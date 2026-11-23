@@ -100,7 +100,19 @@ _EXPECTED_SCOPE_WRITES = (
 )
 
 
+# A person's own workbench conversations and deep-research runs, under management
+# prefixes: they run as the caller in the caller's own tenant, never in the browser
+# management view (a cross-tenant super admin would fail its own policy with 24006
+# and store the conversation in a tenant its conversation list never reads).
+_PERSONAL_WORKBENCH_RUN = re.compile(
+    r"/api/v1/workstation/(?:chat/completions(?:/abort)?|gen_title|messages/.+|conversations/.+)"
+    r"|/api/v1/linsight/workbench/.+"
+)
+
+
 def _is_management_api_path(path: str, prefixes: Iterable[str] = MANAGEMENT_API_PREFIXES) -> bool:
+    if _PERSONAL_WORKBENCH_RUN.fullmatch(path.rstrip("/")):
+        return False
     return any(path == value or path.startswith(value + "/") for value in prefixes)
 
 

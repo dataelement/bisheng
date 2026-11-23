@@ -2,7 +2,7 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -89,11 +89,13 @@ async def test_real_folder_http_uses_one_app_and_projects_all_resources_before_f
     server = FastAPI()
     server.include_router(api.router, prefix="/api/v1")
     server.dependency_overrides[get_knowledge_space_service] = lambda: upload.service
-    async with AsyncClient(transport=ASGITransport(app=server), base_url="http://offline") as client:
-        response = await client.post(
-            "/api/v1/knowledge/space/40/folders/upload",
-            json={"items": [item.model_dump() for item in items()]},
-        )
+    # Legacy wire resolves issued upload references first; that contract is tested separately.
+    with patch.object(api.PreviewSourceService, "resolve", AsyncMock(return_value=None)):
+        async with AsyncClient(transport=ASGITransport(app=server), base_url="http://offline") as client:
+            response = await client.post(
+                "/api/v1/knowledge/space/40/folders/upload",
+                json={"items": [item.model_dump() for item in items()]},
+            )
     assert response.status_code == 200 and len(response.json()["data"]) == 2
     assert len(folder_upload.apps) == 1 and upload.publish.call_count == 2
     upload.service._initialize_child_resource_permissions.assert_not_awaited()

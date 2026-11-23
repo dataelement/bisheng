@@ -1,7 +1,7 @@
-"""Model visibility and the workbench model list when DSH is not deployed.
+"""Platform model visibility and candidate lists are independent of DSH.
 
-Without DSH every online chat model is offered by default, an administrator may
-narrow a model to departments / roles / users, and no credits apply.
+Every online chat model is offered by default; administrators may narrow a model
+to departments / roles / users. Credits never define the candidate catalog.
 """
 
 from types import SimpleNamespace
@@ -58,12 +58,15 @@ def _candidates():
     ]
 
 
-@pytest.fixture
-def catalog(monkeypatch):
+@pytest.fixture(params=[False, True], ids=["without-dsh", "with-dsh"])
+def catalog(monkeypatch, request):
     from bisheng.dsh.domain.services import model_catalog, vision
     from bisheng.llm.domain.services.llm import LLMService
 
-    _dsh(monkeypatch, False)
+    _dsh(monkeypatch, request.param)
+    from bisheng.dsh import runtime
+
+    monkeypatch.setattr(runtime, "read_policy", AsyncMock(side_effect=AssertionError("catalog read a credit policy")))
     monkeypatch.setattr(LLMService, "aget_online_chat_models", AsyncMock(return_value=_candidates()))
     monkeypatch.setattr(model_catalog, "read_visible_model_ids", AsyncMock(return_value={1, 2}))
     monkeypatch.setattr(vision, "read_catalog_vision", AsyncMock(return_value={1: False, 2: True}))
@@ -92,18 +95,6 @@ async def test_projection_moves_an_invisible_default_to_the_first_visible_model(
     assert projected.chat_default_model_id == "1"
     assert projected.linsight_default_model_id == "2"
     assert not config.models  # the stored config is not mutated
-
-
-async def test_dsh_mode_keeps_the_credit_governed_catalog(monkeypatch):
-    from bisheng.dsh.domain.services import model_catalog
-
-    _dsh(monkeypatch, True)
-    governed = AsyncMock(return_value=["dsh"])
-    visible = AsyncMock(return_value=["platform"])
-    monkeypatch.setattr(model_catalog, "authorized_workbench_models", governed)
-    monkeypatch.setattr(model_catalog, "visible_workbench_models", visible)
-    assert await model_catalog.user_workbench_models(20, "cfg") == ["dsh"]
-    visible.assert_not_awaited()
 
 
 async def test_online_chat_models_skip_offline_and_non_chat_rows(monkeypatch):
@@ -147,7 +138,7 @@ async def test_visibility_admin_with_dsh_uses_dsh_management(monkeypatch):
     monkeypatch.setattr(unified_policy, "get_runtime", AsyncMock(return_value="runtime"))
     monkeypatch.setattr(unified_policy, "get_management", AsyncMock(return_value="management"))
     assert await unified_policy.get_policy_admin(SimpleNamespace()) == "management"
-    assert unified_policy._missing_row_visible_to_everyone() is False
+    assert unified_policy._missing_row_visible_to_everyone() is True
 
 
 # ---- new models get an explicit "everyone" row whenever a tenant is in scope ---------------
@@ -209,3 +200,10 @@ def test_backfill_script_adds_rows_only_for_models_without_one(store):
         assert repo.visibility(5)["everyone"] is True and repo.visibility(8)["everyone"] is True
         # The narrowed model keeps its stored scope.
         assert repo.visibility(7)["everyone"] is False
+
+
+@pytest.fixture(autouse=True)
+def ordinary_model_operator(monkeypatch):
+    from bisheng.dsh.domain.services import model_access
+
+    monkeypatch.setattr(model_access, "require_model_operator", AsyncMock(return_value=False))

@@ -171,9 +171,9 @@ CREATE TABLE IF NOT EXISTS knowledge (
     is_shared INTEGER NOT NULL DEFAULT 0,
     auto_tag_enabled INTEGER NOT NULL DEFAULT 0,
     auto_tag_library_id INTEGER,
+    metadata_fields JSON,
     copy_source_id INTEGER,
     copy_target_id INTEGER,
-    metadata_fields JSON,
     processing_defaults JSON,
     processing_config_version INTEGER NOT NULL DEFAULT 0,
     metadata_schema_revision INTEGER NOT NULL DEFAULT 0,
@@ -412,6 +412,7 @@ CREATE TABLE IF NOT EXISTS assistant (
     model_name VARCHAR(255),
     status INTEGER DEFAULT 1,
     is_delete INTEGER DEFAULT 0,
+    memory_enabled BOOLEAN NOT NULL DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""

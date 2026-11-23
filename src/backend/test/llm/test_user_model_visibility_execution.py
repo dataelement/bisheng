@@ -1,4 +1,4 @@
-"""Ordinary non-DSH Chat/Work calls cannot execute a locally hidden model."""
+"""Chat/Work enforce platform model visibility in both DSH deployment modes."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -7,17 +7,26 @@ import pytest
 
 from bisheng.api.v1.schemas import WorkstationConfig
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.services.config_service import settings
 from bisheng.dsh.domain.services import model_catalog, vision
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services.llm import LLMService
 
 
-@pytest.fixture
-async def ordinary_catalog(monkeypatch):
+@pytest.fixture(params=[False, True], ids=["without-dsh", "with-dsh"])
+async def ordinary_catalog(monkeypatch, request):
     from bisheng.common.services import config_service
 
-    monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=False)))
+    monkeypatch.setattr(
+        config_service,
+        "settings",
+        SimpleNamespace(
+            dsh=SimpleNamespace(enabled=request.param),
+            get_linsight_conf=lambda: SimpleNamespace(default_temperature=0),
+        ),
+    )
+    from bisheng.linsight.domain.services import agent_factory
+
+    monkeypatch.setattr(agent_factory, "settings", config_service.settings)
     server = SimpleNamespace(id=1, name="Own provider", type="openai", tenant_id=1)
     models = [
         (SimpleNamespace(id=mid, server_id=1, tenant_id=1, model_name=f"m{mid}", name=f"m{mid}"), server)
@@ -26,7 +35,7 @@ async def ordinary_catalog(monkeypatch):
     monkeypatch.setattr(LLMService, "aget_online_chat_models", AsyncMock(return_value=models))
     visible = AsyncMock(return_value={7})
     monkeypatch.setattr(model_catalog, "read_visible_model_ids", visible)
-    monkeypatch.setattr(vision, "read_vision", AsyncMock(return_value=SimpleNamespace(vision=False)))
+    monkeypatch.setattr(vision, "read_catalog_vision", AsyncMock(return_value={7: False}))
     config = WorkbenchModelConfig(
         models=[{"id": "7", "name": "visible"}, {"id": "8", "name": "hidden"}], linsight_default_model_id="7"
     )
@@ -42,7 +51,6 @@ async def test_work_keeps_hidden_explicit_identity_and_refuses_before_model_crea
 
     factory = AsyncMock(return_value="model")
     monkeypatch.setattr(LLMService, "get_bisheng_linsight_llm", factory)
-    monkeypatch.setattr(type(settings), "get_linsight_conf", lambda self: SimpleNamespace(default_temperature=0))
     session = SimpleNamespace(tenant_id=1, user_id=ordinary_catalog.user.user_id)
     with pytest.raises(ValueError, match="not currently available"):
         await agent_factory._resolve_model(session, "8")
@@ -50,8 +58,7 @@ async def test_work_keeps_hidden_explicit_identity_and_refuses_before_model_crea
     factory.assert_not_awaited()
 
 
-@pytest.mark.parametrize("entry", ["initialize_chat", "_agent_initialize_chat"])
-async def test_chat_rejects_hidden_explicit_id_before_session_or_model_creation(ordinary_catalog, monkeypatch, entry):
+async def test_chat_rejects_hidden_explicit_id_before_session_or_model_creation(ordinary_catalog, monkeypatch):
     from bisheng.api.v1.schema.chat_schema import APIChatCompletion
     from bisheng.workstation.domain.services import chat_service
 
@@ -62,7 +69,14 @@ async def test_chat_rejects_hidden_explicit_id_before_session_or_model_creation(
     monkeypatch.setattr(LLMService, "get_bisheng_llm", factory)
     data = APIChatCompletion(clientTimestamp="t", model="8", text="hello")
     with pytest.raises(ValueError, match="not found"):
-        await getattr(chat_service, entry)(data, ordinary_catalog.user)
+        await chat_service._agent_initialize_chat(data, ordinary_catalog.user)
     ordinary_catalog.visible.assert_awaited_once_with(42, [7, 8])
     insert.assert_not_awaited()
     factory.assert_not_awaited()
+
+
+@pytest.fixture(autouse=True)
+def ordinary_model_operator(monkeypatch):
+    from bisheng.dsh.domain.services import model_access
+
+    monkeypatch.setattr(model_access, "require_model_operator", AsyncMock(return_value=False))

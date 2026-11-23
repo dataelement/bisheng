@@ -373,6 +373,9 @@ class FileAncestorFact:
 
 
 class UnificationResourceRepository:
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
     @staticmethod
     async def _read(session, statement, *, global_facts=False):
         _scope(session)
@@ -394,9 +397,15 @@ class UnificationResourceRepository:
         ):
             _blocked("invalid_page")
         query = select(*(getattr(model, name) for name in columns)) if statement is None else statement
-        if after_id is not None:
-            query = query.where(model.id > after_id)
-        rows = await self._read(session, query.order_by(model.id).limit(limit + 1))
+        if self.fact_view is not None:
+            rows = await self.fact_view.page_mappings(
+                session, model=model, statement=query, after=after_id, limit=limit + 1, read=self._read, tenant=tenant
+            )
+            rows = self.fact_view.project_resource_joins(row_type, rows)
+        else:
+            if after_id is not None:
+                query = query.where(model.id > after_id)
+            rows = await self._read(session, query.order_by(model.id).limit(limit + 1))
         for row in rows:
             owner = row.get("tenant_id", row.get("parent_tenant_id"))
             if owner != tenant:
@@ -426,6 +435,21 @@ class UnificationResourceRepository:
         self, session: AsyncSession, *, after_id: int | None = None, limit: int = 200
     ) -> InventoryPage[FileRow]:
         return await self._page(session, KnowledgeFile, FILE_COLUMNS, FileRow, after_id, limit)
+
+    async def ainspect_existing_knowledge_ids(self, session, *, knowledge_ids):
+        """Global PK existence only; another tenant's parent is never absence."""
+        _scope(session)
+        if (
+            type(knowledge_ids) is not tuple
+            or len(knowledge_ids) > 200
+            or any(type(value) is not int or value <= 0 for value in knowledge_ids)
+        ):
+            _blocked("invalid_rootless_parent_ids")
+        if not knowledge_ids:
+            return frozenset()
+        table = Knowledge.__table__.alias("retained_original_parent")
+        rows = await self._read(session, select(table.c.id).where(table.c.id.in_(knowledge_ids)), global_facts=True)
+        return frozenset(row["id"] for row in rows)
 
     async def aload_retention_rows(self, session, *, resource_ids=(), file_ids=()):
         tenant = _scope(session)
@@ -494,6 +518,11 @@ class UnificationResourceRepository:
         counts = dict.fromkeys(resource_ids, 0)
         for row in rows:
             counts[row["knowledge_id"]] = row["file_count"]
+        if self.fact_view is not None:
+            for ident, difference in self.fact_view.file_count_changes(resource_ids, tenant=tenant).items():
+                counts[ident] += difference
+            if any(value < 0 for value in counts.values()):
+                _blocked("file_count_history_delta_invalid")
         return counts
 
     async def avalidate_retained_index_bindings(self, session: AsyncSession, *, bindings: tuple):
@@ -621,11 +650,14 @@ class UnificationResourceRepository:
         )
 
     async def _probe(self, session, statement, reason):
+        if self.fact_view is not None:
+            await self.fact_view.prepare(session)
+            statement = self.fact_view.exclude_affected_probe(statement)
         rows = await self._read(session, statement.limit(1), global_facts=True)
         if rows:
             _blocked(reason, id=rows[0]["id"])
 
-    async def avalidate_global_integrity(self, session: AsyncSession) -> None:
+    async def avalidate_global_integrity(self, session: AsyncSession, *, retain_rootless_files=False) -> None:
         _scope(session)
         for model in (
             Knowledge,
@@ -661,11 +693,22 @@ class UnificationResourceRepository:
             "projected_creation_conflict",
         )
         physical, space = KnowledgeFile.__table__.alias("m2_file_row"), Knowledge.__table__.alias("m2_file_parent")
+        invalid_file_parent = or_(space.c.id.is_(None), space.c.tenant_id != physical.c.tenant_id)
+        if retain_rootless_files:
+            # The new policy separately freezes these exact unreachable rows
+            # and proves no SQL/FGA authorization. Foreign parents, folders and
+            # unknown ancestor paths still fail this global gate.
+            invalid_file_parent = and_(
+                invalid_file_parent,
+                ~and_(
+                    space.c.id.is_(None),
+                    physical.c.file_type == 1,
+                    or_(physical.c.file_level_path.is_(None), physical.c.file_level_path == ""),
+                ),
+            )
         await self._probe(
             session,
-            select(physical.c.id)
-            .outerjoin(space, space.c.id == physical.c.knowledge_id)
-            .where(or_(space.c.id.is_(None), space.c.tenant_id != physical.c.tenant_id)),
+            select(physical.c.id).outerjoin(space, space.c.id == physical.c.knowledge_id).where(invalid_file_parent),
             "file_parent_invalid",
         )
         doc, doc_space = KnowledgeDocument.__table__.alias("m2_doc_row"), Knowledge.__table__.alias("m2_doc_parent")
@@ -751,6 +794,8 @@ class UnificationResourceRepository:
                 select(*(table.c[name] for name in ANCESTOR_COLUMNS)).where(table.c.id.in_(ids[offset : offset + 200])),
                 global_facts=True,
             )
+            if self.fact_view is not None:
+                rows = self.fact_view.project_rows("knowledgefile", rows)
             facts.update((row["id"], FileAncestorFact(**dict(row), exists=True)) for row in rows)
         return tuple(
             facts[ident] if ident in facts else FileAncestorFact(ident, False, None, None, None, None, None, None)

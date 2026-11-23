@@ -5,6 +5,10 @@ global:
   clusterDomain: cluster.local
   credentials:
     existingPlatformSecret: ''
+    # Secret with key keys.json: {"version":1,"keys":["<Fernet key>",...]}.
+    # Empty = chart generates one on first install. Required when upgrading an
+    # install whose stored ciphertext predates the keyring (see helm README).
+    existingKeyringSecret: ''
     existingRuntimeSecret: ''
     existingIssuerSecret: ''
     existingDataSecret: ''

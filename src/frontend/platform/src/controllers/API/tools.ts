@@ -21,6 +21,28 @@ export const createTool = async (data: any): Promise<any> => {
     return await axios.post(`/api/v1/tool`, data);
 };
 
+// Tools that exist only as capability switches for other clients (e.g. the
+// desktop Work knowledge search). The platform UI never lists them.
+const PLATFORM_HIDDEN_TOOL_KEYS = new Set(['bisheng_knowledge_search']);
+
+type ToolGroupLike = { children?: Array<{ tool_key?: string }> };
+
+export const hidePlatformHiddenTools = <T>(groups: T): T => {
+    if (!Array.isArray(groups)) return groups;
+    const kept: ToolGroupLike[] = [];
+    for (const group of groups as ToolGroupLike[]) {
+        const children = group?.children;
+        if (!Array.isArray(children)) {
+            kept.push(group);
+            continue;
+        }
+        const visible = children.filter((tool) => !PLATFORM_HIDDEN_TOOL_KEYS.has(tool?.tool_key ?? ''));
+        if (visible.length === 0 && children.length > 0) continue;
+        kept.push(visible.length === children.length ? group : { ...group, children: visible });
+    }
+    return kept as T;
+};
+
 export const getToolsApi = async (
     type: 'all' | 'default' | 'custom' | 'mcp',
     options: { action?: 'visible' | 'use' } = {}
@@ -35,7 +57,7 @@ export const getToolsApi = async (
     if (preset) params.set('is_preset', preset);
     if (options.action) params.set('action', options.action);
     const query = params.toString();
-    return await axios.get(`/api/v1/tool${query ? `?${query}` : ''}`)
+    return hidePlatformHiddenTools(await axios.get(`/api/v1/tool${query ? `?${query}` : ''}`));
 };
 /**
  * 修改工具接口

@@ -10,15 +10,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import sqlalchemy as sa
-from test.knowledge_unification import test_wf_create as create_fixtures
-from test.knowledge_unification import test_wf_current as current_fixtures
-from test.knowledge_unification import test_wf_save as save_fixtures
-from test.knowledge_unification.test_wf_extract import graph, node
 
 from bisheng.api.services import flow as flow_service
 from bisheng.api.v1 import flows as endpoint
 from bisheng.api.v1.schemas import FlowVersionCreate
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
 from bisheng.core.context.tenant import current_tenant_id, management_tenant_scope, set_current_tenant_id
 from bisheng.database.models.flow_version import FlowVersion
 from bisheng.resource_reference.application.bindings import ReferenceBindings
@@ -26,6 +21,10 @@ from bisheng.resource_reference.application.contracts import reference_set_diges
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
+from test.knowledge_unification import test_wf_create as create_fixtures
+from test.knowledge_unification import test_wf_current as current_fixtures
+from test.knowledge_unification import test_wf_save as save_fixtures
+from test.knowledge_unification.test_wf_extract import graph, node
 
 store = create_fixtures.store
 tenant = create_fixtures.tenant
@@ -54,67 +53,50 @@ async def test_actual_root_delete_preserves_all_definitions_and_releases_all_liv
         deleting.user, "wf", FlowVersionCreate(name="blank", data={})
     )
     before_ids = {row["id"] for row in rows(deleting, "flowversion")}
-    terminal = next(row for row in rows(deleting, "business_reference_set") if row["source_version"] == "3")
     assert blank.data.id in before_ids
     result = await delete(deleting)
     assert result.status_code == 200
     assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 1
     assert {row["id"] for row in rows(deleting, "flowversion")} == before_ids
     assert all(row["is_delete"] == 1 for row in rows(deleting, "flowversion"))
+    await save_fixtures.refresh(deleting)
     assert not rows(deleting, "business_resource_reference")
     deleting.cleanup_projection.assert_awaited_once()
     sources = [row for row in rows(deleting, "business_reference_set") if row["record_kind"] == "source"]
-    assert len(sources) == 4 and all(row["effective"] == 0 and row["ready"] == 1 for row in sources)
-    assert next(row for row in sources if row["source_version"] == "3") == terminal
+    assert not sources
     deleting.delete_projection.assert_awaited_once()
 
 
-async def test_second_version_binding_failure_rolls_back_entire_root_and_first_release(deleting, monkeypatch):
-    before = {
-        table: rows(deleting, table)
-        for table in ("flow", "flowversion", "business_reference_set", "business_resource_reference")
-    }
-    original = ReferenceBindings.areplace_source_bindings
-    calls = 0
-
-    async def fail_second(binding_service, *args, **kwargs):
-        nonlocal calls
-        result = await original(binding_service, *args, **kwargs)
-        calls += 1
-        if calls == 2:
-            raise RuntimeError("second source binding failed")
-        return result
-
-    monkeypatch.setattr(ReferenceBindings, "areplace_source_bindings", fail_second)
-    with pytest.raises(RuntimeError, match="second source binding failed"):
-        await delete(deleting)
-    assert calls == 2
-    for table, expected in before.items():
-        assert rows(deleting, table) == expected
-    deleting.delete_projection.assert_not_awaited()
+async def test_root_delete_never_calls_legacy_binding_writer(deleting, monkeypatch):
+    binding = AsyncMock(side_effect=RuntimeError("source binding failed"))
+    monkeypatch.setattr(ReferenceBindings, "areplace_source_bindings", binding)
+    before = rows(deleting, "business_resource_reference")
+    assert (await delete(deleting)).status_code == 200
+    assert rows(deleting, "business_resource_reference") == before
+    assert all(row["is_delete"] == 1 for row in rows(deleting, "flowversion"))
+    binding.assert_not_awaited()
+    deleting.delete_projection.assert_awaited_once()
 
 
-async def test_root_with_a_missing_live_version_index_fails_before_permission_projection(deleting):
+async def test_missing_live_version_index_does_not_block_business_delete(deleting):
     async with deleting.session_factory() as session, session.begin():
         await session.execute(
             sa.delete(BusinessReferenceSet).where(
                 BusinessReferenceSet.source_id == "wf", BusinessReferenceSet.source_version == "2"
             )
         )
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await delete(deleting)
-    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
-    deleting.delete_projection.assert_not_awaited()
+    assert (await delete(deleting)).status_code == 200
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 1
+    deleting.delete_projection.assert_awaited_once()
 
 
-async def test_root_with_configuration_index_drift_fails_before_permission_projection(deleting):
+async def test_stale_version_index_does_not_block_business_delete(deleting):
     async with deleting.session_factory() as session, session.begin():
         version = await session.get(FlowVersion, 2)
         version.data = graph(node("drift", "llm", model_id=7))
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await delete(deleting)
-    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
-    deleting.delete_projection.assert_not_awaited()
+    assert (await delete(deleting)).status_code == 200
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 1
+    deleting.delete_projection.assert_awaited_once()
 
 
 async def test_permission_projection_sees_existing_committed_root_before_final_sql_delete(deleting):
@@ -125,6 +107,7 @@ async def test_permission_projection_sees_existing_committed_root_before_final_s
 
     deleting.delete_projection.side_effect = before_commit
     await delete(deleting)
+    await save_fixtures.refresh(deleting)
     assert not rows(deleting, "business_resource_reference")
 
 
@@ -143,11 +126,12 @@ async def test_projection_failure_rolls_back_all_root_and_source_changes(deletin
 async def test_root_delete_can_release_original_invalid_references_with_real_tombstone(deleting):
     await current_fixtures.force_delete_model(deleting)
     assert (await delete(deleting)).status_code == 200
+    await save_fixtures.refresh(deleting)
     assert not rows(deleting, "business_resource_reference")
 
 
 @pytest.mark.parametrize("effective", [True, False])
-async def test_extra_indexed_source_without_business_version_rejects_root_delete(deleting, effective):
+async def test_orphan_indexed_source_does_not_block_root_delete(deleting, effective):
     async with deleting.session_factory() as session, session.begin():
         session.add(
             BusinessReferenceSet(
@@ -163,30 +147,41 @@ async def test_extra_indexed_source_without_business_version_rejects_root_delete
                 effective=effective,
             )
         )
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await delete(deleting)
-    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
-    deleting.delete_projection.assert_not_awaited()
+    assert (await delete(deleting)).status_code == 200
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 1
+    deleting.delete_projection.assert_awaited_once()
 
 
 @pytest.mark.parametrize("corruption", ["active", "unready", "nonempty_digest"])
-async def test_deleted_business_version_must_have_an_existing_consistent_terminal_set(deleting, corruption):
+async def test_stale_terminal_index_does_not_block_root_delete(deleting, corruption):
     async with deleting.session_factory() as session, session.begin():
         source = await session.scalar(
             sa.select(BusinessReferenceSet).where(
                 BusinessReferenceSet.source_id == "wf", BusinessReferenceSet.source_version == "3"
             )
         )
+        if source is None:
+            source = BusinessReferenceSet(
+                tenant_id=101,
+                source_type="workflow_version",
+                source_id="wf",
+                source_version="3",
+                source_revision=1,
+                extractor_version="workflow-version-v1",
+                digest=reference_set_digest(()),
+                ready=True,
+                effective=False,
+            )
+            session.add(source)
         if corruption == "active":
             source.effective = True
         elif corruption == "unready":
             source.ready = False
         else:
             source.digest = "f" * 64
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await delete(deleting)
-    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
-    deleting.delete_projection.assert_not_awaited()
+    assert (await delete(deleting)).status_code == 200
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 1
+    deleting.delete_projection.assert_awaited_once()
 
 
 async def test_root_delete_keeps_pinned_management_tenant_separate_from_identity_home(deleting):
@@ -199,10 +194,11 @@ async def test_root_delete_keeps_pinned_management_tenant_separate_from_identity
         current_tenant_id.reset(token)
     assert deleting.user.tenant_id == 1
     assert all(row["tenant_id"] == 101 for row in rows(deleting, "business_reference_set"))
+    await save_fixtures.refresh(deleting)
     assert not rows(deleting, "business_resource_reference")
 
 
-async def test_committed_new_version_changes_manifest_and_aborts_root_delete(deleting, monkeypatch):
+async def test_root_delete_includes_version_committed_before_root_lock(deleting, monkeypatch):
     original = WorkflowVersionRepository.alock_root
     added = []
 
@@ -216,19 +212,15 @@ async def test_committed_new_version_changes_manifest_and_aborts_root_delete(del
         return await original(session, flow_id, tenant_id)
 
     monkeypatch.setattr(WorkflowVersionRepository, "alock_root", concurrent_create_before_root_lock)
-    with pytest.raises(KnowledgeOperationPlanConflictError):
-        await delete(deleting)
+    assert (await delete(deleting)).status_code == 200
     assert added[0] is not None
-    assert next(row for row in rows(deleting, "flowversion") if row["id"] == added[0])["is_delete"] == 0
-    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 0
-    assert any(
-        row["source_version"] == str(added[0]) and row["effective"] for row in rows(deleting, "business_reference_set")
-    )
-    deleting.delete_projection.assert_not_awaited()
+    assert next(row for row in rows(deleting, "flowversion") if row["id"] == added[0])["is_delete"] == 1
+    assert next(row for row in rows(deleting, "flow") if row["id"] == "wf")["is_delete"] == 1
+    deleting.delete_projection.assert_awaited_once()
 
 
 @pytest.mark.parametrize("corruption", ["deleted_without_set", "unknown_without_set", "terminal_with_raw_row"])
-async def test_raw_root_reference_without_a_valid_live_source_aborts_before_any_delete(deleting, corruption):
+async def test_orphan_reference_does_not_block_business_delete_and_is_refreshed(deleting, corruption):
     source_version = "999" if corruption == "unknown_without_set" else "3"
     async with deleting.session_factory() as session, session.begin():
         if corruption == "deleted_without_set":
@@ -252,15 +244,10 @@ async def test_raw_root_reference_without_a_valid_live_source_aborts_before_any_
                 source_revision=1,
             )
         )
-    before = {
-        table: rows(deleting, table)
-        for table in ("flow", "flowversion", "business_reference_set", "business_resource_reference")
-    }
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await delete(deleting)
-    for table, expected in before.items():
-        assert rows(deleting, table) == expected
-    deleting.delete_projection.assert_not_awaited()
+    assert (await delete(deleting)).status_code == 200
+    await save_fixtures.refresh(deleting)
+    assert not rows(deleting, "business_resource_reference")
+    deleting.delete_projection.assert_awaited_once()
 
 
 async def test_legacy_deleted_version_without_set_or_raw_references_does_not_get_new_index(deleting):
@@ -272,14 +259,15 @@ async def test_legacy_deleted_version_without_set_or_raw_references_does_not_get
         )
     assert (await delete(deleting)).status_code == 200
     assert not any(row["source_version"] == "3" for row in rows(deleting, "business_reference_set"))
+    await save_fixtures.refresh(deleting)
     assert not rows(deleting, "business_resource_reference")
 
 
 async def test_root_reference_inventory_is_exact_tenant_type_root_and_stably_ordered(deleting, monkeypatch):
     from sqlmodel import Session
-    from test.knowledge_unification.test_wf_save import key
 
     from bisheng.core.database import tenant_filter
+    from test.knowledge_unification.test_wf_save import key
 
     # The isolated workflow fixture creates only its tables; activate the real
     # C3 listener for this explicit cross-tenant query regression.

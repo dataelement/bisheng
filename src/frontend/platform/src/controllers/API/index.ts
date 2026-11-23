@@ -504,7 +504,7 @@ type UploadFileFc = {
   separator_rule: ("after" | "before")[]; // 必需
   chunk_size: number; // 必需
   chunk_overlap: number; // 必需
-  file_list: { file_path: string }[]; // 必需
+  file_list: { file_path: string; preview_upload_ref?: string }[]; // 必需
   retain_images?: boolean; //保留文档图片
   force_ocr?: boolean; //强制开启ocr
   enable_formula?: boolean; //开启公式识别
@@ -519,7 +519,7 @@ type UploadFileFc = {
 };
 type DefaultUploadFileFc = {
   knowledge_id: number; // 必需
-  file_list: { file_path: string }[]; // 必需
+  file_list: { file_path: string; preview_upload_ref?: string }[]; // 必需
 };
 ///
 export async function subUploadLibFile(data: UploadFileFc): Promise<any>;
@@ -832,16 +832,17 @@ export async function getQaFile(id): Promise<{ file_list: string[] }> {
  */
 export async function postImportQaFile(
   id,
-  params,
+  params: { url: string; preview_upload_ref: string },
 ): Promise<{
   result: {
     answers: string;
     questions: string[];
   }[];
 }> {
-  const { url } = params;
+  const { url, preview_upload_ref } = params;
   return await axios.post(`/api/v1/knowledge/qa/import/${id}`, {
     file_list: [url],
+    preview_upload_refs: [preview_upload_ref],
   });
 }
 
@@ -850,16 +851,17 @@ export async function postImportQaFile(
  */
 export async function getQaFilePreview(
   id,
-  params,
+  params: { url: string; preview_upload_ref: string; size?: number; offset?: number },
 ): Promise<{
   result: {
     answers: string;
     questions: string[];
   }[];
 }> {
-  const { url, size, offset } = params;
+  const { url, size, offset, preview_upload_ref } = params;
   return await axios.post(`/api/v1/knowledge/qa/preview/${id}`, {
     file_url: url,
+    preview_upload_ref,
     size,
     offset,
   });

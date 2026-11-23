@@ -126,7 +126,12 @@ ENABLED = {"biao-shu-zhuan-xie", "he-tong-shen-yue"}  # ting-yong-ji-neng disabl
 
 
 def _copied_rel_paths(backend: _CacheBackend) -> set[str]:
-    return set(backend.uploaded)
+    """Files the copy left in the run's local directory (F005: nothing goes through upload)."""
+    assert backend.uploaded == []
+    root = backend.file_dir
+    if not root.exists():
+        return set()
+    return {"/" + p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
 
 
 class TestGate:
@@ -243,13 +248,13 @@ class TestFailureIsReported:
         assert result.copied == ["biao-shu-zhuan-xie"]
         assert result.failed == ["he-tong-shen-yue"]
 
-    async def test_upload_error_counts_as_failure(self, monkeypatch, store, backend):
+    async def test_local_copy_error_counts_as_failure(self, monkeypatch, store, backend):
         _patch_enabled(monkeypatch, ENABLED, store)
 
-        async def _failing_upload(files):
-            return [_Resp(path, error="disk full") for path, _ in files]
+        def _failing_copy(*_args, **_kwargs):
+            raise OSError("disk full")
 
-        monkeypatch.setattr(backend, "aupload_files", _failing_upload)
+        monkeypatch.setattr(skill_provisioning.shutil, "copytree", _failing_copy)
         result = await materialize_session_skills(backend, TENANT, ["biao-shu-zhuan-xie"], store=store)
         assert (result.copied, result.failed) == ([], ["biao-shu-zhuan-xie"])
 
@@ -258,6 +263,7 @@ class TestEnumerationLoop:
     async def test_copied_skill_is_enumerated_and_path_resolves(self, monkeypatch, store, backend):
         """Full Fork X loop: copy → real SkillsMiddleware enumerates → path consistency."""
         from deepagents.backends.filesystem import FilesystemBackend
+
         from bisheng.linsight.domain.services.skills_prompt import LinsightSkillsMiddleware
         from bisheng.linsight.domain.services.workspace_backend import normalize_workspace_path
 
@@ -329,7 +335,7 @@ class TestStrictForUnattendedRuns:
 
     async def test_copy_failure_also_fails_a_strict_run(self, monkeypatch, store, backend):
         _patch_enabled(monkeypatch, ENABLED, store)
-        monkeypatch.setattr(skill_provisioning, "_collect_bundle_pairs", lambda *_a: [])
+        monkeypatch.setattr(skill_provisioning, "_install_local", lambda *_a, **_k: False)
         with pytest.raises(skill_provisioning.SkillsUnavailableForRunError) as exc_info:
             await materialize_session_skills(backend, TENANT, ["he-tong-shen-yue"], store=store, strict=True)
         assert exc_info.value.names == ["he-tong-shen-yue"]

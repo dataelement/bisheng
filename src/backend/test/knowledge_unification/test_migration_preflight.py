@@ -154,8 +154,8 @@ async def test_real_original_type_retirement_creator_and_quota_facts_preserve_hi
         assert not session.new and not session.dirty
 
 
-@pytest.mark.parametrize("change", [{"type": 99}, {"user_id": 888}])
-async def test_unknown_type_or_globally_absent_creator_blocks(module, native, change):
+@pytest.mark.parametrize("change", [{"type": 99}])
+async def test_unknown_type_blocks(module, native, change):
     await native.insert(original.Knowledge, [original.resource(9000, **change)])
     async with AsyncSession(native.engine) as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):

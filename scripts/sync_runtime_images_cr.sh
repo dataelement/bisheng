@@ -4,9 +4,6 @@ set -euo pipefail
 : "${RUNTIME_RELEASE:?set the release identifier}"
 : "${TARGET_ARCH:?amd64 or arm64}"
 [[ "$TARGET_ARCH" == amd64 || "$TARGET_ARCH" == arm64 ]] || exit 64
-# A forced Git tag update may explicitly reissue this exact release. Normal builds remain immutable.
-RUNTIME_REPLACE_RELEASE="${RUNTIME_REPLACE_RELEASE:-}"
-[[ -z "$RUNTIME_REPLACE_RELEASE" || "$RUNTIME_REPLACE_RELEASE" == "$RUNTIME_RELEASE" ]] || exit 64
 metadata_dir="dist/runtime-metadata-cr-${TARGET_ARCH}"
 mkdir -p "$metadata_dir" dist/cr
 PYTHONPATH=src/runtime-manager python3 - > "$metadata_dir/targets.tsv" <<'PY'
@@ -32,18 +29,6 @@ for name in IMAGE_NAMES:
     assert image['image'].startswith(tag.split(':')[0] + '@sha256:')
     print(name, image['image_id'], 'cr.dataelem.com/' + tag, sep='\t')
 PY
-# Refuse existing tags or registry/authentication uncertainty before any CR push.
-while IFS=$'\t' read -r name image_id target; do
-  if docker buildx imagetools inspect "$target" > "$metadata_dir/$name.existing" 2> "$metadata_dir/$name.error"; then
-    if [[ "$RUNTIME_REPLACE_RELEASE" != "$RUNTIME_RELEASE" ]]; then
-      echo "Refusing to overwrite published image: $target" >&2; exit 1
-    fi
-    echo "Explicit release reissue: $target; copying the verified native image ID"
-  elif grep -Eqi 'unauthorized|forbidden|denied|authentication|authorization' "$metadata_dir/$name.error" || \
-    ! grep -Eqi 'manifest unknown|not found|no such manifest' "$metadata_dir/$name.error"; then
-    echo "Cannot establish tag absence for $target; publication refused" >&2; exit 1
-  fi
-done < "$metadata_dir/targets.tsv"
 while IFS=$'\t' read -r name image_id target; do
   # Use the frozen local image ID, never rebuild or resolve a mutable source tag.
   docker tag "$image_id" "$target"

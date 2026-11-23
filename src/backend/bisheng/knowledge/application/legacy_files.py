@@ -31,8 +31,12 @@ class LegacyFilesApplication:
         self.request, self.identity = request, identity
         self.service = make_legacy_space_service(request, identity)
 
-    async def aregister(self, command):
-        """Register a whole batch once, without enqueueing an inline ingestion."""
+    async def aregister(self, command, *, trusted_sources=None):
+        """Register a whole batch once, without enqueueing an inline ingestion.
+
+        ``trusted_sources`` are server-resolved upload references, one per
+        file_list item; when given, only those objects are read.
+        """
         from bisheng.knowledge.domain.services.knowledge_space_service import _UploadDispatchBatch
 
         fixed = deepcopy(command)
@@ -48,6 +52,7 @@ class LegacyFilesApplication:
                     _legacy_request=fixed,
                     _application=application,
                     _deferred=batch,
+                    **({"trusted_sources": trusted_sources} if trusted_sources is not None else {}),
                 )
             except BaseException:
                 await self.service._compensate_upload(application)
@@ -55,8 +60,8 @@ class LegacyFilesApplication:
         failed = [row for row in result if self._status(row) == KnowledgeFileStatus.FAILED.value]
         return application, batch, failed
 
-    async def astage(self, command):
-        _application, batch, failed = await self.aregister(command)
+    async def astage(self, command, *, trusted_sources=None):
+        _application, batch, failed = await self.aregister(command, trusted_sources=trusted_sources)
         return (
             await KnowledgeDao.aquery_by_id(command.knowledge_id),
             failed,
@@ -64,11 +69,13 @@ class LegacyFilesApplication:
             [cache for _row, cache in batch.files],
         )
 
-    async def aprocess(self, command, *, inline=False, documents=None):
+    async def aprocess(self, command, *, inline=False, documents=None, trusted_sources=None):
         from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
         fixed = deepcopy(command)
         knowledge = await KnowledgeDao.aquery_by_id(fixed.knowledge_id)
+        if trusted_sources is not None and inline:
+            raise ValueError("Trusted upload sources are not supported for inline ingestion")
         if not inline:
             result = await self.service.add_file(
                 fixed.knowledge_id,
@@ -76,6 +83,7 @@ class LegacyFilesApplication:
                 _legacy_inputs=tuple(fixed.file_list),
                 _legacy_request=fixed,
                 callback_url=fixed.callback_url,
+                **({"trusted_sources": trusted_sources} if trusted_sources is not None else {}),
             )
             process_files = [row for row in result if self._status(row) != KnowledgeFileStatus.FAILED.value]
         else:

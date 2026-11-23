@@ -42,10 +42,18 @@ from bisheng.worker.linsight.personal_skill_sweep import (
     sweep_personal_skill_orphans,
 )
 from bisheng.worker.main import bisheng_celery
+from bisheng.worker.memory.tasks import (
+    cleanup_memory_turns,
+    consolidate_memory_user,
+    flush_memory_metrics,
+    reconcile_memory,
+    scan_memory_sessions,
+)
 from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
     retry_failed_tuples,
 )
+from bisheng.worker.resource_reference import sync_reference_root
 from bisheng.worker.runtime_audit.tasks import runtime_audit_export, runtime_audit_reconcile
 from bisheng.worker.telemetry.mid_table import (
     sync_mid_app_increment,

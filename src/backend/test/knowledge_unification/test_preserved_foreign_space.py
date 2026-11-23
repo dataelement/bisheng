@@ -56,11 +56,13 @@ async def test_native_read_preserves_owner_and_denies_execution_and_unsaved_prev
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, reads.REQUEST, ctx.identity)
         fact = (await ctx.knowledge.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.state == "invalid_scope" and not fact.is_valid and fact.target_tenant_id == 1
+        assert fact.state == "invalid_missing" and not fact.is_valid and fact.target_tenant_id is None
         with pytest.raises(ResourceReferenceInvalidError):
             await runtime.arequire_source_valid(session, scope, ctx.identity)
         preview = await ctx.verifier.aissue_transient_scope(
             session, TransientTargetRequest("workflow", "workflow-a", reads.payload((ref,))), ctx.identity
         )
-        with pytest.raises(ResourceReferenceInvalidError):
+        transient = (
             await ctx.knowledge.ainspect_transient_targets(session, preview, (ref.target,), identity=ctx.identity)
+        )[0]
+        assert not transient.is_valid

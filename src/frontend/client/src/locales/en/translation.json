@@ -65,7 +65,13 @@
     "copyFailed": "Could not copy. Select and copy the account manually."
   },
   "project_sync": {
-    "reason": { "not_owned": "No conversation in this legacy project belongs to this account", "cloud_membership_kept": "Cloud assignment kept", "conversation_unavailable": "Conversation deleted or owned by another account", "invalid_local_data": "Invalid local record", "unknown": "Item not imported" },
+    "reason": {
+      "not_owned": "No conversation in this legacy project belongs to this account",
+      "cloud_membership_kept": "Cloud assignment kept",
+      "conversation_unavailable": "Conversation deleted or owned by another account",
+      "invalid_local_data": "Invalid local record",
+      "unknown": "Item not imported"
+    },
     "loading": "Loading…",
     "more": "Load more",
     "save_failed": "Could not save the project. Your input is kept. Try again.",
@@ -483,7 +489,7 @@
   "com_linsight_add_skill": "Add Skill",
   "com_linsight_exit_task_mode": "Turn off deep research",
   "com_linsight_input_placeholder": "Enter your task goal and let $t(com_linsight_task_mode) handle it",
-  "com_linsight_awaiting_reply": "Answer the question above to continue the task",
+  "com_linsight_answer_placeholder": "Pick an option above, or type your answer here",
   "com_linsight_skill_empty": "No skills available",
   "com_linsight_skill_search": "Search skills",
   "com_linsight_task_mode": "Deep research",
@@ -2674,7 +2680,14 @@
   "com_chat_image_expired": "Image is no longer available",
   "com_error_file_upload_incomplete": "\"{{0}}\" hasn't finished uploading. Remove it and upload again before sending.",
   "com_linsight_error_title_chat_unknown": "Reply generation failed",
-  "com_linsight_error_desc_chat_unknown": "Something went wrong while generating this reply, so it was interrupted.",
+  "com_linsight_error_desc_chat_unknown": "The system ran into an error while handling this message, so no reply was generated. Send it again; contact an administrator if it keeps failing.",
+  "com_linsight_error_desc_chat_content_filter": "The model provider judged this content as possibly non-compliant, so no reply was generated. Rephrase the question or split it up, then ask again.",
+  "com_linsight_error_desc_chat_quota_exhausted": "The quota or account balance of the current model is used up, so no reply was generated. Ask an administrator to top up, or switch to an available model and send again.",
+  "com_linsight_error_desc_chat_credit_exhausted": "Your model credits for this month are used up, so no reply was generated. Ask an administrator to adjust your credit limit; credits reset at the start of next month.",
+  "com_linsight_error_desc_chat_auth_error": "The credentials of the current model are invalid or lack permission, so no reply was generated. Ask an administrator to check the model configuration.",
+  "com_linsight_error_desc_chat_context_overflow": "This content is longer than the current model can handle at once, so no reply was generated. Shorten the content or remove attachments and send again, or switch to a model with a longer context.",
+  "com_linsight_error_desc_chat_context_compress_failed": "This conversation is long, and the system could not summarize its earlier part, so no reply was generated. Send the message again; if it keeps failing, ask an administrator to check the model service.",
+  "com_linsight_error_desc_chat_output_truncated": "The model reasoned for too long in this reply and reached its output limit, so no reply was generated. Send the message again; if it keeps happening, ask an administrator to raise the maximum output length of this model.",
   "com_linsight_error_hint_chat_unknown": "Tip: send the message again; contact an administrator if it keeps failing.",
   "com_linsight_error_title_file_parse_busy": "File parsing service is busy",
   "com_linsight_error_desc_file_parse_busy": "The file parsing service is handling too many requests, so your attachments could not be processed.",
@@ -3073,6 +3086,7 @@
     "noModelsConfigured": "No model is available yet, so you can't send messages. Ask your administrator to add one.",
     "recommendedApps": "Recommended apps",
     "scrollToBottom": "Scroll to bottom",
+    "messageQueued": "Sent — queued",
     "preview": "Preview",
     "source": "Source",
     "closeResearch": "Turn off deep research",
@@ -3177,6 +3191,22 @@
       "description": "Create and edit Excel workbooks (.xlsx), including data tables, summaries, budgets, financial models, quotations and registers. Read and clean .xlsx, .xls and .csv data, apply formulas and formatting, and recalculate and check the workbook before delivery."
     }
   },
+  "runPlan": {
+    "cancelled": "Cancelled",
+    "stopped": "Stopped",
+    "awaitingAnswer": "Waiting for your answer",
+    "stoppedNote": "Stopped. The finished steps and files are kept."
+  },
+  "runMessage": {
+    "toolStopped": "{{name}} stopped"
+  },
+  "runComposer": {
+    "stoppedPlaceholder": "Stopped. Send a message to pick up where it left off",
+    "runningPlaceholder": "Type anytime — press Enter to send while the answer is in progress",
+    "stopFailed": "Couldn't stop. Please try again",
+    "uploadLocked": "You can upload files after the current answer finishes",
+    "modelLocked": "You can switch models after the current answer finishes"
+  },
   "appChat": {
     "unknownApp": "Unknown app",
     "noDescription": "No description available",
@@ -3187,5 +3217,115 @@
     "checking": "Checking knowledge space access…",
     "failed": "Could not load knowledge space permissions. Refresh the page to try again.",
     "revoked": "Access has expired for these knowledge spaces: {{names}}. Choose accessible spaces in Add context."
+  },
+  "memory": {
+    "nav_title": "Memory",
+    "switch_label": "My memory",
+    "switch_hint": "When on, chats automatically keep information that is useful to you and remember what you ask them to. When off, chats no longer read or write memory; you can still view and manage saved memories below.",
+    "list_title": "Saved memories",
+    "empty": "No saved memories yet",
+    "add": "Add",
+    "add_title": "Add memory",
+    "delete": "Delete",
+    "clear": "Clear all",
+    "clear_confirm_title": "Clear all memories?",
+    "clear_confirm_desc": "All of your saved memories will be deleted. This cannot be undone.",
+    "clear_confirm_ok": "Clear",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "content_placeholder": "What should be remembered (up to 200 characters)",
+    "type": {
+      "fact": "Fact",
+      "preference": "Preference",
+      "experience": "Experience"
+    },
+    "updated_at": "Last updated",
+    "detail_label": "Details",
+    "no_detail": "No details yet. Tell the AI below what to add.",
+    "back": "All memories",
+    "revise_label": "Ask the AI to change this memory",
+    "revise_placeholder": "Tell the AI how to change this memory, e.g. the trip moved to January",
+    "revise_send": "Send",
+    "revising": "The AI is updating this memory…",
+    "revised": "Updated",
+    "undo": "Undo",
+    "revise_unchanged": "Nothing in this memory needed changing",
+    "revise_failed": "Couldn't update it. Try again.",
+    "detail_load_failed": "Couldn't load the details",
+    "source": {
+      "manual": "Added manually",
+      "daily": "Daily chat",
+      "linsight": "Deep research",
+      "assistant": "Assistant",
+      "workflow": "Workflow",
+      "unknown": "Chat",
+      "auto": "{{source}} (organized automatically)"
+    },
+    "load_failed": "Could not load memories",
+    "retry": "Retry",
+    "save_failed": "Could not save. Please try again.",
+    "delete_failed": "Could not delete. Please try again.",
+    "clear_failed": "Could not clear. Please try again.",
+    "switch_failed": "Setting not saved. Please try again.",
+    "loading": "Loading…",
+    "notice": {
+      "pending": "Memory updated",
+      "remember": "Remembered {{count}} item(s)",
+      "correct": "Corrected {{count}} memory item(s)",
+      "forget": "Forgot {{count}} memory item(s)",
+      "updated": "Updated {{count}} memory item(s)",
+      "op_remember": "Remembered",
+      "op_correct": "Corrected",
+      "op_forget": "Forgot",
+      "item_gone": "This memory has been cleared",
+      "undo": "Undo",
+      "undone": "Undone",
+      "undo_failed": "Could not undo. Please try again."
+    },
+    "tool_operation": "Memory operation",
+    "step": {
+      "running_remember": "Remembering",
+      "running_correct": "Correcting a memory",
+      "running_forget": "Forgetting a memory",
+      "running_search": "Searching memory",
+      "running_write": "Updating memory",
+      "done_remember": "Remembered 1 memory",
+      "done_correct": "Corrected 1 memory",
+      "done_forget": "Forgot 1 memory",
+      "done_write": "Memory updated",
+      "done_search": "Searched memory, found {{count}}",
+      "done_search_empty": "Searched memory, nothing relevant",
+      "hits_gone": "The related memories have been deleted",
+      "failed_remember": "Memory write rejected: {{reason}}",
+      "failed_correct": "Memory correction rejected: {{reason}}",
+      "failed_forget": "Memory deletion rejected: {{reason}}",
+      "failed_search": "Memory search failed: {{reason}}",
+      "failed_write": "Memory update rejected: {{reason}}",
+      "reason_12100": "longer than 200 characters",
+      "reason_12101": "looks like a password, ID or card number",
+      "reason_12102": "uses a relative time such as \"tomorrow\" or \"next Tuesday\"",
+      "reason_12103": "the memory to change no longer exists or has changed",
+      "reason_12107": "memory search is temporarily unavailable",
+      "reason_12110": "invalid memory type",
+      "reason_12111": "the content is empty",
+      "reason_other": "the operation did not succeed"
+    },
+    "field": {
+      "type": "Category",
+      "source": "Source"
+    },
+    "group": {
+      "preference": "Preferences",
+      "fact": "Facts",
+      "experience": "Experiences"
+    }
+  },
+  "runTool": {
+    "viewCodeOutput": "View code and output",
+    "collapse": "Collapse",
+    "code": "Code",
+    "params": "Parameters",
+    "output": "Output"
   }
 }

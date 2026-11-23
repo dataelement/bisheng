@@ -90,6 +90,8 @@ async def test_stream_error_is_an_openai_error_event_followed_by_done(authorized
     response = await _post({"model": ASSISTANT_ID, "messages": [{"role": "user", "content": "hi"}], "stream": True})
 
     assert response.status_code == 200
+    assert response.headers["x-accel-buffering"] == "no"
+    assert response.headers["cache-control"] == "no-cache, no-transform"
     payloads = _sse_payloads(response.text)
     assert json.loads(payloads[0])["choices"][0]["delta"]["content"] == "par"
     assert json.loads(payloads[1]) == {"error": expected}

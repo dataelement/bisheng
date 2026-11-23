@@ -30,7 +30,7 @@
 | [`customer-guides/`](customer-guides/) | **对外口径**使用说明(如[多租户产品使用说明](customer-guides/多租户产品使用说明.md))——面向客户/实施,不含实现细节;PRD 与产品方案放 [`PRD/`](PRD/) |
 | [`observability/`](observability/) | BS_METRIC 指标日志契约(监控团队解析依据) |
 | [`私有化部署/`](私有化部署/) | 部署文档 |
-| [`upgrades/`](upgrades/) | 版本升级操作，包括 [3.0.2 升级至 3.1.0-beta1](upgrades/v3.1.0-beta1.md) |
+| [`upgrades/`](upgrades/) | 版本升级操作，包括 [3.0.0 升级至 3.1.0-beta1](upgrades/v3.1.0-beta1.md)，兼容3.0.1/3.0.2 |
 | [`blog/`](blog/) | 设计科普(如"企业权限体系的前世今生") |
 
 ## 独立待办

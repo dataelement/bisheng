@@ -16,7 +16,6 @@ from sqlmodel import Session
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
-    KnowledgeProcessingConflictError,
     ResourceReferenceInvalidError,
 )
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as App
@@ -82,7 +81,7 @@ async def test_actual_transition_finalizes_resource_and_source_with_same_generat
     row = next(row for row in facts["knowledge"] if row["id"] == 40)
     assert row["model"] == "12" and row["model_transition"] is None and row["state"] == 1
     assert row["model_config_revision"] == 2 and row["index_generation"] == original["index_generation"]
-    assert [(ref["slot_key"], ref["target_id"]) for ref in facts["business_resource_reference"]] == [("model", "12")]
+    assert [(ref["slot_key"], ref["target_id"]) for ref in facts["business_resource_reference"]] == []
     async with context.sessions() as session:
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await App.aprepare_finalization(session, 40, **expected(original))
@@ -99,7 +98,7 @@ async def test_obsolete_operation_revision_or_generation_cannot_finalize_a_diffe
     assert fixtures.state(context) == before
 
 
-async def test_reference_failure_keeps_current_pending_models_and_original_stage(building, monkeypatch):
+async def test_reference_failure_does_not_block_business_finalization(building, monkeypatch):
     context, original, _ = building
     before = fixtures.state(context)
     monkeypatch.setattr(
@@ -107,10 +106,12 @@ async def test_reference_failure_keeps_current_pending_models_and_original_stage
     )
     async with context.sessions() as session:
         plan = await App.aprepare_finalization(session, 40, **expected(original))
-        with pytest.raises(RuntimeError, match="R2 finalize failed"):
-            await App.aapply_finalization(session, plan)
-        await session.rollback()
-    assert fixtures.state(context) == before
+        await App.aapply_finalization(session, plan)
+        await session.commit()
+    facts = fixtures.state(context)
+    assert next(row for row in facts["knowledge"] if row["id"] == 40)["model"] == "12"
+    assert facts["business_resource_reference"] == before["business_resource_reference"]
+    context.runtime.aapply_source_bindings.assert_not_awaited()
 
 
 async def test_expired_real_worker_or_cloned_plan_cannot_apply_finalization(building):
@@ -148,6 +149,9 @@ async def test_pending_model_must_still_be_eligible_before_publishing_business_b
         )
     before = fixtures.state(context)
     async with context.sessions() as session:
-        with pytest.raises(KnowledgeProcessingConflictError if stage == "deleting" else ResourceReferenceInvalidError):
+        if stage == "deleted":
+            with pytest.raises(ResourceReferenceInvalidError):
+                await App.aprepare_finalization(session, 40, **expected(original))
+        else:
             await App.aprepare_finalization(session, 40, **expected(original))
     assert fixtures.state(context) == before

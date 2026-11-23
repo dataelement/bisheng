@@ -36,7 +36,7 @@ def offline(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no network")))
 
 
-async def test_real_prepared_empty_clear_is_emitted_as_ordinary_task_and_epoch_change_breaks_retry(
+async def test_real_prepared_empty_clear_is_an_ordinary_task_and_ignores_reference_epoch_change(
     application, context, monkeypatch
 ):
     plan = await application.aprecheck(identity=application.user, space_id=2, operation="knowledge_space_clear")
@@ -56,7 +56,7 @@ async def test_real_prepared_empty_clear_is_emitted_as_ordinary_task_and_epoch_c
         job = await session.get(KnowledgeSpaceDeleteJob, plan.confirmation_id)
         frozen = await session.get(KnowledgeOperationPlan, plan.confirmation_id)
         assert job.business_phase == "prepared" and job.state == "PENDING"
-        assert frozen.source_revisions["epoch"] == 1
+        assert "epoch" not in frozen.source_revisions
         assert not (await session.execute(sa.select(ResourceReferenceTombstone.id))).all()
         with pytest.raises(KnowledgeOperationPlanConflictError):
             _ = [
@@ -71,10 +71,11 @@ async def test_real_prepared_empty_clear_is_emitted_as_ordinary_task_and_epoch_c
         return replace(await original(self, version), coverage_epoch=2)
 
     monkeypatch.setattr(SqlStatus, "aget_global_status", next_epoch)
-    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
-        await application.aconfirm(identity=application.user, space_id=2, request=request)
-    print("ACTUAL_RESUME_REJECT", caught.value.kwargs)
-    assert caught.value.kwargs["reason"] == "knowledge_delete_impact_changed"
+    result = await application.aconfirm(identity=application.user, space_id=2, request=request)
+    assert result
+    async with context.db.sessions() as session:
+        job = await session.get(KnowledgeSpaceDeleteJob, plan.confirmation_id)
+        assert job.business_phase == "finalized"
 
 
 async def test_actual_sql_finalized_cleanup_is_allowed_and_does_not_revalidate_old_epoch(

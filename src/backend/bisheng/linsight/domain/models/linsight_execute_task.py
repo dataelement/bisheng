@@ -131,6 +131,20 @@ class LinsightExecuteTaskDao(object):
             return tasks.all()
 
     @classmethod
+    async def get_plan_columns_by_session_version_id(cls, session_version_id: str) -> List[tuple]:
+        """``(id, status, task_data)`` of every task of a session version.
+
+        Selects only these three columns. ``history`` and ``result`` grow with the
+        run and must not be read on a repeated path (see update_fields_by_id).
+        """
+        async with get_async_db_session() as session:
+            statement = select(
+                LinsightExecuteTask.id, LinsightExecuteTask.status, LinsightExecuteTask.task_data
+            ).where(LinsightExecuteTask.session_version_id == str(session_version_id))
+            rows = await session.exec(statement)
+            return [tuple(row) for row in rows.all()]
+
+    @classmethod
     async def batch_create_tasks(cls, tasks: List[LinsightExecuteTask]) -> List[LinsightExecuteTask]:
         """
         Batch Create Tasks

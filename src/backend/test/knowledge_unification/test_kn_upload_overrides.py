@@ -1,7 +1,7 @@
 """Original SPACE HTTP upload uses typed batch rules and the native writer."""
 
 import json
-from unittest.mock import call
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
 from fastapi import FastAPI
@@ -31,8 +31,12 @@ async def request(upload, payload):
     app = FastAPI()
     app.include_router(api.router, prefix="/api/v1")
     app.dependency_overrides[get_knowledge_space_service] = lambda: upload.service
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://offline") as client:
-        return await client.post("/api/v1/knowledge/space/40/files", json=payload)
+    # Legacy wire requires one issued upload reference per path; the reference
+    # contract itself is covered in test/knowledge/test_space_upload_source_security.py.
+    payload = {"preview_upload_refs": [f"ref-{i}" for i, _ in enumerate(payload["file_path"])], **payload}
+    with patch.object(api.PreviewSourceService, "resolve", AsyncMock(return_value=None)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://offline") as client:
+            return await client.post("/api/v1/knowledge/space/40/files", json=payload)
 
 
 @pytest.mark.parametrize("extra", [{}, {"overrides": None}, {"overrides": {}}])
@@ -43,7 +47,8 @@ async def test_http_omitted_null_empty_inherit_saved_defaults(upload, extra):
     actual = json.loads(row["split_rule"])
     assert actual["chunk_size"] == 800
     assert actual["_effective_processing"]["supplied_fields_by_layer"]["batch"] == []
-    assert upload.service._require_action.await_args_list == [call("knowledge_space", 40, "upload_file")] * 2
+    # Entry gate before resolving upload references, then the original add_file gate.
+    assert upload.service._require_action.await_args_list == [call("knowledge_space", 40, "upload_file")] * 3
     upload.publish.assert_called_once()
 
 
@@ -132,7 +137,7 @@ async def test_folder_upload_keeps_only_original_container_action_with_explicit_
     row = response.json()["data"][0]
     assert row["file_level_path"] == "/95"
     assert json.loads(row["split_rule"])["chunk_size"] == 600
-    assert upload.service._require_action.await_args_list == [call("folder", 95, "upload_file")] * 2
+    assert upload.service._require_action.await_args_list == [call("folder", 95, "upload_file")] * 3
 
 
 @pytest.mark.parametrize(

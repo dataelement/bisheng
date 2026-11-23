@@ -56,13 +56,12 @@ jest.mock('~/components/ui', () => {
 jest.mock('./Input/ChatSkillSelector', () => ({ ChatSkillSelector: ({ onChange }) => <button onClick={() => onChange(mockSkills)}>skills</button> }));
 jest.mock('./Input/AgentToolSelector', () => () => <button>tools</button>);
 jest.mock('./Input/ChatFormTools', () => ({ ChatToolDown: () => <button>legacy tools</button> }));
-jest.mock('~/components/Linsight/Input/TaskModeToggle', () => ({ TaskModeToggle: () => <button>research</button> }));
 jest.mock('./Input/ChatResourceMenu', () => ({
-  ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, onFileUploadClick, showTools, showResearch, researchActive, onResearchChange, children }) => (
+  ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, fileUploadDisabled, fileUploadDisabledReason, onFileUploadClick, showTools, showResearch, researchActive, onResearchChange, children }) => (
     <div>
       {children}{showTools && <button>tools</button>}{showResearch && <button aria-pressed={researchActive} onClick={onResearchChange}>research</button>}
       {showKnowledgeSelection && <button>spaces</button>}
-      {showFileUpload && <button onClick={onFileUploadClick}>upload</button>}
+      {showFileUpload && <button disabled={fileUploadDisabled} title={fileUploadDisabledReason} onClick={onFileUploadClick}>upload</button>}
     </div>
   ),
 }));
@@ -71,7 +70,7 @@ jest.mock('./Input/AttachmentBar', () => ({
 }));
 jest.mock('./Input/Files/DragDropOverlay', () => () => null);
 jest.mock('~/components/Voice/SpeechToText', () => () => null);
-jest.mock('./AiModelSelect', () => () => <button>model</button>);
+jest.mock('./AiModelSelect', () => ({ disabled, disabledReason }) => <button disabled={disabled} title={disabledReason}>model</button>);
 jest.mock('~/pages/appChat/components/InputFiles', () => {
   const React = jest.requireActual('react');
   const StubInputFiles = React.forwardRef(({ onChange, accepts }, ref) => {
@@ -360,4 +359,94 @@ test('an explicit new composer discards unsent files without a late send clearin
   onSend.mockResolvedValue(true);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
   expect(onSend).toHaveBeenLastCalledWith('Question B', null);
+});
+
+// ── F004 T048: a run in progress accepts messages on the conversation page ──
+test('conversation composer keeps the text box and send button usable next to stop while a run is in progress (AC-12)', () => {
+  const input = { ...props(), features: { taskMode: false } };
+  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming value="Change step 3" />);
+  expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'true');
+  expect(screen.getByRole('button', { name: 'Stop generating' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(input.onSend).toHaveBeenCalledWith('Change step 3', null);
+  fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }));
+  expect(input.onStop).toHaveBeenCalledTimes(1);
+});
+
+// ── F004 design §7 item 7: no upload and no model switch while a run is in progress ──
+function dropFile() {
+  const file = new File(['notes'], 'late.txt', { type: 'text/plain' });
+  fireEvent.drop(window, { dataTransfer: { files: [file], items: [], clearData: () => {} } });
+}
+
+test('conversation composer locks upload and the model selector while a run is in progress, and says when they come back', () => {
+  const input = { ...props(), features: { taskMode: false } };
+  const view = render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming value="Change step 3" />);
+  expect(screen.getByRole('button', { name: 'upload' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'upload' })).toHaveAttribute('title', 'runComposer.uploadLocked');
+  expect(screen.getByRole('button', { name: 'model' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'model' })).toHaveAttribute('title', 'runComposer.modelLocked');
+  // Typing and sending are not part of the lock.
+  expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'true');
+  expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
+  // The run ended: both controls are back, with no leftover reason.
+  view.rerender(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} value="Change step 3" />);
+  expect(screen.getByRole('button', { name: 'upload' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'upload' })).not.toHaveAttribute('title');
+  expect(screen.getByRole('button', { name: 'model' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'model' })).not.toHaveAttribute('title');
+});
+
+test('conversation composer refuses a pasted or dropped file while a run is in progress and explains why', () => {
+  const input = { ...props(), features: { taskMode: false } };
+  const view = render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming />);
+  mockToast.mockClear();
+  pasteImage();
+  expect(mockToast).toHaveBeenCalledWith({ message: 'runComposer.uploadLocked', status: 'warning' });
+  mockToast.mockClear();
+  dropFile();
+  expect(mockToast).toHaveBeenCalledWith({ message: 'runComposer.uploadLocked', status: 'warning' });
+  expect(screen.queryByTestId('attachments')).toBeNull();
+  // Once the run ended the same drop is an attachment again.
+  view.rerender(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} />);
+  mockToast.mockClear();
+  dropFile();
+  expect(mockToast).not.toHaveBeenCalled();
+  expect(screen.getByTestId('attachments')).toHaveTextContent('late.txt');
+});
+
+test('a streaming run adds no upload or model lock of its own when the input is not the conversation composer', () => {
+  const input = { ...props(), features: { taskMode: false } };
+  render(<AiChatInput {...input} allowConfiguration={false} isStreaming />);
+  expect(screen.getByRole('button', { name: 'upload' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'upload' })).not.toHaveAttribute('title');
+  expect(screen.getByRole('button', { name: 'model' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'model' })).not.toHaveAttribute('title');
+});
+
+test('conversation composer sends on Enter while a run is in progress (AC-12)', () => {
+  const input = { ...props(), features: { taskMode: false } };
+  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming value="Go on" />);
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(input.onSend).toHaveBeenCalledWith('Go on', null);
+});
+
+test('conversation composer shows no stop button when nothing runs', () => {
+  const input = { ...props() };
+  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} />);
+  expect(screen.queryByRole('button', { name: 'Stop generating' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument();
+});
+
+test.each([
+  ['the input is not the conversation composer', {}],
+  ['the input is the /linsight composer', { composerIdentity: 'c1', isLingsi: true }],
+])('a streaming run still blocks the composer when %s', (_name, extra) => {
+  const input = { ...props(), features: { taskMode: false }, ...extra };
+  render(<AiChatInput {...input} allowConfiguration={false} isStreaming value="Change step 3" />);
+  expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'false');
+  expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull();
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(input.onSend).not.toHaveBeenCalled();
 });

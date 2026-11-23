@@ -30,7 +30,9 @@ import type { AgentEvent } from "~/api/chatApi";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import ThinkingContent from "./ThinkingContent";
-import ToolCallDisplay from "./ToolCallDisplay";
+import { isMemoryToolEvent } from "~/api/memory";
+import { describeMemoryStep } from "~/components/Memory/memoryStep";
+import ToolCallDisplay, { MemoryToolStep } from "./ToolCallDisplay";
 
 const BUTTON_STYLES = {
     base: "group flex w-fit items-center gap-1 text-sm font-medium leading-[22px] text-text-1",
@@ -84,9 +86,13 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         // that search, not merged into the block above it. Mirrors task mode's
         // DeepStepGroup.buildSegments.
         const segments = useMemo(() => {
+            type ToolCallEvent = Extract<AgentEvent, { type: "tool_call" }>;
             type Segment =
                 | { kind: "thinking"; key: string; content: string }
-                | { kind: "tool"; key: string; toolCall: Extract<AgentEvent, { type: "tool_call" }> };
+                | { kind: "tool"; key: string; toolCall: ToolCallEvent }
+                | { kind: "memorySearch"; key: string; toolCalls: ToolCallEvent[] };
+            const isMemorySearch = (call: ToolCallEvent) =>
+                isMemoryToolEvent(call) && describeMemoryStep(call).op === "search";
             const out: Segment[] = [];
             events.forEach((ev, i) => {
                 if (ev.type === "thinking") {
@@ -102,6 +108,14 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                         out.push({ kind: "thinking", key: `think-${i}`, content: ev.content });
                     }
                 } else if (ev.type === "tool_call") {
+                    // F132: memory searches fired back to back (often in parallel)
+                    // read as one step, so the same "found N" row does not repeat.
+                    const last = out[out.length - 1];
+                    if (isMemorySearch(ev)) {
+                        if (last?.kind === "memorySearch") last.toolCalls.push(ev);
+                        else out.push({ kind: "memorySearch", key: ev.tool_call_id || `tc-${i}`, toolCalls: [ev] });
+                        return;
+                    }
                     out.push({ kind: "tool", key: ev.tool_call_id || `tc-${i}`, toolCall: ev });
                 }
             });
@@ -129,6 +143,9 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                         {segments.map((seg, i) => {
                             // Connector runs to the next row, whatever kind it is.
                             const hasNext = i < segments.length - 1;
+                            if (seg.kind === "memorySearch") {
+                                return <MemoryToolStep key={seg.key} toolCalls={seg.toolCalls} showConnector={hasNext} />;
+                            }
                             return seg.kind === "thinking" ? (
                                 <ThinkingContent
                                     key={seg.key}

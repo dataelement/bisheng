@@ -71,6 +71,19 @@ class LinsightSkillBase(SQLModelSerializable):
             comment="Preselected in the end-user picker",
         ),
     )
+    # F005: hidden from every end-user picker and available to every user who
+    # may see the skill, regardless of a personal opt-out. Only while enabled.
+    auto_enabled: bool = Field(
+        default=False,
+        description="Auto-enabled: hidden from end-user pickers, always available",
+        sa_column=Column(
+            "auto_enabled",
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="Auto-enabled: hidden from pickers, always available",
+        ),
+    )
     source: str = Field(
         default=SKILL_SOURCE_MANUAL,
         description="manual | sop_migrated | builtin",
@@ -292,6 +305,22 @@ class LinsightSkillDao:
                 .where(col(LinsightSkill.tenant_id) == tid)
                 .where(col(LinsightSkill.owner_user_id) == owner_user_id)
                 .values(default_checked=default_checked, update_time=datetime.now())
+            )
+            result = await session.exec(statement)
+            await session.commit()
+            return result.rowcount > 0
+
+    @classmethod
+    async def set_auto_enabled(cls, name: str, auto_enabled: bool) -> bool:
+        """F005: tenant skills only (owner 0). Same explicit tenant scoping as set_default_checked."""
+        tid = get_current_tenant_id() or DEFAULT_TENANT_ID
+        async with get_async_db_session() as session:
+            statement = (
+                update(LinsightSkill)
+                .where(col(LinsightSkill.name) == name)
+                .where(col(LinsightSkill.tenant_id) == tid)
+                .where(col(LinsightSkill.owner_user_id) == 0)
+                .values(auto_enabled=auto_enabled, update_time=datetime.now())
             )
             result = await session.exec(statement)
             await session.commit()

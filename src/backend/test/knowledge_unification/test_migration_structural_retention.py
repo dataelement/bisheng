@@ -6,10 +6,6 @@ from contextlib import asynccontextmanager
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
-from test.knowledge_unification import test_migration_inventory_application as original
-from test.knowledge_unification import test_migration_references_application as reference_tests
-from test.knowledge_unification import test_migration_resource_repository as resources
-from test.knowledge_unification.test_migration_legacy_index_retention import resource as old_resource
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import tenant_execution_scope
@@ -22,6 +18,10 @@ from bisheng.knowledge.application.unification_structural_retention import (
     stranded_retention,
 )
 from bisheng.permission.domain.models import PermissionGrant, ResourcePermissionMode
+from test.knowledge_unification import test_migration_inventory_application as original
+from test.knowledge_unification import test_migration_references_application as reference_tests
+from test.knowledge_unification import test_migration_resource_repository as resources
+from test.knowledge_unification.test_migration_legacy_index_retention import resource as old_resource
 
 raw_resource_native = reference_tests.raw_resource_native
 resource_native = reference_tests.resource_native
@@ -240,7 +240,7 @@ async def test_native_m2_m3_and_resume_preserve_rows_and_never_create_permission
                 ).records
             )
     assert len(proofs) == 1 and proofs[0].record_type == (
-        "stranded_file_retention" if stranded else "existing_space_creator_retention"
+        "stranded_file_retention" if stranded else "historical_resource_creator_retention"
     )
     with tenant_execution_scope(1):
         assert (await app.arun(**transport.inputs)).sql_complete

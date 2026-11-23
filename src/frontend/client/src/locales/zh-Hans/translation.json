@@ -65,7 +65,13 @@
     "copyFailed": "复制失败，请手动选中账号复制。"
   },
   "project_sync": {
-    "reason": { "not_owned": "当前账号在旧项目中没有对话，未导入", "cloud_membership_kept": "已保留云端归属", "conversation_unavailable": "对话已删除或不属于当前账号", "invalid_local_data": "本机记录损坏或格式无效", "unknown": "此项未导入" },
+    "reason": {
+      "not_owned": "当前账号在旧项目中没有对话，未导入",
+      "cloud_membership_kept": "已保留云端归属",
+      "conversation_unavailable": "对话已删除或不属于当前账号",
+      "invalid_local_data": "本机记录损坏或格式无效",
+      "unknown": "此项未导入"
+    },
     "loading": "正在加载…",
     "more": "加载更多",
     "save_failed": "项目未能保存，请重试。输入已保留。",
@@ -471,7 +477,7 @@
   "com_linsight_add_skill": "添加技能",
   "com_linsight_exit_task_mode": "关闭深度研究",
   "com_linsight_input_placeholder": "请输入你的任务目标，交给$t(com_linsight_task_mode)完成",
-  "com_linsight_awaiting_reply": "请在上方回答问题后继续任务",
+  "com_linsight_answer_placeholder": "点上面的选项，或者直接输入你的回答",
   "com_linsight_skill_empty": "暂无可用技能",
   "com_linsight_skill_search": "搜索技能",
   "com_linsight_task_mode": "深度研究",
@@ -2603,7 +2609,14 @@
   "com_chat_image_expired": "图片已失效\n无法查看",
   "com_error_file_upload_incomplete": "「{{0}}」尚未上传完成，请移除后重新上传再发送",
   "com_linsight_error_title_chat_unknown": "回复生成失败",
-  "com_linsight_error_desc_chat_unknown": "本次回复在生成过程中出现异常，已中断。",
+  "com_linsight_error_desc_chat_unknown": "系统处理这条消息时出错，没有生成回复。请重新发送；如果多次失败，请联系管理员。",
+  "com_linsight_error_desc_chat_content_filter": "模型服务商判定这次的内容可能不合规，没有生成回复。请换一种说法，或把问题拆开后重新提问。",
+  "com_linsight_error_desc_chat_quota_exhausted": "当前模型的调用额度或账户余额已用完，没有生成回复。请联系管理员充值，或换一个可用的模型后重新发送。",
+  "com_linsight_error_desc_chat_credit_exhausted": "你本月可用的模型积分已经用完，没有生成回复。请联系管理员调整积分额度；积分在下个月初恢复。",
+  "com_linsight_error_desc_chat_auth_error": "当前模型的访问凭证无效或没有权限，没有生成回复。请联系管理员检查模型配置。",
+  "com_linsight_error_desc_chat_context_overflow": "这次要处理的内容超出了当前模型一次能处理的长度，没有生成回复。请缩短内容或减少附件后重新发送，也可以换用上下文更长的模型。",
+  "com_linsight_error_desc_chat_context_compress_failed": "对话内容较多，系统需要先把较早的内容整理成摘要，但整理没有成功，没有生成回复。请重新发送；如果多次失败，请联系管理员检查模型服务。",
+  "com_linsight_error_desc_chat_output_truncated": "模型在这次回复中思考过长，达到了单次输出上限，没有生成回复。请重新发送；如果反复出现，请联系管理员调大该模型的最大输出长度。",
   "com_linsight_error_hint_chat_unknown": "建议：重新发送该消息；若多次失败请联系管理员。",
   "com_linsight_error_title_file_parse_busy": "文件解析服务繁忙",
   "com_linsight_error_desc_file_parse_busy": "文件解析服务当前请求较多，本次上传的文件没能解析完成。",
@@ -3002,6 +3015,7 @@
     "noModelsConfigured": "管理员还没有配置可用的模型，暂时不能发送消息。请联系管理员添加模型。",
     "recommendedApps": "推荐应用",
     "scrollToBottom": "回到底部",
+    "messageQueued": "已发送，排队处理中",
     "preview": "预览",
     "source": "源文件",
     "closeResearch": "关闭深度研究",
@@ -3106,6 +3120,22 @@
       "description": "创建和修改 Excel 工作簿（.xlsx），适用于数据表、汇总表、预算表、财务模型、报价单和台账。支持读取和清洗 .xlsx、.xls、.csv 数据，设置公式与格式，并在交付前重算和检查工作簿。"
     }
   },
+  "runPlan": {
+    "cancelled": "已取消",
+    "stopped": "已停止",
+    "awaitingAnswer": "等你回答后继续",
+    "stoppedNote": "已停止，做完的步骤和文件都保留着。"
+  },
+  "runMessage": {
+    "toolStopped": "{{name}}已停止"
+  },
+  "runComposer": {
+    "stoppedPlaceholder": "已停止。说一句话就能接着做",
+    "runningPlaceholder": "回答进行中，可随时补充，按 Enter 发送",
+    "stopFailed": "没能停下来，请再试一次",
+    "uploadLocked": "当前回答结束后才能上传文件",
+    "modelLocked": "当前回答结束后才能切换模型"
+  },
   "appChat": {
     "unknownApp": "未知应用",
     "noDescription": "暂无描述信息",
@@ -3116,5 +3146,115 @@
     "checking": "正在核验知识空间访问权限…",
     "failed": "知识空间权限加载失败，请刷新页面后重试。",
     "revoked": "以下知识空间的访问权限已失效：{{names}}。请在“添加上下文”中重新选择可访问的空间。"
+  },
+  "memory": {
+    "nav_title": "记忆",
+    "switch_label": "我的记忆",
+    "switch_hint": "开启后，对话会自动整理出对你有用的信息，并记住你要求记下的内容。关闭后，对话不再读写记忆；下方已保存的记忆仍可查看和管理。",
+    "list_title": "已保存的记忆",
+    "empty": "还没有保存的记忆",
+    "add": "新增",
+    "add_title": "新增记忆",
+    "delete": "删除",
+    "clear": "清空全部",
+    "clear_confirm_title": "清空全部记忆？",
+    "clear_confirm_desc": "你保存的全部记忆都会被删除，删除后无法恢复。",
+    "clear_confirm_ok": "清空",
+    "cancel": "取消",
+    "close": "关闭",
+    "save": "保存",
+    "content_placeholder": "写下要记住的内容，200 字以内",
+    "type": {
+      "fact": "事实",
+      "preference": "偏好",
+      "experience": "经验"
+    },
+    "updated_at": "最近更新",
+    "detail_label": "详情",
+    "no_detail": "还没有详情，可以在下方告诉 AI 补充",
+    "back": "全部记忆",
+    "revise_label": "让 AI 修改这条记忆",
+    "revise_placeholder": "告诉 AI 怎么改这条记忆，例如：出行改到 1 月了",
+    "revise_send": "发送",
+    "revising": "AI 正在修改这条记忆…",
+    "revised": "已修改",
+    "undo": "撤销",
+    "revise_unchanged": "这条记忆没有需要修改的地方",
+    "revise_failed": "修改失败，请重试",
+    "detail_load_failed": "详情加载失败",
+    "source": {
+      "manual": "手动添加",
+      "daily": "日常对话",
+      "linsight": "深度研究",
+      "assistant": "助手",
+      "workflow": "工作流",
+      "unknown": "对话",
+      "auto": "{{source}}（自动整理）"
+    },
+    "load_failed": "记忆加载失败",
+    "retry": "重试",
+    "save_failed": "保存失败，请重试",
+    "delete_failed": "删除失败，请重试",
+    "clear_failed": "清空失败，请重试",
+    "switch_failed": "设置未保存，请重试",
+    "loading": "加载中…",
+    "notice": {
+      "pending": "记忆已更新",
+      "remember": "已记下 {{count}} 条记忆",
+      "correct": "已更正 {{count}} 条记忆",
+      "forget": "已忘掉 {{count}} 条记忆",
+      "updated": "已更新 {{count}} 条记忆",
+      "op_remember": "记下",
+      "op_correct": "更正",
+      "op_forget": "忘掉",
+      "item_gone": "这条记忆已被清空",
+      "undo": "撤销",
+      "undone": "已撤销",
+      "undo_failed": "撤销失败，请重试"
+    },
+    "tool_operation": "记忆操作",
+    "step": {
+      "running_remember": "正在记下记忆",
+      "running_correct": "正在更正记忆",
+      "running_forget": "正在忘掉记忆",
+      "running_search": "正在查找记忆",
+      "running_write": "正在处理记忆",
+      "done_remember": "已记下 1 条记忆",
+      "done_correct": "已更正 1 条记忆",
+      "done_forget": "已忘掉 1 条记忆",
+      "done_write": "记忆已更新",
+      "done_search": "查找记忆，找到 {{count}} 条",
+      "done_search_empty": "查找记忆，没有相关内容",
+      "hits_gone": "相关记忆已被删除",
+      "failed_remember": "记忆写入被拒绝：{{reason}}",
+      "failed_correct": "记忆更正被拒绝：{{reason}}",
+      "failed_forget": "记忆删除被拒绝：{{reason}}",
+      "failed_search": "记忆检索失败：{{reason}}",
+      "failed_write": "记忆更新被拒绝：{{reason}}",
+      "reason_12100": "内容超过 200 字",
+      "reason_12101": "内容像密码、证件号或卡号",
+      "reason_12102": "内容里有“明天”“下周二”这类相对时间",
+      "reason_12103": "要改的记忆不存在或已经变了",
+      "reason_12107": "记忆检索暂时不可用",
+      "reason_12110": "记忆类型不对",
+      "reason_12111": "内容为空",
+      "reason_other": "操作没有成功"
+    },
+    "field": {
+      "type": "分类",
+      "source": "来源"
+    },
+    "group": {
+      "preference": "偏好",
+      "fact": "事实",
+      "experience": "经验"
+    }
+  },
+  "runTool": {
+    "viewCodeOutput": "查看代码和输出",
+    "collapse": "收起",
+    "code": "代码",
+    "params": "参数",
+    "output": "输出"
   }
 }

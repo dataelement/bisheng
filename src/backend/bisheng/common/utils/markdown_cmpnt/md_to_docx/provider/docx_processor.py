@@ -1,24 +1,20 @@
 # noinspection PyProtectedMember
 #
-import base64
-import binascii
 import io
 import re
-from socket import socket
-from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
 
 from bs4 import BeautifulSoup
 from docx import Document
-from docx.enum.text import *
+from docx.enum.text import WD_COLOR_INDEX, WD_PARAGRAPH_ALIGNMENT
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
-from docx.shared import Inches, RGBColor, Pt
+from docx.shared import Inches, Pt, RGBColor
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 from loguru import logger
 
+from bisheng.common.utils.markdown_cmpnt.image_resources import image_bytes
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.provider.docx_plus import add_hyperlink
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.provider.style_manager import StyleManager
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.utils.style_enum import MDX_STYLE
@@ -55,15 +51,15 @@ class DocxProcessor:
     def add_run(self, p: Paragraph, content: str, char_style: str = "plain"):
         # fixme Sentences with more than one style in a row are ignored, such as:
         # <u>**Bold and*Italic*Underline again**</u>
-        self.debug("[%s]:" % char_style, content)
+        self.debug(f"[{char_style}]:", content)
         run = p.add_run(content)
 
         # Standardized label name - will be HTML5 Label mapping to standard styles
         style_map = {
-            'b': 'strong',      # <b> -> Bold
-            'i': 'em',          # <i> -> Italic
-            'del': 'strike',    # <del> -> Strikethrough
-            'mark': 'highlight' # <mark> -> Gao Liang
+            "b": "strong",  # <b> -> Bold
+            "i": "em",  # <i> -> Italic
+            "del": "strike",  # <del> -> Strikethrough
+            "mark": "highlight",  # <mark> -> Gao Liang
         }
         char_style = style_map.get(char_style, char_style)
 
@@ -94,7 +90,7 @@ class DocxProcessor:
 
         # Security check: Make sure the code block has content
         if pre_tag.contents and len(pre_tag.contents) > 0 and pre_tag.contents[0].string:
-            code_text = pre_tag.contents[0].string.rstrip('\n')
+            code_text = pre_tag.contents[0].string.rstrip("\n")
             run = row_cells[0].paragraphs[0].add_run(code_text)
             run.font.name = "Consolas"
         else:
@@ -121,8 +117,6 @@ class DocxProcessor:
 
         img_src: str
         scale: float = 100  # Highest priority, unit %
-        width_px: int = 100
-        height_px: int = 100
 
         # Set width
         if img_tag.get("style"):
@@ -133,69 +127,25 @@ class DocxProcessor:
             for attr in img_attr:
                 if attr.find("width") != -1:
                     # TODO <g id="Bold">Medical Treatment:</g> style Medium Width and Height Properties
-                    width_px = int(re.findall(r"\d+", attr)[0])
+                    int(re.findall(r"\d+", attr)[0])
                 if attr.find("height") != -1:
-                    height_px = int(re.findall(r"\d+", attr)[0])
+                    int(re.findall(r"\d+", attr)[0])
                 if attr.find("zoom") != -1:
                     scale = int(re.findall(r"\d+", attr)[0])
 
         img_src = img_tag.get("src") or ""
-        # sanitize_html_for_pdf drops any src without a safe scheme (relative or
-        # absolute local paths), so a tag may arrive with no src at all.
-        if not img_src and not img_tag.get("title"):
-            logger.warning("[md2docx] image skipped: no usable src (alt={!r})", img_tag.get("alt"))
-        elif img_src.startswith("data:"):
-            # Inline image (e.g. a workspace image embedded by the export tools).
-            try:
-                header, _, payload = img_src.partition(",")
-                if not header.lower().startswith("data:image/") or ";base64" not in header.lower():
-                    raise ValueError("not a base64 image data URI")
-                data_stream = io.BytesIO(base64.b64decode(payload))
-                run.add_picture(data_stream, width=Inches(5.7 * scale / 100))
-            except (ValueError, binascii.Error) as e:
-                logger.warning("[md2docx] invalid data URI image skipped: {}", e)
-            except Exception as e:
-                logger.warning("[md2docx] failed to load data URI image: {}: {}", type(e).__name__, e)
-        elif img_src:
-            # webauthn
-            if img_src.startswith("http://") or img_src.startswith("https://"):
-                print("[IMAGE] fetching:", img_src)
-                try:
-                    image_bytes = urlopen(img_src, timeout=10).read()
-                    data_stream = io.BytesIO(image_bytes)
-                    run.add_picture(data_stream, width=Inches(5.7 * scale / 100))
-                except HTTPError as e:
-                    print(f"[HTTP ERROR] {e.code}: {img_src}")
-                except socket.timeout:
-                    print(f"[TIMEOUT] Image load timeout: {img_src}")
-                except URLError as e:
-                    print(f"[URL ERROR] Failed to fetch image: {e.reason} - {img_src}")
-                except Exception as e:
-                    print(f"[RESOURCE ERROR] {type(e).__name__}: {e} - {img_src}")
-            else:
-                # Location Image
-                try:
-                    run.add_picture(img_src, width=Inches(5.7 * scale / 100))
-                except FileNotFoundError:
-                    print(f"[FILE ERROR] Image not found: {img_src}")
-                except Exception as e:
-                    print(f"[RESOURCE ERROR] Failed to load image: {type(e).__name__}: {e} - {img_src}")
+        # The title is descriptive metadata, never a fallback resource locator.
+        # Owned workspace pictures are already inlined by the authorized caller.
+        if not img_src:
+            logger.warning("[md2docx] image skipped: no supported source")
         else:
-            # webauthn
-            img_src = img_tag.get("title")
-            print("[IMAGE] fetching:", img_src)
             try:
-                image_bytes = urlopen(img_src, timeout=10).read()
-                data_stream = io.BytesIO(image_bytes)
-                run.add_picture(data_stream, width=Inches(5.7 * scale / 100))
-            except HTTPError as e:
-                print(f"[HTTP ERROR] {e.code}: {img_src}")
-            except socket.timeout:
-                print(f"[TIMEOUT] Image load timeout: {img_src}")
-            except URLError as e:
-                print(f"[URL ERROR] Failed to fetch image: {e.reason} - {img_src}")
-            except Exception as e:
-                print(f"[RESOURCE ERROR] {type(e).__name__}: {e} - {img_src}")
+                content = image_bytes(img_src)
+                run.add_picture(io.BytesIO(content), width=Inches(5.7 * scale / 100))
+            except Exception:
+                # Pictures are optional in an otherwise useful export. This
+                # explicit best-effort boundary must not log sensitive URLs.
+                logger.warning("[md2docx] image skipped: unavailable or rejected resource")
 
         # If you choose to display an image description, the description will appear below the image
         # Note: Add descriptions only in standalone paragraph mode(Avoid interrupting paragraph flow)
@@ -215,14 +165,14 @@ class DocxProcessor:
         if table_root.thead and table_root.thead.tr:
             has_thead = True
             for col in table_root.thead.tr.contents:
-                if col.name in ['th', 'td']:
+                if col.name in ["th", "td"]:
                     col_count += 1
         elif table_root.tbody:
             # FROM tbody Number of columns in the first row
-            first_row = table_root.tbody.find('tr')
+            first_row = table_root.tbody.find("tr")
             if first_row:
                 for col in first_row.contents:
-                    if col.name in ['th', 'td']:
+                    if col.name in ["th", "td"]:
                         col_count += 1
 
         if col_count == 0:
@@ -236,7 +186,7 @@ class DocxProcessor:
             head_row_cells = table.add_row().cells
             i = 0
             for col in table_root.thead.tr.contents:
-                if col.name in ['th', 'td']:
+                if col.name in ["th", "td"]:
                     cell_text = col.get_text(strip=True)
                     head_row_cells[i].paragraphs[0].add_run(cell_text).bold = True
                     i += 1
@@ -244,12 +194,12 @@ class DocxProcessor:
         # Data Line
         if table_root.tbody:
             for tr in table_root.tbody:
-                if tr.name != 'tr':
+                if tr.name != "tr":
                     continue
                 row_cells = table.add_row().cells
                 i = 0
                 for td in tr.contents:
-                    if td.name in ['th', 'td']:
+                    if td.name in ["th", "td"]:
                         cell_text = td.get_text(strip=True)
                         row_cells[i].text = cell_text
                         i += 1
@@ -257,51 +207,56 @@ class DocxProcessor:
     def add_number_list(self, number_list):
         # print(number_list.contents, "\n")
         for item in number_list.children:
-            if item.name != 'li':  # Skip non- li label
+            if item.name != "li":  # Skip non- li label
                 continue
 
             # Get direct text content(Exclude subtags)
-            direct_text = ''.join([str(s) for s in item.find_all(text=True, recursive=False)]).strip()
+            direct_text = "".join([str(s) for s in item.find_all(text=True, recursive=False)]).strip()
 
             # Check if there are paragraph tags
-            has_paragraph_tag = item.find('p') is not None
+            has_paragraph_tag = item.find("p") is not None
 
             # If there is direct text,Add your paragraph
             if direct_text:
-                self.add_paragraph(item, p_style=MDX_STYLE.LIST_NUMBER) \
-                    .style.paragraph_format.space_after = Pt(1)  # TODO Number List Style
+                self.add_paragraph(item, p_style=MDX_STYLE.LIST_NUMBER).style.paragraph_format.space_after = Pt(
+                    1
+                )  # TODO Number List Style
             # If there is no direct text but there is <p> label,<g id="Bold">Medical Treatment:</g> <p> label
             elif has_paragraph_tag:
                 para_count = 0
                 for child in item.children:
-                    if hasattr(child, 'name') and child.name == 'p':
+                    if hasattr(child, "name") and child.name == "p":
                         if para_count == 0:
                             # first <p> Use list style
-                            self.add_paragraph(child, p_style=MDX_STYLE.LIST_NUMBER) \
-                                .style.paragraph_format.space_after = Pt(1)
+                            self.add_paragraph(
+                                child, p_style=MDX_STYLE.LIST_NUMBER
+                            ).style.paragraph_format.space_after = Pt(1)
                         else:
                             # Additional <p> Use continuation style
-                            self.add_paragraph(child, p_style=MDX_STYLE.LIST_CONTINUE) \
-                                .style.paragraph_format.space_after = Pt(1)
+                            self.add_paragraph(
+                                child, p_style=MDX_STYLE.LIST_CONTINUE
+                            ).style.paragraph_format.space_after = Pt(1)
                         para_count += 1
 
             # Working with Nested Ordered Lists
             if hasattr(item, "ol") and item.ol is not None:
                 sub_num: int = 1  # Sub-Serial Number
                 for item2 in item.ol.children:
-                    if item2.name != 'li':
+                    if item2.name != "li":
                         continue
-                    self.add_paragraph(item2, prefix="(%d). " % sub_num, p_style=MDX_STYLE.LIST_CONTINUE) \
-                        .style.paragraph_format.first_line_indent = 0  # TODO Number List Style
+                    self.add_paragraph(
+                        item2, prefix="(%d). " % sub_num, p_style=MDX_STYLE.LIST_CONTINUE
+                    ).style.paragraph_format.first_line_indent = 0  # TODO Number List Style
                     sub_num += 1
 
             # Working with Nested Unordered Lists
             if hasattr(item, "ul") and item.ul is not None:
                 for item2 in item.ul.children:
-                    if item2.name != 'li':
+                    if item2.name != "li":
                         continue
-                    self.add_paragraph(item2, prefix="•  ", p_style=MDX_STYLE.LIST_CONTINUE) \
-                        .style.paragraph_format.space_after = Pt(1)
+                    self.add_paragraph(
+                        item2, prefix="•  ", p_style=MDX_STYLE.LIST_CONTINUE
+                    ).style.paragraph_format.space_after = Pt(1)
 
     def add_bullet_list(self, bullet_list):
         # It may be. list
@@ -310,32 +265,33 @@ class DocxProcessor:
             self.add_todo_list(bullet_list)
             return
         for item in bullet_list.children:
-            if item.name != 'li':  # Skip non- li label
+            if item.name != "li":  # Skip non- li label
                 continue
 
             # Get direct text content(Exclude subtags)
-            direct_text = ''.join([str(s) for s in item.find_all(text=True, recursive=False)]).strip()
+            direct_text = "".join([str(s) for s in item.find_all(text=True, recursive=False)]).strip()
 
             # Check if there are paragraph tags
-            has_paragraph_tag = item.find('p') is not None
+            has_paragraph_tag = item.find("p") is not None
 
             # If there is direct text,Add your paragraph
             if direct_text:
-                self.add_paragraph(item, p_style=MDX_STYLE.LIST_BULLET) \
-                    .style.paragraph_format.space_after = Pt(1)
+                self.add_paragraph(item, p_style=MDX_STYLE.LIST_BULLET).style.paragraph_format.space_after = Pt(1)
             # If there is no direct text but there is <p> label,<g id="Bold">Medical Treatment:</g> <p> label
             elif has_paragraph_tag:
                 para_count = 0
                 for child in item.children:
-                    if hasattr(child, 'name') and child.name == 'p':
+                    if hasattr(child, "name") and child.name == "p":
                         if para_count == 0:
                             # first <p> Use list style
-                            self.add_paragraph(child, p_style=MDX_STYLE.LIST_BULLET) \
-                                .style.paragraph_format.space_after = Pt(1)
+                            self.add_paragraph(
+                                child, p_style=MDX_STYLE.LIST_BULLET
+                            ).style.paragraph_format.space_after = Pt(1)
                         else:
                             # Additional <p> Use continuation style
-                            self.add_paragraph(child, p_style=MDX_STYLE.LIST_CONTINUE) \
-                                .style.paragraph_format.space_after = Pt(1)
+                            self.add_paragraph(
+                                child, p_style=MDX_STYLE.LIST_CONTINUE
+                            ).style.paragraph_format.space_after = Pt(1)
                         para_count += 1
 
             # <g id="Bold">Medical Treatment:</g> ul Above listings
@@ -343,18 +299,20 @@ class DocxProcessor:
                 for item2 in item.ul.children:
                     if item2.string == "\n" or (not item2.string):
                         continue
-                    self.add_paragraph(item2, prefix="•  ", p_style=MDX_STYLE.LIST_CONTINUE) \
-                        .style.paragraph_format.space_after = Pt(1)
+                    self.add_paragraph(
+                        item2, prefix="•  ", p_style=MDX_STYLE.LIST_CONTINUE
+                    ).style.paragraph_format.space_after = Pt(1)
 
             # <g id="Bold">Medical Treatment:</g> ol Above listings
             if hasattr(item, "ol") and item.ol is not None:
                 # read out start Property,If not present, defaults to1
-                sub_num = int(item.ol.get('start', 1))
+                sub_num = int(item.ol.get("start", 1))
                 for item2 in item.ol.children:
-                    if item2.name != 'li':
+                    if item2.name != "li":
                         continue
-                    self.add_paragraph(item2, prefix=f"{sub_num}. ", p_style=MDX_STYLE.LIST_CONTINUE) \
-                        .style.paragraph_format.space_after = Pt(1)
+                    self.add_paragraph(
+                        item2, prefix=f"{sub_num}. ", p_style=MDX_STYLE.LIST_CONTINUE
+                    ).style.paragraph_format.space_after = Pt(1)
                     sub_num += 1
 
     # falseTODO list
@@ -378,7 +336,8 @@ class DocxProcessor:
         p.paragraph_format.space_before = Pt(6)
         p.paragraph_format.space_after = Pt(6)
         border_elm = parse_xml(
-            r'<w:pBdr {}><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>'.format(nsdecls('w')))
+            r'<w:pBdr {}><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>'.format(nsdecls("w"))
+        )
         p._p.get_or_add_pPr().append(border_elm)
 
     # Hyperlinks
@@ -387,7 +346,7 @@ class DocxProcessor:
         add_hyperlink(p, href, text)
         # run = p.add_run(text)
 
-    def add_paragraph(self, children, p_style: str = None, prefix: str = ""):
+    def add_paragraph(self, children, p_style: str | None = None, prefix: str = ""):
         """
         children: list|str
         An element (including an image) within a paragraph. Divided according to whether there is a style, forming a list.
@@ -396,7 +355,7 @@ class DocxProcessor:
         ["I am plain", "while", "he is", "bold"]
         """
         p = self.document.add_paragraph(prefix, style=p_style)
-        if type(children) == str:
+        if type(children) == str:  # noqa: E721  # exact type, bool must not pass as int
             p.add_run(children)
             return p
         for elem in children.contents:  # Traverse all elements in a paragraph
@@ -425,7 +384,7 @@ class DocxProcessor:
                 continue
 
             # Working with paragraph tags
-            if hasattr(child, 'name') and child.name == 'p':
+            if hasattr(child, "name") and child.name == "p":
                 if para_count > 0:
                     # Add a new passage
                     row_cells[0].add_paragraph()
@@ -451,16 +410,16 @@ class DocxProcessor:
                     para_count += 1
                 p.add_run(child.strip())
 
-        shading_elm_1 = parse_xml(r'<w:shd {} w:fill="efefef"/>'.format(nsdecls('w')))
+        shading_elm_1 = parse_xml(r'<w:shd {} w:fill="efefef"/>'.format(nsdecls("w")))
         table.rows[0].cells[0]._tc.get_or_add_tcPr().append(shading_elm_1)
 
     def html2docx(self, html_str: str):
         # OpenHTML
 
-        soup = BeautifulSoup(html_str, 'html.parser')
+        soup = BeautifulSoup(html_str, "html.parser")
 
         # Find it securely body label
-        body_tag = soup.find('body')
+        body_tag = soup.find("body")
         if body_tag is None:
             # If no evidence of   microbial body,Use entire soup
             body_tag = soup

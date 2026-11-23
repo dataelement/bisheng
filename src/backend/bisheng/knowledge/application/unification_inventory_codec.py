@@ -62,6 +62,23 @@ _NAMESPACE_RECORDS = _NAMESPACE_GLOBAL | {
     "namespace_after_assignee",
     "namespace_after_visible_source",
 }
+FLOW_BINDING_SCHEMA = {
+    "upgrade_flow_policy": "str",
+    "upgrade_flow_ref": "descriptor",
+    "upgrade_history_sha256": "hash",
+    "upgrade_semantics_sha256": "hash",
+    "upgrade_history_after_ref": "descriptor",
+}
+
+
+def flow_binding_metadata(value):
+    selected = {key: value[key] for key in FLOW_BINDING_SCHEMA if key in value}
+    if selected:
+        if set(selected) != set(FLOW_BINDING_SCHEMA) or selected["upgrade_flow_policy"] != "unified_v1":
+            _invalid()
+        for key, spec in FLOW_BINDING_SCHEMA.items():
+            _value(selected[key], spec)
+    return selected
 
 
 def _descriptor(value):
@@ -120,6 +137,9 @@ def _value(value, spec):
 
 def _validate(tag, data):
     schema = _SCHEMAS.get(tag)
+    if tag == "run" and type(data) is dict and any(key.startswith("upgrade_") for key in data):
+        flow_binding_metadata(data)
+        schema = {**schema, **FLOW_BINDING_SCHEMA}
     # New Runs carry no DBA backup/schema attestations. Keep the legacy wire
     # shape strict: null descriptors are legal only under this explicit policy.
     if tag == "run" and type(data) is dict and "external_material_policy" in data:
@@ -134,7 +154,7 @@ def _validate(tag, data):
     # The reference writer contract itself does not change in this repair.
     if tag == "run" and type(data) is dict and "preparation_policy_version" in data:
         schema = {**schema, "preparation_policy_version": "positive"}
-        if type(data["preparation_policy_version"]) is not int or data["preparation_policy_version"] != 2:
+        if type(data["preparation_policy_version"]) is not int or data["preparation_policy_version"] not in {2, 3}:
             _invalid()
     if tag == "run" and type(data) is dict and "physical_inventory_policy" in data:
         schema = {**schema, "physical_inventory_policy": "str"}
@@ -196,6 +216,13 @@ def _validate(tag, data):
                     _invalid()
                 if value.tzinfo is not None or value.microsecond or value.isoformat() != data["creator_planned_at"]:
                     _invalid()
+            elif data["membership_action"] == "retain_missing":
+                if (
+                    data["existing_creator_member_id"] is not None
+                    or data["creator_planned_at"] is not None
+                    or data["creator_template_digest"] != digest(None)
+                ):
+                    _invalid()
             elif data["membership_action"] == "keep":
                 if (
                     data["existing_creator_member_id"] is None
@@ -233,10 +260,9 @@ def _validate(tag, data):
         _invalid()
     if tag == "evidence_material" and data["material_kind"] not in {"backup", "schema"}:
         _invalid()
-    if tag == "file":
-        for name in ("object_name", "preview_file_object_name", "bbox_object_name", "html_snapshot_object_name"):
-            if data[name] not in (None, ""):
-                _value(data[name], "key")
+    # Original file locators are bounded historical strings, not storage
+    # capabilities. Binding-only inventories preserve them without IO. Actual
+    # physical_object and artifact descriptors retain their strict key gates.
     if tag == "manifest_entry":
         _identity("manifest", data["section"], data["scope"], data["tenant_id"], data["page_index"], "baseline")
 

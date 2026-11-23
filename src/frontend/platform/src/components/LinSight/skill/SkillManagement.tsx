@@ -1,4 +1,4 @@
-import { Pagination, Button, SearchInput, Select, notification } from "@bisheng/ui";
+import { Pagination, Button, SearchInput, Select, Tooltip, notification } from "@bisheng/ui";
 // F035 (PRD §4.5): tenant custom skill management section, mounted in the
 // merged Daily tab of Build / Workbench Config (replaces the legacy SOP manual library).
 // List shows display_name only — the skill ID stays detail-level; no
@@ -107,6 +107,25 @@ export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
       });
   };
 
+  const handleAutoEnabledToggle = (skill: SkillBrief, autoEnabled: boolean) => {
+    // Optimistic flip, same as the status switch; rolled back if the save fails.
+    setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, auto_enabled: autoEnabled } : s)));
+    skillApi
+      .setSkillAutoEnabled(skill.name, autoEnabled)
+      .then(() => {
+        notification.open({
+          type: "success",
+          description: String(
+            t(autoEnabled ? "skillManage.autoEnabledOnToast" : "skillManage.autoEnabledOffToast") ?? "",
+          ),
+        });
+      })
+      .catch((error) => {
+        setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, auto_enabled: !autoEnabled } : s)));
+        showApiError(error);
+      });
+  };
+
   const handleDelete = (skill: SkillBrief) => {
     bsConfirm({
       desc: t("skillManage.deleteConfirm", { name: skill.display_name }),
@@ -195,6 +214,13 @@ export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
               <TableHead className="w-56">{t("skillManage.columns.displayName")}</TableHead>
               <TableHead>{t("skillManage.columns.description")}</TableHead>
               <TableHead className="w-24">{t("skillManage.columns.status")}</TableHead>
+              <TableHead className="w-28">
+                <Tooltip content={t("skillManage.autoEnabledTip")}>
+                  <span className="cursor-help border-b border-dashed border-current">
+                    {t("skillManage.columns.autoEnabled")}
+                  </span>
+                </Tooltip>
+              </TableHead>
               <TableHead className="w-40">{t("skillManage.columns.updateTime")}</TableHead>
               <TableHead className="w-24">{t("permission:dialog.tabGrant")}</TableHead>
               <TableHead className="w-8" />
@@ -203,7 +229,7 @@ export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
           <TableBody>
             {skills.length === 0 && !loading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
                   {emptyHint}
                 </TableCell>
               </TableRow>
@@ -231,6 +257,22 @@ export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
                     checked={skill.enabled}
                     onCheckedChange={(checked) => handleToggle(skill, checked)}
                   />
+                </TableCell>
+                {/* F005: only meaningful while the skill is enabled; disabled switches explain why */}
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  {skill.enabled ? (
+                    <Switch
+                      checked={!!skill.auto_enabled}
+                      aria-label={t("skillManage.columns.autoEnabled")}
+                      onCheckedChange={(checked) => handleAutoEnabledToggle(skill, checked)}
+                    />
+                  ) : (
+                    <Tooltip content={t("skillManage.autoEnabledNeedsEnable")}>
+                      <span className="inline-flex">
+                        <Switch checked={!!skill.auto_enabled} disabled aria-label={t("skillManage.columns.autoEnabled")} />
+                      </span>
+                    </Tooltip>
+                  )}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs">
                   {(skill.update_time ?? skill.create_time)?.replace("T", " ").slice(0, 16) ?? "--"}

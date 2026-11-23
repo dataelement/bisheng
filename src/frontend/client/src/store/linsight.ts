@@ -212,10 +212,9 @@ export function isLinsightTaskRunning(info: LinsightInfo): boolean {
 /**
  * Whether a conversation (chat_id) currently owns a task-mode session that is
  * still executing — drives the per-conversation running spinner in the sidebar
- * list. A linsight session stores its owning chat_id in `session_id` (see
- * useAiChat `onTaskHandoff`), so we match the conversation against that. The
- * "running" set mirrors ChatView's `taskRunning` (startup → execution) so the
- * spinner is live for exactly the window the stop button is.
+ * list. A linsight session stores its owning chat_id in `session_id`, so we
+ * match the conversation against that. The "running" set covers startup →
+ * execution.
  *
  * EXCEPT a park (waiting for the user to answer an ask_user): the top-level status
  * stays `running` during a live park, but nothing is executing — the agent is
@@ -248,40 +247,6 @@ export const conversationTaskRunningState = selectorFamily<boolean, string>({
 
 
 
-export type ToolConfig = {
-    id: string;
-    name: string;
-    params?: Record<string, any>;
-};
-
-export type SubmissionState = {
-    isNew: boolean;
-    files: {
-        file_id: string;
-        file_name: string;
-        parsing_status: string;
-    }[];
-    question: string;
-    feedback?: string;
-    tools: ToolConfig[];
-    model: string;
-    /** F035 Track H: skill names picked in the task-mode input (enabled skills only). */
-    skills?: string[];
-    /** Skill rows the user checked. Same order as `skills`. */
-    skill_ids?: number[];
-    enableWebSearch: boolean;
-    useKnowledgeBase: boolean;
-    prevVersionId?: string;
-    /** F035: existing session id to continue (follow-up round); undefined = new session. */
-    sessionId?: string;
-};
-
-// 使用atomFamily管理每个会话的状态 会话id-版本id:状态
-export const submissionState = atomFamily<SubmissionState | null, string>({
-    key: 'submissionState',
-    default: null, // 初始状态为null
-});
-
 // 上传文件管理
 export const filesByIndex = atomFamily<Map<string, ExtendedFile>, string | number>({
     key: 'linsightFilesByIndex',
@@ -297,14 +262,6 @@ export type TaskModeKnowledgeItem = {
     type: 'space' | 'org';
 };
 
-export type TaskModeToolItem = {
-    id: string | number;
-    name: string;
-    checked: boolean;
-    /** Raw tool object from bsConfig.linsightConfig.tools (used by convertTools on submit). */
-    data?: any;
-};
-
 export type TaskModeSkill = {
     id?: number;
     name: string;
@@ -312,25 +269,9 @@ export type TaskModeSkill = {
     description?: string;
 };
 
-export type TaskModeContext = {
-    knowledge: TaskModeKnowledgeItem[];
-    tools: TaskModeToolItem[];
-    files: any[];
-};
-
 /**
- * Session-level memory (PRD §4.1.2): knowledge / tools / files selections are
- * keyed per conversation and survive leaving task mode (navigate back to /c),
- * so they are refilled when the user re-enters task mode.
- */
-export const taskModeContextState = atomFamily<TaskModeContext, string>({
-    key: 'taskModeContextState',
-    default: { knowledge: [], tools: [], files: [] },
-});
-
-/**
- * Skill selections are intentionally separate from taskModeContextState:
- * exiting task mode clears skills while keeping the rest (PRD §4.1.2).
+ * Skill selections of the task-mode input, keyed per conversation: exiting
+ * task mode clears them (PRD §4.1.2).
  */
 export const taskModeSkillsState = atomFamily<TaskModeSkill[], string>({
     key: 'taskModeSkillsState',

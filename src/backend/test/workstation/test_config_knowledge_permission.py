@@ -84,7 +84,9 @@ async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
 
     response = await config_endpoint.get_config(request=None, login_user=login_user)
 
-    picker.assert_awaited_once_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
+    # F004: the protocol switch is gone; the client always speaks the run protocol.
+    assert "unified_runtime_enabled" not in response.data
+    picker.assert_awaited_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
     assert response.data["tools"][0]["default_checked"] is True
     assert [item["id"] for item in response.data["orgKbs"]] == [13]
     assert response.data["orgKbs"][0]["default_checked"] is True

@@ -87,7 +87,9 @@ async def precheck_deletion(
         inspection = await owner.references.ainspect(
             identity=actual, space_id=space_id, selections=selections, whole_space=whole
         )
-        scope, facts = inspection.facts.scope, inspection.facts
+        async with owner._session() as session:
+            facts = await owner._collect(session, space_id=space_id, selections=selections, operation=operation)
+        scope = facts.scope
         if historical_version_id is not None:
             chosen_ids = {ident for unit in scope.units for ident in unit.version_ids}
             version = next((row for row in scope.versions if row.id == historical_version_id), None)
@@ -108,7 +110,6 @@ async def precheck_deletion(
             if not whole and position not in authorized_set
         ]
         valid_positions = []
-        referenced = {row.unit_index for row in facts.references}
         for issue in scope.issues:
             invalid.extend(
                 OperationInvalidItem(
@@ -118,14 +119,8 @@ async def precheck_deletion(
                 )
                 for pos in issue.positions
             )
-        for index, unit in enumerate(scope.units):
-            reason = (
-                "referenced"
-                if index in referenced and not whole
-                else "no_permission"
-                if allowed is not None and not set(unit.resource_ids) <= allowed
-                else None
-            )
+        for unit in scope.units:
+            reason = "no_permission" if allowed is not None and not set(unit.resource_ids) <= allowed else None
             if reason is None:
                 valid_positions.extend(unit.selection_positions)
             else:
@@ -141,7 +136,7 @@ async def precheck_deletion(
             valid_positions = list(range(len(scope.selections)))
         positions = tuple(sorted(set(valid_positions)))
         chosen = _selected(scope, positions)
-        executable = (whole or bool(chosen.resources)) and (not whole or not inspection.blocked or force)
+        executable = whole or bool(chosen.resources)
         pin = await owner._pin()
         async with owner._session() as session:
             root, root_revision = await owner.execution.aroot(session, space_id, lock=True)
@@ -149,7 +144,7 @@ async def precheck_deletion(
             await owner.execution.arequire_transfer_idle(session, space_id=space_id)
             await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
             current = await owner._collect(session, space_id=space_id, selections=selections, operation=operation)
-            if current != facts:
+            if current.scope != facts.scope:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_precheck_changed")
             ids = {ident for unit in chosen.units for ident in unit.version_ids}
             result = await owner.plans.acreate(
@@ -167,10 +162,7 @@ async def precheck_deletion(
                     "selected_scope": impact_digest(deletion_scope_payload(chosen)),
                 },
                 source_revisions={
-                    "inbound": inspection.inbound_digest,
                     "root": root_revision,
-                    "epoch": facts.coverage_epoch,
-                    "inventory": facts.inventory_hash,
                 },
                 parameters={
                     "selections": [asdict(row) for row in selections],
@@ -184,6 +176,7 @@ async def precheck_deletion(
                     "pin": pin,
                 },
                 impact={
+                    "reference_check_complete": inspection.check_complete,
                     "source_counts": dict(inspection.source_counts),
                     "restricted_counts": dict(inspection.restricted_counts),
                     "source_page": asdict(inspection.source_page),

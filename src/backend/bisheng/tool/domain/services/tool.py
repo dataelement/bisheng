@@ -40,6 +40,12 @@ from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.linsight_knowledge import SearchKnowledgeBase
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, GptsToolsTypeRead
 from bisheng.tool.domain.services.openapi import OpenApiSchema
+from bisheng.tool.domain.services.read_projection import (
+    merge_masked_configuration,
+    preserved_api_key,
+    restore_masked_configuration,
+    tool_read_view,
+)
 from bisheng.utils import get_request_ip, md5_hash
 from bisheng.utils.mask_data import JsonFieldMasker
 
@@ -206,7 +212,15 @@ class ToolServices(BaseModel):
         preset_ids = [one.id for one in res if one.is_preset == ToolPresetType.PRESET.value]
         preset_child_keys = await GptsToolsDao.aget_preset_child_keys(preset_ids, current_tid)
         enrich_start = perf_counter()
-        for one in res:
+        edit_map = {}
+        if action == "visible":
+            edit_map = await batch_check_business_actions(
+                self.login_user,
+                resource_type="tool",
+                resource_ids=(one.id for one in res),
+                actions=("edit",),
+            )
+        for index, one in enumerate(res):
             one.children = tool_type_children.get(one.id, [])
 
             # Data desensitization
@@ -215,6 +229,10 @@ class ToolServices(BaseModel):
                 search_category=one.is_preset == ToolPresetType.PRESET.value and "web_search" in keys,
                 ambiguous=one.is_preset == ToolPresetType.PRESET.value and not keys,
             )
+            include_configuration = action == "visible" and (
+                self.login_user.is_global_super or "edit" in edit_map.get(str(one.id), ())
+            )
+            res[index] = tool_read_view(one, include_configuration=include_configuration)
         enrich_elapsed_ms = (perf_counter() - enrich_start) * 1000
 
         logger.info(
@@ -333,6 +351,8 @@ class ToolServices(BaseModel):
         json_masker = JsonFieldMasker()
 
         old_config = json.loads(tool_type.extra)
+        if not isinstance(old_config, dict) or not isinstance(extra, dict):
+            raise ValueError("Tool configuration must be an object")
         child_keys = await GptsToolsDao.aget_preset_child_keys([tool_type_id], tool_type.tenant_id)
         if child_keys.get(tool_type_id, set()) & {"image_generation", "dalle_image_generator"}:
             from bisheng_langchain.gpts.tools.image_generation.tool import ImageGenerationError, normalize_image_config
@@ -345,7 +365,7 @@ class ToolServices(BaseModel):
                 old_azure = old_config.get("azure_endpoint") or old_config.get("provider") == "azure"
                 if old_azure and extra.get("provider") != "openai":
                     raise ImageGenerationError("Reconfigure the image service")
-                merged = json_masker.update_json_with_masked(old_config, extra)
+                merged = merge_masked_configuration(old_config, extra)
                 candidate = {
                     key: merged[key]
                     for key in ("openai_api_base", "openai_api_key", "openai_proxy", "model")
@@ -363,7 +383,7 @@ class ToolServices(BaseModel):
             except (ImageGenerationError, ValueError, TypeError):
                 raise ToolImageConfigError() from None
         else:
-            merge_extra = json.dumps(json_masker.update_json_with_masked(old_config, extra), ensure_ascii=False)
+            merge_extra = json.dumps(merge_masked_configuration(old_config, extra), ensure_ascii=False)
         await GptsToolsDao.update_tools_extra(tool_type_id, merge_extra)
         return True
 
@@ -377,8 +397,10 @@ class ToolServices(BaseModel):
                 download = get_url_content
             try:
                 file_content = await download(download_url)
-            except Exception:
-                raise ToolSchemaDownloadError(exception=ValueError("OpenAPI download failed")) from None
+            except Exception as exc:
+                # URLs and transport exceptions can contain query credentials.
+                logger.warning("Tool schema download failed ({})", type(exc).__name__)
+                raise ToolSchemaDownloadError() from None
         if not file_content:
             raise ToolSchemaEmptyError()
         try:
@@ -456,7 +478,7 @@ class ToolServices(BaseModel):
             except BaseErrorCode:
                 raise
             except BaseException as e:
-                if isinstance(e, (KeyboardInterrupt, SystemExit, asyncio.CancelledError)):
+                if isinstance(e, KeyboardInterrupt | SystemExit | asyncio.CancelledError):
                     raise
                 logger.exception("mcp tool connect/list error")
                 raise mcp_error_code(e)() from e
@@ -487,9 +509,11 @@ class ToolServices(BaseModel):
         exist_tool_type.description = req.description
         exist_tool_type.server_host = req.server_host
         exist_tool_type.auth_method = req.auth_method
-        exist_tool_type.api_key = req.api_key
+        exist_tool_type.api_key = preserved_api_key(req.api_key, exist_tool_type.api_key)
         exist_tool_type.auth_type = req.auth_type
-        exist_tool_type.openapi_schema = req.openapi_schema
+        exist_tool_type.openapi_schema = restore_masked_configuration(
+            req.openapi_schema, exist_tool_type.openapi_schema
+        )
         tool_extra = {"api_location": req.api_location, "parameter_name": req.parameter_name}
         exist_tool_type.extra = json.dumps(tool_extra, ensure_ascii=False)
 
@@ -515,7 +539,7 @@ class ToolServices(BaseModel):
                 new_tool_info = children_map.pop(one.name)
                 one.name = new_tool_info.name
                 one.desc = new_tool_info.desc
-                one.extra = new_tool_info.extra
+                one.extra = restore_masked_configuration(new_tool_info.extra, one.extra)
                 one.api_params = new_tool_info.api_params
                 update_tool_list.append(one)
 
@@ -561,12 +585,6 @@ class ToolServices(BaseModel):
         """
         Updating tool categories, including updating tool category names and deletions, adding tool categoryAPI
         """
-        # Try to parse theopenapi schemaSee if it can be parsed normally, Save if not possible Do not allow to save
-        if req.is_preset == ToolPresetType.API.value:
-            await self.parse_openapi_schema("", req.openapi_schema)
-        elif req.is_preset == ToolPresetType.MCP.value:
-            await self.parse_mcp_schema(req.openapi_schema)
-
         exist_tool_type = await GptsToolsDao.aget_one_tool_type(req.id)
         if not exist_tool_type:
             raise ToolTypeNotExistsError()
@@ -589,9 +607,17 @@ class ToolServices(BaseModel):
             action="edit",
         )
 
+        # Restore response masks only after authorizing the saved resource, and
+        # before discovery so a masked MCP header is never sent as a credential.
+        req = req.model_copy(deep=True)
+        req.openapi_schema = restore_masked_configuration(req.openapi_schema, exist_tool_type.openapi_schema)
+        if req.is_preset == ToolPresetType.API.value:
+            await self.parse_openapi_schema("", req.openapi_schema)
+        elif req.is_preset == ToolPresetType.MCP.value:
+            await self.parse_mcp_schema(req.openapi_schema)
         res = await self._update_gpts_tools(exist_tool_type, req, self.login_user)
         await self.update_tool_hook(self.request, self.login_user, exist_tool_type)
-        return res
+        return tool_read_view(res, include_configuration=True)
 
     @classmethod
     async def update_tool_hook(cls, request: Request, user: UserPayload, exist_tool_type):

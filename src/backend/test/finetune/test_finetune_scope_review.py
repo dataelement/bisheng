@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 """Adversarial references and FT transport scope, through real tenant HTTP routes."""
 
 from unittest.mock import AsyncMock
@@ -212,9 +213,12 @@ async def test_background_uses_reloaded_task_transport_instead_of_caller_endpoin
 
 
 @pytest.mark.parametrize("target,super_user", [(60, False), (70, True)])
-async def test_service_registration_stamps_verified_target_not_request_tenant(tasks, target, super_user):
+async def test_service_registration_stamps_verified_target_not_request_tenant(tasks, target, super_user, monkeypatch):
     from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.permission import application
 
+    # The route override already admits this caller. The service repeats the admin check.
+    monkeypatch.setattr(application, "is_tenant_admin", AsyncMock(return_value=True))
     tasks.app.dependency_overrides[UserPayload.get_tenant_admin_user] = lambda: tasks.user
     if super_user:
         tasks.user.is_global_super = True
@@ -255,7 +259,9 @@ async def test_same_tenant_service_aliases_do_not_block_legitimate_tasks(tasks):
     from bisheng.finetune.domain.models.server import Server
 
     with tenant_execution_scope(60):
-        await ServerDao.insert(Server(server="alias", endpoint="runtime", sft_endpoint="http://training-60.test"))
+        await ServerDao.insert(
+            Server(server="alias", endpoint="runtime", sft_endpoint="http://training-60.test"), tenant_id=60
+        )
     options = result(await tasks.client.get("/api/v1/finetune/server/options"))
     assert len(options) == 2
     result(await tasks.client.post("/api/v1/finetune/job", json=payload()))

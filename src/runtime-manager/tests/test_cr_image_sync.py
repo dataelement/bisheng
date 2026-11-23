@@ -67,6 +67,8 @@ if args[:3]==["buildx","imagetools","inspect"]:
  print("unauthorized: manifest not found (authentication required)" if failure=="auth" else "manifest unknown",file=sys.stderr)
  sys.exit(1)
 elif args[0]=="push":
+ if failure=="auth":
+  print("unauthorized: authentication required",file=sys.stderr);sys.exit(43)
  if failure=="push":sys.exit(42)
 elif args[:2]==["image","inspect"]:
  tag=args[-1]; name=tag.split("bisheng-")[1].split(":")[0]
@@ -95,8 +97,9 @@ elif args[0]!="tag":sys.exit(99)
 
 
 @pytest.mark.parametrize("arch", ["amd64", "arm64"])
-def test_sync_preserves_native_image_ids_and_records_only_cr_digests(tmp_path, monkeypatch, arch):
-    result, commands, metadata = sync_images(tmp_path, monkeypatch, arch)
+@pytest.mark.parametrize("existing", [False, True])
+def test_sync_preserves_native_image_ids_and_records_only_cr_digests(tmp_path, monkeypatch, arch, existing):
+    result, commands, metadata = sync_images(tmp_path, monkeypatch, arch, failure="existing" if existing else "")
     assert result.returncode == 0, result.stderr
     tags = [item for item in commands if item[0] == "tag"]
     assert len(tags) == 9
@@ -114,12 +117,12 @@ def test_sync_preserves_native_image_ids_and_records_only_cr_digests(tmp_path, m
         assert image["tag"].endswith(f":v-test-{arch}")
 
 
-@pytest.mark.parametrize("failure", ["existing", "auth", "push", "stale-source", "unpublished"])
+@pytest.mark.parametrize("failure", ["auth", "push", "stale-source", "unpublished"])
 def test_sync_failure_cannot_produce_a_published_cr_inventory(tmp_path, monkeypatch, failure):
     result, commands, _ = sync_images(tmp_path, monkeypatch, failure=failure)
     assert result.returncode != 0
     assert not (tmp_path / "dist/cr/runtime-images-amd64.json").exists()
-    if failure != "push":
+    if failure in {"stale-source", "unpublished"}:
         assert not any(item[0] in {"tag", "push"} for item in commands)
 
 

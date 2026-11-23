@@ -7,6 +7,8 @@
 **PRD**：[《3.1 beta1》§1.1–§1.8](https://dataelem.feishu.cn/wiki/RGvDwDbyDiNaRQk7DqfcqEPxnoh)\
 **调研基线**：本地 `feat/3.0.0`，`25e50eceeeb71989257e5ff38e35f5e011e59bae`。未查询线上数据、未验证远端部署；已有未提交的配置及 review 目录不属于本轮变更。
 
+**升级流程增量状态（更新至2026-11-23）**：AC-158～166及[§16 升级流程技术设计](#16-升级流程统一改造技术设计2026-11-20)已获用户确认并完成实现，独立分支以`56a461e2d7`合入`feat/3.1.0-beta1`。165原completed Run的新入口预检、幂等apply和严格后态复核已通过；未重演首次数据转换、未将新实现部署为在线服务。合并验证见[合入核对记录](../../../docs/reviews/f118-upgrade-beta1-merge-20261123.md)，操作见[3.0.0升级指南](../../../docs/upgrades/v3.1.0-beta1.md)。本轮迁移流程以 §16 为准，早期独立历史脚本及阶段参数的描述仅保留旧计划兼容意义；在线引用策略、权限与完整 Coverage 要求不变。
+
 ## 1. 目标、边界与交付形态
 
 把旧文档库 `type=0` 收敛为知识空间 `type=3`，前后台共用资源、文件、版本、权限和处理结果。后台承担高级处理配置与任务管理；旧调用经兼容适配进入同一业务服务，3.x 不维持第二份数据或第二套授权。
@@ -55,6 +57,8 @@
 上述六种是当前 Catalog 中 use 的作用类型，并非范围上限；所有其他权限模型、遗留 use/can_use/业务别名均须继续盘点。`visible` 是现有可见性能力，与具体动作 Catalog 的职责不同。
 
 ## 3. 关键方案选择
+
+2026-11-20 升级流程改造（AC-158～166，设计待确认）：统一入口、修复后事实视图、材料绑定与阶段恢复详见 §16。该增量取代下述“普通操作者独立执行历史准备”的流程，继续保留实际原生修复及完整引用核验；不涉及引用辅助化。
 
 2026-11-19 升级操作收敛（AC-129–134）：DBA 完成一致备份并通知升级负责人，脚本不接收或校验外部备份/schema 证明。新 Run 直接盘点实际结构、全租户业务/权限/引用并冻结自己的快照、计划和 checkpoint；选中行及孤儿内容的精确备份仍保留。未选择自动伪造描述符或把全量备份封装为迁移凭据：它们无法证明备份可恢复，且增加人工操作。只有将来明确要求自动备份/恢复编排时才重审这项职责；当前脚本不启停服务、不检测停服。
 
@@ -1288,12 +1292,297 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 
 ### 修订历史：2026-11-20 历史删除技术标记缺失的受限恢复
 
+### 2026-11-20 已确认升级默认分类增量（AC-138–AC-143）
+
+本轮已获用户对分类、正式修改、验证和生产升级的明确授权。遵循 constitution C1–C8，不增加在线绕过接口或数据库专用语法。实施与验证进度以 tasks.md 的 MIG-DEFAULT 项为准，以下为本轮目标合同，未完成项不得视为已部署行为。
+
+1. 历史准备计划保存自动修复项、完整保留事实及阻塞项，CLI 输出有界数量摘要和私密制品路径。保留原 schema-1 计划读取及原冻结 Run 的策略；新增原生盘点策略只对新 Run 生效。拒绝直接删除 blocked 检查，因为后续结构、来源和 Coverage 必须能够解释这些事实。
+2. 父知识资源全局缺失的普通文件保留原行和物理内容。准备及正式 M2 分别确认原租户/ID、原父缺失和无授权贡献；保留记录进入不可变制品并在冻结重读与收尾校验。仅从活资源转换中隔离该明确范围，不放宽跨租户、未知父链、有效下游或未知 FGA 关系。原精确清理在具备原绑定和备份时仍可执行；本次不为升级猜索引。
+3. 知识旧模型名称复用已有旧名称来源保留机制：给原来源保存名称指纹的 extractor 版本，不构造假模型 ID，不搜索同名模型。正式盘点、M4 原配置重读、在线 SourceOwner、详情读取及显式模型修复使用同一规则；新写仍严格要求合法模型。原配置与索引不变，模型调用和处理在重新配置前拒绝。拒绝清空旧名称后回退默认模型。
+4. 无任何原授权事实的普通文档库成功文件，通过现有 RESOURCE_CREATE 投影记录继承模式及确定父关系，不添加个人/全员 Grant。已有 FAILED_CLOSED 授权只使用原 operation/tuple 账本、scope fence、原 pin 和原生恢复服务；先预览后恢复并校验 SQL 收尾，不直接写状态。
+5. 本地操作文件仅为显式维护的选中计划/证据；正式共享事实仍在 SQL/MinIO，不引入运行时本地共享状态。全局扫描与文件/授权检查按批次处理并复用索引；保留完整验证，禁止用户与资源的笛卡尔积探针。
+
+已知坑：同一批 22,171 个孤儿文件在原预检被原索引缺失、父链缺失重复计为 44,342 项；名称配置不能作为数字模型槽位解码；mode 的“父级或状态异常”不能等同于父级错误，实际可能是原 GRANT_MUTATION 失败。省略这些区别会导致误删、猜绑或丢失原授权意图。
+
+复审触发：需要恢复孤儿物理内容、引入新的旧名称格式、处理有原授权的缺 mode 文件，或改变已有冻结 Run 的身份时，重新评审对应边界，不扩展本次保留策略。
+
 按用户确认的方案，历史准备 apply 对原快照已缺一类技术标记的自有删除操作接入现有前向恢复服务；同计划、同 operator、原生投影账本与版本栅栏保持，已完成操作不重写，恢复中断继续原账本。CLI 错误增加安全原因码及可用的操作编号/状态。SQL 业务修复、物理清理及正式 M2 流程不改；165 环境按用户要求不部署、不执行。验证与审查见 [修复记录](../../../docs/reviews/f118-history-delete-recovery-20261120.md)。
 
-### 修订历史：2026-11-20 显式目录继承与私有库保留
+# 2026-11-20 补充：失效创建者（AC-144）
 
-后续升级执行中发现历史准备将退役私有库文件也当作必须补 mode 的活动资源；用户确认缺失目录应继承父库，私有库保留且不新增授权。按 D12 增加选中目录原生投影修复入口与私有库保留回归，保留原历史计划及全部断点。独立修复和后续历史复核串行执行，正式 M2 合同不改。验证见 [修复审查记录](../../../docs/reviews/f118-folder-inheritance-repair-20261120.md)。
+保留 `historical_resource_creator_retention` 原资源指纹及缺账号事实。NORMAL 的成员指令新增 `retain_missing`：空模板摘要、无新增成员主键和时间；原成员集合冻结且完整保持，创建者 ID 不变。冻结 verifier 要求缺账号事实和原资源逐项闭合；原 SQL Writer 在 apply/verify 以有界批次重验全局账号缺失，成员集合前后摘要相等。续跑前原生重新读取身份，资源类型仅允许原类型及既定 0→3 转换。六类来源保留仍仅限同一 Knowledge 身份，不借此解释其他来源的缺创建者。文件/QA/标签作者为原审计元数据，不参与该成员指令。已有授权与目录迁移合同保持。
+# 2026-11-20 补充：原始文件定位字段（AC-145）
 
-## 2026-11-20 取消租户身份保留兼容
+`file`/`rootless_file` 中的原对象定位字段是历史 SQL 标量，受字符串长度/NUL 规则和整行摘要约束；不能与 `physical_object.object_key` 或制品 descriptor 的存储能力混用。bindings-only 盘点保留旧 URL 原值、输出不含 URL 的提示，不验证外部地址可达性。物理端口、制品 key 和在线输入规则不变；不把迁移编码器作为对象获取授权。
+### 2026-11-20 补充：保留已删除权限的历史业务行（AC-146）
 
-用户明确保留原记录并确认受控兼容方案后，增加 D13 / AC-135～137。新 Run 显式冻结已分类保留集合的身份数量与原事实摘要；原 Run 不重解释，实际租户及 Coverage 清单不扩张。原生恢复、漂移拒绝和 FGA 键保持由新增测试覆盖；现场只读 acquisition 已在真实 MySQL 测得 185 SELECT、约 1.7 秒，真实开服验收与原生双库覆盖分开记录。
+权限删除的原生 FINALIZED 账本仅证明权限关闭，不伪装业务行物理消失。历史准备读取 <=200 条自有当前 DELETE 操作和有界 tuple 页，复原校验 request/before/after 摘要；确认原用户启用标记缺失、原始业务指纹、SQL mode/Grant/来源和完整对象关系。残留 service_account 标记用原生 RESOURCE_DELETE 预留、版本围栏、投影及 finalizer 关闭；缺失的旧 user 标记通过原生 checksum-bound FAILED_CLOSED 恢复处理，不直接修改状态。已证明冗余 parent DELETE 合入同一自有对象的删除投影，避免后续父边修复覆盖关闭意图。新清理计划使用 schema 2，旧脚本拒绝而非忽略；旧 schema 1 计划仍可原样续跑。
+
+M2 控制页保存 `retained_permission_delete`，绑定原 mode/版本、operation、Store/model 和原生校验和；冻结 verifier 要求实际业务行仍在、两个主体均无 permission_enabled、marker restore 为 false。同 Store 的完整目标图验证确保新 namespace 仍关闭；M3、续跑及 Coverage 前重读原生账本/业务身份。原生恢复成功可保留 PENDING tuple 明细，最终操作及真实 AFTER 图才是证明，不手改明细状态。已存在业务行仍被完整盘点、转换及登记来源；保留不会生成新的人员/全员 Grant 或重新启用权限。
+
+### 2026-11-20 补充：工作流审计创建者与未完成投影（AC-147–148）
+
+工作流 creator retention 使用实际全局缺失事实，控制页冻结根/版本/生命周期摘要，原来源清单仍完整登记；原生复核按 200 根批次读取根、版本数及账号，不能产生新授权。历史 DELETE 的 FAILED_CLOSED 原账本仅由维护捕获器读取，默认 M2 保留证明仍只接受 FINALIZED。仅精确 CURRENT/expected fence 可生成当前 pin 的新 DELETE；原失败账本永不改写，业务完整对象图/SQL 意图按预览及续跑校验。
+
+内置技能 RESOURCE_CREATE 必须是 source=builtin、owner=0、created_by=NULL 且有原内容定位摘要；原 operation 与 CURRENT pin/tenant/scope/fence 精确匹配，原生账本实际 AFTER 且无 correction。冻结 mode/SQL镜像/原生回执/技能摘要，apply 全集复核后逐项原生收尾，完成后重复执行不写 FGA。其他不完整操作不自动推断。计划 schema 3 防止旧脚本忽略新收尾字段；已有 schema 1/2 计划仍可续跑。`--projection-repairs-only` 是已做完历史准备后的有界补充入口，不签发迁移 Ready。候选 mode 200 条游标分页，按原生操作读取固定范围，无用户×资源扫描。
+
+### 空根缺 mode 的关闭初始化（AC-149）
+
+内部 f118_empty_root 按 200 根游标寻找无 payload 的旧 NORMAL；全局检查两个命名空间 mode/Grant/visible source/原操作及子 mode 均不存在，冻结原业务整行。默认准备复用完整 Store 遍历，补充入口仅对存在的候选单独遍历，证明对象/入向边为空。apply 全集重读业务/pin/SQL/完整图；原生预留 DELETE 后，用 owner-state 以 CUSTOM、无 owner_grant 创建 mode，计划动作全部 DELETE，无 enable WRITE/成员/Grant。原生 AFTER 对账及 finalizer 完成，支持 PREPARED/claim/最终回包丢失续跑。M2 复用 finalized-delete 保留证明，M3 正常根转换及完整来源/Coverage 不恢复访问。schema 4 防止旧版本忽略；非空或未知授权缺 mode 仍阻塞。
+
+### 失效工作流配置保留（AC-150）
+
+迁移对已保存版本的严格引用提取器仅捕获 TypeError/ValueError，并产生 `retained_invalid_workflow_configuration` 生命周期事实，包含原 flow_type/is_current/is_delete、原数据摘要及父/版本整行修订摘要。版本仍计入原根保留数；不作为可用 source，不签发来源 ready head。完整 census 保留所有版本、根及显式隔离事实，排除的版本由同一纯提取器失败事实决定，原配置不改，不猜变量/占位 ID。M2 要求对应来源 head/raw rows/legacy 全空；父 root head 可独立存在并原样冻结。M3/M4/续跑原生读取并重验精确根、版本、原标记及解析失败，变得可解析/来源重现/已有索引等继续拒绝。运行时及所有新配置写入仍用原严格提取器，旧失效版本须显式修复后保存新版本才能执行。正常版本只提取一次；额外完整 census 对已分页读入的版本做一次纯解析，无远程目标/用户乘积。
+
+### 2026-11-20 已确认的引用仅登记操作设计（AC-154～157）
+
+用户先确认仅登记/差异分类方案，再明确要求跳过已完成 SQL 和权限重验并执行，作为本次分阶段运维合同与设计确认。使用既有 F118 分支，不改变线上引用策略。
+
+`--register-references-only --resume` 默认只读预览，`--apply` 才写。新入口直接读取原生完成检查点和当前发布目录/授权 pin，复用已完成阶段，不调用 arun/arun_permissions。只遍历哈希验证的 manifests、sources 和 conversion 叶，不读取 FGA/权限/成员全量叶；原 sources/decisions/转换闭包校验仍保留。
+
+差异在新不可变 verification 制品中记录，并由 Run 的 backfilling.registration_plan 检查点绑定。只支持有界的新增且已原生登记来源以及配置/生命周期/引用未变的托管应用 revision 更新，根作者必须匹配原 root。增量登记事实含实际业务与索引摘要，重试必须复用同一描述符；不修改原 baseline_ref/plan_ref。当前已有登记若不存在或不一致，先停止报告而非写占位。
+
+ReferenceMigration 增加仅登记内部模式：复用目标检查、RegisteredReferenceBackfill 写后校验及原子 checkpoint；跳过已提交前缀、最终 census 与第二轮 verify，不签发证书。退役记录仍走原生证明和清理，不能留下原有效来源。完整复核后续必须消费此增量证明，不能假称原全量入口在有漂移情况下直接兼容。所有业务授权/租户/目标规则保持，遵守 constitution C1/C2/C3/C4/C8。
+
+规模：仅登记按来源/退役线性处理；预览与执行只读取一次所需叶；追加来源有界 100，应用 revision 更新有界 100；没有用户×资源穷举。用真实事务测试正常、零引用、完成阶段拒绝、回滚/续跑、增量变化及 N/2N 成本。维护期间不调用线上业务写接口进行验证。
+
+### 频道差异扩展及旧登记证明兼容
+
+用户已在新阻塞报告后明确确认扩展并继续。频道原投影为 id/tenant_id/user_id/is_released/update_time；先核对原 root 的 creator/lifecycle，再由原生来源读取核对完整配置/引用，仅放行剩余的更新时间变化。初始证明中已有应用差异必须完全保持。若原 registration_plan 已冻结，则新增 `registration_plan_extension`，verification 制品绑定原描述符/摘要、追加频道差异和当时各租户来源游标；只允许追加未提交来源。既有证明、来源、游标不改写；续跑验证扩展事实不变且游标不回退。已完成零来源租户由空游标初始化为正式空 checkpoint 不应误报回退。
+
+差异写前核验只遍历有界的差异来源，不重放已提交引用前缀或无关来源引用叶。其余来源仍在各自登记事务中检查；不取消真实目标检查。
+
+## 16. 升级流程统一改造技术设计（2026-11-20）
+
+### 16.1 目标、现状与边界
+
+**状态：已按确认设计实现并合入发行线`feat/3.1.0-beta1`（`56a461e2d7`）；165旧completed Run后态验证通过，未部署为在线服务。** 对应 AC-158～166；本节记录实际实现合同及明确容量/环境边界。基线 `61af8928d7` 已合流生产修复；四组63项仅为历史基线，本轮证据另见实施报告及七维审查；知识模块的既有全目录失败已单列对照，不报整体全绿。
+
+目标是同一 `unify_knowledge_spaces.py` 完成 dry-run、显式 apply 和自动恢复；确定性问题直接按计划处理，历史失效项保留并报告，真正冲突阻塞。引用登记、退役、完整复核及原生 Coverage 全部留在维护流程内。
+
+改造前链路是两个脚本，正式入口再按 `run_references → arun_permissions → arun` 重走前置阶段。原只读 inventory 的临时制品在返回时删除；完整图分类还会在 `F118PermissionTupleBuilder.finish` 才发现未分类关系。原引用逐来源事务，完整入口不能消费仅登记时追加的全部证明。这些问题由下述实现处理，不能仅套一个shell顺序调用旧入口。
+
+本轮不改在线来源读取/保存/执行、删除或租户创建策略；不新增全局业务 mutation epoch，不提供在线迁移或在线一致签证。遵循 [constitution](../../../docs/constitution.md) C1～C8 及 [release-contract](../release-contract.md)，不重定义其规则。运维停止所有业务写入者并保持维护；脚本不启停容器、不以 HTTP/队列探测推断已经停写。
+
+### 16.2 核心决策及被否方案
+
+| 决策 | 选定与理由 | 被否方案 | 重审条件 |
+| --- | --- | --- | --- |
+| 同一规则做预检和执行 | 原生历史动作先产生纯效果描述；正式 planner 消费修复后只读视图；执行仍走原生事务/投影。可在写入前发现后续问题 | 真实修复后回滚不能撤销 FGA/对象副作用；先检查原始数据再 apply 会继续逐层暴露阻塞 | 新历史动作无法用原生效果描述表达时扩展对应 Owner，不能默默跳过 |
+| 只读视图局限于 F118 | 已有原生事实分页+受影响闭包的私有磁盘索引；所有关联探针读同一 after | 全库克隆耗时、复制无关敏感配置；通用 Session/SQL 字符串代理无法可靠处理 JOIN、租户和聚合；全量 delta UNION 易超参数限制 | 真实闭包规模超过容量时重新设计该探针，不扩大为通用数据库虚拟化框架 |
+| 原 Run 负责进度，单独串行执行 | 准备阶段复用 Run 的 preparing/checkpoint；只加 F118 全局互斥锁行防两个命令同时写 | 本地锁不覆盖其他维护容器；TTL 租约失效不能证明旧 FGA 请求已结束；通用工作流引擎超出需求 | 多维护进程高可用或在线执行被另行明确要求时重审 |
+| 去重有完整性边界 | 同一执行验证一次不可变输入并复用校验器产出的计划；恢复按回执和必要 current-after 验证进入下一阶段 | 只信 complete/pin 会漏业务漂移；仅 64 MiB LRU 对大库顺序扫描会重复 miss；抽样不能签完整证明 | 内存/磁盘量测显示 tuple builder 仍是瓶颈时另做外排，不承诺本轮恒定内存 |
+| 引用仍完整完成 | 批量登记与完整 census，消费原增量证明后签原生证书 | 直接只做权限或后置引用，会继续造成模型读取/工作流编辑失败 | 下一版本引用辅助化的生产者、消费者和可靠后台闭环交付后再改变 |
+| 旧 Run 不猜历史变化 | 已批准证明精确消费；新计划带明确语义投影；无充分变更证据时报告维护复核 | update_time 或 revision 增加不等于合法原生变更；当前引用表没有完整 append-only 来源变更账本 | 各 Owner 提供完整变更回执或统一 mutation fence 后再支持更广在线证明 |
+
+### 16.3 主流程与状态真相
+
+```text
+dry-run：环境/结构/原 Run → 原事实采集与历史分类 → 纯原生效果 → 修复后视图
+         → 正式转换规划 → 完整权限图分类 → 六类引用规划 → 本地不可变计划/报告
+
+apply：先只读识别原材料/Run/提交位置 → 按阶段核对当前期望 → 全局串行准入及重读
+       → 无 Run 时 preparing 绑定材料；已有 Run 时从原阶段继续
+       → 原历史计划执行/回执 → 精确 after 核对 → 原生 M2 冻结
+       → SQL → namespace/FGA/Catalog → 引用登记/退役 → 完整复核/Coverage → 报告
+```
+
+- dry-run 不写 SQL、Run、FGA、Redis、远端制品或物理业务内容。允许私有材料目录及临时索引写入；原数据只读账号和远端写拦截作为测试证据。
+- 不存在全局业务 revision，dry-run 与 apply 是不同观察时点，apply 仍需流式重验全部必要 before，包括来源全集和原图；这不是可取消的同一时点重复扫描。复用的是纯分类/编译结果，不凭旧摘要省略 current 校验。
+- 仅无 preparing/冻结的新执行要求原始完整 before；已有 preparing 时，当前期望为“未提交 BEFORE＋原回执证明的已提交 AFTER＋未知批次原生核对”，不能以完整原始 before 拒绝自身已提交修复。冻结后按实际阶段回执验证，不重做历史或 M2。首次 before 不匹配在历史/业务/Run 写入前返回 drift；取得互斥后重读 Run/pin/提交位置，若已推进则重新判定原回执或拒绝，不能按旧位置写。
+- 原历史动作完成后只重新读取受影响闭包及必要动态事实；未改变的已采集事实与实际生成身份的回执共同物化正式冻结材料，不重新编译另一个不相干计划。初始完整采集的页和规划时刻复用至冻结结束；对应修复效果不能闭合时停止在 preparing。
+- `KnowledgeUnificationRun` 是共享阶段真相；原生权限操作/投影账本是效果真相；内容寻址制品是不可变输入。私有目录里的 flow.json、事件、缓存不成为独立完成状态或共享锁。
+
+### 16.4 材料、身份与同计划执行
+
+普通接口：
+
+```bash
+# src/backend/，业务同配置；新 Run 名只在首次指定
+python scripts/unify_knowledge_spaces.py --run-id upgrade-site-a --dry-run
+python scripts/unify_knowledge_spaces.py --run-id upgrade-site-a --apply --operator-id 7
+# 中断仍执行相同 apply；不要求判断 --resume
+```
+
+保留默认 preview；`--dry-run/--apply` 互斥。`--materials-dir` 可覆盖默认 `/app/data/upgrade/3.1.0-beta1/f118/<run-id>/`；未指定 environment 时只读解析唯一 CURRENT/ACTIVE 对应环境，显式参数只作一致性断言。旧 `--resume`、描述符断言和阶段模式保留兼容，不列入标准流程；单独阶段完成不返回默认 full 成功。
+
+本地 `flow.json` 是 `{run_id, flow_ref}` 指针；其引用的内容寻址 flow 对象为 schema=1、kind=`new_run|frozen_resume`，引用历史计划、预检报告、before/expected-after 语义目录，包含：Run/writer、flow/history/compiler 协议版本、实际环境、非敏感数据库连接身份指纹、租户集合摘要、schema 摘要、原 Catalog/pin、固定 `planned_at`、材料 SHA、处理策略、检查完整性及操作者绑定方式。数据库指纹只取规范化 dialect/host/port/database（SQLite 取实际库定位）后摘要，不含账号、密码或带凭据 URL。连接别名变化须明确报告，不自动跨环境找材料。
+
+所有原值/业务载荷仅留必要私有证据；目录 0700、文件 0600，文件按临时写入+fsync+原子改名发布，已有同 Run 计划不覆盖。输入 SHA 校验、schema/字段集校验和可执行结论缺一不可；失败的 candidate/report 不能改名当成功计划。共享断点仅存摘要及必要描述符，不能持久化进程内临时路径。
+
+首次 apply 通过 before 校验与串行准入后，先将恢复必需的 `HistoryReplayPlan`、预期语义目录和 flow manifest 发布到受权限保护的共享内容寻址存储并真实回读，再按实际租户顺序原子创建/读取 preparing Run，在 `preparing.flow_identity_v1` 绑定这些 descriptor、SHA、固定规划时间与策略。未成功绑定共享可读材料时不得提交首个历史效果。新增严格 schema 的 `history_replay`/`upgrade_flow` 制品种类与原 inventory 页区分，旧解码器不将它们当原 frozen 页。
+
+HistoryReplayPlan 包含执行必需的目标身份、before/after 摘要、变更值、原生意图/回执引用、逻辑身份及原历史计划 checksum，足以在原生账本重读后恢复；不上传与执行无关的全库原始配置、凭据或业务内容。选中行精确回滚备份仍保留在私有运维备份目录，恢复执行与回滚材料分开；如果某动作的恢复确实需要未能安全持久化的原载荷，则该动作不得放行或先提交。既有旧脚本的私有备份合同保留。
+
+preparing checkpoint 仍恰为 `cursor/processed_count/digest/complete`；版本化细节放 canonical cursor 或不可变 verification 描述符，不改通用字段集。本地文件丢失后，同 run-id apply 从 preparing 原 descriptor 读回原材料，不按当前数据重建计划。历史效果和回执按原计划幂等；最后 `preparing.history_after_v1` 绑定回执/语义 after，完成后才调用原 `afreeze_all`。preparing 的 baseline/plan 仍为空；正式 M2 元数据增加可验证的 flow 策略、历史 SHA 和语义目录摘要，旧图缺字段仍按旧合同读取。
+
+已有冻结 Run 的 dry-run 先走 frozen_resume，不比较尚未修复的完整原 before、不重新规划历史。它读取原 flow（旧 Run 无 flow 时只建立绑定原冻结 descriptor 的只读恢复材料）、原证明及当前提交位置，按 §16.9 发布 `reconciliation/<content-hash>/manifest.json` 不可变候选。候选绑定原材料/证明、当前 phase/checkpoint、当前完整语义摘要和新验证合同，不覆盖 flow.json。无变化则生成相同候选 SHA；不同候选不能按目录修改时间选“最新”。
+
+同一 apply 优先消费当前 phase 已 CAS 绑定的 reconciliation descriptor，按原受验证游标恢复；尚未绑定时，以当前状态一次采集的摘要筛选所有候选，要求唯一且完整匹配，才在当前合法 phase 的专用四字段 checkpoint 原子绑定。无匹配则报告需要重跑同一 dry-run；多个非等价候选匹配则阻塞并列出 SHA，不猜选。绑定后候选不替换，变化转明确漂移；新补充必须在原候选已完成、边界可证明的情况下追加前驱证明。该分支不新建 Run、不覆盖旧 checkpoint，也不引入正常升级必需的第三个命令或内部选择参数。
+
+**新生成身份不能按原始字节硬比较**：纯效果用逻辑身份表示新 mode/operation/tuple；预览给这些明确新实体分配无冲突、有界的临时正整数以调用原验证器，并保存字段级逻辑映射。执行回执提供实际 ID，先把逻辑引用物化再用原生 checksum 函数重算，包含 `resource-purge:<operation_id>` 等派生键。只有计划列出的新身份、新建审计时间和新操作审计人可按映射规范化；已有 ID、版本、Owner、权限字段及原账本 checksum 一律严格。
+
+`planned_at` 固定复用预检值，避免 V1 模板/命令因重新取时钟而换摘要。dry-run 可不提供 operator；此时 `operator_binding={mode:apply_time,operator_id:null}`，纯计划仅用不可持久化的审计占位值，不能造账号或赋予权限。apply 在写前核验真实、未删除的正整数用户，并将其与全部 preparing Run 的创建/新 attempt/原 flow descriptor **同一事务**绑定，避免创建 preparing 后尚未绑定材料的崩溃空档。随后新原生计划/账本按该人计算；原失败操作的原 operator/校验和保持。显式提供 operator 的预检使用 fixed 模式绑定其精确身份。
+
+新 capture 对 FGA 原始 tuple 使用私有 SQLite 复合键稳定排序，批量写入不超过 200，流式读取排序结果、重复严格拒绝；不依赖服务端返回顺序决定新材料 SHA，不改变旧冻结字节。历史 replay/semantic/after 材料超限时仅按已知字段路径拆为不超过 200 条且约 1MiB 的内容寻址页；目录绑定原 body SHA、完整路径、顺序、条数及各项摘要。恢复仍重建原生 dict，不能将分页声称为整个历史计划常量内存；超大不可拆原子值明确未检查。
+
+### 16.5 修复后只读事实与诊断收集
+
+新增 F118 专用 `HistoryPreparationApplication` 和 `HistoryFactView`，旧 scripts 只做 CLI 兼容与组合；app 不反向 import scripts，SQL 读取/更新移至对应 Owner 的 repository。历史动作发现与 apply 共用同一纯效果构建函数，避免复制一套允许规则。
+
+| 动作 | 同时投影的事实 | 生产者/消费者 |
+| --- | --- | --- |
+| 业务 updates/deletes、level/冗余关联 | Knowledge/File/QA/Document/Version/Tag/成员及相应来源/删除任务的明确修改；原保留项不改行 | 现 `f118_history_business.build/apply` 拆为纯动作+repository；正式资源/成员/来源及全局探针读 after |
+| 缺 mode 初始化、关闭空根 | 原生 lifecycle plan、SQL mode 与完整对应 operation/tuple after；不新增 Grant | permission.application 新 migration-history 导出层复用 `build_create_plan/build_delete_plan`；权限快照/liveness/删除保留读取匹配账本 |
+| 失败恢复/parent/delete_closure | 原计划校验与精确 delta、mode/version、受影响 Grant/assignee/visible source 和匹配账本 | 原 `restore_projection_plan/build_projection_operation` 与恢复检查；SQL finalizer 的共享纯效果被预检和实际 finalize 同时消费 |
+| 内置操作已 AFTER 待收尾 | 原 AFTER 零图修正证明+SQL finalizer after | 不伪造新图效果或直接把状态写成 FINALIZED |
+| 已删除范围 purge | 原生清理的 mode/Grant/assignee/visible source 移除及受控图边删除，保留操作审计 | permission Owner 暴露受验证 purge 效果；不凭缺业务行删除未知授权 |
+| 孤儿/旧名称/缺创建者/失效版本 | 原事实及历史失效证明原样保留，纳入相应核验 | 不加入 dirty 更新集合，不造父级、用户、模型或“零引用 ready” |
+
+SQL after 由权限 Owner 从 `SqlProjectionFinalizer.finalize` 抽取共享纯规则，经 `permission.application` 导出；权限模块不查询知识业务表。历史业务 Owner 提供已核实目标/意图，权限侧只计算业务无关原生效果。多动作涉及同一 scope 按原 apply 顺序串接，前一 after 必须是后一 before；无法证明闭合的动作输出 `not_evaluated`，不靠 CURRENT/FINALIZED 字面值凑过校验。
+
+接线在 `UnificationInventoryApplication` 注入 raw/permissions/preflight/source-factory/read-ports；现 `UnificationPreflight` 的 resources/controls/permissions/inventory/memberships 注入继续使用。目标读取、OriginalReferenceState、删除保留 `load_facts`、identity-retention、task idle 和完整性探针也接同一视图，不能只替换分页 DTO 或把 history_prepared/global 校验变成 no-op。原始实际 Catalog/pin、schema、租户/用户存在性及未改变事实仍实时只读验证。
+
+容量策略是**只索引 dirty scope 及其关联闭包**，不是将全库或全部 delta 拼成 UNION。复用现有私有 `SnapshotStore` 的磁盘行/索引能力，提取为 repository 内维护组件，不作为在线共享状态。约 22,171 个孤儿属于保留证据，不是 dirty 行。
+
+- 分页读取按原 keyset 流式取数据，在 repository 映射到 DTO 前合并 after 行/删除及合成行；必须在 after 上重新判断查询谓词，并补入原本不匹配、修改后匹配的行，返回稳定排序/游标及原有页上限，不能只改原查询返回的几行。
+- 精确键的 JOIN 按完整 doc/file/root/permission-scope 闭包构造有界 selectable；别名及所有相关表同步，使用统一 `build_tenant_filter_clause` 处理子查询内租户过滤。全局查找保留其明确 global 语义，不手写另一套租户解析。
+- 全局 probe 改为流式枚举原生违例：未受影响 anchor 沿原规则判断，受影响 anchor 通过与原 probe 共用的不变量核验函数检查完整 after。**无论 before 是否违例，都独立核验全部 dirty 闭包的 after**，捕获修复新引入的错误；不能只过滤原违例列表。闭包须包括入向边、祖先、父子、文档/版本、原操作/tuple、Grant/assignee/source；影响沿边传播至闭合。不能按任意 200 行拆开关系后各自通过。
+- 聚合读取完整受影响 group，或使用已证明的 native count+精确 delta；不将分片 count 当全局 count。闭包超容量时转磁盘流式核验，不截断；无法覆盖的探针明确未检查并拒绝放行。
+
+FGA 原图先经真实 pin/model 验证并流式采集，再叠加原生纯效果 delta；原 tuple、共享模型读取、对象不存在性探针也使用同一受控图视图。以 `projection_state_expectations` 的多阶段最终状态为准，不能简单按无序 WRITE/DELETE 集合相减。
+
+诊断以 `(tenant,resource,rule,root_cause)` 去重，资源数/问题数/动作数分别统计。可独立的租户/资源继续采集；共享 pin、材料结构、父链闭包损坏等影响可信度时，依赖项记 `not_evaluated`。`can_apply = 所有必需检查完成且BLOCK为0`；保留提示或确定性修复不单独阻塞。各已确认自动规则沿 AC-138～150 及既有分类，不扩展到目录失落授权或未知有效下游。
+
+### 16.6 完整 dry-run 的消费与生命周期
+
+统一预检上下文持有私有 artifact store，顺序完成：
+
+1. 历史分类和修复后视图，以及原生 inventory/ConversionPlanBuilder 全量校验。
+2. PermissionNamespacePlan/ResourceRetirementPlanner，并调用 F118PermissionTupleBuilder 的完整 finish；不进入 publisher.aprepare、写 Catalog 或创建 Run。
+3. 六类来源正式提取、目标/原索引/失效证据检查、退役和来源/根/保存版本全集规划。预检视图按原生转换纯结果继续推导引用 after，不能只检查“某个 JSON 能解码”。
+4. 全部 verifier finish 后封口 expected-after/plan 语义目录，最后才原子发布 `preflight_complete/can_apply` 与 flow.json。
+
+现 `arun(freeze=False)` 内部 preview store 返回即删除，须将生命周期提升到统一预检上下文，或提供受控回调直到权限及引用 planner 消费完；旧单独 preview 保持原清理行为。预检临时页不作为可恢复 Run，apply 重建和物化时使用受绑定的纯计划及当前事实，不能持久化临时文件名假作 MinIO 对象。
+
+### 16.7 单执行者、恢复与阶段回执
+
+新增**仅用于维护互斥**的 `knowledge_unification_executor_lock` 模型，单例键为 F118 global；不存业务状态、不提供任务队列或 TTL lease。表结构仅由正常模型发现/结构升级创建；dry-run 只检查结构，不插锁行。首次 apply 在预检材料及适用的前置事实通过后，以独立短事务幂等 bootstrap 锁行并立即提交，再取得跨命令的行锁。唯一键争用采用有界超时/回滚/只读核对，不能让首次 INSERT 一直持锁到迁移结束。该种子属于维护互斥元数据，不是历史业务效果；前置拒绝时连种子也不写。
+
+独立控制连接持有该行事务锁至命令结束，非阻塞获取失败报告另有执行者；不锁 Tenant/业务行跨整个迁移，避免与原 Run/权限事务死锁。MySQL 与 DM8 的 NOWAIT/短等待行为由 dialect helper 和真实双库验证，不能用仅 MySQL advisory lock 或本地文件替代。
+
+控制连接不允许透明重连，连接代际与原锁绑定。Run 在当前合法 phase 保存版本化 executor-attempt 回执：attempt 身份、未闭合意图引用和结束状态；原生 FGA 意图/派发记录在发送前持久绑定，SQL batch 在同事务锁 Run 并核对 attempt，不只检查一个内存布尔值。正常结束在效果已闭合后签结束回执；跨 phase 时与原阶段推进原子绑定其结束和下一阶段身份。
+
+失锁立即停止调度、取消后续请求，并按仍可用的原生账本保留 uncertain 状态；即使无法再写 uncertain，未闭合的 durable attempt 本身也视为不确定。新执行者取得行锁只获得排他检查资格，不能据此证明旧业务连接/FGA 请求已经停止；先锁原 Run、核对全部旧意图和提交位置，再 CAS 新 attempt，从而拒绝旧 token 的后续 SQL 效果。
+
+对旧已派发的外部效果，只有原生派发/响应回执能够证明请求已终结且同一有限意图已闭合，才继续原意图恢复和推进。一次 FGA BEFORE/AFTER 扫描、TTL 到期、客户端超时、取消任务或单独停止旧容器都不当作请求已终结的证明；没有足够请求终结证据则返回 `executor_recovery_required`，只读报告原 attempt/意图/最后位置，禁止接管新图意图。原账本未能提供此证明的异常失锁保持真实阻塞，不承诺自动恢复所有网络分区；不能为了自动续跑降级放行。正常、异常、取消均释放连接，进程崩溃由 DB 释放锁；该锁不拦在线业务写。
+
+阶段调度基于原 Run/检查点，失败沿原 `aresume`，不修改阶段顺序或改写 FINALIZED。新增 `sql_admission_v1/permission_admission_v1` 四字段回执；cursor/verification 描述符绑定阶段、Run/原 hash、租户集合、规则/编译合同、操作者、前置回执、原 checkpoint 摘要、after 目录及发布身份。after 目录分页内容寻址，不能把完整明细塞入 Run 行。
+
+| 状态 | 本次执行/恢复行为 |
+| --- | --- |
+| 无 preparing/冻结 | 原计划 before 通过后绑定 preparing；任一效果前核对原计划与 pin |
+| preparing 历史部分提交 | 按原历史回执继续；实际已完成效果精确核验，不重新生成历史计划或提前 M2 |
+| SQL 部分提交 | 沿原前缀与原生 continuation 核对未知批次；同批效果和 checkpoint 原子提交 |
+| SQL 完整、权限未完整 | 回执+批量 current-after 验证通过后不重新执行 SQL 入口；允许原权限 before/staged/pending/after，交原权限恢复判断，不能要求此时生产 runtime 已 ready |
+| 权限完整、引用未完整 | 核对回执、SQL/namespace 目录、完整发布 commit、CURRENT/ACTIVE 实际 runtime pin、无 pending；跳过发布执行链，进入引用 |
+| 引用部分提交 | 按原 ordinal/批末 checkpoint 继续，最终仍完整核验 |
+| completed | 返回原 Coverage/Run/hash/proofs 结果及本次执行摘要；计数scope区分原计划与本次无效果重跑。显式strict verify只读复核；旧completed首次使用统一入口的候选保持本地，不进入executor/锁种子、绑定或远端上传，不再写checkpoint或重做效果 |
+
+预先上传的预期目录只含逻辑身份/自然键及预期语义，不伪造未来自增 ID。原 `sql_conversion.cursor` 的 `sql-v1:{count}:{hash}` 格式和 fold 完全不变；原进程内 SQLConversionBatchResult 不当作持久证据。新增独立四字段 `sql_results_v1`：每批与业务/原 SQL checkpoint 在同一事务保存本批受控“逻辑身份/自然键→实际 document/version 等 ID”映射、实际 outcome digest、对应原 SQL checkpoint 及已持久化前驱结果页 descriptor。该 key 的版本化 canonical cursor 只保存本批 tail，不累计整条链。
+
+ACK 后在事务外上传并真实回读该批结果页；下一批覆盖 `sql_results_v1` tail 前，必须确保上一批已成为可恢复的共享前驱。上传前崩溃，当前 SQL checkpoint 仍含完整本批映射；上传后但下一批未提交，仍依原 tail/前驱恢复，内容寻址页可幂等复用。COMMIT 应答未知先重读原 SQL checkpoint 与该 key，不能凭异常上传未确认结果或重写业务效果。每页绑定前驱/Run/租户/原哈希、逻辑目录及批次序号/原 outcome 链，断链/重复/跨 Run 均拒绝。
+
+末批 tail 共享持久化并回读后，在当前合法 phase 的 CAS 事务绑定 admission：逻辑目录 descriptor、完整结果页链摘要、原 sql_conversion 完成 checkpoint digest。current-after 核验用映射重读实际行再比较逻辑语义，原实际 digest 仍严格，不要求实际 ID 等于预览 ID。阶段完成但 admission 尚未签发只补证不重做效果；事务内不发远端 I/O，不每批重写全链 JSON。映射/结果按单批数量/字节受控，不含完整业务载荷，末页空批/零命令也有精确定义；该额外制品成本纳入规模对照，不能宣称去重后所有 I/O 都减少。
+
+回执只证明“过去已完成”，恢复仍批量核对必要当前业务/成员/版本/关联及保留事实，不仅比较 complete/pin。没有全局 revision，不能承诺恢复零全量 SQL；去掉的是重放命令、重算原计划和无关 frozen 叶遍历。最终 Coverage 的权限/来源全集证明不取消。
+
+旧 Run 无回执时，沿原策略完整只读核验一次并同步形成 after 目录，再在**当前合法 phase** CAS 追加补证；不向 backfilling 的 converting 区域补写，不回退 phase。completed 旧 Run 仓储禁止新增 checkpoint，保持严格只读结果，不放宽通用仓储来凑快准入。
+
+### 16.8 不可变输入复用与日志
+
+同一命令持有 `VerifiedExecutionInputs`：64 MiB 内存热层+私有磁盘已验证页，键为 Run/kind/SHA/协议；首次远端读取校验 SHA/canonical/schema，磁盘复用检查本地哈希，上传必须真实回读远端，不从 cache 冒充上传验证。生命周期限本次执行，ExitStack 覆盖部分初始化、异常、取消；强杀残留只可清理，恢复不信旧缓存。
+
+完整冻结图校验器 `PermissionInventoryVerifier._close_tenant` 已产出 ResourceRetirementPlan，应直接流入私有磁盘 plan sink，所有 verifier finish 后 seal；`PermissionPublicationInput.aplans` 消费同一产物，不再二次编译。提供 len/迭代及至多一批 slice，不常驻全部 plans 或复制公共 Catalog。保留 FGA before、切 ACTIVE 前 staged、最终 after 三类完整图证明；不扩大现 100 资源 namespace 或 90 tuple 原子批次。
+
+仍有原 tuple set、单租户 collector/builder 的容量成本，本轮不宣称恒定内存。磁盘满、缓存损坏、材料被替换均不能当成成功；缓存损坏可按同 hash 重新真实读取，权限/原材料损坏则失败。
+
+进度通过 F118 recorder 覆盖 scan/history/plan/freeze/sql/namespace/fga/reference/verify，快照含 run/mode/phase/tenant、processed/total/unit、committed/cursor、elapsed/rate/eta/last_success/wait。约 15 秒一条，切换/失败/完成立即输出；未知 total 或无稳定速率时 ETA 为 null。不同单位不拼总百分比，ACK 后才增 committed，恢复显示原累计及本次新增。
+
+心跳使用独立、可关闭的轻量 reporter 读取线程安全计数，长 await/CPU 规划期间仍可显示等待；不在 reporter 线程访问 DB/FGA。热路径 `permission_visibility_projection` 的指标通过 common 层执行作用域聚合后接入 recorder，退出作用域恢复在线原行为，permission/domain 不 import knowledge。错误及原生审计保持即时，不全局降日志级别。日志量随阶段时间和错误数增长，明细流式落私有报告，不逐资源刷 INFO。
+
+报告输出失败须可见：dry-run 材料/报告未原子写成时不生成可执行计划；apply 的业务效果以原生账本为准，报告 I/O 异常不回滚已提交效果，输出明确“业务阶段状态+报告失败”并保留恢复位置，不把失败改写为全流程成功。
+
+### 16.9 引用批处理、增量与完整收尾
+
+保留原来源/退役 ordinal、链式 fold 和 checkpoint 四字段。批次不跨租户，最多 100 来源，并按明细数量和序列化计划记录的字节预算分批。**实现容量取舍**：六类原生来源的配置/索引协议按完整单 source DTO 校验；超预算的单来源独立原子处理，仍会加载其完整配置与索引，不把“逐来源流”称作单来源常量内存，也不引入较旧协议更低的拒绝上限。16MiB 单制品协议上限保持，不能提交半个 source。此前设计的“超大单来源流式”措辞据真实 Owner 路径收窄为这一实际边界，外部 AC-163 的完整证明与工作量要求不变。不能直接复用在线 BatchReferenceBindings。
+
+初始批字节计量覆盖 frozen header 与 ReferenceInventoryRecord，并非业务 JSON 的总内存硬上限；最终尾检按真实业务 snapshot **加完整 raw index snapshot** 的 canonical 字节计量。正常批数量/明细/字节均受控；原生单来源配置及原单租户 collector/tuple set 的既有容量成本保留并实测。5MiB 配置、5,120 引用单来源已完成全流程及中断回滚/恢复验证，新增 Python 分配峰约 50～64MiB，不以此外推生产维护时间。
+
+新增原生批接口：`aload_raw_snapshots(...for_update=True)`、`aprepare_registered_batch(...)`、`aapply_registered_batch(...)`。Prepared 绑定同一 TransactionIdentity/Run/租户/期望 checkpoint，不能由 CLI JSON 直接构造。必须批量前读、差量写和完整 AFTER 回读；仅把现 `aprocess` 放到同一事务，仍保留每项前后查询，不能算查询优化。
+
+事务顺序：Run 锁/CAS → 必要目标验证及业务根按稳定键锁定 → 版本/索引根/source/明细稳定锁 → 正式配置与目标/删除证据核验 → 写入与批量 after → 按原 ordinal fold → 只写批末 checkpoint → commit。同根只取一次锁，不依赖 IN 默认行序；与原 Owner 的目标→业务根→索引协议逐项对照。已有 `aload_raw_snapshots` 无锁，不可直接当写入快照；缺 root 的唯一约束冲突是并发/漂移，不能静默补授权。每批任意失败全部回滚，未知 COMMIT 用原 Run 精确 before/批末 after 判定，其他 checkpoint 状态拒绝。
+
+新增默认空的 `ReferenceReconciliation` 接到 FrozenReferencePlan，包含原 registration_plan、extension 描述符、版本化 revision override、已原生登记 additions 及受控维护补充证明。完整入口共享原 run_registration 的准备逻辑；原 baseline/plan、来源序列、旧 checkpoint 和已提交来源的旧证明不覆盖。无增量普通 Run 不写空 registration_plan。
+
+原证明严格回读 hash、Run/writer/环境/operator、原哈希、Catalog/pin、before/after、扩展前驱与 resume_prefixes；游标不回退。来源全集为原有效来源+已证明 additions−有充分原生证据的 retirement，根/保存版本/实际索引全集同步核对。additions 逐一验证真实配置、原生 head/明细、空集、归属/目标及删除/legacy，完整事实按稳定键 fold 到现 source_digest/reference_digest，并更新根/来源/引用分类计数；不能只加 count。
+
+原登记提交链与当前验证链分开：`verify_frozen_after` 核对未变化来源的原 frozen+1 AFTER；`verify_proven_native_current` 只处理已由增量/维护证明闭合的当前更新或退役，不再套原 `_guard_root` 的固定 frozen+1 模板，也不拿当前索引指纹与旧 committed prefix digest 比相等。原 checkpoint 只证明历史提交，完全不改；新全量 verification manifest 分别绑定原提交回执、变更/退役证明及当前全集事实，再生成 Coverage 摘要。已提交来源的合法更新/删除走此只读核验分流，未提交原来源仍按原计划真实登记，不能把未经证明的差异塞进 current 分支。
+
+Coverage 现 `_PROOF_FIELDS` 严格，扩展证明作为不可变对象绑定到现 digest，不随意向 certificate 塞字段；最终 certificate_digest 仍由原生签证器生成，原 baseline/plan 哈希保持。
+
+**时间与开服后变更分类**：
+
+- 新预检材料保存版本化 semantic_projection_digest：完整被观察业务行/配置，仅剔除明确列举的操作时间字段，原整体摘要仍保留；执行联合身份/状态/配置/完整引用判断等价。不实现全局 ignore_update_time。
+- 已批准的旧 registration_plan/extension 按其精确 AFTER 消费；旧 Run 新出现差异若缺可逆 BEFORE/等价投影，不能从旧 hash 证明“只改时间”，报告待维护复核。
+- 来源表保存当前状态而非完整来源 mutation ledger。只有实际 Owner 原生回执或其他完整身份/前后状态证据能证明的更新/退役，才加入不可变 reconciliation；目标 tombstone 不冒充来源删除证据。
+- 证据不足输出 `maintenance_reconciliation_required`、来源/缺证类型、原游标。停写后仍用同一脚本 dry-run 评估当前配置、原生索引、真实目标及全集；能完整闭合的受控补充证明另存、绑定原材料/旧证明并由同一 apply 消费，不重新定基旧提交。未知授权/归属或不可替代的原意图缺失仍 BLOCK，停写本身不使其合法。
+
+最终全量验证以运维保持停写为前提：批次记录业务/索引/目标摘要和 root/source revision，签证前核对同一 verification manifest、实际租户、来源/版本全集及修订。再次变化的批次重验；持续变化或无法闭合则 ready=false 并报告范围。Run 互斥锁不能拦在线写，两遍分页摘要相同也不宣称任意并发下线性一致；本轮不提供在线签证。
+
+实际收尾在签证同一原生事务内按租户/业务根/索引根稳定顺序锁定并批读所有已观察来源及完整索引，逐事实摘要与先前验证结果比较，覆盖新增及退休来源，并再次 census 全集。此 O(root) 尾检与必要 current-after 是不同时间的证明，不作为可省掉的重复读取；业务写入者仍须保持停止。首次创建维护锁种子前额外执行一次完整只读准入，材料损坏、原始事实变化时不留种子；持锁后再核验防止准入间变化，已有种子不支付这一首次 bootstrap 额外成本。
+
+### 16.10 模块、内部接口与依赖风险
+
+| 模块/接口 | 提供与消费 | 不做什么/风险点 |
+| --- | --- | --- |
+| scripts/unify_knowledge_spaces.py | 参数、同配置资源生命周期、结果/退出码；调用统一 application | 不直接编排 SQL或启停服务；旧参数兼容不能假报 full 成功 |
+| 新 unification_upgrade application | dry-run/apply 阶段路由、材料绑定、原 Run 恢复、recorder | 不新增通用工作流引擎或第二个状态机 |
+| 新 history preparation/fact-view ports | 纯动作、受影响 after 闭包；消费业务/权限 Owner 事实及原生效果 | 不调用真实 apply 再 rollback，不从权限模块反查业务表 |
+| Owner repositories / permission.application 导出 | 真实/视图同契约，原生 SQL/图 after 与批量当前核验 | 子查询租户、JOIN、聚合、ORM返回类型变化都须真实双库验证 |
+| Inventory/Preview store/tuple builder | 统一上下文内完整图校验、sealed 输入/计划 | finish 前不可消费；临时目录退出即失效 |
+| Conversion/PermissionPublication | 原生阶段效果、after 目录、admission 回执 | 回执不替代 current 状态/最终图证明；合法 pending 不误当故障 |
+| ReferenceMigration/Backfill/Coverage | 事务批处理、增量集合、完整证书 | 不改变在线绑定授权，不把 source ready 或 root_guard false 当全局状态 |
+| 原 prepare_f118_history.py 与辅助脚本 | 旧 schema-1～4 计划及原 operator 继续原生恢复 | 共享逻辑迁出时保持原 checksum/idempotency；不重编号历史冻结策略 |
+| MySQL/DM8、OpenFGA、MinIO | 实际结构、锁/事务、原 pin、原子图变更、内容寻址材料 | 本地 SQLite 不能证明真实锁；只读初始化不可创建 bucket/model/索引 |
+
+对外无新 HTTP API。CLI JSON 固定包含 mode/run、preflight_complete/can_apply/ready、stage 状态、auto_repair/retained_warning/blocker/not_evaluated 计数及报告位置；错误增加当前 phase、提交是否未知、最后已确认 cursor 和恢复命令。计数可为 0，未知 total/eta 为 null，不能用空集合冒充已检查空集。
+
+退出码：0=完整可执行预检或本次声明合同的完整成功；2=参数/数据阻塞；3=材料/身份/pin/事实漂移；4=运行或检查未完成。阶段诊断模式另给 mode/complete 范围，不视为默认 full 成功。使用既有 KnowledgeOperationPlanConflictError/ReferenceCoverageNotReadyError 及低基数 reason，不新增未经占用核对的业务错误码；不在普通日志输出异常凭据或业务载荷。
+
+### 16.11 已知坑、验证与交付证据
+
+| 事实 | 忽略后的错误 | 接线位置 |
+| --- | --- | --- |
+| preview store 退出立即删除；inventory 不是完整 tuple 分类 | dry-run 后续读取失败，或先过预检再遇未分类边 | unification_inventory.arun / preview_artifacts / F118PermissionTupleBuilder.finish |
+| finalizer 涉及 Grant/assignee/visible source 和原账本，不只是 mode 状态 | 伪造 CURRENT 后仍在 liveness/删除保留检查失败甚至误授权 | permission/application/sql_runtime.SqlProjectionFinalizer / migration-history 导出 |
+| planned_at、新 ID、operator 与派生 idempotency 会影响真实 checksum | 正确 apply 也被假漂移拒绝，或全局忽略 checksum 漏错 | ConversionPlanBuilder.finish / 逻辑身份物化及原生 checksum |
+| UNION 隐藏源表，外层 ORM 自动租户事件可能看不到 | 跨租户事实混入 | core/database/tenant_filter.build_tenant_filter_clause / view repository |
+| checkpoint 只能当前 phase 写且 completed 禁写 | 旧 Run 补证失败或破坏仓储状态机 | unification_run_repository.acheckpoint / admission 回执 |
+| SQL 完成不代表权限 runtime 已 ready | 合法 FGA/SQL pending 无法恢复 | PermissionPublicationApplication._fga / SQL阶段 admission |
+| 只有当前引用 head，没有完整来源操作历史 | 把未知配置变化误当合法原生变更 | unification_registration / ReferenceAfterSources.acensus / reconciliation |
+| INFO 每规划一次输出，独关 DEBUG 不够 | 继续产出 GiB 日志且无有效进度 | common/metric_log / VisibilityProjectionCompiler / recorder |
+
+测试策略：纯规则覆盖每类历史效果、逻辑身份物化和 hash；原生事务集成穿过统一 CLI→application→Owner repos→原生投影→Coverage，覆盖零引用、失效历史、首末批、旧图/旧证明与当前 after；端到端按 e2e-test 技能确认维护 CLI 的适用层次，不用 helper 单测代替入口闭环。MySQL/DM8 验证视图查询、租户、行锁/NOWAIT、事务回滚/未知 COMMIT；真实 OpenFGA/MinIO 验证图和材料协议。
+
+必须故障注入：首次 before 变化零业务写；历史部分提交、冻结前后、SQL/namespace/FGA pending、批末 COMMIT ACK 丢失、互斥失锁、旧 backfilling 缺回执、临时盘满/损坏、材料尾页损坏、扩展事实再变化、最终来源/版本全集变化。证明原材料/游标保持，无半批成功、重复副作用或伪 Coverage。
+
+规模对照使用同镜像/同数据/同环境，分别放大资源、成员、来源和 tuple；记录各阶段 GET/SQL/事务/编译次数、扫描字节、RSS/临时盘、日志和耗时。核对同一时点不可变页只真实取一次、校验器产物不再重编、恢复不重新进入已完成执行链；必要 current-after 扫描另计。引用事务随批次数增长，查询须随批读下降，完整性证明维持。以约 14 万文件、3.1 万工作流版本、160 万 tuple、5.5 万来源的真实集成演练确定维护窗口，不从本机倍数外推。
+
+手动验证使用 §16.4 的两条命令，需新镜像维护容器、持久 data 卷、业务同 config、真实操作人、全部写入者停服及完成结构升级；先在脱敏克隆执行，核对报告、原生账本、完整 ready 与模型读取/工作流编辑/运行等业务抽检。schema 与其他功能迁移仍按独立升级指南执行；环境操作以用户对指定现场的授权范围为准。后续已授权的165验证仅覆盖旧completed Run及完整后态，未恢复业务服务。
+
+已按用户确认完成八列 QA 用例、任务拆分及本地实现；入口闭环、历史分类、故障恢复和规模验证见[实施验证记录](../../../docs/reviews/f118-upgrade-flow-implementation-20261120.md)及[七维审查](../../../docs/reviews/f118-upgrade-flow-code-review-20261120.md)。后续真实MySQL、OpenFGA、MinIO、Redis上的165旧completed Run验证见[实机记录](../../../docs/reviews/165-f118-unified-flow-2530742181-20261121.md)。当前已知边界是 tuple/collector 全量成本，以及首次迁移、真实互斥/失锁/未知提交和DM8尚未现场覆盖；引用辅助化下版本独立处理，不扩展本轮在线协议。源码已合入发行线，正式镜像构建、上线及业务验收须分别完成。
+
+修订记录：2026-11-20，用户确认 AC-158～166 与本设计后实施统一入口。原生闭环现包含历史 after 视图、生成身份精确映射、同事务 preparing 绑定、稳定 tuple 排序、共享历史分页、阶段准入与批引用完整收尾；已知容量取舍如上明确记录。真实 MySQL/DM8 行锁及真实中间件规模演练仍待集成环境，不以 SQLite/模拟 HTTP 结果代替。
+
+修订记录：2026-11-23，按用户授权将`952165f85e`合入最新发布线`ec59c5a0fa`，合并提交`56a461e2d7`；同步3.0.0起点的升级指南与实际验证边界。合并无冲突，迁移实现未手工重写，最新发布线的分享链接、工具归属与注册规则均保留；定向结果与未覆盖范围见合入核对记录。

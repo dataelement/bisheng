@@ -83,6 +83,7 @@ jest.mock('~/components/Linsight/Execution/taskTurnLoad', () => ({
 }));
 jest.mock('~/components/Linsight/Execution/stepUtils', () => ({}));
 jest.mock('~/components/Linsight/Execution/PinnedTaskPanel', () => ({ PinnedTaskPanel: () => null }));
+jest.mock('~/components/Linsight/Execution/ClarifyCard', () => ({ RunClarifyCard: () => null }));
 jest.mock('~/components/Linsight/Artifacts/WorkspacePanel', () => ({ WorkspacePanel: () => null }));
 jest.mock('~/api/linsight', () => ({}));
 jest.mock('~/api/messageExport', () => ({}));

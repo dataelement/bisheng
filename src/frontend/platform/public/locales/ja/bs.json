@@ -1287,6 +1287,9 @@
     "knowledgeSpace": "ナレッジスペース",
     "userAuthVerification": "ユーザーナレッジ権限チェック",
     "userAuthVerificationTips": "有効にすると、検索結果は現在の利用者本人のナレッジスペースファイルの閲覧権限でフィルタされ、各利用者は閲覧権限のあるファイルのみ検索できます。無効の場合は設定者の可視範囲で検索し、すべての利用者が設定者の見えるファイルを共有します（設定者が閲覧できないファイルは検索されません）。ドキュメント知識ベースはきめ細かなファイル権限の影響を受けません。",
+    "memory": "メモリ",
+    "assistantMemory": "アシスタントメモリ",
+    "assistantMemoryDesc": "オンにすると、このアシスタントでの会話の要点が利用者自身のメモリに整理されます。アシスタントは回答時に現在の利用者のメモリを参照するため、その内容が回答に表示されることがあります。メモリは利用者ごとに分かれており、ほかの利用者からは見えません。",
     "searchBaseName": "ナレッジベース名を検索",
     "debugPreview": "デバッグプレビュー",
     "addTool": "ツール追加",
@@ -1407,6 +1410,16 @@
     "availableTools": "利用可能なツール",
     "addTool": "ツールを追加",
     "defaultChecked": "デフォルト",
+    "toolUsage": {
+      "title": "利用方法",
+      "optional": "ユーザーが選択",
+      "optionalDesc": "ツールメニューに表示、既定ではオフ",
+      "default": "既定でオン",
+      "defaultDesc": "新しい会話でオン、ユーザーがオフにできます",
+      "auto": "常時有効",
+      "autoDesc": "ユーザーには表示せず、毎回の会話で使用",
+      "ariaLabel": "{{name}}の利用方法"
+    },
     "remove": "削除",
     "builtinTools": "組込み",
     "apiTools": "API",
@@ -2775,6 +2788,7 @@
       "displayName": "表示名",
       "description": "説明",
       "status": "状態",
+      "autoEnabled": "常時有効",
       "defaultChecked": "デフォルト選択",
       "updateTime": "更新日時",
       "actions": "操作"
@@ -2790,6 +2804,10 @@
     "defaultCheckedTip": "オンにすると、新しい会話を始めるたびにこのスキルが選択済みになります。ユーザーは選択を外せます。スキルが無効の間は適用されません。",
     "defaultCheckedOnToast": "デフォルト選択に設定しました。新しい会話から適用されます",
     "defaultCheckedOffToast": "デフォルト選択を解除しました",
+    "autoEnabledTip": "オンにするとユーザーには表示されず、毎回の会話で読み込まれます",
+    "autoEnabledNeedsEnable": "先にスキルを有効にしてください",
+    "autoEnabledOnToast": "常時有効に設定し、ユーザーには表示しません",
+    "autoEnabledOffToast": "常時有効を解除し、ユーザーに再表示します",
     "deleted": "削除しました",
     "saved": "保存しました",
     "count": "全 {{count}} 件",
@@ -4726,5 +4744,8 @@
   "organization.trafficLoadFailed": "利用制限を読み込めませんでした。再試行してください。",
   "organization.partialSave": "基本設定は保存されました。利用制限は未保存です。再試行してください。",
   "organization.clearSearch": "検索をクリア",
-  "organization.noResults": "該当する結果はありません"
+  "organization.noResults": "該当する結果はありません",
+  "memory": {
+    "operation": "メモリ操作"
+  }
 }

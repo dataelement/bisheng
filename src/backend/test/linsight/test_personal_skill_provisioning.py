@@ -126,7 +126,7 @@ async def env(monkeypatch, tmp_path):
     from unittest.mock import AsyncMock
 
     async def permitted(_user, *, resource_ids, **kwargs):
-        return {str(skill_id): {"use"} for skill_id in resource_ids}
+        return {str(skill_id): {"use", "visible"} for skill_id in resource_ids}
 
     monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", permitted)
     monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
@@ -187,6 +187,7 @@ class TestCandidateCopy:
             "skill_id": env.personal.id,
             "owner_user_id": USER,
             "content_hash": env.personal.content_hash,
+            "tenant_id": TENANT,
         }
         assert by_name["he-tong"]["skill_id"] == env.contract.id
         assert by_name["he-tong"]["owner_user_id"] == 0

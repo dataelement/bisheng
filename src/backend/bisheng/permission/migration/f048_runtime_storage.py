@@ -44,6 +44,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
 )
+from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
     derive_permission_models,
@@ -274,6 +275,7 @@ class SqlMigrationRunStore:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     result = await session.execute(
                         update(PermissionMigrationRun)
                         .where(
@@ -317,6 +319,7 @@ class SqlMigrationRunStore:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     target_count = int(
                         (
                             await session.execute(
@@ -401,6 +404,7 @@ class SqlMigrationRunStore:
             raise PermissionMigrationBlockedError(msg="Migration run has no target model")
         async with get_async_db_session() as session:
             async with session.begin():
+                await acheck_transaction(session)
                 target_release = (
                     (
                         await session.execute(
@@ -559,6 +563,7 @@ class OpenFGAMigrationModelPublisher:
             return
         async with get_async_db_session() as session:
             async with session.begin():
+                await acheck_transaction(session)
                 session.add(
                     AuthorizationModelRelease(
                         environment=self._environment,
@@ -638,6 +643,7 @@ class SqlOpenFGAMigrationTargetWriter:
         control_checksum = await self.acontrol_plane_checksum()
         async with get_async_db_session() as session:
             async with session.begin():
+                await acheck_transaction(session)
                 await session.execute(
                     update(PermissionCatalogRelease)
                     .where(PermissionCatalogRelease.id == release_id)
@@ -961,6 +967,7 @@ class SqlOpenFGAMigrationTargetWriter:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     statement = select(PermissionCatalogRelease).where(
                         PermissionCatalogRelease.release_key == INITIAL_CATALOG_RELEASE_KEY
                     )
@@ -1082,6 +1089,7 @@ class SqlOpenFGAMigrationTargetWriter:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     for mapped in grants:
                         statement = select(PermissionGrant).where(
                             PermissionGrant.tenant_id == mapped.tenant_id,
@@ -1224,6 +1232,7 @@ class SqlOpenFGAMigrationTargetWriter:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     for mapped in modes:
                         statement = select(ResourcePermissionMode).where(
                             ResourcePermissionMode.tenant_id == mapped.tenant_id,

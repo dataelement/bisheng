@@ -5,8 +5,12 @@ import AiChatInput from "~/components/Chat/AiChatInput";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ComposerConfigNotice } from "~/components/Chat/ComposerConfigNotice";
 import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel";
+import { RunClarifyCard } from "~/components/Linsight/Execution/ClarifyCard";
+import { useRunAwaitingAnswer } from "./hooks/useTaskWorkspaceState";
+import { composerPlaceholder, useRunStopped } from "./hooks/runComposerState";
 import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
 import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
+import { RunPageContext, TaskTurnRetryContext } from "~/components/Chat/runPageContext";
 import { cn } from "~/utils";
 import Landing from "./Landing";
 import { DailyFeaturedApps } from "./DailyFeaturedApps";
@@ -70,7 +74,7 @@ export function ChatSurfacePresentation({
     canUseTaskMode,
     inviteQuotaBar,
     inviteQuotaDialog,
-    handleSend,
+    handleSend, handleSendAnswer,
     isNew,
     hasMessages,
     activeCitationMessageId,
@@ -93,11 +97,11 @@ export function ChatSurfacePresentation({
     taskWorkspaceFiles,
     reportTaskTurnLoadFailed,
     taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
-    handleStop,
+    handleRetryTaskTurn,
     shareToken,
   } = model;
+  const runAwaitingAnswer = useRunAwaitingAnswer(shareToken ? "" : conversationId);
+  const runStopped = useRunStopped(shareToken ? "" : conversationId);
   // The composer is disabled without a model list; say why instead of leaving
   // a dead input. A share view has no composer to explain.
   const composerConfigNotice = shareToken ? null : (
@@ -110,6 +114,8 @@ export function ChatSurfacePresentation({
   );
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
+      <RunPageContext.Provider value={!shareToken}>
+      <TaskTurnRetryContext.Provider value={shareToken ? null : handleRetryTaskTurn}>
       <Presentation isLingsi={false}>
         {inviteQuotaDialog}
         <div className="dsh-chat-surface" data-testid="dsh-chat-surface">
@@ -257,11 +263,15 @@ export function ChatSurfacePresentation({
                             </div>
                           ) : (
                             <div className="dsh-chat-composer-seat">
-                              {latestTaskVersionId && (
-                                <PinnedTaskPanel
-                                  versionId={latestTaskVersionId}
-                                />
-                              )}
+                              {/* F004: renders nothing when it has no rows. */}
+                              <PinnedTaskPanel
+                                versionId={latestTaskVersionId}
+                                conversationId={activeConvoId}
+                              />
+                              <RunClarifyCard
+                                conversationId={shareToken ? "" : conversationId}
+                                onSend={handleSendAnswer}
+                              />
                               {inviteQuotaBar}
                               {composerConfigNotice}
                               <AiChatInput
@@ -275,41 +285,26 @@ export function ChatSurfacePresentation({
                                   !bsConfig?.models?.length ||
                                   !!shareToken
                                 }
-                                sendDisabled={taskRunning}
                                 isStreaming={isStreaming}
                                 isParsingMedia={isParsingMedia}
-                                // Parked awaiting the user → not "running": drop the Stop
-                                // button (sendDisabled still blocks a new round until the
-                                // current one resolves). The user replies via the
-                                // ClarifyCard in the stream above, not this input.
-                                taskRunning={taskRunning && !awaitingUserInput}
                                 features={{
                                   taskModeEntry: canUseTaskMode,
-                                  taskMode:
-                                    (taskMode || taskRunning) && canUseTaskMode,
+                                  taskMode: taskMode && canUseTaskMode,
                                 }}
                                 onToggleTaskMode={handleToggleTaskMode}
-                                placeholder={
-                                  awaitingUserInput
-                                    ? t("com_linsight_awaiting_reply")
-                                    : taskMode
-                                      ? (
-                                          bsConfig as {
-                                            linsightConfig?: {
-                                              input_placeholder?: string;
-                                            };
-                                          }
-                                        )?.linsightConfig?.input_placeholder ||
-                                        t("com_linsight_input_placeholder")
-                                      : undefined
-                                }
+                                placeholder={composerPlaceholder(t, {
+                                  runAwaitingAnswer, runStopped, taskMode,
+                                  runTakesMessages: isStreaming,
+                                  taskPlaceholder: (bsConfig as { linsightConfig?: { input_placeholder?: string } } | undefined)
+                                    ?.linsightConfig?.input_placeholder,
+                                })}
                                 onScrollToBottom={() => {}}
                                 modelOptions={bsConfig?.models}
                                 modelValue={chatModel.id}
                                 onModelChange={handleModelChange}
                                 onModelAutoChange={handleModelAutoChange}
                                 onSend={handleSend}
-                                onStop={handleStop}
+                                onStop={stopGenerating}
                                 value={inputText}
                                 onChange={setInputText}
                                 bsConfig={bsConfig}
@@ -521,7 +516,6 @@ export function ChatSurfacePresentation({
                                 !bsConfig?.models?.length ||
                                 !!shareToken
                               }
-                              sendDisabled={taskRunning}
                               isStreaming={isStreaming}
                               isParsingMedia={isParsingMedia}
                               features={{
@@ -614,6 +608,8 @@ export function ChatSurfacePresentation({
             )}
         </div>
       </Presentation>
+      </TaskTurnRetryContext.Provider>
+      </RunPageContext.Provider>
     </TaskTurnLoadContext.Provider>
   );
 }

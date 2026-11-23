@@ -1,0 +1,25 @@
+{
+  "id": "no-request-no-write-fact",
+  "acs": [
+    "AC-30"
+  ],
+  "turns": [
+    {
+      "user": "我在杭州办公，今天帮我查一下知识库里报销制度的要点",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "总结一下刚才的报销要点",
+    "new_session": false,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "已记下"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

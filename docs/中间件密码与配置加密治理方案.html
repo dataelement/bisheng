@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>毕昇 · 中间件密码与配置加密治理方案 v2.1</title>
+<style>
+  :root{
+    --old:#b45309; --old-bg:#fef3c7; --old-line:#f59e0b;   /* 复用/老服务 */
+    --new:#1d4ed8; --new-bg:#dbeafe; --new-line:#3b82f6;   /* 本次新增 */
+    --infra:#047857; --infra-bg:#d1fae5;                    /* 存储 */
+    --ext:#475569; --ext-bg:#e2e8f0;                        /* 外部依赖 */
+    --mq:#7c3aed; --mq-bg:#f3e8ff;                          /* 消息队列 */
+    --ink:#0f172a; --muted:#64748b; --border:#e2e8f0; --bg:#f8fafc; --accent:#4f46e5;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--bg);line-height:1.65;font-size:15px}
+  code{font-family:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;background:#eef2ff;color:#3730a3;padding:1px 6px;border-radius:4px;font-size:13px}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  main{max-width:1040px;margin:0 auto;padding:36px 40px 120px}
+  header.top{border-bottom:2px solid var(--border);padding-bottom:16px;margin-bottom:8px}
+  header.top h1{font-size:25px;margin:0 0 6px}
+  header.top .sub{color:var(--muted);font-size:13.5px}
+  section{margin-bottom:48px;scroll-margin-top:20px}
+  h2{font-size:22px;margin:34px 0 6px;padding-bottom:9px;border-bottom:2px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px}
+  .lead{color:var(--muted);font-size:14px;margin:0 0 16px;border-left:3px solid var(--accent);padding:6px 14px;background:#fff}
+  p{margin:10px 0}
+  nav.toc{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin:14px 0;font-size:13.5px;columns:2}
+  nav.toc a{display:block;padding:2px 0}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  th,td{border:1px solid var(--border);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#f1f5f9;font-weight:600}
+  tr:nth-child(even) td{background:#fbfcfe}
+  td code,th code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .note{background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid var(--old);padding:10px 14px;border-radius:6px;margin:14px 0;font-size:13.5px}
+  .tip{background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid var(--new);padding:10px 14px;border-radius:6px;margin:14px 0;font-size:13.5px}
+  .warn{background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;padding:10px 14px;border-radius:6px;margin:14px 0;font-size:13.5px}
+  figure{margin:18px 0;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px}
+  figure svg{display:block;width:100%;height:auto}
+  figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;text-align:center}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:8px 0 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:13px;height:13px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.15)}
+  .pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px}
+  .pill.old{background:var(--old-bg);color:var(--old)} .pill.new{background:var(--new-bg);color:var(--new)}
+  .pill.infra{background:var(--infra-bg);color:var(--infra)} .pill.mq{background:var(--mq-bg);color:var(--mq)}
+  .pill.todo{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+  .pill.prod{background:#faf5ff;color:#7c3aed;border:1px solid #e9d5ff}
+  .pill.tech{background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc}
+  .pill.done{background:#dcfce7;color:#15803d;border:1px solid #86efac}
+  /* 待确认清单容器（可选：橙色）*/
+  .todo-box{background:#fff7ed;border:2px solid #fdba74;border-radius:10px;padding:4px 18px 14px;margin:16px 0}
+  .todo-box h2{border:none;color:#c2410c}
+  tr.q-prod td:first-child{border-left:3px solid #7c3aed}
+  tr.q-tech td:first-child{border-left:3px solid #0e7490}
+  /* 已对齐结论容器（可选：绿色）*/
+  .done-box{background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:4px 18px 14px;margin:16px 0}
+  .done-box h2{border:none;color:#15803d}
+  tr.a-prod td:first-child{border-left:3px solid #7c3aed}
+  tr.a-tech td:first-child{border-left:3px solid #0e7490}
+  svg text{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  .svg-t{font-size:12.5px;fill:var(--ink)} .svg-s{font-size:11px;fill:var(--muted)}
+  .svg-title{font-size:13px;font-weight:700}
+  /* ↓↓↓ 可选：产品视觉稿 mock（如 UI 弹窗）。不需要就整段删除。 */
+</style>
+</head><body><main><h1>中间件密码与配置加密治理方案</h1><p>更新：2026-11-15。目标：运维继续执行原部署命令，部署程序完成密码输入、加密、配置同步、启动检查和故障恢复。</p>
+<section id="es-no-auth"><h2>2026-11-15 补充：旧 ES 无认证升级</h2><p><strong>用户已确认，纳入原部署脚本。本地 ES 8.12.0 单节点协议测试通过。166 已由用户执行原命令并选择开启认证；下面的验收矩阵不因此改为全部通过。</strong></p><p>旧拒绝条件已改为服务端识别、交互选择和有状态迁移。需求 AC-71～AC-76，面向原标准 Compose 的 Bitnami ES 8.12.0 单节点；不新增独立部署命令或另建运行栈。</p><h3>入口与识别</h3><p>在 credential_setup 的 v1 转换与 rotation_select 之前增加只读 ES 识别，首次安装沿用现有初始化路径。归属从原容器项目标签、镜像 ID、端口、实际挂载和当前集群 UUID 交叉核对；新代码目录允许与原数据目录不同，不覆盖 3.0.0。识别工具通过原项目网络访问服务端，检查安全设置与认证结果，不依靠 config.yaml 是否存在 basic_auth。安全开启但允许匿名访问不能归为安全关闭；权限不足、网络失败和服务端关闭认证必须区分。</p><p>无认证的“保留”选择保留安全关闭和无 basic_auth，写入签名 pending 策略，不在普通部署时强制改密。启用选择收集加密输入，交互沿用原命令；若服务端已开认证、客户端没有认证来源，则在同一入口引导导入现用管理凭据，校验后保存加密配置，不擅自重置未知账号。已认证的普通改密继续复用现有轮换路径。</p><h3>准备、执行与状态</h3><p>实际 ES 子状态：PREPARED → FROZEN → PASSWORD_INTENT → PASSWORD_SET → VERIFIED；外层沿用 SEALED → VERIFIED → CONSUMERS_SWITCHED → COMPLETE。所有跨服务写入前先持久化意图。状态签名绑定源/目标配置、外置密钥身份、原容器镜像和集群 UUID；密码、完整运行配置、原环境、索引基线和恢复材料整体密封，不把密码摘要公开。保持部署锁，并要求其他节点停止写入。</p><p>PREPARED 前对照新旧配置验证只有 ES 认证及声明的消费者发生变化。保留原 data 挂载和自定义配置，固化原镜像；备份配置不等于数据备份，维护确认须说明使用客户已有数据备份，不宣称配置副本能恢复索引损坏。停止本项目写入消费者后记录所有业务索引 UUID、文档数和别名；不通过删除索引或重建数据目录初始化 ES。</p><p>宿主脚本负责 Docker 编排，后端模块只负责纯数据编译、加密状态和 ES SDK 操作。ELASTICSEARCH_ENABLE_SECURITY 配置与存量 elastic 密码是两个动作；原生认证开启后优先验证已保存目标身份。若尚未设置目标密码，在核实身份的本地容器内使用该版本官方 elasticsearch-reset-password 工具（临时 file realm 用户）完成设置；密码只经受控 stdin/内存文件传递，不用 argv、Docker Env 或明文文件。该工具的非 TTY 输入、临时用户清理及 tmpfs 要做真实版本验证；若不适配，保持停写，不换成明文命令行。不能假定 Bitnami 在发现已有 data 时会重新初始化密码。</p><p>返回结果未知时先检查目标凭据和 PASSWORD_INTENT。能验证则继续；不能验证时在原入口提供明确的恢复选择，不盲目反复重置。PASSWORD_SET 后才激活后端、worker 及实际发现的统计 ES 消费者配置；同端点可共用管理身份，外部端点不得误改。v1 adopt-key 缺失的原生密码材料在内存重建，运行配置从实际容器捕获；新交付目录只读导入旧包，不覆盖旧目录。</p><h3>完成与失败恢复</h3><p>完成必须同时证明目标认证成功、安全设置开启、匿名业务访问拒绝、原集群/业务索引 UUID 保留、冻结后的文档数与别名一致；再进行读取及可销毁临时探针索引的写读删，不写客户业务文档；探针归属先持久化，续跑只清理归属一致的索引。最后验证实际后端/worker 消费者配置和调用链，无引用旧材料后才能按原有清理规则收尾。后续执行原命令不重复设密。</p><p>开启认证前失败：保留原服务状态、原配置和数据；停写后失败：保持应用暂停，重跑原命令恢复。已开启认证后失败：默认继续同一目标，禁止自动降级无认证。用户明确选择配对回退时，验证旧镜像、数据归属和配置备份，恢复原安全模式及原消费者配置，并重新检查索引与连接；不恢复/删除整份数据目录。若目标密码曾写入安全索引，回退不能把“恢复安全关闭”描述为清除安全索引记录，下一次开启仍以原生账号现状为准。</p><h3>影响与边界</h3><p>影响 ES 容器和使用 ES 的 API/worker/统计客户端，维护期间搜索/写入短暂中断；MySQL、Redis、MinIO 和 Milvus 密码不随本次操作改变。集群、已有 TLS 与 file realm 被禁用的环境需要相应适配，禁止关闭 TLS 来套用 HTTP 单节点流程。代码改动应集中在凭据模块与原入口，不触及业务表或双数据库逻辑；C1/C2/C3/C4 不引入变化，C6 通过外置密钥和密封状态保持。</p><p>参考：官方最小安全配置 <a href="https://www.elastic.co/docs/deploy-manage/security/set-up-minimal-security">set-up-minimal-security</a>，官方设密工具 <a href="https://www.elastic.co/docs/reference/elasticsearch/command-line-tools/reset-password">reset-password</a>。锁定版本真实行为仍以实际测试为准。</p><h3>开发验收矩阵</h3><p>本地 ES 协议已通过。下表不把 166 上的一次原命令执行记成全部场景通过。</p><table><tr><th>优先级</th><th>风险</th><th>场景</th><th>预期结果</th><th>验证层级</th></tr><tr><td>P0</td><td>服务端识别</td><td>安全关闭、已开认证、匿名角色、网络失败</td><td>只把明确安全关闭归为无认证；未知状态不写账号</td><td>SDK 边界与协议测试</td></tr><tr><td>P0</td><td>选择保留</td><td>旧无认证 ES，选择不启用</td><td>保留原安全模式，报告待治理，普通部署不被全量强度检查误挡</td><td>原命令 PTY 与迁移集成</td></tr><tr><td>P0</td><td>首次启用</td><td>单节点已有索引，用户选择启用</td><td>原镜像与数据卷不变，目标密码可用、匿名业务访问拒绝</td><td>真实锁定版本集成</td></tr><tr><td>P0</td><td>配置同步</td><td>主 ES 与同端点统计消费者</td><td>只更新对应加密凭据；后端和 worker 使用同一目标密码</td><td>配置与业务集成</td></tr><tr><td>P0</td><td>写入前失败</td><td>预检/加密备份失败</td><td>无原生账号与数据变更，不输出秘密</td><td>故障注入</td></tr><tr><td>P0</td><td>设密后断线</td><td>PASSWORD_INTENT 后响应丢失</td><td>先验证已保存目标身份，成功则续跑，不换密码或盲目重置</td><td>故障注入与原命令恢复</td></tr><tr><td>P0</td><td>配对回退</td><td>认证开启、后端激活失败</td><td>原入口先续跑；回退需明确确认并验证旧配置和索引，不能自动降级</td><td>状态机与真实集成</td></tr><tr><td>P0</td><td>数据与泄露</td><td>旧索引、别名、特殊字符、短密码</td><td>冻结后的 UUID/文档数保留，探针写读删成功；密码不进入 argv/env/日志/宿主明文文件</td><td>扫描、索引及业务集成</td></tr><tr><td>P1</td><td>重复执行</td><td>已完成计划再次部署</td><td>读取已验证状态，不重复设密，不再要求录入相同密码</td><td>幂等与 PTY</td></tr><tr><td>P0</td><td>不适配拓扑</td><td>多节点、已有 TLS、未知 file realm</td><td>明确保持现状，不能关闭 TLS 或套用单节点 HTTP</td><td>拒绝路径</td></tr></table><p>环境不可用时必须记录未执行。开发侧真实集成使用已获授权的本地或 CI 环境。</p></section><h2>一、业务背景</h2><p>客户环境需要各自独立的中间件密码，不能统一使用默认弱密码。MySQL、Redis、ES、Milvus 及统计 ES 至少 6 位；MinIO 原生密钥至少 8 位。不要求数字、字母、符号同时出现，已知默认密码和占位符仍拒绝。安全优化必须保持一条命令部署的操作方式，允许运维在部署过程中逐项选择是否改密。</p>
+<h2>二、原有安全问题</h2><p>治理前存在默认密码、配置中明文密码、组件覆盖不一致、固定密钥风险，以及原生启动文件、轮换阶段和恢复副本残留明文的问题。仅加密后端 config.yaml 无法覆盖原生组件启动与历史材料。</p>
+<h2>三、部署入口</h2><p>继续使用 <code>bash docker/install.sh</code>，或公司原有入口 <code>bash scripts/deploy.sh install</code>。首次部署隐藏输入并二次确认；重新部署逐项询问 MySQL、Redis、MinIO、ES、Milvus 是否修改，默认保留。运维无需手工运行加解密命令。</p>
+<h2>四、技术实现</h2><p>首次部署生成外置主密钥，不写入代码或镜像。主密钥文件使用受控权限 600 或经过验证的 640；非 root 部署依靠文件所有者或专用组访问，不能放开到所有人可读写。</p><p>后端密码字段使用密文；部署输入、原生配置包、历史材料和恢复备份使用经过身份绑定与完整性校验的加密文件。原生组件通过配套静态启动工具，在经过检查的内存文件系统内获取启动所需明文，工具随后执行原组件入口。部署期间拒绝不符合要求的交换分区、转储与休眠环境。</p>
+<h2>五、各组件处理</h2><table><tr><th>组件</th><th>处理步骤</th><th>影响与失败兜底</th></tr><tr><td>MySQL</td><td>身份预检；更新原生账号；保存加密配置；重连检查；更新后端与依赖服务。</td><td>维护窗口内可能短暂停服。失败保留加密状态与原材料，原命令识别恢复；禁止盲目重复执行原生改密。</td></tr><tr><td>Redis</td><td>保留实际配置和 ACL（访问控制规则）；更新选中凭据；切换加密配置包；验证新连接。</td><td>缓存和任务连接需要重连；失败按受验证状态恢复，避免丢弃客户自定义配置。</td></tr><tr><td>MinIO</td><td>核验现用账号；更新原生凭据；同步后端及 Milvus 存储依赖；验证文件读写。</td><td>旧临时下载链接可能失效；重新获取链接。原有对象保留，失败由原命令恢复。</td></tr><tr><td>ES</td><td>服务端识别认证状态。无认证时由原命令选择保留或启用；启用时保留原数据卷和索引并设密。已认证则走普通改密。</td><td>连接短暂中断。多节点、已有 TLS、未知 file realm 保持现状，不关闭 TLS 套用单节点流程。失败保留现场，原命令续跑，或经确认后配对回退。</td></tr><tr><td>Milvus</td><td>保持原生账号认证和凭据更新；部署生成材料加密；核验向量数据读取。</td><td>用户明确接受其原生内部消息中的 Base64 密码例外；不引入 FUSE、SYS_ADMIN、透明加密卷或原生镜像分叉。</td></tr></table>
+<h2>六、旧版升级与恢复</h2><p>经核验的受管 v1 包自动转换为 v2，实际密码不变。切换前加密备份，验证新包、原生连接、应用状态及所有容器的旧文件引用后才清理旧文件。清理要求实际挂载完整源目录，不能将容器看不到文件当作删除成功；中断后重新执行原命令恢复。</p><p>主密钥必须与对应凭据材料配套备份，保存到公司批准的受限位置。丢失主密钥无法从密文重建密码。失败不得删除状态目录、覆盖密钥或擅自修改原生密码。</p>
+<h2>七、可行性与验收范围</h2><p>166 隔离环境以 UID 1000 和 Docker 授权完成新装、五组件改密恢复、受管 v1 转换及旧文件清理；213 项专项回归通过且无跳过。单项 MinIO 改密、数据/业务/worker 复验及最终扫描均通过；完整故障矩阵、L2 审查和正式发布镜像仍待验收，尚未宣布完整交付。</p><p>测试采用本地覆盖镜像，业务探针使用确定性嵌入，并包含仅限夹具的对象下载路由兼容配置；不代表最终成对发布镜像、真实模型质量或完整业务流程已验收。</p><p>DM 按用户要求待验证。Gateway、rootless 和未经验证的原生旧布局明确拒绝或不在本轮通过范围。Helm 已于 2026-11-16 移出本次治理，Chart 恢复治理前的部署方式，不在本次交付内。不能据此宣称所有部署形态均已支持。</p><p>运维步骤见 <a href="../docker/中间件凭据运维手册.html">运维手册</a>。当时的增量验收报告已清理，剩余范围以特性目录中的 verification.md 为准。</p></main></body></html>

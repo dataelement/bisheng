@@ -7,8 +7,6 @@ import { Constants } from '~/types/chat';
 import { useAuthContext } from '~/hooks/AuthContext';
 import store from '~/store';
 import { replaceSpecialVars } from '~/utils';
-import { useSetFilesToDelete } from '../Files';
-import { useLinsightSessionManager } from '../useLinsightManager';
 
 const appendIndex = (index: number, value?: string) => {
   if (!value) {
@@ -20,55 +18,19 @@ const appendIndex = (index: number, value?: string) => {
 export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) {
   const { user } = useAuthContext();
   const methods = useChatFormContext();
-  const { files, setFiles, ask, index, getMessages, setMessages, latestMessage } = useChatContext();
+  const { ask, index, getMessages, setMessages, latestMessage } = useChatContext();
   const { addedIndex, ask: askAdditional, conversation: addedConvo } = useAddedChatContext();
 
   const autoSendPrompts = useRecoilValue(store.autoSendPrompts);
   const activeConvos = useRecoilValue(store.allConversationsSelector);
   const setActivePrompt = useSetRecoilState(store.activePromptByIndex(index));
-  const { setLinsightSubmission } = useLinsightSessionManager('new')
-  const setFilesToDelete = useSetFilesToDelete();
 
   const submitMessage = useCallback(
-    (data?: {
-      text: string, linsight?: boolean, tools?: any[], knowledge?: {
-        personal?: boolean;
-        orgKbIds?: string[];
-      };
-    }) => {
+    (data?: { text: string }) => {
       if (!data) {
         return console.warn('No data provided to submitMessage');
       }
 
-      if (data?.linsight) {
-        setLinsightSubmission('new', {
-          isNew: true,
-          files: Array.from(data.files?.values() || []).map(item => ({
-            file_id: item.file_id,
-            file_name: item.name,
-            parsing_status: 'completed'
-          })),
-          question: data?.text,
-          // feedback: '',
-          tools: data.tools,
-          // empty -> backend falls back to the tenant's linsight default model
-          model: '',
-          // F035 Track H: this daily-chat entry has no skill picker, so send an
-          // explicit empty list rather than omitting the field. A missing skills
-          // key is persisted as NULL, which the backend treats as "no skills";
-          // being explicit keeps the contract legible and independent of that
-          // default (no reliance on the `|| []` guard downstream).
-          skills: [],
-          enableWebSearch: false,
-          useKnowledgeBase: true,
-          orgKnowledgeBaseIds: data.knowledge?.orgKbIds ?? [],
-        });
-        // 重置表单和清理草稿
-        methods.reset();
-        setFiles?.(new Map())
-        setFilesToDelete({});
-        return;
-      }
       // 检查最新消息是否在会话中
       const rootMessages = getMessages();
       const isLatestInRootMessages = rootMessages?.some(

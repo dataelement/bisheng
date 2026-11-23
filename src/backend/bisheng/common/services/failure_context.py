@@ -28,6 +28,9 @@ _PRIVATE = re.compile(
 _REFERENCE = "_bisheng_failure_reference"
 _UMBRELLA_CODES = frozenset({11090, 11091})
 _REDACTIONS = (
+    # SQLAlchemy appends the statement and its parameters to the message; in the
+    # detail text only the root-cause part (after " <- ") may follow them.
+    (re.compile(r"\[SQL:.*?(?= <- |$)", re.S), "<sql>"),
     (re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I), "<url>"),
     (
         re.compile(
@@ -41,6 +44,8 @@ _REDACTIONS = (
     (re.compile(r"\b(?:sk|ak|pk)-[A-Za-z0-9_-]{8,}"), "***"),
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b"), "<host>"),
     (re.compile(r"\b(?=[\w.-]*[A-Za-z])[\w.-]+:\d{2,5}\b"), "<host>"),
+    # Absolute file paths (two segments or more) of the server.
+    (re.compile(r"(?<![\w.<>/])(?:[A-Za-z]:\\|~?/)(?:[\w.@+~-]+[/\\])+[\w.@+~-]*"), "<path>"),
 )
 
 
