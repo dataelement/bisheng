@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
@@ -169,6 +169,7 @@ from bisheng.permission.application.initial_grant import (
 from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
+from bisheng.user.application.avatar import read_visible_user_avatar_urls
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, get_request_ip
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
@@ -552,6 +553,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         count_map = await KnowledgeFileDao.async_count_root_files_batch(space_ids)
         for space in spaces:
             space.file_num = count_map.get(int(space.id), 0)
+
+    @staticmethod
+    async def _space_creator_avatars(
+        spaces: Iterable[Knowledge | KnowledgeRead | KnowledgeSpaceListItemResp],
+    ) -> dict[tuple[int, int], str]:
+        return await read_visible_user_avatar_urls(
+            (space.tenant_id, space.user_id)
+            for space in spaces
+            if space.tenant_id is not None and space.user_id is not None
+        )
+
+    @classmethod
+    async def decorate_web_space_list_creators(
+        cls, spaces: Sequence[KnowledgeRead | KnowledgeSpaceListItemResp]
+    ) -> list[dict]:
+        """Enrich the already-authorized web lists with creator names and avatars."""
+        creator_ids = sorted({space.user_id for space in spaces if space.user_id is not None})
+        if not creator_ids:
+            return [{**space.model_dump(), "avatar": None} for space in spaces]
+
+        creators, avatars = await asyncio.gather(
+            UserDao.aget_user_by_ids(creator_ids), cls._space_creator_avatars(spaces)
+        )
+        names = {creator.user_id: creator.user_name for creator in creators or []}
+        return [
+            {
+                **space.model_dump(),
+                "user_name": space.user_name or names.get(space.user_id),
+                "avatar": avatars.get((space.tenant_id, space.user_id)),
+            }
+            for space in spaces
+        ]
 
     async def _format_managed_space_rows(
         self,
@@ -1781,6 +1814,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     result.user_name = create_user.user_name if create_user else str(space.user_id)
                 else:
                     result.user_name = self.login_user.user_name
+                creator_avatars = await self._space_creator_avatars([space])
+                result.avatar = creator_avatars.get((space.tenant_id, space.user_id))
 
             with measure_stage("subscription_role"):
                 if space.user_id == self.login_user.user_id:
@@ -2636,8 +2671,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return True
 
     async def get_knowledge_square(self, keyword: str | None = None, page: int = 1, page_size: int = 20) -> dict:
-        from bisheng.user.domain.services.user import UserService
-
         """
         Return PUBLIC/APPROVAL spaces for the Knowledge Square with pagination, sorted by:
         1. Not-joined first (easier to explore)
@@ -2667,15 +2700,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         creator_ids = list({row[0].user_id for row in rows if row[0].user_id})
 
         # 3. Batch fetch creator info and file counts for the current page only
-        creator_users_task = UserDao.aget_user_by_ids(creator_ids) if creator_ids else None
-        if creator_users_task:
-            creator_users, success_file_map = await asyncio.gather(
-                creator_users_task,
+        if creator_ids:
+            creator_users, success_file_map, creator_avatars = await asyncio.gather(
+                UserDao.aget_user_by_ids(creator_ids),
                 KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
+                self._space_creator_avatars(row[0] for row in rows),
             )
         else:
             creator_users = []
             success_file_map = await KnowledgeFileDao.async_count_success_files_batch(space_ids_int)
+            creator_avatars = {}
         # Square subscription state must match the personal ``/joined`` list.
         # Do not use the generic action batch here: it expands every action for
         # super admins, which would incorrectly label every square space joined.
@@ -2712,7 +2746,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "is_pending": subscription_status == SpaceSubscriptionStatusEnum.PENDING,
                         "subscription_status": subscription_status,
                         "user_name": creator.user_name if creator else str(space.user_id),
-                        "avatar": await UserService.get_avatar_share_link(creator.avatar) if creator else None,
+                        "avatar": creator_avatars.get((space.tenant_id, space.user_id)),
                         "file_num": success_file_map.get(space.id, 0),
                         "follower_num": subscriber_count,
                     },

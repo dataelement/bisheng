@@ -103,3 +103,27 @@ async def test_normal_turn_has_no_session_version_id(patch_daos):
 
     assert result.category != "task"
     assert result.linsightSessionVersionId is None
+    assert "user_avatar" not in result.model_dump()
+
+
+async def test_audit_read_attaches_avatar_only_to_the_actual_person(patch_daos, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bisheng.chat_session.domain import chat
+
+    message = _make_chat_message(id_=1, is_bot=False, category="user_input", message="Hello")
+    reply = _make_chat_message(id_=2, is_bot=True, category="answer", message="Hi")
+    lookup = []
+
+    async def avatars(pairs):
+        lookup.extend(pairs)
+        return {(1, 1): "/object/bisheng/avatar/1/current.png"}
+
+    monkeypatch.setattr(chat.ChatMessageDao, "aget_messages_by_chat_id", AsyncMock(return_value=[message, reply]))
+    monkeypatch.setattr(chat, "read_visible_user_avatar_urls", avatars)
+
+    result = await chat.ChatSessionService.get_audit_workstation_messages("chat-1")
+
+    assert lookup == [(1, 1)]
+    assert result[0].user_avatar == "/object/bisheng/avatar/1/current.png"
+    assert "user_avatar" not in result[1].model_dump()

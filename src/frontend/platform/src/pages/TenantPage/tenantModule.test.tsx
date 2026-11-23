@@ -91,12 +91,12 @@ beforeEach(() => {
   vi.mocked(api.getTenantQuotaApi).mockResolvedValue({ quota_config: { storage_gb: 5 }, usage: { storage_gb: 1 } });
   vi.mocked(api.getTenantUsersApi).mockResolvedValue({
     data: [
-      { user_id: 7, user_name: "Admin", external_id: "admin-7" },
-      { user_id: 8, user_name: "Member" },
+      { user_id: 7, user_name: "Admin", external_id: "admin-7", avatar: "/object/public/avatar/7/admin.png", join_time: null },
+      { user_id: 8, user_name: "Member", join_time: null },
     ],
     total: 2,
   });
-  vi.mocked(api.listTenantAdminsApi).mockResolvedValue({ user_ids: [7], users: [{ user_id: 7, user_name: "Admin" }] });
+  vi.mocked(api.listTenantAdminsApi).mockResolvedValue({ user_ids: [7], users: [{ user_id: 7, user_name: "Admin", avatar: "/object/public/avatar/7/admin.png" }] });
   for (const fn of [
     api.updateTenantApi,
     api.updateTenantStatusApi,
@@ -206,6 +206,8 @@ describe("Tenant module", () => {
   });
   it("grants and revokes child admins while Root has no admin actions", async () => {
     const first = render(<TenantUserDialog tenant={tenant} onClose={vi.fn()} />);
+    expect(await screen.findByAltText("")).toHaveAttribute("src", "/object/public/avatar/7/admin.png");
+    expect(screen.getByText("M")).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "tenant.promoteAdmin" }));
     await waitFor(() => expect(api.grantTenantAdminApi).toHaveBeenCalledWith(2, 8));
     await userEvent.click(screen.getByRole("button", { name: "tenant.revokeAdmin" }));
@@ -275,6 +277,8 @@ describe("Tenant module", () => {
     expect(await within(current).findByText("Admin")).toBeInTheDocument();
     const add = screen.getByRole("region", { name: "tenant.addAdmin" });
     expect(await within(add).findByText("tenant.alreadyAdmin")).toBeInTheDocument();
+    expect(within(current).getByAltText("")).toHaveAttribute("src", "/object/public/avatar/7/admin.png");
+    expect(within(add).getByAltText("")).toHaveAttribute("src", "/object/public/avatar/7/admin.png");
     await userEvent.click(within(add).getByRole("button", { name: "tenant.promoteAdmin" }));
     await waitFor(() => expect(api.grantTenantAdminApi).toHaveBeenCalledWith(2, 8));
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));

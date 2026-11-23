@@ -18,3 +18,4 @@ class ServiceAccountOwnerCandidate(BaseModel):
     user_id: int
     user_name: str
     tenant_id: int
+    avatar: str | None = None

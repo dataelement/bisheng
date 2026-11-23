@@ -1,4 +1,5 @@
 import {
+  Button,
   Dropdown,
   DropdownItem,
   Tooltip as SharedTooltip,
@@ -6,7 +7,6 @@ import {
 } from "@bisheng/ui";
 import { DemoTag } from "~/mock/demo/DemoTag";
 import type { AppItem } from "~/@types/app";
-import { Button } from "~/components";
 import AppAvator from "~/components/Avator";
 
 import { useLocalize, useMediaQuery } from "~/hooks";
@@ -14,6 +14,7 @@ import { cn } from "~/utils";
 import { Outlined } from "bisheng-icons";
 import { MoreVertical } from "lucide-react";
 import { useLazyAppSharePermission } from "../hooks/useLazyAppSharePermission";
+import { appCardSurfaceClassName } from "./appCardStyles";
 
 interface AgentCardProps {
   agent: AppItem;
@@ -22,7 +23,7 @@ interface AgentCardProps {
   onTogglePin?: (agent: AppItem) => void;
   onStartChat: (agent: AppItem) => void;
   openLabel?: string;
-  onShare: (agent: AppItem) => void;
+  onShare?: (agent: AppItem) => void;
 }
 
 export function AgentCard({
@@ -38,7 +39,8 @@ export function AgentCard({
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine)");
   const shouldUseHoverActions = !isMobileCard && canHover;
   const shouldUseHoverActionsInMobileCard = isMobileCard && canHover;
-  const { canShare, ensureSharePermission } = useLazyAppSharePermission(agent);
+  const { canShare: hasSharePermission, ensureSharePermission } = useLazyAppSharePermission(agent);
+  const canShare = !!onShare && hasSharePermission;
   // Only render pin affordances when a toggle handler is supplied.
   const showPin = typeof onTogglePin === "function";
   // Hosted applications (flow_type 35) are not conversational — they open a web
@@ -48,7 +50,7 @@ export function AgentCard({
     openLabel ?? (agent.flow_type === HOSTED_APP_FLOW_TYPE ? localize("com_app_enter_app") : localize("com_app_start_chat"));
 
   const handleShare = () => {
-    onShare({ ...agent, can_share: true });
+    onShare?.({ ...agent, can_share: true });
   };
 
   // Desktop card actions — rendered once, reused for the hover overlay and the
@@ -82,15 +84,13 @@ export function AgentCard({
   return (
     <div
       className={cn(
-        "group/card relative flex cursor-pointer flex-col overflow-hidden rounded-[12px] border border-solid p-2 transition-all",
-        "[--app-card-surface:var(--bg-page)] dark:[--app-card-surface:var(--fill-1)]",
-        "border-border-base border-[0.5px] bg-[rgb(var(--app-card-surface))] fine-pointer:hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]",
-        "after:pointer-events-none after:absolute after:inset-0 after:rounded-[12px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100",
-        "bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,rgb(var(--app-card-surface))_50%,rgb(var(--brand-500)/0.04)_100%)] dark:bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.08)_0%,rgb(var(--app-card-surface))_50%,rgb(var(--brand-500)/0.08)_100%)]",
+        appCardSurfaceClassName,
+        "group/card relative flex cursor-pointer flex-col overflow-hidden transition-shadow fine-pointer:hover:shadow-popup",
+        "after:pointer-events-none after:absolute after:inset-0 after:[border-radius:inherit] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100",
       )}
       onClick={() => onStartChat(agent)}
       onMouseEnter={() => {
-        if (canHover) void ensureSharePermission();
+        if (canHover && onShare) void ensureSharePermission();
       }}
     >
       {/* Header Info */}

@@ -1,10 +1,9 @@
-import { Button, SearchInput } from '@bisheng/ui';
+import { resolveUserAvatarUrl } from '@bisheng/identity';
+import { Button, Checkbox, SearchInput, UserAvatar } from '@bisheng/ui';
 import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 import { useSubjectSearch } from "./useSubjectSearch"
 import { SubjectBusinessId, SubjectSearchStatus } from "./SubjectSearchStatus"
 import { useLazyDepartmentTree } from "@/components/bs-comp/department"
-
-import { Checkbox } from '@bisheng/ui';
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import {
@@ -16,13 +15,14 @@ import {
 import { getUsersApi } from "@/controllers/API/user"
 import { showApiError } from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
-import { Building2, ChevronDown, ChevronRight, User as UserIcon, X } from "lucide-react"
+import { Building2, ChevronDown, ChevronRight, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 export type DepartmentUserOption = {
   label: string
   value: number
+  avatar?: string | null
   /** Business ID for display; the internal value remains the submission identity. */
   external_id?: string | null
   /** Resolved from the organization tree for immediate display in edit forms. */
@@ -57,6 +57,7 @@ interface DepartmentUsersSelectProps {
 type UserListItem = {
   user_id: number
   user_name: string
+  avatar?: string | null
   external_id?: string | null
   dept_id?: number | string | null
   department_id?: number | null
@@ -135,6 +136,7 @@ export default function DepartmentUsersSelect({
         const users = (res?.data || []).map((u) => ({
           value: Number(u.user_id),
           label: u.user_name,
+          avatar: u.avatar,
           external_id: u.external_id ?? u.person_id ?? null,
         }))
         const allowed = filterUserIds ? new Set(await filterUserIds(users.map((u) => u.value))) : null
@@ -219,7 +221,8 @@ export default function DepartmentUsersSelect({
       >
         <div className="relative shrink-0 self-stretch" style={{ width: depth * TREE_INDENT_PER_LEVEL }} aria-hidden />
         <Checkbox className="peer" checked={selected} disabled={locked} onClick={(e) => e.stopPropagation()} onCheckedChange={() => setPicked(u, departmentPath)} />
-        <UserIcon className="mx-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <UserAvatar className="mx-1.5 size-3.5" fallbackClassName="text-[9px]" name={u.label}
+          src={resolveUserAvatarUrl(u.avatar, __APP_ENV__.BASE_URL)} />
         <span className="truncate">{u.label}</span>
         <SubjectBusinessId value={u.external_id} />
       </div>
@@ -362,25 +365,23 @@ export default function DepartmentUsersSelect({
               ) : (
                 searchedUsers.map((u) => {
                   const deptLabel = u.department_path ?? ""
+                  const option = { value: u.user_id, label: u.user_name, external_id: u.external_id }
                   return (
                     <div
                       key={`su-${u.user_id}`}
                       className={`flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm ${
                         lockedSet.has(Number(u.user_id)) ? "opacity-60" : "cursor-pointer hover:bg-accent"
                       }`}
-                      onClick={() =>
-                        setPicked({ value: u.user_id, label: u.user_name, external_id: u.external_id }, deptLabel)
-                      }
+                      onClick={() => setPicked(option, deptLabel)}
                     >
                       <Checkbox className="peer"
                         checked={selectedMap.has(Number(u.user_id))}
                         disabled={lockedSet.has(Number(u.user_id))}
                         onClick={(e) => e.stopPropagation()}
-                        onCheckedChange={() =>
-                          setPicked({ value: u.user_id, label: u.user_name, external_id: u.external_id }, deptLabel)
-                        }
+                        onCheckedChange={() => setPicked(option, deptLabel)}
                       />
-                      <UserIcon className="mx-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <UserAvatar className="mx-1.5 size-3.5" fallbackClassName="text-[9px]" name={u.user_name}
+                        src={resolveUserAvatarUrl(u.avatar, __APP_ENV__.BASE_URL)} />
                       <span className="truncate">{u.user_name}</span>
                       <SubjectBusinessId value={u.external_id} />
                       {deptLabel && <span className="ml-auto truncate pl-2 text-xs text-muted-foreground">{deptLabel}</span>}

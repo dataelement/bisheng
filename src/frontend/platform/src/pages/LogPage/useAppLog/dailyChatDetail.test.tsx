@@ -16,14 +16,19 @@ vi.mock('@/pages/ChatAppPage/components/ResouceModal', async () => {
 })
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 it('keeps daily JSON history, reasoning toggle, errors and source-modal payloads', async () => {
+    const avatar = '/object/public/avatar/14/history.png?signature=example'
     mock.history.mockResolvedValue([
-        { messageId: 'q1', isCreatedByUser: true, user_name: 'Alice', text: '{"query":"Original question"}' },
+        { messageId: 'q1', isCreatedByUser: true, user_name: 'Alice', user_avatar: avatar, text: '{"query":"Original question"}' },
         { messageId: 'a1', isCreatedByUser: false, sender: 'Assistant', source: 1, text: '{"msg":"Final answer","events":[{"type":"thinking","content":"Reasoning details"}]}' },
         { messageId: 'a2', isCreatedByUser: false, sender: 'Assistant', text: '{"content":"Older answer","reasoning_content":"Older reasoning"}' },
         { messageId: 'e1', isCreatedByUser: false, sender: 'Assistant', text: 'Model failed', error: true },
     ])
     render(<MemoryRouter initialEntries={['/log/chatlog/chat-1']}><Routes><Route path="/log/chatlog/:cid" element={<DailyChatDetail />} /></Routes></MemoryRouter>)
     await screen.findByText('Original question')
+    const senderImage = screen.getByAltText('')
+    expect(senderImage).toHaveAttribute('src', avatar)
+    fireEvent.error(senderImage)
+    expect(screen.getByText('A')).toBeInTheDocument()
     expect(screen.getByText('Final answer')).toBeVisible()
     expect(screen.getByText('Older answer')).toBeVisible()
     expect(screen.getByText('Model failed')).toBeVisible()

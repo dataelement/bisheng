@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
+import { UserAvatar } from '@bisheng/ui';
 import type { TMessage, TPreset, Assistant, Agent } from '~/types/chat';
 import type { TMessageProps } from '~/common';
 import MessageEndpointIcon from '../Endpoints/MessageEndpointIcon';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { getIconEndpoint } from '~/utils';
-import { UserIcon } from '../svg';
+import { resolveChatAuthor } from '~/utils/chatAuthor';
 
 export default function MessageIcon(
   props: Pick<TMessageProps, 'message' | 'conversation'> & {
@@ -49,19 +50,8 @@ export default function MessageIcon(
   }
 
   if (message?.isCreatedByUser === true) {
-    return (
-      <div
-        style={{
-          backgroundColor: 'rgb(121, 137, 255)',
-          width: '20px',
-          height: '20px',
-          boxShadow: 'rgba(240, 246, 252, 0.1) 0px 0px 0px 1px',
-        }}
-        className="relative flex h-9 w-9 items-center justify-center rounded-sm p-1 text-white"
-      >
-        <UserIcon />
-      </div>
-    );
+    const author = resolveChatAuthor(message);
+    return <UserAvatar className="size-5" fallbackClassName="text-caption-sm" name={author.name} src={author.avatar} />;
   }
 
   return (

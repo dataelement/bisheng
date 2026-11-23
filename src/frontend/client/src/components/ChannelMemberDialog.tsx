@@ -12,7 +12,7 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { Button } from "~/components/ui/Button";
-import { Dropdown, DropdownItem, DropdownSeparator, SearchInput } from "@bisheng/ui";
+import { Dropdown, DropdownItem, DropdownSeparator, SearchInput, UserAvatar } from "@bisheng/ui";
 import {
     Dialog,
     DialogClose,
@@ -55,11 +55,6 @@ function roleWeight(role: ChannelMember["role"]) {
     if (role === "creator") return 0;
     if (role === "admin") return 1;
     return 2;
-}
-
-function getInitials(name: string) {
-    const trimmed = (name || "").trim();
-    return (trimmed[0] || "?").toUpperCase();
 }
 
 function truncateText(text: string, maxLen: number) {
@@ -360,9 +355,7 @@ export function ChannelMemberDialog({
                                     >
                                         <div className="flex min-w-0 flex-1 items-center gap-4">
                                             <div className="flex w-[132px] min-w-[132px] items-center gap-2">
-                                                <div className="flex size-8 items-center justify-center rounded-full bg-fill-4 text-[12px] text-white">
-                                                    {getInitials(m.user_name)}
-                                                </div>
+                                                <UserAvatar className="size-8" fallbackClassName="text-caption" name={m.user_name} src={m.avatar} />
                                                 <div
                                                     title={m.user_name}
                                                     className="min-w-0 flex-1 truncate text-[14px] text-text-1"

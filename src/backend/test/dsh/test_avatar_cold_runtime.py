@@ -10,8 +10,8 @@ from textwrap import dedent
 def test_cold_avatar_import_and_runtime_composition_leave_web_user_service_unloaded(tmp_path):
     # A subprocess is essential: other avatar tests intentionally exercise UserService,
     # so sys.modules assertions in the pytest process could conceal eager imports.
-    config_file = tmp_path / "empty.yaml"
-    config_file.write_text("{}\n", encoding="utf-8")
+    config_file = tmp_path / "cold-runtime.yaml"
+    config_file.write_text("database_url: sqlite://\n", encoding="utf-8")
     script = dedent(
         """
         import asyncio

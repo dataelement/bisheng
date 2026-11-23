@@ -20,7 +20,7 @@ from bisheng.dsh.domain.schemas.unified_policy import (
     credit_balance,
 )
 from bisheng.dsh.domain.services.profile import profile_scope
-from bisheng.dsh.domain.services.unified_policy import policy_transaction
+from bisheng.dsh.domain.services.unified_policy import policy_transaction, with_visibility_avatars
 from bisheng.dsh.runtime import get_model_runtime, read_policy
 
 router = APIRouter(prefix="/dsh")
@@ -70,9 +70,8 @@ async def visibility(
 
         await LLMService.get_dsh_model_metadata_snapshot(model_id)
         default_everyone = _missing_row_visible_to_everyone()
-        return resp_200(
-            data=await policy_transaction(lambda repo: repo.visibility(model_id, default_everyone=default_everyone))
-        )
+        payload = await policy_transaction(lambda repo: repo.visibility(model_id, default_everyone=default_everyone))
+        return resp_200(data=await with_visibility_avatars(payload, tenant))
 
 
 @router.put("/admin/models/{model_id}/visibility")
@@ -88,7 +87,8 @@ async def save_visibility(
         from bisheng.llm.domain.services.llm import LLMService
 
         await LLMService.get_dsh_model_metadata_snapshot(model_id)
-        return resp_200(data=await policy_transaction(lambda repo: repo.save_visibility(model_id, user.user_id, body)))
+        payload = await policy_transaction(lambda repo: repo.save_visibility(model_id, user.user_id, body))
+        return resp_200(data=await with_visibility_avatars(payload, tenant))
 
 
 @router.get("/admin/credit-rules")

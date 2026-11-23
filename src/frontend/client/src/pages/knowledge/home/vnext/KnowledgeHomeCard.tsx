@@ -1,4 +1,4 @@
-import { Outlined } from 'bisheng-icons';
+import { UserAvatar } from '@bisheng/ui';
 import { motion } from 'framer-motion';
 import { useId, type MouseEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -41,7 +41,7 @@ export function KnowledgeHomeCard({
   const location = useLocation();
   const titleId = useId();
   const { space, source } = item;
-  const { cardRef, creator } = useKnowledgeHomeCardCreator(space);
+  const { cardRef, creator, creatorAvatar } = useKnowledgeHomeCardCreator(space);
   const demo = isDemoId(space.id);
   const exitStatus = useSpaceExitStatus(space.id, false);
   const handleMenuOpen = () => {
@@ -77,7 +77,10 @@ export function KnowledgeHomeCard({
         </p>
         <footer className={`${styles.cardFooter} text-caption`}>
           <span className={styles.owner} title={creator}>
-            {creator && <><Outlined.People size={14} className="shrink-0" aria-hidden /><span>{creator}</span></>}
+            {(creator || creatorAvatar) && <>
+              <UserAvatar className="size-3.5" fallbackClassName="text-caption-sm" name={creator} src={creatorAvatar} />
+              <span>{creator}</span>
+            </>}
           </span>
           {updated && (
             <time dateTime={updated.toISOString()} className={styles.updated}>

@@ -1,11 +1,14 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { userContext } from '@/contexts/userContext';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore, type StoreApi } from 'zustand';
 interface HostServices { dispose: () => void }
 /** Context passes each panel's store and host services without a global singleton. */
-export function createMessageStoreScope<T, S extends HostServices>(createStore: () => StoreApi<T> & { services: S }) {
+export function createMessageStoreScope<T, S extends HostServices>(createStore: (readAuthorId: () => number | undefined) => StoreApi<T> & { services: S }) {
     const Context = createContext<(StoreApi<T> & { services: S }) | null>(null);
     function MessageStoreProvider({ children }: { children: ReactNode }) {
-        const [store] = useState(createStore);
+        const authorId = useRef<number>();
+        authorId.current = useContext(userContext).user?.user_id;
+        const [store] = useState(() => createStore(() => authorId.current));
         useEffect(() => () => store.services.dispose(), [store]);
         return <Context.Provider value={store}>{children}</Context.Provider>;
     }

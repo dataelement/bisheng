@@ -529,6 +529,8 @@ export type BsConfig = {
   }>;
   /** Visible organization knowledge bases configured as new-chat defaults. */
   orgKbs?: Array<{ id: string | number; name: string; default_checked?: boolean; sort_order?: number }>;
+  /** Ordered IDs configured for the chat landing page. */
+  recommendedApps?: string[] | null;
   applicationCenterWelcomeMessage: string;
   applicationCenterDescription: string;
   /**

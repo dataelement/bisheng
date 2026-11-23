@@ -42,7 +42,7 @@ jest.mock('~/pages/appChat/components/ChatEmptyState', () => ({ ChatEmptyState: 
 jest.mock('~/components/Avator', () => ({ __esModule: true, default: () => null }));
 jest.mock('~/components/Banners', () => ({ Banner: () => null }));
 jest.mock('~/components/Nav', () => ({ MobileNav: ({ appSurfaceBackAction }: { appSurfaceBackAction: () => void }) => <button onClick={appSurfaceBackAction}>Mobile back</button> }));
-jest.mock('~/components/Nav/MobileSidebarHeaderTabs', () => ({ MobileSidebarHeaderTabs: () => null }));
+jest.mock('~/components/Nav/MobileSidebarHeaderTabs', () => ({ MobileSidebarHeader: () => null }));
 jest.mock('~/components/Nav/MobileAppHistoryDropdown', () => ({ MobileAppHistoryDropdown: () => null }));
 jest.mock('~/components/Nav/NavToggle', () => ({ __esModule: true, default: () => null }));
 jest.mock('~/components/Chat/Input/AgentToolSelector', () => ({ useAgentToolPreferences: () => {} }));
@@ -54,12 +54,6 @@ jest.mock('~/layouts/useWorkbenchNavLinks', () => ({ useWorkbenchNavLinks: () =>
 jest.mock('~/components/ui/Button', () => ({ Button: () => null }));
 jest.mock('~/components/ui/icon/Loading', () => ({ LoadingIcon: () => null }));
 jest.mock('~/components/ui/Dialog', () => ({ Dialog: () => null, DialogContent: () => null, DialogFooter: () => null, DialogHeader: () => null, DialogTitle: () => null }));
-jest.mock('~/components/ui/Tooltip2', () => ({
-  TooltipProvider: ({ children }: React.PropsWithChildren) => children,
-  Tooltip: ({ children }: React.PropsWithChildren) => children,
-  TooltipTrigger: ({ children }: React.PropsWithChildren) => children,
-  TooltipContent: () => null,
-}));
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
 jest.mock('~/common', () => ({ NotificationSeverity: {} }));
 jest.mock('~/utils', () => ({ cn: (...args: unknown[]) => args.filter(Boolean).join(' '), generateUUID: () => 'fresh-chat' }));

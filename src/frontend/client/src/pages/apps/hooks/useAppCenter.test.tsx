@@ -1,5 +1,5 @@
-import { act, renderHook } from '@testing-library/react';
-import type { PropsWithChildren, ComponentType } from 'react';
+import { act, render, renderHook, screen } from '@testing-library/react';
+import { useEffect, type PropsWithChildren, type ComponentType } from 'react';
 import { getFrequently, pinAppApi } from '~/api/apps';
 import type { AppItem } from '~/@types/app';
 import { useAppCenter } from './useAppCenter';
@@ -23,6 +23,28 @@ beforeEach(() => {
   mockPin.mockReset();
   mockList.mockReset();
   mockList.mockResolvedValue({ status_code: 200, data: { list: [app], total: 1 } });
+});
+
+function RecentApps() {
+  const { apps, fetchApps } = useAppCenter();
+  useEffect(() => { void fetchApps(); }, [fetchApps]);
+  return <div>{apps.map((item) => <span key={item.id}>{item.name}</span>)}</div>;
+}
+
+it('keeps the new list when an earlier tab mount finishes loading late', async () => {
+  const previous = { ...app, name: 'Previous list' };
+  let resolvePrevious: (value: { data: { list: AppItem[]; total: number } }) => void = () => {};
+  mockList
+    .mockImplementationOnce(() => new Promise(resolve => { resolvePrevious = resolve; }))
+    .mockResolvedValueOnce({ data: { list: [app], total: 1 } });
+
+  const { rerender } = render(<RecoilRoot><RecentApps key="first" /></RecoilRoot>);
+  rerender(<RecoilRoot><RecentApps key="second" /></RecoilRoot>);
+  expect(await screen.findByText(app.name)).toBeInTheDocument();
+
+  await act(async () => { resolvePrevious({ data: { list: [previous], total: 1 } }); });
+  expect(screen.getByText(app.name)).toBeInTheDocument();
+  expect(screen.queryByText(previous.name)).not.toBeInTheDocument();
 });
 
 it('reads persisted pin state after pin, reload and unpin', async () => {

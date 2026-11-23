@@ -1,26 +1,31 @@
 // @ts-strict-ignore
 import React, { useMemo, memo } from 'react';
-import type { Assistant, Agent } from '~/types/chat';
+import type { Assistant, Agent, TMessage } from '~/types/chat';
 import type { TMessageIcon } from '~/common';
 import { getEndpointField, getIconEndpoint, logger } from '~/utils';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import Icon from '~/components/Endpoints/Icon';
+import { useAuthContext } from '~/hooks/AuthContext';
+import { useShareContext } from '~/Providers/ShareContext';
+import { resolveChatAuthor } from '~/utils/chatAuthor';
 
 const MessageIcon = memo(
   ({
     iconData,
-    name,
+    message,
     assistant,
     agent,
   }: {
     iconData?: TMessageIcon;
     assistant?: Assistant;
     agent?: Agent;
-    name?: string;
+    message?: Pick<TMessage, 'user_id' | 'user_name'>;
   }) => {
     logger.log('icon_data', iconData, assistant, agent);
     const { data: endpointsConfig } = useGetEndpointsQuery();
+    const { user } = useAuthContext();
+    const { isSharedConvo } = useShareContext();
 
     const agentName = useMemo(() => agent?.name ?? '', [agent]);
     const agentAvatar = useMemo(() => agent?.avatar?.filepath ?? '', [agent]);
@@ -48,7 +53,7 @@ const MessageIcon = memo(
       [endpointsConfig, endpoint],
     );
 
-    // 模型头像
+    // Model icon
     if (iconData?.isCreatedByUser !== true && iconURL != null ) {
       return (
         <ConvoIconURL
@@ -64,12 +69,15 @@ const MessageIcon = memo(
       );
     }
 
-    // 用户头像
+    const author = iconData?.isCreatedByUser
+      ? resolveChatAuthor(message ?? {}, isSharedConvo ? undefined : user)
+      : undefined;
     return (
       <Icon
         isCreatedByUser={iconData?.isCreatedByUser ?? false}
         endpoint={endpoint}
-        name={name}
+        name={author?.name}
+        userAvatar={author?.avatar}
         iconURL={avatarURL || endpointIconURL}
         model={iconData?.model}
         assistantName={assistantName}

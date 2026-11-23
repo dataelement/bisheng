@@ -35,7 +35,8 @@ import { squareTypePath } from "~/pages/square/squarePaths";
 const WebView = lazy(() => import("@/components/WebView"));
 const AppChat = lazy(() => import("@/pages/appChat"));
 const AppChatEntry = lazy(() => import("@/pages/appChat/AppChatEntry"));
-const AgentCenter = lazy(() => import("@/pages/apps"));
+const AppCenter = lazy(() => import("@/pages/apps").then(module => ({ default: module.AppCenter })));
+const BishengApps = lazy(() => import("@/pages/apps/BishengApps").then(module => ({ default: module.BishengApps })));
 const CloudWorkbenches = lazy(() => import("@/pages/apps/CloudWorkbenches").then(module => ({ default: module.CloudWorkbenches })));
 const ExplorePlaza = lazy(() => import("@/pages/apps/explore"));
 const Share = lazy(() => import("@/pages/share"));
@@ -249,7 +250,6 @@ export const router = createBrowserRouter(
                         </MenuApprovalPluginGate>,
                       ),
                     },
-                    // { path: 'apps', element: <AgentCenter /> },
                   ],
                 },
                 {
@@ -280,17 +280,13 @@ export const router = createBrowserRouter(
                   path: "apps",
                   element: suspended(
                     <MenuApprovalPluginGate pluginId="apps">
-                      <AgentCenter />
+                      <AppCenter />
                     </MenuApprovalPluginGate>,
                   ),
-                },
-                {
-                  path: "apps/cloud-workbenches",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="apps">
-                      <CloudWorkbenches />
-                    </MenuApprovalPluginGate>,
-                  ),
+                  children: [
+                    { index: true, element: suspended(<BishengApps />) },
+                    { path: "cloud-workbenches", element: suspended(<CloudWorkbenches />) },
+                  ],
                 },
                 {
                   path: "apps/explore",

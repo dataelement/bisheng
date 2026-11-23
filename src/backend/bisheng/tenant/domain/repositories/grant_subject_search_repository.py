@@ -62,6 +62,14 @@ class GrantSubjectSearchRepository:
             async with get_async_db_session() as session:
                 return int((await session.exec(statement)).one())
 
+    @classmethod
+    async def visible_user_ids(cls, scope, user_ids: tuple[int, ...]) -> tuple[int, ...]:
+        statement = cls._users(scope, "").where(col(User.user_id).in_(user_ids))
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                rows = (await session.exec(statement)).all()
+        return tuple(int(row.user_id) for row in rows)
+
     @staticmethod
     def _groups(scope, keyword: str):
         statement = select(Group.id, Group.group_name).where(Group.tenant_id == scope.tenant_id)

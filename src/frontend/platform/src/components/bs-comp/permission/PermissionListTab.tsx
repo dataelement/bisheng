@@ -95,12 +95,18 @@ function RosterRow({
       data-editable={String(editable)}
       className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
     >
-      <PermissionSubjectIdentity type={assignee.subject.type} name={displayName} metadata={<>
-        <SourceBadge source={assignee.source} />
-        <PermissionModelStatus active={assignee.model.active} visibilityOnly={assignee.model.visibility_only} />
-        <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
-        {assignee.inherited_from && <span className="truncate">· {t("roster.inheritedFrom")}: {getInheritedSourceLabel(assignee, t)}</span>}
-      </>} />
+      <PermissionSubjectIdentity
+        type={assignee.subject.type}
+        name={displayName}
+        avatar={assignee.subject.avatar}
+        avatarName={assignee.subject.name ?? null}
+        metadata={<>
+          <SourceBadge source={assignee.source} />
+          <PermissionModelStatus active={assignee.model.active} visibilityOnly={assignee.model.visibility_only} />
+          <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
+          {assignee.inherited_from && <span className="truncate">· {t("roster.inheritedFrom")}: {getInheritedSourceLabel(assignee, t)}</span>}
+        </>}
+      />
 
       <div className="flex w-[176px] shrink-0 items-center justify-end gap-1">
         {editable ? (

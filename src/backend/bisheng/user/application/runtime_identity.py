@@ -1,17 +1,23 @@
 """Current verified identity value for server-owned delayed web work."""
 
+from collections.abc import Iterable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+from bisheng.user.domain.models.user import User
 from bisheng.user.domain.repositories.runtime_identity import current_person_rows, current_runtime_person
 
 
-async def read_current_person_facts(user_ids):
-    """Current identity facts, never the request actor or a synthetic session."""
+async def read_current_person_records(user_ids: Iterable[int | str]) -> dict[int, tuple[User | None, str, int | None]]:
+    """Resolve current person rows with their verified membership state and tenant."""
     ids = tuple(dict.fromkeys(int(value) for value in user_ids if str(value).isdigit() and int(value) > 0))
+    if not ids:
+        return {}
+
     grouped = {ident: [] for ident in ids}
     for user, tenant in await current_person_rows(ids):
         if user.user_id in grouped:
@@ -23,19 +29,28 @@ async def read_current_person_facts(user_ids):
         if user is None or user.delete != 0:
             state, tenant = "inactive", None
         elif not settings.multi_tenant.enabled:
-            state, tenant = "active", 1
+            state, tenant = "active", DEFAULT_TENANT_ID
         elif len(tenants) == 1:
             state, tenant = "active", next(iter(tenants))
         else:
             state, tenant = ("ambiguous" if len(tenants) > 1 else "inactive"), None
-        result[ident] = {
+        result[ident] = (user, state, tenant)
+    return result
+
+
+async def read_current_person_facts(user_ids: Iterable[int | str]):
+    """Current identity facts, never the request actor or a synthetic session."""
+    records = await read_current_person_records(user_ids)
+    return {
+        ident: {
             "id": ident,
             "name": user.user_name if user else None,
             "state": state,
             "tenant_id": tenant,
             "token_version": user.token_version if user else None,
         }
-    return result
+        for ident, (user, state, tenant) in records.items()
+    }
 
 
 @asynccontextmanager

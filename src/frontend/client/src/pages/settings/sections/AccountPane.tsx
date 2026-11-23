@@ -1,5 +1,5 @@
 import { Outlined } from "bisheng-icons";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AccountSection } from "~/components/Settings/sections/AccountSection";
 import { Button } from "~/components/ui/Button";
@@ -14,7 +14,6 @@ export function AccountPane() {
   const localize = useLocalize();
   const { user, logout } = useAuthContext();
   const displayName = user?.username ?? '';
-  const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -29,10 +28,11 @@ export function AccountPane() {
   return (
     <div className="flex flex-col gap-6">
       <AccountSection
+        key={user?.id}
+        userId={user?.id}
         username={displayName}
         account={user?.external_id}
-        avatarUrl={avatarUrl || user?.avatar || ""}
-        onAvatarUpdated={setAvatarUrl}
+        avatarUrl={user?.avatar ?? ""}
       />
 
       <section className="flex flex-col gap-4 border-t border-fill-2 pt-5">

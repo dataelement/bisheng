@@ -1,5 +1,6 @@
 import { showApiError } from "~/api/request";
-import { Tooltip as SharedTooltip } from "@bisheng/ui";
+import { resolveUserAvatarUrl } from "@bisheng/identity";
+import { Tooltip as SharedTooltip, UserAvatar } from "@bisheng/ui";
 import { refreshChannelState, useChannelStateRefresh } from "./hooks/useChannelStateRefresh";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { NoPermissionIllustration } from "~/components/illustrations";
@@ -15,7 +16,6 @@ import {
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
@@ -71,7 +71,10 @@ export function ChannelPreviewDrawer({
   } = useQuery({
     queryKey: ["channelPreviewDetail", channelId],
     queryFn: async () => {
-      const res: any = await getChannelDetailApi(channelId!);
+      const res = await getChannelDetailApi(channelId!) as ChannelDetailResponse & {
+        status_code?: number;
+        status_message?: string;
+      };
       if (res?.status_code && res.status_code !== 200) {
         throw new Error(res.status_message || localize("com_subscription.channel_load_failed"));
       }
@@ -283,10 +286,12 @@ export function ChannelPreviewDrawer({
 
               {/* Creator Info */}
               <div className="mt-0 flex items-center gap-1">
-                <Avatar className="w-5 h-5">
-                  {/* Backend currently doesn't provide creator_avatar, use AvatarName fallback directly for now */}
-                  <AvatarName name={channelDetail.creator_name} className="text-xs" />
-                </Avatar>
+                <UserAvatar
+                  className="size-5"
+                  fallbackClassName="text-caption"
+                  name={channelDetail.creator_name}
+                  src={resolveUserAvatarUrl(channelDetail.creator_avatar, __APP_ENV__.BASE_URL)}
+                />
                 <span className="text-[14px] leading-[22px] text-text-3">{channelDetail.creator_name}</span>
               </div>
 

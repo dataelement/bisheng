@@ -155,6 +155,7 @@ export default defineConfig({
         {
           text: '数据展示 Data Display',
           items: [
+            { text: '用户头像 Avatar', link: '/components/avatar' },
             { text: '分段控制器 Segmented', link: '/components/segmented' },
             { text: '徽标 Badge', link: '/components/badge' },
             { text: '标签 Tag', link: '/components/tag' },

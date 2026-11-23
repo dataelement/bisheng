@@ -1,73 +1,80 @@
+import { Button, Tooltip, TooltipProvider } from '@bisheng/ui';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { AppItem } from '~/@types/app';
-import { Plus, ArrowLeftRight } from 'lucide-react';
 import AppAvator from '~/components/Avator';
-import { ShareOutlineIcon } from '~/components/icons';
 import { useLocalize } from '~/hooks';
+import { appCardSurfaceClassName } from '~/pages/apps/components/appCardStyles';
+import { cn } from '~/utils';
+import { AppSwitcherDropdown } from './AppSwitcherDropdown';
 
 interface AppInfoCardProps {
-  app: AppItem;
+  app: Pick<AppItem, 'name' | 'description' | 'logo' | 'flow_type' | 'can_share'> | null;
+  actionSize?: 'small' | 'medium';
   onShare: () => void;
   onNewChat: () => void;
-  onSwitchApp: () => void;
-  switchDisabled?: boolean;
 }
 
-/**
- * App info card displayed at the top of the chat sidebar.
- * Shows app avatar, name, description and action buttons.
- */
-export function AppInfoCard({
-  app,
-  onShare,
-  onNewChat,
-  onSwitchApp,
-  switchDisabled,
-}: AppInfoCardProps) {
+function AppDescription({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [truncated, setTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const measure = () => setTruncated(element.scrollWidth > element.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [text, truncated]);
+
+  const description = (
+    <p ref={ref} className={cn('truncate text-caption text-text-3', truncated && 'cursor-default')}>
+      {text}
+    </p>
+  );
+
+  return truncated ? (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip content={text} side="bottom" align="start">
+        {description}
+      </Tooltip>
+    </TooltipProvider>
+  ) : description;
+}
+
+export function AppInfoCard({ app, actionSize = 'medium', onShare, onNewChat }: AppInfoCardProps) {
   const localize = useLocalize();
+  const shareLabel = localize('com_app_share_app');
+  const newChatLabel = localize('com_knowledge_start_new_chat');
+
   return (
-    <div className="px-4 mb-6">
-      <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <AppAvator
-              className="size-10 min-w-10"
-              url={app.logo}
-              id={app.id as any}
-              flowType={String(app.flow_type)}
-            />
-            <div className="overflow-hidden">
-              <h3 className="font-bold text-gray-900 truncate">{app.name}</h3>
-              <p className="text-xs text-gray-400 truncate">
-                {app.description || localize('com_app_no_description')}
-              </p>
+    <div className={cn(appCardSurfaceClassName, 'flex flex-col gap-3')}>
+      <div className="flex items-center gap-2">
+        <AppAvator className="size-8 shrink-0 rounded-md" url={app?.logo} flowType={app?.flow_type} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-1">
+            <h3 className="truncate text-body font-medium text-text-1">
+              {app?.name || localize('com_app.unknown_name')}
+            </h3>
+            <div className="flex size-4 shrink-0 items-center justify-center">
+              <AppSwitcherDropdown />
             </div>
           </div>
-          <button
-            onClick={onSwitchApp}
-            disabled={switchDisabled}
-            className="p-1 text-gray-300 hover:text-gray-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed mt-1"
-            title={localize(switchDisabled ? 'com_app_no_switchable_app' : 'com_app_switch_app')}
-          >
-            <ArrowLeftRight size={14} />
-          </button>
+          <AppDescription text={app?.description || localize('com_app_no_description_placeholder')} />
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={onShare}
-            className="flex items-center justify-center gap-1 py-2 px-1 text-sm border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
-          >
-            <ShareOutlineIcon className="size-[14px] shrink-0" />
-            {localize('com_app_share_app')}
-          </button>
-          <button
-            onClick={onNewChat}
-            className="flex items-center justify-center gap-1 py-2 px-1 text-sm border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
-          >
-            <Plus size={14} />
-            {localize('com_knowledge_start_new_chat')}
-          </button>
-        </div>
+      <div className="flex gap-2">
+        {app?.can_share === true ? (
+          <Button type="button" color="default" size={actionSize} className="min-w-0 flex-1" onClick={onShare}>
+            <span className="truncate" title={shareLabel}>{shareLabel}</span>
+          </Button>
+        ) : null}
+        <Button type="button" color="default" size={actionSize} className="min-w-0 flex-1" onClick={onNewChat}>
+          <span className="truncate" title={newChatLabel}>{newChatLabel}</span>
+        </Button>
       </div>
     </div>
   );

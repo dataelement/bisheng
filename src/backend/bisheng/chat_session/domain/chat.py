@@ -29,14 +29,23 @@ from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
-from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.user.application.avatar import read_visible_user_avatar_urls
+from bisheng.user.application.runtime_identity import read_current_person_facts
 from bisheng.user.domain.models.user import UserDao
 from bisheng.workflow.domain.repositories.history_repository import WorkflowHistoryRepository
 
 if TYPE_CHECKING:
     from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
+    from bisheng.workstation.domain.schemas.workstation_schema import WorkstationMessage
+
+
+def _message_author(message: ChatMessage) -> tuple[int, int] | None:
+    if message.is_bot or not message.tenant_id or not message.user_id:
+        return None
+    return message.tenant_id, message.user_id
 
 
 class ChatSessionService:
@@ -44,12 +53,20 @@ class ChatSessionService:
 
     @staticmethod
     async def get_chat_history(
-        chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20, *, read_scope=None
+        chat_id: str,
+        flow_id: str,
+        message_id: str | None = None,
+        page_size: int | None = 20,
+        *,
+        read_scope=None,
+        include_audit_avatars: bool = False,
     ) -> list["ChatMessageHistoryResponse"]:
         """Retrieve chat history for a user."""
         if read_scope is not None:
             with read_scope:
-                return await ChatSessionService.get_chat_history(chat_id, flow_id, message_id, page_size)
+                return await ChatSessionService.get_chat_history(
+                    chat_id, flow_id, message_id, page_size, include_audit_avatars=include_audit_avatars
+                )
         from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 
         if not chat_id or not flow_id:
@@ -63,8 +80,41 @@ class ChatSessionService:
         )
         if history:
             user_info = await UserDao.aget_user(user_id=session_info.user_id)
-            history = ChatMessageHistoryResponse.from_chat_message_objs(history, user_info, session_info)
-        return history
+            response = ChatMessageHistoryResponse.from_chat_message_objs(history, user_info, session_info)
+            if include_audit_avatars:
+                authors = [
+                    _message_author(message) if message.tenant_id == session_info.tenant_id else None
+                    for message in history
+                ]
+                avatars = await read_visible_user_avatar_urls(author for author in authors if author)
+                other_ids = {author[1] for author in authors if author and author[1] != session_info.user_id}
+                other_facts = await read_current_person_facts(other_ids) if other_ids else {}
+                other_names = {
+                    user_id: facts["name"]
+                    for user_id, facts in other_facts.items()
+                    if facts["state"] == "active" and facts["tenant_id"] == session_info.tenant_id
+                }
+                for entry, message, author in zip(response, history, authors, strict=True):
+                    if not message.is_bot and message.user_id and message.user_id != session_info.user_id:
+                        entry.user_name = other_names.get(message.user_id) if author else None
+                    if author:
+                        entry.user_avatar = avatars.get(author)
+            return response
+        return []
+
+    @staticmethod
+    async def get_audit_workstation_messages(chat_id: str) -> list["WorkstationMessage"]:
+        from bisheng.workstation.domain.schemas.workstation_schema import WorkstationMessage
+
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
+        if not messages:
+            raise NotFoundError()
+        authors = [_message_author(message) for message in messages]
+        avatars = await read_visible_user_avatar_urls(author for author in authors if author)
+        return [
+            await WorkstationMessage.from_chat_message(message, user_avatar=avatars.get(author) if author else None)
+            for message, author in zip(messages, authors, strict=True)
+        ]
 
     @staticmethod
     async def get_session_info(

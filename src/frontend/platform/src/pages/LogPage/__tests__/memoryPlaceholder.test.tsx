@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlatformConversationMessages } from '@/components/bs-comp/appChat/PlatformConversationMessages';
+import { userContext } from '@/contexts/userContext';
 import DailyChatDetail from '../useAppLog/dailyChatDetail';
 import zhHans from '../../../../public/locales/zh-Hans/bs.json';
 import enUS from '../../../../public/locales/en-US/bs.json';
@@ -26,7 +27,10 @@ vi.mock('@/pages/ChatAppPage/components/ResouceModal', async () => {
     const { forwardRef } = await import('react');
     return { default: forwardRef(() => null) };
 });
-vi.mock('../useAppLog/DailyMessageContent', () => ({ MessageContent: ({ text }: { text: string }) => <div data-testid="daily-text">{text}</div> }));
+vi.mock('../useAppLog/DailyMessageContent', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../useAppLog/DailyMessageContent')>(),
+    MessageContent: ({ text }: { text: string }) => <div data-testid="daily-text">{text}</div>,
+}));
 
 const SECRET = 'User likes spicy noodles';
 const redacted = { redacted: true, op: 'search', item_ids: ['m1'] };
@@ -41,6 +45,32 @@ beforeEach(() => {
     mocks.get.mockImplementation(async () => mocks.rows);
 });
 afterEach(cleanup);
+
+it('shows each message author’s avatar without substituting the viewer for history', () => {
+    const viewerAvatar = '/object/public/avatar/17/preview.png';
+    const historyAvatar = '/object/public/avatar/14/history.png';
+    const viewerContext = {
+        user: { user_id: 17, user_name: 'Viewer', avatar: viewerAvatar },
+        setUser: vi.fn(), savedComponents: [], addSavedComponent: vi.fn(),
+        checkComponentsName: vi.fn(), delComponent: vi.fn(),
+    };
+    const messages = [
+        { id: 1, category: 'question', user_id: 14, user_name: 'Ada', user_avatar: historyAvatar, message: 'History' },
+        { id: 2, category: 'question', user_id: 15, user_name: 'Casey', message: 'Historical author without an avatar' },
+        { id: 3, category: 'question', user_id: 17, message: 'Local preview' },
+    ];
+    function view(canExecute: boolean) {
+        return <userContext.Provider value={viewerContext}>
+            <PlatformConversationMessages mode="assistant" sessionKey="chat-avatar" messages={messages}
+                canExecute={canExecute} canAnnotate={false} />
+        </userContext.Provider>;
+    }
+    const { rerender } = render(view(true));
+    expect(screen.getAllByAltText('').map(image => image.getAttribute('src'))).toEqual([historyAvatar, viewerAvatar]);
+    expect(screen.getByText('C')).toBeInTheDocument();
+    rerender(view(false));
+    expect(screen.getByAltText('')).toHaveAttribute('src', historyAvatar);
+});
 
 describe('assistant and workflow log page', () => {
     function renderRows(rows: unknown[]) {

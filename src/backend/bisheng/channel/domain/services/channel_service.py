@@ -132,6 +132,7 @@ from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import
     DEFAULT_AUTO_REPLY,
     SensitiveWordPolicyService,
 )
+from bisheng.user.application.avatar import read_visible_user_avatar_urls
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 
@@ -1850,16 +1851,22 @@ class ChannelService:
             if channel.visibility == ChannelVisibilityEnum.PRIVATE and "visible" not in actions:
                 raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
 
-        # 3. Get Creator Name
+        # 3. Resolve the creator's display data after channel authorization.
         creators = await self.space_channel_member_repository.find_members_by_role(
             channel_id=channel_id, role=UserRoleEnum.CREATOR
         )
         creator_name = "Unknown"
+        creator_avatar = None
         if creators:
             creator_user_id = creators[0].user_id
-            users = await UserDao.aget_user_by_ids([creator_user_id])
+            creator_pair = (channel.tenant_id, creator_user_id)
+            users, avatars = await asyncio.gather(
+                UserDao.aget_user_by_ids([creator_user_id]),
+                read_visible_user_avatar_urls([creator_pair]),
+            )
             if users:
                 creator_name = users[0].user_name
+            creator_avatar = avatars.get(creator_pair)
 
         # 4. Get Subscriber Count
         subscriber_count = await self.space_channel_member_repository.count_channel_members(channel_id=channel_id)
@@ -1933,6 +1940,7 @@ class ChannelService:
             latest_article_update_time=channel.latest_article_update_time,
             create_time=channel.create_time,
             creator_name=creator_name,
+            creator_avatar=creator_avatar,
             subscriber_count=subscriber_count,
             article_count=article_count,
             subscription_status=subscription_status,
