@@ -28,6 +28,8 @@ from bisheng.knowledge.domain.repositories.source_move_input_repository import S
 from bisheng.knowledge.domain.services.model_reference_extractor import (
     KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
     extract_knowledge_model_references,
+    knowledge_model_source_configuration,
+    legacy_knowledge_model_version,
 )
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.resource_reference.application.access import (
@@ -101,7 +103,15 @@ class KnowledgeModelReferenceApplication:
 
     @staticmethod
     def _references(row):
-        return extract_knowledge_model_references(model=row.model, model_transition=row.model_transition)
+        return knowledge_model_source_configuration(
+            model=row.model, model_transition=row.model_transition, retain_legacy=True
+        )[1]
+
+    @staticmethod
+    def current_model_id(row):
+        if legacy_knowledge_model_version(row.model, row.model_transition) is not None:
+            return None
+        return canonical_target_id(row.model) if row.model else None
 
     @classmethod
     def _facts(cls, row):
@@ -144,7 +154,9 @@ class KnowledgeModelReferenceApplication:
         if kinds.get(selected) != "embedding":
             raise KnowledgeNoEmbeddingError()
         old = [targets[spec.target] for spec in cls._references(candidate)]
-        repair = any(item.state != ReferenceState.VALID or not item.new_binding_allowed for item in old)
+        repair = legacy_knowledge_model_version(candidate.model, candidate.model_transition) is not None or any(
+            item.state != ReferenceState.VALID or not item.new_binding_allowed for item in old
+        )
         if not repair and (
             candidate.model_transition is not None or candidate.state == KnowledgeState.REBUILDING.value
         ):
@@ -169,10 +181,12 @@ class KnowledgeModelReferenceApplication:
         transition = {
             "schema_version": 1,
             "operation_id": operation,
-            "current_model_id": canonical_target_id(row.model) if row.model else selected,
+            "current_model_id": cls.current_model_id(row) or selected,
             "pending_model_id": selected,
         }
-        proposed = extract_knowledge_model_references(model=row.model or selected, model_transition=transition)
+        proposed = extract_knowledge_model_references(
+            model=cls.current_model_id(row) or selected, model_transition=transition
+        )
         return current, selected, transition, proposed
 
     @classmethod
@@ -189,7 +203,7 @@ class KnowledgeModelReferenceApplication:
         new_generation=None,
         explicit_rebuild=False,
     ):
-        current = canonical_target_id(row.model) if row.model else None
+        current = cls.current_model_id(row)
         changed = explicit_rebuild or current != selected or row.model_transition is not None
         if repair or current is None:
             transition = {**transition, "current_model_id": selected}
@@ -308,6 +322,7 @@ class KnowledgeModelReferenceApplication:
     @classmethod
     def create(cls, session, row, *, login_user, project_created):
         cls._user(login_user)
+        extract_knowledge_model_references(model=row.model, model_transition=row.model_transition)
         cls.repository.insert(session, row)
         runtime = get_reference_binding_runtime_sync()
         bindings = runtime.prepare_source_bindings(
@@ -345,6 +360,7 @@ class KnowledgeModelReferenceApplication:
     @classmethod
     async def acreate(cls, session, row, *, login_user, project_created):
         cls._user(login_user)
+        extract_knowledge_model_references(model=row.model, model_transition=row.model_transition)
         await cls.repository.ainsert(session, row)
         runtime = await get_reference_binding_runtime()
 
@@ -404,7 +420,7 @@ class KnowledgeModelReferenceApplication:
         )
         kinds = cls.repository.model_kinds(session, runtime.verifier, cls._source(row), bindings.verified.context)
         repair = cls._validate_configuration(row, bindings, kinds, selected)
-        if _explicit_rebuild or selected != (canonical_target_id(row.model) if row.model else None):
+        if _explicit_rebuild or selected != cls.current_model_id(row):
             status = cls.repository.model_status(
                 session, runtime.verifier, cls._source(row), bindings.verified.context, selected
             )
@@ -454,7 +470,7 @@ class KnowledgeModelReferenceApplication:
             session, runtime.verifier, cls._source(row), bindings.verified.context
         )
         repair = cls._validate_configuration(row, bindings, kinds, selected)
-        if _explicit_rebuild or selected != (canonical_target_id(row.model) if row.model else None):
+        if _explicit_rebuild or selected != cls.current_model_id(row):
             status = await cls.repository.amodel_status(
                 session, runtime.verifier, cls._source(row), bindings.verified.context, selected
             )

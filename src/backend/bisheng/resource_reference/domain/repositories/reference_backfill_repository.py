@@ -73,6 +73,46 @@ def _identity(row):
 
 
 class ReferenceBackfillRepository:
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
+    def _reference_rows(self, rows):
+        if self.fact_view is None:
+            return rows
+        projected = self.fact_view.project_rows("business_resource_reference", rows)
+        # Historical preparation owns only the target owner correction for
+        # this table. Preserve every identity, row and other original column.
+        if len(projected) != len(rows) or any(
+            set(after) != set(before)
+            or any(after[name] != before[name] for name in before if name != "target_tenant_id")
+            for before, after in zip(rows, projected, strict=True)
+        ):
+            _invalid("history_reference_projection_scope")
+        return projected
+
+    async def alock_roots(self, session, *, root_keys):
+        tenant, _ = _scope(session)
+        if (
+            type(root_keys) is not tuple
+            or not 1 <= len(root_keys) <= 200
+            or len(set(root_keys)) != len(root_keys)
+            or any(type(key) is not SourceRootKey or key.tenant_id != tenant for key in root_keys)
+        ):
+            _invalid("root_batch")
+        table = BusinessReferenceSet.__table__
+        for key in sorted(root_keys, key=lambda key: (key.source_type.value, key.source_id)):
+            await self._read(
+                session,
+                select(table.c.id)
+                .where(
+                    table.c.tenant_id == tenant,
+                    table.c.source_type == key.source_type.value,
+                    table.c.source_id == key.source_id,
+                    table.c.source_version == ROOT_GUARD_VERSION,
+                )
+                .with_for_update(),
+            )
+
     async def apage_index_roots(self, session, *, after_key=None, limit=200):
         tenant, _ = _scope(session)
         if type(limit) is not int or not 1 <= limit <= 200:
@@ -237,6 +277,7 @@ class ReferenceBackfillRepository:
             .order_by(table.c.id)
             .limit(limit),
         )
+        rows = self._reference_rows(rows)
         items = tuple(
             IndexedReference(
                 row["id"], ReferenceReadRow(**{item.name: row[item.name] for item in fields(ReferenceReadRow)})
@@ -290,7 +331,7 @@ class ReferenceBackfillRepository:
                 .order_by(table.c.id)
                 .limit(200),
             )
-            rows.extend(dict(row) for row in page)
+            rows.extend(dict(row) for row in self._reference_rows(page))
             if len(page) < 200:
                 break
             after = page[-1]["id"]
@@ -327,7 +368,7 @@ class ReferenceBackfillRepository:
         transaction.assert_current(session)
         return rows
 
-    async def aload_raw_snapshots(self, session, *, source_keys):
+    async def aload_raw_snapshots(self, session, *, source_keys, for_update=False):
         """Read each original row once across one exact bounded source group."""
         tenant, _ = _scope(session)
         if type(source_keys) is not tuple or len(source_keys) > 200:
@@ -339,7 +380,22 @@ class ReferenceBackfillRepository:
             return {}
         heads, bindings = {}, {key: [] for key in keys}
         sets = BusinessReferenceSet.__table__
-        roots = tuple(dict.fromkeys((key.source_type.value, key.source_id) for key in keys))
+        roots = tuple(sorted({(key.source_type.value, key.source_id) for key in keys}))
+        if for_update:
+            # Exact root latches in deterministic order. An ORDER BY on a large
+            # IN predicate does not establish portable MySQL/DM8 lock order.
+            for kind, ident in roots:
+                await self._read(
+                    session,
+                    select(sets.c.id)
+                    .where(
+                        sets.c.tenant_id == tenant,
+                        sets.c.source_type == kind,
+                        sets.c.source_id == ident,
+                        sets.c.source_version == ROOT_GUARD_VERSION,
+                    )
+                    .with_for_update(),
+                )
         condition = or_(
             *(
                 and_(sets.c.source_type == kind, sets.c.source_id == ident, sets.c.source_version == ROOT_GUARD_VERSION)
@@ -378,7 +434,7 @@ class ReferenceBackfillRepository:
                 .order_by(table.c.id)
                 .limit(200),
             )
-            for row in page:
+            for row in self._reference_rows(page):
                 key = SourceKey(tenant, row["source_type"], row["source_id"], row["source_version"])
                 bindings[key].append(dict(row))
             if len(page) < 200:
@@ -394,7 +450,17 @@ class ReferenceBackfillRepository:
         }
 
     async def awrite_registered_source(
-        self, session, *, source_key, expected_snapshot, root_revision, rows, extractor_version, reference_digest
+        self,
+        session,
+        *,
+        source_key,
+        expected_snapshot,
+        root_revision,
+        rows,
+        extractor_version,
+        reference_digest,
+        read_after=True,
+        write_root=True,
     ):
         """M4-only scalar effect after its frozen-registration checks, never a normal bind."""
         from sqlalchemy import delete, insert, update
@@ -418,7 +484,7 @@ class ReferenceBackfillRepository:
         # The actual M4 service loaded this snapshot under the original Root
         # latch in this same TX; never stream the complete original BRR twice.
         root, source, old = expected_snapshot
-        if root is None:
+        if write_root and root is None:
             await session.execute(
                 insert(sets).values(
                     tenant_id=tenant,
@@ -433,7 +499,7 @@ class ReferenceBackfillRepository:
                     ready=False,
                 )
             )
-        elif root["source_revision"] != root_revision:
+        elif write_root and root["source_revision"] != root_revision:
             await session.execute(
                 update(sets)
                 .where(*condition, sets.c.id == root["id"])
@@ -498,7 +564,9 @@ class ReferenceBackfillRepository:
             current()
         if _scope(session)[0] != tenant:
             _invalid("tenant_changed")
-        return await self.aload_raw_snapshot(session, source_key=key)
+        if read_after:
+            return await self.aload_raw_snapshot(session, source_key=key)
+        return None
 
     async def aassert_index_universe(self, session, *, source_keys, empty_roots=()):
         """Exhaust actual indexed rows, including orphan/excess tail rows."""
@@ -565,7 +633,7 @@ class ReferenceBackfillRepository:
                 .order_by(table.c.id)
                 .limit(200),
             )
-            rows.extend(dict(row) for row in page)
+            rows.extend(dict(row) for row in self._reference_rows(page))
             if len(page) < 200:
                 break
             after = page[-1]["id"]

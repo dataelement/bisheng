@@ -42,6 +42,7 @@ class PermissionInventoryVerifier:
         target_model_checksum,
         catalog_plan_checksum,
         permission_planner=None,
+        plan_sink=None,
     ):
         self.run_id, self.writer = run_id, writer_contract_version
         self.target_checksum, self.catalog_checksum = target_model_checksum, catalog_plan_checksum
@@ -56,6 +57,7 @@ class PermissionInventoryVerifier:
         self._mode, self._after = None, None
         self._mode_seen, self._header_seen = set(), set()
         self._phase, self._finished, self._after_stage = "baseline", False, -1
+        self._plan_sink = plan_sink
 
     def _compile(self):
         if self._planner is not None:
@@ -91,6 +93,8 @@ class PermissionInventoryVerifier:
         if plan.checksum != self.catalog_checksum:
             _blocked("catalog_plan_changed")
         self._planner = self._supplied_planner or ResourceRetirementPlanner(catalog_plan=plan)
+        if self._plan_sink is not None:
+            self._plan_sink.set_planner(self._planner)
         self._expected_catalog = tuple(record_from_row(row) for row in (*plan.after_actions, *plan.after_models))
         self._expected_namespace = catalog_namespace_records(self._planner)
         self._baseline_catalog = []
@@ -103,6 +107,8 @@ class PermissionInventoryVerifier:
             if mode_id in self._summaries:
                 _blocked("duplicate_original_mode")
             self._summaries[mode_id] = permission_plan_record(plan).data
+            if self._plan_sink is not None:
+                self._plan_sink.observe_plan(self._tenant, plan)
         self._collector, self._tenant = None, None
 
     def _baseline(self, section, tenant, record):

@@ -1654,7 +1654,11 @@ space/other real references. The selected invalid sync item cannot deliver to
 the space root; users must remove or rebind it in the channel configuration.
 Other malformed IDs and explicitly saved new selections remain strict.
 
-### Historical preparation before a new M2 freeze
+### Legacy historical preparation (existing plans only)
+
+For the normal upgrade use the unified dry-run/apply entry below. This section
+retains the standalone script's original plan compatibility and repair details;
+it is not a prerequisite command for a new unified Run.
 
 `prepare_f118_history.py` backs and cleans proven orphan files/documents/versions,
 invalid tags/members, repairs parent ownership/depth and unmapped empty-resource
@@ -1678,11 +1682,32 @@ python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json 
 Preview saves a private, checksummed selected-row/FGA backup and plan using
 exclusive creation. Apply and retries read exactly that plan; never overwrite
 it with a new baseline. The adjacent `.events.jsonl` retains execution events.
-An active frozen Run is rejected. Missing/ambiguous parents, changed facts,
-unknown types or remaining downstreams are reported, never guessed away.
-Apply returns permission operation IDs; exit 2 means selected repairs completed
-but blocked items remain, and exit 3 means an error requiring the same plan to
-be inspected/resumed. Preview exit 0 does not certify migration readiness.
+An active frozen Run is rejected. Ambiguous ownership, changed facts, unknown
+types or remaining live downstreams stop apply before repair. Preview/apply
+classify deterministic repairs, retained historical invalidity and blockers;
+the ordinary commands above require no per-row SQL edits or force option.
+Apply returns permission operation IDs; exit 2 reports unresolved blockers,
+and exit 3 means an error requiring the same plan to be inspected/resumed.
+Preview exit 0 does not certify migration readiness.
+
+Flat historical files whose Knowledge parent is globally absent and whose SQL,
+FGA and saved references contain no authorization/live contribution are retained
+when the original physical index is unknown. Their full rows enter the immutable
+new M2 baseline and are checked again during conversion/resume/Coverage. No index
+is guessed and no physical data is deleted for these retained records. Populated
+Knowledge resources with old embedding names retain the raw name and original
+index, with a source fingerprint and a `legacy_embedding_preserved` warning.
+The source is invalid for model execution until explicitly reconfigured to a
+lawful model. New resource creation remains strict; there is no default fallback.
+
+Successful old NORMAL-library files lacking every permission mirror, FGA edge and
+historical operation can initialize only their original parent's INHERIT mode
+through a native RESOURCE_CREATE ledger. No personal or everyone Grant is added.
+An existing FAILED_CLOSED GRANT_MUTATION with an intact original ledger, matching
+Store/model and original version fence uses native checksum-bound forward recovery.
+Changed evidence or a failed native recovery stops execution. All newly supported
+repairs remain tied to the exact saved plan and operator on retry. Older frozen
+Run materials are not rewritten or assigned the new retention policy.
 
 For a historical deleted resource whose saved plan contains only one of the two
 `permission_enabled` technical markers, apply can automatically forward-recover
@@ -1779,77 +1804,93 @@ stopped-service migration below. Historical Alembic revisions are unchanged.
 
 ### Formal stopped-service migration
 
-Run from `src/backend` after the operator has stopped all business writers and
-received DBA confirmation that the consistent backup is complete. No backup/schema
-evidence descriptors or `f118-inputs.json` are required. Use the same `config`
-as the service. For a new Run, default preview executes the same complete
-SQL/permission/six-source inventory and plan validation as fresh M2, without
-SQL/FGA/MinIO writes or freezing a Run. Private local scratch pages are removed
-on success or failure. Output is `validation_scope=current_inventory`,
-`preflight_complete=true`, `frozen=false`, `ready=false`; passing preflight is
-not a completed migration or permission publication.
-
-DBA/operations own the actual backup and restore verification; this script does
-not inspect or attest it. Actual schema, tenant, business, permission and reference
-checks remain mandatory. If another process freezes this Run between the CLI
-lookup and scanning, fresh preview stops instead of reporting the frozen graph
-as a complete current-data scan.
-
-For an existing frozen Run, preview validates its original graph and reports
-`validation_scope=frozen_run`, `preflight_complete=false`. `--resume` requires
-that original Run; it does not rescan or replace its baseline. An old Run's
-tenant inventory mismatch remains a recovery/review blocker, not proof that a
-new inventory has failed.
-
-New inventories do not inspect Redis broker/queued-task contents or make unrelated
-full Role/UserRole eligibility cleanup a prerequisite. Space membership roles
-and permission-source subjects still participate in their exact migration checks;
-the command does not copy or rebind tenant roles. It still rejects uncommitted business delete cutovers/tombstones;
-these checks do not detect Celery consumption or whether services are stopped.
-Normal resources preserve the SQL `index_name`/`collection_name` bindings without
-ES/Milvus existence, schema or count queries, or per-file MinIO stat. Physical
-store health and SQL/vector inconsistencies are separate diagnostics. The
-historical preparation above still requires exact payload backup/deletion when
-an approved orphan cleanup needs it; missing cleanup evidence remains blocking.
-MinIO reads of frozen migration artifacts remain necessary. New metadata records
-`external_material_policy=not_required` with null legacy backup/schema fields; no
-DBA evidence objects are created or fetched.
+From `src/backend/`, with the service's exact `config`, completed schema upgrade,
+DBA-confirmed consistent backups, a persistent private data directory, and all
+business writers/consumers stopped:
 
 ```bash
-python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --dry-run
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --apply --operator-id 7
 ```
 
-Add `--apply --operator-id 7` for the actual M2 freeze, original SQL conversion,
-permission publication, six-source backfill, full reconciliation and persisted
-Coverage certificate. After interruption, repeat the identical arguments with
-`--apply --resume`; this requires the same already-frozen Run and never rebuilds
-its baseline. Old frozen metadata is read internally, without resupplying DBA
-proofs; its original graph hashes, tenant scope, business facts and checkpoints
-remain mandatory. Legacy `--backup-ref/--schema-ref` flags assert original fields
-only for an existing frozen Run; fresh Runs reject them. DBA evidence objects
-are no longer read, including during recovery. Output
-contains the Run/hashes, tenant scope, six-source proofs and the immutable plan
-reference containing the invalid-slot inventory. Nonzero exit preserves the
-checkpoint and never restarts services. Enable business traffic only after the
-operator has accepted the overall upgrade verification and real environment
-checks; a local component test is not that acceptance.
+Use a real active user's positive ID. The environment is discovered from the
+unique native CURRENT/ACTIVE release; `--environment` is an assertion. The first
+command checks the repair-after facts, complete SQL/permission plans and real
+six-source configuration/target/index closure without SQL, Run, FGA, Redis or
+remote artifact writes. Passing means exit 0, `can_apply=true`,
+`preflight_complete=true`, `ready=false`. It does not certify a completed migration.
 
-Permission namespace conversion commits at most 100 complete resource plans and
-their cumulative checkpoint in one transaction. Before/after reads keep every
-Grant, Assignee and VisibleSource, including inactive facts and foreign-assignee
-rejection. An old single-resource prefix remains resumable; an unknown commit
-result still requires the original Run. Artifact upload performs one verified
-readback; later frozen-graph and SQL/FGA phase checks remain. See
-[performance repair and measured limits](../../../docs/reviews/v310b1-migration-performance-fix-20261119.md).
+The second command consumes that exact plan, automatically prepares history,
+freezes the native baseline, converts SQL and permissions, registers/retire
+references, verifies the complete current universe and issues native Coverage.
+Only full success reports `ready=true`. Repeat the identical apply command after
+interruption; neither stage selection nor `--resume` is required.
 
-F118 deliberately uses a narrow context assembly rather than the general
-`initialize_app_context` convention: the eager general initializer constructs
-`MinioStorage` and may initialize buckets/policies. The command registers the
-original DB/Redis managers from the live service settings and closes each owned
-manager explicitly; its owned raw MinIO artifact and permission
-adapters never invoke the API startup, default seeds or bucket/policy writers.
-This feature-specific exception preserves the frozen read-only inventory
-contract and does not change general script initialization. The migration
-runtime does not open ES/Milvus clients. Current query order, comparison rules,
-conversion and publication boundaries are shown in the
-[complete current flow](../../../docs/reviews/f118-migration-current-flow-20261113.md).
+Default persistent materials:
+`/app/data/upgrade/3.1.0-beta1/f118/<run-id>/`. Override with `--materials-dir`.
+Directories/files are 0700/0600. Keep the immutable `flow.json`, `objects/`,
+private selected-row backups in `private/`, and summaries/progress in `reports/`.
+A failed report write does not publish a new executable candidate. Shared
+content-addressed replay/semantics and native Run bindings permit continuation
+after local material loss; private rollback backups should still be retained.
+
+Ordinary rootless files, old embedding names, missing historical creators and
+proven invalid saved versions retain their original rows/content/index bindings
+and invalid semantics with reports. Known depth/parent/permission receipt repairs
+execute automatically through their native owner rules. No owner replacement,
+account creation or new access is inferred. Unknown authority, tenant conflicts,
+cycles, changed proofs and unclosed external requests block. A physical cleanup
+that lacks a safe durable replay recipe is explicitly `not_evaluated`, never a
+passing plan. Existing standalone physical cleanup plans keep their old contract.
+
+Normal migration preserves SQL `index_name`/`collection_name` bindings without
+ES/Milvus health/count scans, per-file object stat, reparsing or index rebuilding.
+It does not scan broker tasks, copy tenant roles, stop/start services or attest
+DBA backups. Other model/pricing/schema/Redis migrations remain separate.
+
+Progress emits at stage changes and roughly every 15 seconds, including Run,
+tenant, unit, processed/committed counts, known total, elapsed time, observed rate,
+ETA, last acknowledged progress and current wait. Unknown total/rate/ETA is null.
+Command-local immutable input and compiler reuse avoids duplicate work; necessary
+live before/staged/after checks remain. Reference batches keep whole-source atomic
+commits. Their normal budget covers up to 100 sources, detail count and serialized
+plan bytes. An oversized single source is processed alone: its native configuration
+and complete source index are still loaded as one source, so memory is not constant.
+The final stable-order source/index tail check counts actual business plus index
+bytes and refuses drift before Coverage.
+
+Exit codes: 0 = complete executable preflight or declared-scope success;
+2 = parameter/data blocker; 3 = material/identity/pin/fact drift;
+4 = incomplete execution/check/output or cancellation. Failure JSON includes
+native phase/confirmed-position summaries, uncertainty and same-Run recovery.
+No provider error payload or credentials are printed. Report output failure does
+not undo committed business effects; the native ledger remains authoritative.
+
+For old frozen Runs, the same dry-run validates native SQL/permission recovery
+and full references, preserving original baseline/plan hashes, ordinal and receipts.
+Candidates are append-only under `reconciliation/<sha>/`. Apply uses a bound
+candidate or one uniquely matching a single current observation, never newest
+mtime. Missing proof requires maintenance reconciliation; unproven real source
+changes cannot be ignored. SQL Knowledge/default after-state checks stay exact.
+
+No `--backup-ref`, `--schema-ref`, `f118-inputs.json` or manual history plan is
+required. Old descriptor flags only assert existing frozen fields; their DBA
+objects are not fetched. `--verify --apply` strictly reverifies completed Runs;
+normal completed replays return the original Coverage result without adding
+checkpoints.
+
+#### Legacy diagnostic and history compatibility
+
+The earlier standalone history section documents existing plans, not an extra
+normal step. Preserve their original schema/checksum/operator, events and payload
+backups. Do not run them concurrently with the unified command.
+
+`--permissions-only --apply` and
+`--register-references-only --apply --resume` remain explicit diagnostics for an
+existing frozen Run. They share the global control lock, native attempt guards and
+uncertain-request handling. They do not certify full Ready; permission-only leaves
+references unverified, while registration-only retains its original committed
+proofs for a later full invocation. New Runs must use the unified dry-run/apply path.
+
+The detailed version upgrade sequence, result checks and business acceptance
+remain in [v3.1.0-beta1 upgrade guide](../../../docs/upgrades/v3.1.0-beta1.md).

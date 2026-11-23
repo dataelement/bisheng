@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import Generic, TypeVar
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.channel.domain.models.channel import Channel
@@ -232,8 +232,26 @@ def _row(row_type, row):
 
 
 class UnificationInventoryRepository:
-    async def ainspect_permission_resource_liveness(self, session, *, resources, operations=None):
-        """Freeze business liveness; CURRENT mode alone is not existence proof."""
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
+    async def aload_reference_sources(self, session, *, source_keys, for_update=False):
+        from bisheng.knowledge.domain.repositories.unification_reference_batch_repository import (
+            UnificationReferenceBatchRepository,
+        )
+
+        return await UnificationReferenceBatchRepository(fact_view=self.fact_view).aload_reference_sources(
+            session, source_keys=source_keys, for_update=for_update
+        )
+
+    async def ainspect_permission_resource_liveness(
+        self, session, *, resources, operations=None, retained_deletes=None
+    ):
+        """Marker restore eligibility; physical rows alone do not enable deleted permissions.
+
+        Only a caller collecting closed native receipt facts may retain an
+        original finalized DELETE while its business payload remains present.
+        """
         _scope(session)
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
         from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
@@ -281,6 +299,8 @@ class UnificationInventoryRepository:
             rows = await self._read(
                 session, select(*columns).where(model.id.in_(identities), model.tenant_id == _scope(session))
             )
+            if self.fact_view is not None:
+                rows = await self.fact_view.exact_rows(session, model, tuple(identities), tenant=_scope(session))
             for row in rows:
                 result[kind, identities[row["id"]]] = (
                     not row.get("is_delete")
@@ -309,6 +329,14 @@ class UnificationInventoryRepository:
                 ),
             )
             by_id = {row["id"]: row for row in rows}
+            if self.fact_view is not None:
+                by_id = {
+                    row["id"]: row
+                    for row in await self.fact_view.exact_rows(
+                        session, PermissionProjectionOperation, tuple(sorted(ids)), tenant=_scope(session)
+                    )
+                }
+            retained = {}
             for key, (ident, version) in operations.items():
                 operation = by_id.get(ident)
                 if (
@@ -319,7 +347,14 @@ class UnificationInventoryRepository:
                 ):
                     _blocked("business_marker_operation_not_finalized")
                 if operation["operation_type"] in {"RESOURCE_DELETE", "RESOURCE_DELETE_PURGE"} and result[key]:
-                    _blocked("business_delete_not_committed")
+                    if type(retained_deletes) is not list or operation["operation_type"] != "RESOURCE_DELETE":
+                        _blocked("business_delete_not_committed")
+                    retained[key] = (ident, version)
+            if retained:
+                from bisheng.knowledge.domain.repositories.unification_delete_retention_repository import load_facts
+
+                retained_deletes.extend(await load_facts(session, candidates=retained, fact_view=self.fact_view))
+                result.update(dict.fromkeys(retained, False))
         return result
 
     async def avalidate_history_prepared(self, session):
@@ -327,13 +362,17 @@ class UnificationInventoryRepository:
         from bisheng.core.context.tenant import bypass_tenant_filter
 
         _scope(session)
+        if self.fact_view is not None:
+            await self.fact_view.prepare(session)
+        query = (
+            select(FlowVersion.id)
+            .join(Flow, Flow.id == FlowVersion.flow_id)
+            .where(Flow.flow_type == 10, FlowVersion.tenant_id != Flow.tenant_id)
+        )
+        if self.fact_view is not None:
+            query = self.fact_view.exclude_affected_probe(query)
         with session.no_autoflush, bypass_tenant_filter():
-            mismatch = await session.execute(
-                select(FlowVersion.id)
-                .join(Flow, Flow.id == FlowVersion.flow_id)
-                .where(Flow.flow_type == 10, FlowVersion.tenant_id != Flow.tenant_id)
-                .limit(1)
-            )
+            mismatch = await session.execute(query.limit(1))
             if mismatch.first() is not None:
                 _blocked("workflow_owner_requires_history_preparation")
 
@@ -390,9 +429,21 @@ class UnificationInventoryRepository:
         tenant = _scope(session)
         _pagination(after_id, limit, kind)
         query = select(*_columns(model, row_type)) if statement is None else statement
-        if after_id is not None:
-            query = query.where(model.id > after_id)
-        rows = await self._read(session, query.order_by(model.id).limit(limit + 1))
+        if self.fact_view is not None:
+            rows = await self.fact_view.page_mappings(
+                session,
+                model=model,
+                statement=query,
+                after=after_id,
+                limit=limit + 1,
+                read=self._read,
+                tenant=tenant,
+                aliases={"data_json": "data", "model_transition_json": "model_transition"},
+            )
+        else:
+            if after_id is not None:
+                query = query.where(model.id > after_id)
+            rows = await self._read(session, query.order_by(model.id).limit(limit + 1))
         for row in rows:
             if "tenant_id" in row and row["tenant_id"] != tenant:
                 _blocked("tenant_mismatch")
@@ -411,6 +462,37 @@ class UnificationInventoryRepository:
             Flow.flow_type == FlowType.WORKFLOW.value
         )
         return await self._page(session, Flow, WorkflowRootRow, after_id, limit, str, statement=query)
+
+    async def aload_workflow_roots(self, session, *, root_ids):
+        """Exact bounded original roots for missing-author retention rechecks."""
+        _scope(session)
+        if type(root_ids) is not tuple or not 1 <= len(root_ids) <= 200 or len(set(root_ids)) != len(root_ids):
+            _blocked("workflow_retention_root_batch")
+        rows = await self._read(
+            session,
+            select(*_columns(Flow, WorkflowRootRow, {"data_json": Flow.data}))
+            .where(Flow.id.in_(root_ids), Flow.tenant_id == _scope(session), Flow.flow_type == FlowType.WORKFLOW.value)
+            .order_by(Flow.id),
+        )
+        return tuple(_row(WorkflowRootRow, row) for row in rows)
+
+    async def acount_workflow_retained_versions(self, session, *, root_ids):
+        _scope(session)
+        if type(root_ids) is not tuple or not 1 <= len(root_ids) <= 200 or len(set(root_ids)) != len(root_ids):
+            _blocked("workflow_retention_version_batch")
+        rows = await self._read(
+            session,
+            select(FlowVersion.flow_id, func.count().label("count"))
+            .where(
+                FlowVersion.flow_id.in_(root_ids),
+                FlowVersion.tenant_id == _scope(session),
+                or_(FlowVersion.is_delete.is_(None), FlowVersion.is_delete != 1),
+            )
+            .group_by(FlowVersion.flow_id),
+        )
+        counts = dict.fromkeys(root_ids, 0)
+        counts.update((row["flow_id"], row["count"]) for row in rows)
+        return counts
 
     async def alist_workflow_versions(self, session, *, after_id=None, limit=200) -> InventoryPage[WorkflowVersionRow]:
         parent = Flow.__table__.alias("inventory_workflow_parent")
@@ -640,6 +722,8 @@ class UnificationInventoryRepository:
         if type(source_key) is not SourceKey or source_key.tenant_id != tenant:
             _blocked("source_identity")
         key, kind = source_key, source_key.source_type
+        if self.fact_view is not None:
+            return (await self.aload_reference_sources(session, source_keys=(source_key,)))[source_key]
 
         async def one(model, cls, condition, overrides=None, parent=None):
             query = select(*_columns(model, cls, overrides)).where(condition)
@@ -733,6 +817,15 @@ class UnificationInventoryRepository:
                     parent = row.flow_id if kind == SourceType.WORKFLOW_VERSION else row.app_id
                     versions.add(SourceKey(tenant, kind, parent, str(row.id)))
                     if parent in live and (kind != SourceType.WORKFLOW_VERSION or row.is_delete in (None, 0)):
+                        if kind == SourceType.WORKFLOW_VERSION:
+                            from bisheng.workflow.domain.services.reference_extractor import (
+                                unextractable_workflow_configuration,
+                            )
+
+                            if unextractable_workflow_configuration(
+                                row.data_json, flow_type=row.flow_type, is_delete=row.is_delete
+                            ):
+                                continue
                         sources.add(SourceKey(tenant, kind, parent, str(row.id)))
         for kind, method in (
             (SourceType.ASSISTANT, self.alist_assistants),
@@ -805,6 +898,8 @@ class UnificationInventoryRepository:
     async def avalidate_registered_source_tenants(self, session):
         """One global native tenant-integrity gate for formal M2/M4 only."""
         _scope(session)
+        if self.fact_view is not None:
+            await self.fact_view.prepare(session)
         from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
         from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
@@ -832,6 +927,8 @@ class UnificationInventoryRepository:
                 .where(parent.c.id.is_(None))
                 .limit(1)
             )
+            if self.fact_view is not None:
+                query = self.fact_view.exclude_affected_probe(query)
             with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
                 if (await session.execute(query)).first() is not None:
                     _blocked("unregistered_source_or_index_tenant")

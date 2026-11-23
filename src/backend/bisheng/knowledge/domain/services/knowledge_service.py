@@ -1155,7 +1155,7 @@ class KnowledgeService(KnowledgeUtils):
             if candidate is None:
                 raise KnowledgeNotExistError()
             selected = canonical_target_id(model_id)
-            current = canonical_target_id(candidate.model) if candidate.model else None
+            current = KnowledgeModelReferenceApplication.current_model_id(candidate)
             if current == selected:
                 old = KnowledgeModelReferenceApplication._facts(candidate)
                 row = repository.get(session, knowledge_id, for_update=True)

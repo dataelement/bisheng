@@ -17,7 +17,7 @@ from bisheng.knowledge.domain.repositories.unification_conversion_repository imp
 )
 from bisheng.knowledge.domain.repositories.unification_resource_repository import _scope
 from bisheng.knowledge.domain.repositories.unification_run_repository import KnowledgeUnificationRunRepository
-from bisheng.knowledge.domain.services.unification_fingerprints import digest
+from bisheng.knowledge.domain.services.unification_fingerprints import canonical, digest
 from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 
@@ -41,6 +41,7 @@ class VerifiedConversionBatch:
     ordinal: int
     eof: bool
     mode: str
+    results_context: dict | None = None
 
 
 @dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
@@ -70,6 +71,34 @@ def _progress(value):
     ):
         _blocked("invalid_sql_checkpoint")
     return SQLConversionProgress(**value)
+
+
+def result_checkpoint(batch, start, progress, outcomes):
+    """Bounded durable tail; the original SQL cursor/fold stay unchanged."""
+    context = batch.results_context
+    body = {
+        "schema_version": 1,
+        "purpose": "sql-results-v1",
+        "identity": {**_identity(batch), "tenant_id": batch.tenant_id},
+        "sequence": context["sequence"],
+        "start": batch.ordinal,
+        "previous_progress": asdict(start),
+        "sql_checkpoint": asdict(progress),
+        "directory": context["directory"],
+        "predecessor": context["predecessor"],
+        "commands": [asdict(command) for command in batch.commands],
+        "outcomes": [asdict(outcome) for outcome in outcomes],
+        "outcome_digest": digest([asdict(outcome) for outcome in outcomes]),
+    }
+    encoded = canonical(body)
+    if len(encoded) > 4 * 1024 * 1024:
+        _blocked("result_tail_too_large")
+    return {
+        "cursor": encoded.decode(),
+        "processed_count": progress.processed_count,
+        "digest": digest(body),
+        "complete": progress.complete,
+    }
 
 
 class UnificationConversionService:
@@ -136,6 +165,7 @@ class UnificationConversionService:
         eof=False,
         continuation=None,
         mode="apply",
+        results_context=None,
     ):
         _clean(session)
         if (
@@ -161,10 +191,34 @@ class UnificationConversionService:
             ordinal,
             eof,
             mode,
+            results_context,
         )
         current, raw = await self._run(session, _identity(batch), lock=True)
         if current != (expected_checkpoint or SQLConversionProgress(None, 0, None, False)):
             _blocked("checkpoint_changed")
+        if results_context is not None:
+            if (
+                mode != "apply"
+                or type(results_context) is not dict
+                or set(results_context) != {"expected_tail", "predecessor", "directory", "sequence"}
+            ):
+                _blocked("result_context_invalid")
+            if type(results_context["sequence"]) is not int or results_context["sequence"] < 0:
+                _blocked("result_sequence_invalid")
+            for name in ("predecessor", "directory"):
+                ref = results_context[name]
+                if (ref is None and name == "directory") or (
+                    ref is not None
+                    and (type(ref) is not dict or set(ref) != {"object_key", "sha256"} or not _hash(ref["sha256"]))
+                ):
+                    _blocked("result_descriptor_invalid")
+            run = await self.repository.aread_run(
+                session, run_id=run_id, writer_contract_version=writer_contract_version, lock=True
+            )
+            if run.checkpoints.get("converting", {}).get("sql_results_v1") != results_context["expected_tail"]:
+                _blocked("result_checkpoint_changed")
+            if ordinal and results_context["predecessor"] is None:
+                _blocked("result_predecessor_missing")
         if mode == "apply":
             run = await self.repository.aread_run(
                 session, run_id=run_id, writer_contract_version=writer_contract_version, lock=True
@@ -255,6 +309,15 @@ class UnificationConversionService:
                 expected_checkpoint=value["checkpoint"],
                 checkpoint=asdict(next_progress),
             )
+            if batch.results_context is not None:
+                await self.runs.acheckpoint(
+                    session,
+                    **_identity(batch),
+                    expected_phase="converting",
+                    checkpoint_key="sql_results_v1",
+                    expected_checkpoint=batch.results_context["expected_tail"],
+                    checkpoint=result_checkpoint(batch, value["start"], next_progress, outcomes),
+                )
         value["transaction"].assert_current(session)
         return self._result(batch, next_progress, outcomes)
 
