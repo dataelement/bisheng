@@ -60,6 +60,11 @@ from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.pricing import router as llm_pricing_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
+from bisheng.oauth2_provider.api.router import (
+    oauth2_admin_router,
+    oauth2_consent_router,
+    oauth2_public_router,
+)
 from bisheng.open_api.api.dependencies import verify_open_api_access
 from bisheng.open_api.api.router import management_router as open_api_management_router
 from bisheng.open_api.api.router import model_gateway_router
@@ -171,6 +176,9 @@ router.include_router(guest_link_router, request_scope=S.TENANT)
 router.include_router(role_router, request_scope=S.TENANT)
 router.include_router(org_sync_router, request_scope=S.PLATFORM)
 router.include_router(sso_sync_router, request_scope=S.CREDENTIAL)
+router.include_router(oauth2_public_router, request_scope=S.PUBLIC)
+router.include_router(oauth2_consent_router, request_scope=S.IDENTITY)
+router.include_router(oauth2_admin_router, request_scope=S.PLATFORM)
 router.include_router(relink_router, request_scope=S.PLATFORM)
 router.include_router(tenant_router, request_scope=S.PLATFORM)
 router.include_router(citation_router, request_scope=S.TENANT)

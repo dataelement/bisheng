@@ -14,6 +14,7 @@ import SharePage from "@/pages/Dashboard/share";
 
 // Load page components lazily.
 const DshLogin = lazy(() => import('@/pages/DshLogin').then(module => ({ default: module.DshLogin })));
+const OAuthConsent = lazy(() => import('@/pages/OAuthConsent').then(module => ({ default: module.OAuthConsent })));
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
 const Apps = lazy(() => import("@/pages/BuildPage/apps"));
 const HostedAppDetail = lazy(() => import("@/pages/BuildPage/hostedApp"));
@@ -78,6 +79,7 @@ const RedirectToClient = () => {
 
 const privateRouter = [
   { path: "/desktop-login", element: <DshLogin />, errorElement: <RouteErrorBoundary /> },
+  { path: "/oauth-consent", element: <OAuthConsent />, errorElement: <RouteErrorBoundary /> },
   { path: "/", element: <RedirectToExternalLink /> },
   {
     path: "/",
@@ -262,6 +264,7 @@ export const getAdminRouter = () => {
 
 export const publicRouter = createBrowserRouter([
   { path: "/desktop-login", element: <DshLogin />, errorElement: <RouteErrorBoundary /> },
+  { path: "/oauth-consent", element: <OAuthConsent />, errorElement: <RouteErrorBoundary /> },
   { path: "/", element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
   // Backdoor entry: bypasses SSO auto-redirect when redirect_login_url is configured.
   { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },

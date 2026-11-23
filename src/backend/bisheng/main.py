@@ -300,8 +300,10 @@ def create_app():
 
     app.include_router(router)
     from bisheng.dsh.api.router import compatibility_router
+    from bisheng.oauth2_provider.api.router import well_known_router
 
     app.include_router(compatibility_router)
+    app.include_router(well_known_router)
     app.include_router(router_rpc)
     app.include_router(router_public)
     app.include_router(runtime_material_router)
@@ -320,6 +322,7 @@ def create_app():
     # External protocols retain their own authenticators and tenant proofs.
     for own_router in (compatibility_router, router_public, runtime_material_router):
         inherit_scope(own_router, RequestScope.CREDENTIAL)
+    inherit_scope(well_known_router, RequestScope.PUBLIC)
     # include_router copies route objects; metadata belongs to their endpoints.
     inherit_scope(department_limit_router, RequestScope.TENANT)
     for route in app.routes:

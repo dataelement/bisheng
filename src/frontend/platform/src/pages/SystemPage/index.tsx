@@ -8,6 +8,7 @@ import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import Config from "./components/Config";
 import { InviteCodeTab } from "./components/InviteCodeTab";
+import { OAuthClients } from "./components/OAuthClients";
 import OrganizationAndMembers from "./components/OrganizationAndMembers";
 import OrgSync from "./components/OrgSync";
 import { PersonalToken } from "./components/PersonalToken";
@@ -216,6 +217,20 @@ export default function SystemPage() {
                         <Theme />
                       </div>
                     </>
+                  ),
+                },
+              ]
+            : []),
+          ...(canAccessSystemConfig
+            ? [
+                {
+                  key: "oauthClients",
+                  label: <> {t("oauth2.admin.tab")} </>,
+                  icon: <Outlined.PeopleSafe aria-hidden="true" />,
+                  children: (
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <OAuthClients />
+                    </div>
                   ),
                 },
               ]
