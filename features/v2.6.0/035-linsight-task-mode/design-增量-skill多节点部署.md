@@ -180,3 +180,13 @@ DB 行（`linsight_skill`）只持指针（`object_path` + `content_hash`）。�
 | 存量空 hash 窄回填 | `linsight/domain/services/skill_bundle_backfill.py`；`scripts/migrate_skills_to_object_storage.py` |
 | 技能详情 / 预览 | `linsight/domain/services/skill_service.py` · `get_detail` / `read_bundle_file` |
 | 内置技能 seeder | `linsight/domain/services/builtin_skill_seeder.py` · `_already_published` |
+
+## 8. v3.1.0-beta1 内置技能权限初始化并发修复（2026-11-23）
+
+API 的两个 Uvicorn worker 会各自运行 seeder。同一技能的稳定幂等键只能确保共用一份权限账本，不能阻止第二个进程进入第一个进程仍在执行的 `STAGING` 恢复路径。恢复检查可能将写入中的状态判为 `FAILED_CLOSED`；原进程完成 OpenFGA 写入后，SQL 提交状态的 CAS 随之失败。
+
+`ensure_builtin_skill_permission()` 通过本业务域的 `SkillPermissionRepository.lock()` 对现有 `linsight_skill` 行使用 `SELECT FOR UPDATE`，锁持续覆盖权限状态检查、创建或恢复及收尾。等待者取得锁后重新读取业务行和权限状态；已完成的 `CURRENT` 直接沿用，保留管理员撤销的租户授权。业务行已删除、变为 manual、个人技能或租户不匹配时拒绝初始化。正常完成、异常或任务取消均通过数据库 session 退出释放锁；不同技能不共用锁。
+
+复用数据库行锁，适用于多进程和多 API 节点；保持权限模块的冻结计划、幂等键、CAS 和失败恢复，不引入进程内全局锁、Redis 租约或新表。若以后初始化不再依赖已存在的技能业务行，或需要与其他权限写入口共同协调，应重新评估锁定对象和执行权范围。
+
+验证：`test/linsight/test_builtin_skill_permission_concurrency.py` 以真实权限服务和 SQL 账本复现旧实现的两类竞争错误，覆盖同技能等待后复核、不同技能并行、原失败账本恢复、取消释放锁、业务行重新校验及已撤销授权保持。SQLite 用例仅替代其不支持的行锁原语；`test_builtin_skill_permission_database.py` 为独立空测试库补充 MySQL/DM8 原生多连接验证，使用显式 DSN 与一次性环境确认，不读取业务配置作为测试目标。具体执行结果及未运行范围见[修复与审查记录](../../../docs/reviews/beta1-builtin-skill-permission-race-fix-20261123.md)。本次未操作 165 环境。
