@@ -629,8 +629,8 @@
       }
     },
   "platform_knowledge_retriever": {
-      "name": "昆聯ナレッジ検索",
-      "description": "昆聯のナレッジベースから情報を検索します",
+      "name": "知識ベース検索",
+      "description": "ナレッジベースから情報を検索します",
       "user_question": {
         "label": "質問",
         "placeholder": "質問"
@@ -667,13 +667,13 @@
       }
     },
     "platform_llm": {
-      "name": "昆聯 LLM",
-      "description": "昆聯プラットフォームで認可された大規模モデルを呼び出します",
+      "name": "大規模モデル",
+      "description": "認可された大規模モデルを呼び出します",
       "模型设置": "モデル設定",
       "提示词": "プロンプト",
       "输出": "出力",
       "model_ref": {
-        "label": "昆聯モデル",
+        "label": "モデル",
         "placeholder": "認可されたモデルを選択してください"
       },
       "temperature": {
@@ -786,11 +786,11 @@
     "empty": "利用可能なナレッジベースがありません"
   },
   "platformLlm": {
-    "choose": "昆聯モデルを選択",
+    "choose": "モデルを選択",
     "searchPlaceholder": "モデル名で検索",
     "pinnedVersion": "固定バージョン",
     "empty": "利用可能なモデルがありません",
-    "invalidModel": "利用可能な昆聯モデルを選択してください",
+    "invalidModel": "利用可能なモデルを選択してください",
     "tokenInvalid": "昆聯のセッションまたはトークンが無効です。再ログインしてください。",
     "permissionDenied": "昆聯モデル一覧へのアクセス権限がありません。"
   }

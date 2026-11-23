@@ -629,8 +629,8 @@
       }
     },
   "platform_knowledge_retriever": {
-      "name": "昆联知识库检索",
-      "description": "从昆联知识库检索资料",
+      "name": "知识库检索",
+      "description": "从知识库检索资料",
       "user_question": {
         "label": "用户问题",
         "placeholder": "用户问题"
@@ -667,13 +667,13 @@
       }
     },
     "platform_llm": {
-      "name": "昆联大模型",
-      "description": "调用昆联平台授权的大模型",
+      "name": "大模型",
+      "description": "调用授权的大模型",
       "模型设置": "模型设置",
       "提示词": "提示词",
       "输出": "输出",
       "model_ref": {
-        "label": "昆联大模型",
+        "label": "大模型",
         "placeholder": "请选择授权大模型"
       },
       "temperature": {
@@ -786,11 +786,11 @@
     "empty": "暂无可用知识库"
   },
   "platformLlm": {
-    "choose": "选择昆联大模型",
+    "choose": "选择大模型",
     "searchPlaceholder": "按模型名称搜索",
     "pinnedVersion": "固定版本",
     "empty": "暂无可用大模型",
-    "invalidModel": "请选择可用的昆联大模型",
+    "invalidModel": "请选择可用的大模型",
     "tokenInvalid": "昆联登录态或资源令牌已失效，请重新登录。",
     "permissionDenied": "当前账号无权访问昆联模型目录。"
   }

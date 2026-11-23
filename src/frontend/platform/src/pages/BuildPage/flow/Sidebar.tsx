@@ -112,6 +112,9 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
             if (temp.type === 'platform_agent' && !platformAgent?.platform_agent_enabled) return list
             if (temp.type === 'platform_knowledge_retriever' && !platformKnowledge?.platform_knowledge_enabled) return list
             if (temp.type === 'platform_llm' && !platformLlm?.platform_llm_enabled) return list
+            // 开启平台对应能力时隐藏毕昇原有同名基础节点，避免节点栏出现重复选项
+            if (temp.type === 'knowledge_retriever' && platformKnowledge?.platform_knowledge_enabled) return list
+            if (temp.type === 'llm' && platformLlm?.platform_llm_enabled) return list
             const newNode = getNodeDataByTemp(temp)
             if (temp.type === 'platform_knowledge_retriever' && platformKnowledge?.platform_knowledge_mode === 'mock') newNode.name += ' (' + t('platformAgent.mock') + ')'
             temp.type === 'start' ? onInitStartNode(cloneDeep(temp)) : list.push(newNode)

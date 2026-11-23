@@ -629,8 +629,8 @@
       }
     },
   "platform_knowledge_retriever": {
-      "name": "Kunlian knowledge search",
-      "description": "Find information in a Kunlian knowledge base",
+      "name": "Knowledge Base Retrieval",
+      "description": "Retrieve information from the knowledge base",
       "user_question": {
         "label": "Question",
         "placeholder": "Question"
@@ -667,13 +667,13 @@
       }
     },
     "platform_llm": {
-      "name": "Kunlian LLM",
-      "description": "Invoke an authorized model on Kunlian platform",
+      "name": "LLM",
+      "description": "Invoke an authorized large model",
       "模型设置": "Model Settings",
       "提示词": "Prompt Settings",
       "输出": "Output",
       "model_ref": {
-        "label": "Kunlian Model",
+        "label": "Model",
         "placeholder": "Select an authorized model"
       },
       "temperature": {
@@ -786,11 +786,11 @@
     "empty": "No knowledge bases available"
   },
   "platformLlm": {
-    "choose": "Select Kunlian Model",
+    "choose": "Select Model",
     "searchPlaceholder": "Search by model name",
     "pinnedVersion": "Pinned version",
     "empty": "No models available",
-    "invalidModel": "Select an available Kunlian model",
+    "invalidModel": "Select an available model",
     "tokenInvalid": "Kunlian session or resource token expired. Please sign in again.",
     "permissionDenied": "You do not have permission to access Kunlian model catalog."
   }
