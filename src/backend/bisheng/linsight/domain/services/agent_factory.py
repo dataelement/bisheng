@@ -1862,16 +1862,16 @@ class MemoryWiring:
     prompt: str | None = None
 
 
-def build_memory_prompt(resident_text: str = "", experience_text: str = "") -> str:
-    """Tool guidance, then the resident block, then the experience block (F132 AC-51, AC-55)."""
+def build_memory_prompt(resident_text: str = "", related_text: str = "") -> str:
+    """Tool guidance, then the resident block, then the task-related block (F132 AC-51, AC-55)."""
     from bisheng.linsight.domain.services.memory_turns import MEMORY_PROMPT_HEADER, MEMORY_TOOLS_GUIDE
 
     parts = [MEMORY_PROMPT_HEADER, MEMORY_TOOLS_GUIDE]
-    parts += [text for text in (resident_text, experience_text) if text]
+    parts += [text for text in (resident_text, related_text) if text]
     return "\n\n".join(parts)
 
 
-def wire_memory(ctx, *, resident_text: str = "", experience_text: str = "", on_write=None) -> MemoryWiring:
+def wire_memory(ctx, *, resident_text: str = "", related_text: str = "", on_write=None) -> MemoryWiring:
     """The ONE place that turns an enabled memory context into tools and prompt text (F004 T059).
 
     ``ctx`` is the ``MemoryContext`` the gate resolved for this run. Deep research
@@ -1884,7 +1884,7 @@ def wire_memory(ctx, *, resident_text: str = "", experience_text: str = "", on_w
 
     return MemoryWiring(
         tools=build_memory_tools(ctx, on_write=on_write),
-        prompt=build_memory_prompt(resident_text, experience_text),
+        prompt=build_memory_prompt(resident_text, related_text),
     )
 
 

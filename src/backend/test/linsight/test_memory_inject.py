@@ -30,7 +30,7 @@ from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
 from bisheng.memory.domain.models.memory_turn_record import KIND_SUMMARY
 from bisheng.memory.domain.ports import MemoryContext
 from bisheng.memory.domain.services import metrics as m
-from bisheng.memory.domain.services.resident import EXPERIENCE_HEADER, RESIDENT_HEADER
+from bisheng.memory.domain.services.resident import RELATED_HEADER, RESIDENT_HEADER
 from test.linsight._memory_doubles import (  # noqa: F401 - pytest fixtures
     CHAT,
     TENANT_A,
@@ -108,20 +108,22 @@ def task_message(monkeypatch, memory_db):
     return make
 
 
-async def test_ac51_ac55_round_text_carries_resident_and_experience(memory_services, memory_db, task_message):
-    """AC-51 / AC-55: the round prompt holds the resident block and the experience block."""
+async def test_ac51_ac55_round_text_carries_resident_and_related(memory_services, memory_db, task_message):
+    """AC-51 / AC-55: the round prompt holds the resident block and the memory related to the task question."""
     seed_session(memory_db)
     task_message()
     await _remember(memory_services, "用户偏好用表格呈现对比")
     await _remember(memory_services, "做行业研究时先列数据来源清单", item_type="experience")
 
     round_ = LinsightMemoryRound()
-    await round_.begin(_version())
+    version = _version()
+    version.question = "做一份行业研究，先列数据来源"
+    await round_.begin(version)
     text = round_.prompt()
 
     assert MEMORY_PROMPT_HEADER in text and "memory_search" in text and "memory_write" in text
     assert RESIDENT_HEADER in text and "用户偏好用表格呈现对比" in text
-    assert EXPERIENCE_HEADER in text and "做行业研究时先列数据来源清单" in text
+    assert RELATED_HEADER in text and "做行业研究时先列数据来源清单" in text
     # experience items are not resident
     assert "做行业研究时先列数据来源清单" not in round_.resident_text
 

@@ -190,3 +190,22 @@ def test_ac09_redacted_output_keeps_status_without_content():
     assert redact_tool_event("memory_write", red) == red
     down = redact_tool_event("memory_search", "记忆检索暂时不可用。请在回答中说明这一点。")
     assert down["ok"] is False and down["reason_code"] == 12107
+
+
+def test_ac108_search_guidance_in_tool_and_round_prompt(tools_for, make_ctx):
+    """AC-108: the task-search hint reaches the assistant (tool description) and the
+    daily / deep-research prompt (MEMORY_TOOLS_GUIDE) with the same wording."""
+    from bisheng.linsight.domain.services.memory_turns import MEMORY_TOOLS_GUIDE
+    from bisheng.memory.domain.services.tools import TASK_SEARCH_HINT
+
+    assert TASK_SEARCH_HINT in tools_for(make_ctx())["memory_search"].description
+    assert TASK_SEARCH_HINT in MEMORY_TOOLS_GUIDE
+
+
+def test_ac50_chat_prompt_allows_only_verified_experience():
+    """AC-50: ordinary chats may yield experience, but only what the user confirmed or corrected."""
+    from bisheng.memory.domain.services.consolidation_prompt import build_prompt
+
+    prompt = build_prompt("2026-11-23", [("用户", "对，以后都这样做")], [], 60, mode="chat")
+    assert "经过验证的做事经验" in prompt and "用户纠正过的做事方式" in prompt
+    assert "系统自己提出、用户没有表态的建议" in prompt
