@@ -233,8 +233,8 @@ def test_legacy_unknown_owner_requires_ledger_and_never_creates_tombstone(engine
         assert not session.exec(select(ResourceReferenceTombstone)).all()
 
 
-async def async_database():
-    engine = create_async_engine("sqlite+aiosqlite://")
+async def async_database(url="sqlite+aiosqlite://"):
+    engine = create_async_engine(url)
     async with engine.begin() as connection:
         await connection.run_sync(lambda conn: SQLModel.metadata.create_all(conn, tables=TABLES))
     async with AsyncSession(engine) as session, session.begin():

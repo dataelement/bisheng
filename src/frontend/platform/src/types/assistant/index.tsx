@@ -48,7 +48,7 @@ export interface ReferenceSlotState {
     slot_key: string;
     target_type: 'model' | 'knowledge_space' | 'knowledge_file';
     target_id: string;
-    state: 'valid' | 'deleting' | 'invalid_deleted' | 'invalid_legacy';
+    state: 'valid' | 'deleting' | 'invalid_deleted' | 'invalid_legacy' | 'invalid_scope' | 'invalid_missing';
     is_valid: boolean;
 }
 

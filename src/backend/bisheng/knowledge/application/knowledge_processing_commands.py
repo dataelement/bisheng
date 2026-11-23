@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid5
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application.model_availability import probe_embedding
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
@@ -19,6 +20,7 @@ from bisheng.knowledge.domain.schemas.processing_job import (
 )
 from bisheng.knowledge.domain.services.processing_job_service import ProcessingJobService
 from bisheng.permission.application.business_authorization import require_business_action
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 
 
 class KnowledgeProcessingCommands:
@@ -205,6 +207,7 @@ class KnowledgeProcessingCommands:
                 await KnowledgeModelReferenceApplication.repository.asave(session, row)
             self._clean(session)
             await session.commit()
+            await notify_reference_sync(get_current_tenant_id(), "knowledge", str(space_id))
             return result
 
     async def _configuration(self, session, space_id, request, plan, identity, entry_kind):

@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from bisheng.api.services import assistant as assistant_module
 from bisheng.api.services.assistant import AssistantService
@@ -51,6 +51,7 @@ from test.knowledge_unification import test_as_bindings as bindings
 assistant_tenant = bindings.assistant_tenant
 assistant_business = bindings.assistant_business
 ORIGINAL_ASSISTANT_DEFAULTS = assistant_module.LLMService.get_assistant_llm
+ORIGINAL_ASSISTANT_DEFAULTS_META = assistant_module.LLMService.aget_assistant_llm_with_meta
 
 
 @contextmanager
@@ -72,6 +73,7 @@ def selected_management_tenant():
 @pytest.fixture
 async def management_assistant(assistant_business, monkeypatch):
     context = assistant_business
+    monkeypatch.setattr(assistant_module.LLMService, "aget_assistant_llm_with_meta", ORIGINAL_ASSISTANT_DEFAULTS_META)
     context.user = UserPayload(user_id=7, user_name="Root operator", user_role=[], tenant_id=1, is_global_super=True)
     context.user._runtime_credential_reference = {"credential_id": "credential-7", "data_scope": "OWNED"}
     models = (Tenant, LLMServer, LLMModel, TenantSystemModelConfig)
@@ -84,9 +86,11 @@ async def management_assistant(assistant_business, monkeypatch):
     tenant_filter.register_tenant_filter_events()
     async with context.engine.begin() as connection:
         for model in models:
-            await connection.run_sync(lambda conn, model=model: model.__table__.create(conn))
+            await connection.run_sync(lambda conn, model=model: model.__table__.create(conn, checkfirst=True))
     async with context.sessions() as session:
         with bypass_tenant_filter():
+            for model in (LLMModel, LLMServer, Tenant):
+                await session.execute(delete(model))
             session.add_all(
                 [
                     Tenant(id=1, tenant_code="root", tenant_name="Root"),
@@ -138,6 +142,15 @@ async def management_assistant(assistant_business, monkeypatch):
                     for spec in references
                 )
             await session.commit()
+    from types import SimpleNamespace
+
+    from bisheng.llm.application import model_selection
+
+    monkeypatch.setattr(
+        model_selection,
+        "get_permission_relation_api",
+        AsyncMock(return_value=SimpleNamespace(list_resource_ids=AsyncMock(return_value=["1"]))),
+    )
     # The selected ID now traverses the actual dedicated default source graph:
     # SQL own/Root resolution, complete indexed configuration and current model
     # facts. Only its Session factory points at this isolated database.
@@ -186,21 +199,24 @@ async def test_super_home_root_selected_leaf_keeps_crud_and_sources_in_selected_
         assert context.user.tenant_id == 1 and get_current_tenant_id() == 101
         await create(context)
         assistant, _, references, source = await inspect_assistant(context)
-        assert assistant.tenant_id == source.tenant_id == 101
+        assert assistant.tenant_id == 101 and source is None
         assert assistant.model_name == "2"  # Leaf default, not JWT home's model 1.
-        assert {(row.tenant_id, row.target_id) for row in references} == {(101, "2")}
+        assert not references
+        await bindings.refresh_root(101, "assistant", "assistant-a", session_factory=context.sessions)
         await AssistantService.update_assistant(
             context.request,
             context.user,
             AssistantUpdateReq(id="assistant-a", model_name="1", knowledge_list=[10], temperature=1),
         )
+        await bindings.refresh_root(101, "assistant", "assistant-a", session_factory=context.sessions)
         assistant, links, references, source = await inspect_assistant(context)
         assert assistant.tenant_id == source.tenant_id == 101 and assistant.model_name == "1"
         assert [(row.tenant_id, row.knowledge_id) for row in links] == [(101, 10)]
         assert {(row.tenant_id, row.target_id) for row in references} == {(101, "1"), (101, "10")}
         await AssistantService.delete_assistant(context.request, context.user, assistant.id)
+        await bindings.refresh_root(101, "assistant", "assistant-a", session_factory=context.sessions)
         assistant, _, references, source = await inspect_assistant(context)
-        assert assistant.is_delete == 1 and source.tenant_id == 101 and not source.effective and not references
+        assert assistant.is_delete == 1 and source is None and not references
         # A connection read has no ORM tenant filter that could hide an accidental
         # Root-owned source/guard row from this assertion.
         async with context.engine.connect() as connection:
@@ -209,7 +225,7 @@ async def test_super_home_root_selected_leaf_keeps_crud_and_sources_in_selected_
                     select(BusinessReferenceSet.__table__).where(BusinessReferenceSet.source_type == "assistant")
                 )
             ).all()
-            assert len(rows) == 2 and {row.tenant_id for row in rows} == {101}
+            assert not rows
     assert context.user.model_dump() == identity_before
     assert context.user._runtime_credential_reference == credential_before
 
@@ -224,7 +240,7 @@ async def test_selected_tenant_does_not_replace_or_discard_credential_narrowing(
             await AssistantService.update_prompt("assistant-a", "denied change", context.user)
         assert deny.call_args.args[0] is context.user
         assistant, _, references, source = await inspect_assistant(context)
-        assert assistant.prompt == "" and assistant.tenant_id == source.tenant_id == 101
-        assert {row.target_id for row in references} == {"2"}
+        assert assistant.prompt == "" and assistant.tenant_id == 101 and source is None
+        assert not references
         assert context.user.tenant_id == 1
         assert context.user._runtime_credential_reference == {"credential_id": "credential-7", "data_scope": "OWNED"}

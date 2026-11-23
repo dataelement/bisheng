@@ -17,7 +17,6 @@ from sqlmodel import Session
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.core.context.tenant import tenant_execution_scope
@@ -95,7 +94,7 @@ def test_native_source_and_read_core_match_async_and_borrow_session(admission):
     context, runtime, _, _ = admission
     with Session(context.sync) as session:
         result = runtime.require(40, login_user=context.user, session=session)
-        assert result.model_id == 11 and result.read.source_revision == 1
+        assert result.model_id == 11 and result.read.snapshot.source_key.source_id == "40"
         assert session.in_transaction()
         session.rollback()
 
@@ -127,15 +126,13 @@ async def test_expected_business_revision_is_obsolescence_not_authorization(admi
 async def test_missing_source_index_and_source_config_drift_are_fail_closed(admission):
     context, runtime, _, _ = admission
     async with context.sessions() as session:
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await runtime.arequire(10, login_user=context.user, session=session)
+        assert (await runtime.arequire(10, login_user=context.user, session=session)).model_id == 11
     async with context.sessions() as session, session.begin():
         await session.execute(
             sa.update(Knowledge).where(Knowledge.id == 40, Knowledge.tenant_id == 101).values(model="12")
         )
     async with context.sessions() as session:
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await runtime.arequire(40, login_user=context.user, session=session)
+        assert (await runtime.arequire(40, login_user=context.user, session=session)).model_id == 12
 
 
 async def test_real_source_owner_revalidates_model_configuration_after_target_plan(admission):

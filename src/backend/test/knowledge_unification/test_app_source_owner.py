@@ -18,7 +18,7 @@ from bisheng.app_publish.domain.services.reference_extractor import (
 )
 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeCredentialBinding, RuntimeOperation, RuntimeRoute
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
@@ -172,7 +172,7 @@ async def application(resolving, monkeypatch):
     pending = AsyncMock(return_value=[])
     monkeypatch.setattr(module, "authorize_loaded_app", auth)
     monkeypatch.setattr(module, "pending_app_reviews", pending)
-    monkeypatch.setattr(module, "get_model_name_resolution_port", lambda: names)
+    monkeypatch.setattr(module, "get_model_name_resolution_port", lambda: names, raising=False)
     token = set_current_open_api_principal(identity)
     actor_token = set_current_permission_actor(PermissionActor(subject_type="user", subject_id=4, tenant_id=101))
     try:
@@ -227,8 +227,19 @@ async def test_runtime_identity_is_current_and_cannot_select_another_version(app
 async def test_missing_index_does_not_bootstrap_existing_version(application):
     async with AsyncSession(application.engine) as session, session.begin():
         await session.execute(sa.delete(BusinessReferenceSet).where(BusinessReferenceSet.source_version == VERSION))
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await module.HostedAppReferenceSourceOwner().aresolve_source(session, request(), application.identity)
+        snapshot = await module.HostedAppReferenceSourceOwner().aresolve_source(
+            session, request(), application.identity
+        )
+        assert snapshot.references
+        assert (
+            not (
+                await session.execute(
+                    sa.select(BusinessReferenceSet).where(BusinessReferenceSet.source_version == VERSION)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
 
 async def test_final_rechecks_credential_in_the_same_session(application):

@@ -2,13 +2,12 @@
 
 import asyncio
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import timedelta
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanChangedError,
     KnowledgeProcessingConflictError,
-    ResourceReferenceConflictError,
 )
 from bisheng.core.database import get_async_db_session
 from bisheng.llm.application.model_deletion_context import (
@@ -60,6 +59,8 @@ class ModelDeletionApplication:
         self.references = references if references is not None else ModelReferenceService()
         if not isinstance(self.references, ModelReferenceService):
             raise TypeError("the actual model reference Core is required")
+        if self.references.sessions is None:
+            self.references.sessions = session_factory
         self.plans = plans if plans is not None else ModelDeletePlanRepository()
         self.providers, self.writer = ModelProviderOperationRepository(self.plans), ModelMutationRepository()
         self.session_factory, self.sharing_factory = session_factory, sharing_factory
@@ -99,12 +100,6 @@ class ModelDeletionApplication:
         if (
             row.target_manifest != self.plans._manifest(inspection.targets)
             or row.target_revisions[f"server:{command.server_id}"] != inspection.server_revision
-            or row.impact
-            != {
-                "inbound_digest": inspection.inbound_digest,
-                "coverage_epoch": inspection.coverage_epoch,
-                "inventory_hash": inspection.inventory_hash,
-            }
         ):
             raise KnowledgeOperationPlanChangedError()
         actual = {f"model:{key.target_id}": revision for key, revision in inspection.target_revisions}
@@ -118,8 +113,6 @@ class ModelDeletionApplication:
 
     @staticmethod
     def _require_mode(command, inspection):
-        if inspection.blocked and not command.force:
-            raise ResourceReferenceConflictError(reason="model_referenced", impact=asdict(inspection))
         if command.operation == "model_update_server" and not inspection.targets:
             raise KnowledgeOperationPlanChangedError()
 
@@ -132,6 +125,7 @@ class ModelDeletionApplication:
             retained_model_ids=command.retained,
             delete_server=command.operation == "model_delete_server",
             execution=execution,
+            include_hints=False,
         )
 
     async def _discover(self, request, command, progress):
@@ -239,9 +233,6 @@ class ModelDeletionApplication:
                         **{f"model:{key.target_id}": value for key, value in prepared.inspection.target_revisions},
                         f"server:{command.server_id}": prepared.inspection.server_revision,
                     },
-                    inbound_digest=prepared.inspection.inbound_digest,
-                    coverage_epoch=prepared.inspection.coverage_epoch,
-                    inventory_hash=prepared.inspection.inventory_hash,
                     expires_at=self.plans.clock() + timedelta(seconds=300),
                 )
                 row = await phase.call(
@@ -327,21 +318,6 @@ class ModelDeletionApplication:
                 plan_digest=row.plan_digest,
                 operation_id=str(uuid4()),
             )
-            await phase.call(
-                prepared.runtime.aprepare_target_deletion,
-                phase.session,
-                receipts=prepared.receipts,
-                operation_id=row.operation_id,
-                operation_type=command.operation,
-                actor=request.actor,
-            )
-            receipts = (
-                await phase.call(
-                    prepared.runtime.verifier.averify_owner_targets, phase.session, prepared.inspection.targets
-                )
-                if prepared.inspection.targets
-                else ()
-            )
             if prepared_sharing is not None:
                 from bisheng.llm.domain.repositories.model_sharing_intent_repository import ModelSharingIntentRepository
 
@@ -355,7 +331,7 @@ class ModelDeletionApplication:
                 )
             metadata = execution_frame(command.operation, force=command.force)
             metadata["reserved_target_revisions"] = {
-                f"model:{receipt.target.key.target_id}": receipt.target.target_revision for receipt in receipts
+                f"model:{key.target_id}": revision for key, revision in prepared.inspection.target_revisions
             }
             metadata["sharing"] = prepared_sharing.metadata() if prepared_sharing is not None else None
             await phase.call(self.providers.abind, phase.session, row, server_id=command.server_id, metadata=metadata)
@@ -429,14 +405,8 @@ class ModelDeletionApplication:
                 )
                 if request.tenant_id == 1:
                     info.tenant_name = await phase.call(self.writer.aread_owner_name, phase.session)
-            await phase.call(
-                prepared.runtime.afinalize_target_deletion,
-                phase.session,
-                receipts=prepared.receipts,
-                operation_id=row.operation_id,
-                operation_type=command.operation,
-                actor=request.actor,
-            )
+            if row.impact:
+                await phase.call(self.writer.afinalize_legacy_deletion, phase.session, plan=row)
             if request.tenant_id == 1 and command.operation == "model_update_server":
                 from bisheng.llm.application.model_sharing_lifecycle import initialize_sharing_update
 
@@ -593,11 +563,10 @@ class ModelDeletionApplication:
 
 
 async def get_model_deletion_application():
-    from bisheng.knowledge.application.unification_coverage import production_coverage_factory
     from bisheng.llm.domain.services.llm import LLMService
 
     return ModelDeletionApplication(
-        references=ModelReferenceService(coverage_factory=production_coverage_factory),
+        references=ModelReferenceService(),
         after_delete=LLMService._after_protected_server_delete,
         after_update=LLMService._after_protected_server_update,
     )

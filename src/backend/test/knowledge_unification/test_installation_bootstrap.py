@@ -7,7 +7,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.database.models.tenant import Tenant
-from bisheng.knowledge.application.unification_coverage import production_coverage_factory
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun as Run
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
@@ -61,8 +60,7 @@ async def test_fresh_install_and_api_tenant_startup_are_idempotent(installation)
         async with sessions() as session:
             await _init_default_tenant(session, reference_bootstrap=bootstrap_created_root)
         async with sessions() as session, session.begin():
-            assert (await production_coverage_factory(session).arequire_global_ready()).verified_tenant_ids == (1,)
-            assert len((await session.execute(sa.select(Run.id))).all()) == 1
+            assert not (await session.execute(sa.select(Run.id))).all()
     assert (await initialize_installation(engine=engine, metadata=metadata, sessions=sessions, apply=True))[
         "mode"
     ] == "already_initialized"
@@ -81,30 +79,30 @@ async def test_existing_database_never_gets_empty_provenance(installation):
         assert connection.execute(sa.select(Run.__table__)).first() is None
 
 
-async def test_interrupted_schema_and_failed_certificate_retry_atomically(installation, monkeypatch):
+async def test_interrupted_root_creation_retries_atomically_without_reference_certificate(installation, monkeypatch):
     engine, metadata, sessions = installation
-    import bisheng.tenant.application.installation as application
+    original = AsyncSession.flush
 
-    original = application.bootstrap_created_root
+    async def fail(session, *args, **kwargs):
+        creating = any(isinstance(row, Tenant) for row in session.new)
+        await original(session, *args, **kwargs)
+        if creating:
+            raise OSError("interrupted before commit")
 
-    async def fail(session, tenant):
-        await original(session, tenant)
-        raise OSError("interrupted before commit")
-
-    monkeypatch.setattr(application, "bootstrap_created_root", fail)
+    monkeypatch.setattr(AsyncSession, "flush", fail)
     with pytest.raises(OSError, match="interrupted"):
         await initialize_installation(engine=engine, metadata=metadata, sessions=sessions, apply=True)
     with engine.connect() as connection:
         assert connection.execute(sa.select(InstallationBootstrap.__table__.c.state)).scalar_one() == "pending"
         assert connection.execute(sa.select(Tenant.__table__)).first() is None
         assert connection.execute(sa.select(Run.__table__)).first() is None
-    monkeypatch.setattr(application, "bootstrap_created_root", original)
+    monkeypatch.setattr(AsyncSession, "flush", original)
     assert (await initialize_installation(engine=engine, metadata=metadata, sessions=sessions, apply=True))[
         "initialized"
     ]
 
 
-async def test_pending_schema_creation_resumes_and_nonempty_sources_block(installation):
+async def test_pending_schema_resumes_without_rewriting_existing_business_or_certifying_coverage(installation):
     from bisheng.knowledge.domain.models.knowledge import Knowledge
     from bisheng.tenant.domain.repositories.installation_repository import InstallationRepository
 
@@ -112,13 +110,15 @@ async def test_pending_schema_creation_resumes_and_nonempty_sources_block(instal
     with engine.begin() as connection:
         assert InstallationRepository().claim(connection) == "pending"
         metadata.create_all(connection)
-        connection.execute(Knowledge.__table__.insert().values(id=7, tenant_id=1, name="Unexpected", user_id=1))
-    with pytest.raises(RuntimeError, match="not empty"):
-        await initialize_installation(engine=engine, metadata=metadata, sessions=sessions, apply=True)
+        connection.execute(Knowledge.__table__.insert().values(id=7, tenant_id=1, name="Retained", user_id=1))
+    assert (await initialize_installation(engine=engine, metadata=metadata, sessions=sessions, apply=True))[
+        "initialized"
+    ]
     with engine.connect() as connection:
-        assert connection.execute(sa.select(Tenant.__table__)).first() is None
+        assert connection.execute(sa.select(Tenant.__table__.c.id)).scalar_one() == 1
+        assert connection.execute(sa.select(Knowledge.__table__.c.name)).scalar_one() == "Retained"
         assert connection.execute(sa.select(Run.__table__)).first() is None
-        assert connection.execute(sa.select(InstallationBootstrap.__table__.c.state)).scalar_one() == "pending"
+        assert connection.execute(sa.select(InstallationBootstrap.__table__.c.state)).scalar_one() == "completed"
 
 
 async def test_versioned_database_is_not_claimed_even_without_business_tables(installation):
@@ -145,4 +145,5 @@ async def test_pending_claim_resumes_after_only_some_tables_were_created(install
     ]
     with tenant_execution_scope(1):
         async with sessions() as session, session.begin():
-            assert (await production_coverage_factory(session).arequire_global_ready()).coverage_epoch == 1
+            assert await session.get(Tenant, 1) is not None
+            assert not (await session.execute(sa.select(Run.id))).all()

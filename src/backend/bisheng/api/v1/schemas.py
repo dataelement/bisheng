@@ -333,7 +333,7 @@ class AssistantReferenceView(BaseModel):
     slot_key: str
     target_type: Literal["model", "knowledge_space", "knowledge_file"]
     target_id: str
-    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy", "invalid_scope"]
+    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy", "invalid_scope", "invalid_missing"]
     is_valid: bool
 
 

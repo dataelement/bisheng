@@ -11,9 +11,10 @@ import sqlalchemy as sa
 
 from bisheng.api.services import flow as flow_service
 from bisheng.api.services import workflow as workflow_service
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
+from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.resource_reference.application.contracts import (
     DeletionEvidence,
     ReferenceState,
@@ -66,12 +67,14 @@ async def configured(saved, monkeypatch):
     monkeypatch.setattr(workflow_service, "Workflow", Mock())
     await save(saved, 1, graph(node("old-current", "llm", model_id=7)))
     await save(saved, 2, graph(node("a", "llm", model_id=7), node("b", "llm", model_id=7)))
+    await save_fixtures.refresh(saved)
     return saved
 
 
 async def force_delete_model(context):
     async with context.session_factory() as session, session.begin():
         await session.execute(sa.text("DELETE FROM wf_test_target WHERE target_type='model' AND target_id='7'"))
+        await session.execute(sa.delete(LLMModel).where(LLMModel.id == 7))
         session.add(
             ResourceReferenceTombstone(
                 id=1,
@@ -135,22 +138,15 @@ async def test_valid_publish_atomically_changes_status_and_current_without_relea
     } == before
 
 
-async def test_publish_binding_failure_rolls_back_status_current_and_guard_revisions(configured, monkeypatch):
-    before_flow = rows(configured, "flow")
-    before_versions = rows(configured, "flowversion")
+async def test_publish_does_not_call_legacy_binding_writer(configured, monkeypatch):
     before_sets = rows(configured, "business_reference_set")
-    original = configured.runtime.aapply_source_bindings
-
-    async def fail_after_write(session, prepared):
-        await original(session, prepared)
-        raise RuntimeError("binding write failed")
-
-    monkeypatch.setattr(configured.runtime, "aapply_source_bindings", fail_after_write)
-    with pytest.raises(RuntimeError, match="binding write failed"):
-        await publish(configured, 2)
-    assert rows(configured, "flow") == before_flow
-    assert rows(configured, "flowversion") == before_versions
+    binding = AsyncMock(side_effect=RuntimeError("binding write failed"))
+    monkeypatch.setattr(configured.runtime, "aapply_source_bindings", binding)
+    await publish(configured, 2)
+    assert next(row for row in rows(configured, "flow") if row["id"] == "wf")["status"] == 2
+    assert next(row for row in rows(configured, "flowversion") if row["id"] == 2)["is_current"] == 1
     assert rows(configured, "business_reference_set") == before_sets
+    binding.assert_not_awaited()
 
 
 async def test_partial_repair_retains_other_invalid_slot_and_only_fully_repaired_version_can_publish(configured):
@@ -159,7 +155,10 @@ async def test_partial_repair_retains_other_invalid_slot_and_only_fully_repaired
         connection.execute(
             sa.text("INSERT INTO wf_test_target(target_type,target_id,tenant_id) VALUES('model','8',101)")
         )
+    async with configured.session_factory() as session, session.begin():
+        session.add(LLMModel(id=8, tenant_id=101, server_id=1, model_name="m-8", model_type="llm"))
     await save(configured, 2, graph(node("a", "llm", model_id=8), node("b", "llm", model_id=7)))
+    await save_fixtures.refresh(configured)
     assert {
         (row["slot_key"], row["target_id"])
         for row in rows(configured, "business_resource_reference")
@@ -178,12 +177,11 @@ async def test_partial_repair_retains_other_invalid_slot_and_only_fully_repaired
     )
 
 
-async def test_current_switch_rejects_configuration_index_drift(configured):
+async def test_current_switch_ignores_auxiliary_index_drift(configured):
     async with configured.session_factory() as session, session.begin():
         version = await session.get(FlowVersion, 2)
         version.data = graph(node("drift", "llm", model_id=7))
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await current(configured, 2)
+    assert (await current(configured, 2)).status_code == 200
 
 
 async def test_unpublish_still_allows_stopping_business_with_invalid_configuration(configured):

@@ -8,7 +8,7 @@ _user_factory = None
 
 
 class HostedAppReferenceReadRuntime(ReferenceSourceReadRuntime):
-    """APP-only authority keeps final model checks bound to whole-source admission."""
+    """Bind selected model checks to the actual authorized app version."""
 
     def __init__(self, source_owner, verifier, repository, target_owners):
         super().__init__(verifier, repository, target_owners)

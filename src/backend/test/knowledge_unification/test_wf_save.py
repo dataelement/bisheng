@@ -15,17 +15,16 @@ from bisheng.common.errcode.flow import WorkFlowOnlineEditError
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
 from bisheng.resource_reference.application.contracts import SourceKey
+from bisheng.resource_reference.application.source_sync import refresh_root
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
 from bisheng.workflow.domain.services.reference_extractor import (
     WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
-    extract_workflow_version_references,
 )
 from test.knowledge_unification import test_wf_create as create_fixtures
 from test.knowledge_unification.test_wf_extract import graph, node
@@ -59,6 +58,10 @@ async def saved(bindings, monkeypatch):
     return bindings
 
 
+async def refresh(context):
+    await refresh_root(101, "workflow_version", "wf", session_factory=context.session_factory)
+
+
 async def save(context, version_id, saved_data, name=None):
     return await flow_service.FlowService.update_version_info(
         context.request,
@@ -74,6 +77,9 @@ async def test_new_leaf_uses_flushed_id_and_draft_reference_set(saved):
     )
     assert result.status_code == 200 and result.data.id not in {None, 1, 2, 3}
     indexed = [row for row in rows(saved, "business_reference_set") if row["source_version"] == str(result.data.id)]
+    assert indexed == []
+    await refresh(saved)
+    indexed = [row for row in rows(saved, "business_reference_set") if row["source_version"] == str(result.data.id)]
     assert len(indexed) == 1 and indexed[0]["effective"] == 1 and indexed[0]["ready"] == 1
     references = rows(saved, "business_resource_reference")
     assert [(row["source_version"], row["slot_key"], row["target_id"]) for row in references] == [
@@ -86,6 +92,8 @@ async def test_current_and_noncurrent_saved_versions_keep_independent_sets(saved
     second = graph(node("second", "llm", model_id=7))
     assert (await save(saved, 1, first)).status_code == 200
     assert (await save(saved, 2, second)).status_code == 200
+    assert not rows(saved, "business_resource_reference")
+    await refresh(saved)
     assert {(row["source_version"], row["slot_key"]) for row in rows(saved, "business_resource_reference")} == {
         ("1", "node:first.model_id"),
         ("2", "node:second.model_id"),
@@ -95,38 +103,28 @@ async def test_current_and_noncurrent_saved_versions_keep_independent_sets(saved
         assert (await session.get(Flow, root["id"])).data == first
 
 
-async def test_binding_failure_rolls_back_existing_definition_and_source_revisions(saved, monkeypatch):
-    before_versions = rows(saved, "flowversion")
+async def test_legacy_binding_writer_is_not_part_of_workflow_save(saved, monkeypatch):
     before_sets = rows(saved, "business_reference_set")
-    original = saved.runtime.aapply_source_bindings
-
-    async def fail_after_write(session, prepared):
-        await original(session, prepared)
-        raise RuntimeError("binding write failed")
-
-    monkeypatch.setattr(saved.runtime, "aapply_source_bindings", fail_after_write)
-    with pytest.raises(RuntimeError, match="binding write failed"):
-        await save(saved, 1, graph(node("first", "llm", model_id=7)), name="changed")
-    assert rows(saved, "flowversion") == before_versions
+    binding = AsyncMock(side_effect=RuntimeError("binding write failed"))
+    monkeypatch.setattr(saved.runtime, "aapply_source_bindings", binding)
+    data = graph(node("first", "llm", model_id=7))
+    result = await save(saved, 1, data, name="changed")
+    assert result.data.name == "changed" and result.data.data == data
     assert rows(saved, "business_reference_set") == before_sets
     assert not rows(saved, "business_resource_reference")
-    flow_service.FlowService.update_flow_hook.assert_not_awaited()
+    binding.assert_not_awaited()
+    flow_service.FlowService.update_flow_hook.assert_awaited_once()
 
 
-async def test_binding_failure_rolls_back_new_flushed_leaf(saved, monkeypatch):
-    original = saved.runtime.aapply_source_bindings
-
-    async def fail_after_write(session, prepared):
-        await original(session, prepared)
-        raise RuntimeError("binding write failed")
-
-    monkeypatch.setattr(saved.runtime, "aapply_source_bindings", fail_after_write)
-    with pytest.raises(RuntimeError, match="binding write failed"):
-        await flow_service.FlowService.create_new_version(
-            saved.user, "wf", FlowVersionCreate(name="uncommitted", data=graph(node("n", "llm", model_id=7)))
-        )
-    assert {row["id"] for row in rows(saved, "flowversion")} == {1, 2, 3}
+async def test_new_flushed_leaf_does_not_call_legacy_binding_writer(saved, monkeypatch):
+    binding = AsyncMock(side_effect=RuntimeError("binding write failed"))
+    monkeypatch.setattr(saved.runtime, "aapply_source_bindings", binding)
+    result = await flow_service.FlowService.create_new_version(
+        saved.user, "wf", FlowVersionCreate(name="committed", data=graph(node("n", "llm", model_id=7)))
+    )
+    assert result.data.id in {row["id"] for row in rows(saved, "flowversion")}
     assert not rows(saved, "business_resource_reference")
+    binding.assert_not_awaited()
 
 
 async def test_no_reference_incomplete_new_draft_still_gets_ready_source(saved):
@@ -134,38 +132,45 @@ async def test_no_reference_incomplete_new_draft_still_gets_ready_source(saved):
         saved.user, "wf", FlowVersionCreate(name="blank", data={})
     )
     indexed = [row for row in rows(saved, "business_reference_set") if row["source_version"] == str(result.data.id)]
+    assert indexed == []
+    await refresh(saved)
+    indexed = [row for row in rows(saved, "business_reference_set") if row["source_version"] == str(result.data.id)]
     assert len(indexed) == 1 and indexed[0]["ready"] == 1
 
 
-async def test_existing_unindexed_version_fails_closed_instead_of_bootstrapping(saved):
+async def test_existing_unindexed_version_can_be_saved_without_bootstrapping(saved):
     async with saved.session_factory() as session, session.begin():
         await session.execute(
             sa.delete(BusinessReferenceSet).where(
                 BusinessReferenceSet.source_id == "wf", BusinessReferenceSet.source_version == "1"
             )
         )
-    before = rows(saved, "flowversion")
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await save(saved, 1, graph(node("n", "llm", model_id=7)))
-    assert rows(saved, "flowversion") == before
+    data = graph(node("n", "llm", model_id=7))
+    assert (await save(saved, 1, data)).data.data == data
+    assert not [row for row in rows(saved, "business_reference_set") if row["source_version"] == "1"]
+    await refresh(saved)
+    assert any(row["source_version"] == "1" for row in rows(saved, "business_resource_reference"))
 
 
-async def test_actual_configuration_drift_is_rejected_instead_of_reindexed_by_ordinary_save(saved):
+async def test_auxiliary_configuration_drift_does_not_block_save(saved):
     async with saved.session_factory() as session, session.begin():
         version = await session.get(FlowVersion, 2)
         version.data = graph(node("unindexed-old", "llm", model_id=7))
-    before = rows(saved, "flowversion")
     before_sets = rows(saved, "business_reference_set")
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await save(saved, 2, graph(node("next", "llm", model_id=7)))
-    assert rows(saved, "flowversion") == before
+    data = graph(node("next", "llm", model_id=7))
+    assert (await save(saved, 2, data)).data.data == data
     assert rows(saved, "business_reference_set") == before_sets
     assert not rows(saved, "business_resource_reference")
+    await refresh(saved)
+    assert [(row["source_version"], row["slot_key"]) for row in rows(saved, "business_resource_reference")] == [
+        ("2", "node:next.model_id")
+    ]
 
 
 async def test_removing_one_semantic_slot_keeps_other_slot_on_same_target(saved):
     await save(saved, 2, graph(node("a", "llm", model_id=7), node("b", "llm", model_id=7)))
     await save(saved, 2, graph(node("b", "llm", model_id=7)))
+    await refresh(saved)
     assert [(row["source_version"], row["slot_key"]) for row in rows(saved, "business_resource_reference")] == [
         ("2", "node:b.model_id")
     ]
@@ -174,6 +179,7 @@ async def test_removing_one_semantic_slot_keeps_other_slot_on_same_target(saved)
 async def test_restoring_deleted_version_reestablishes_its_source_without_changing_current(saved):
     result = await save(saved, 3, graph(node("restored", "llm", model_id=7)))
     assert result.data.is_delete == 0 and result.data.is_current == 0
+    await refresh(saved)
     assert {(row["source_version"], row["slot_key"]) for row in rows(saved, "business_resource_reference")} == {
         ("3", "node:restored.model_id")
     }
@@ -207,35 +213,24 @@ async def test_empty_graph_update_cannot_bypass_online_current_version_edit_guar
     assert rows(saved, "flowversion") == before
 
 
-async def test_partial_save_cannot_overwrite_a_newer_normal_save_before_runtime_candidate_read(saved, monkeypatch):
-    original = saved.runtime.aprepare_source_bindings
+async def test_partial_save_cannot_overwrite_version_changed_before_root_lock(saved, monkeypatch):
+    lock = WorkflowVersionRepository.alock_root
     newer_data = graph(node("concurrent", "llm", model_id=7))
 
-    async def concurrent_save_then_prepare(session, source_key, references, **kwargs):
+    async def concurrent_save_then_lock(session, *args, **kwargs):
         async with saved.session_factory() as concurrent, concurrent.begin():
-            root = await WorkflowVersionRepository.aget_root(concurrent, "wf", 101)
-            prepared = await original(
-                concurrent,
-                key(2),
-                extract_workflow_version_references(newer_data),
-                extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
-                lock_source_root=lambda sql: WorkflowVersionRepository.alock_root(sql, "wf", 101),
+            await concurrent.execute(
+                sa.update(FlowVersion).where(FlowVersion.id == 2).values(name="concurrent", data=newer_data)
             )
-            await WorkflowVersionRepository.aupdate_version(
-                concurrent, root, FlowVersion(id=2, flow_id="wf", name="concurrent", data=newer_data)
-            )
-            await saved.runtime.aapply_source_bindings(concurrent, prepared)
-        return await original(session, source_key, references, **kwargs)
+        return await lock(session, *args, **kwargs)
 
-    monkeypatch.setattr(saved.runtime, "aprepare_source_bindings", concurrent_save_then_prepare)
+    monkeypatch.setattr(WorkflowVersionRepository, "alock_root", concurrent_save_then_lock)
     with pytest.raises(KnowledgeOperationPlanConflictError):
         await save(saved, 2, None, name="stale rename")
     async with saved.session_factory() as session:
         version = await session.get(FlowVersion, 2)
         assert version.name == "concurrent" and version.data == newer_data
-    assert [(row["source_version"], row["slot_key"]) for row in rows(saved, "business_resource_reference")] == [
-        ("2", "node:concurrent.model_id")
-    ]
+    assert not rows(saved, "business_resource_reference")
 
 
 @pytest.mark.parametrize("operation", ["save", "create", "delete", "current"])

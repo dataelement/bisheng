@@ -22,7 +22,9 @@ from bisheng.core.context.tenant import (
 )
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
+from bisheng.llm.domain.repositories.reference_target_repository import _revision as target_revision
 from bisheng.resource_reference.application.contracts import TargetKey
+from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 
 
 def _revision(row) -> str:
@@ -41,11 +43,18 @@ class ModelRemovalSnapshot:
     targets: tuple[TargetKey, ...]
     server_revision: str
     model_revisions: tuple[tuple[str, str], ...]
+    target_revisions: tuple[tuple[str, str], ...] = ()
 
 
 class ModelDeletionRepository:
     async def alock_removal_targets(
-        self, session: AsyncSession, *, server_id: int, retained_model_ids, delete_server: bool = False
+        self,
+        session: AsyncSession,
+        *,
+        server_id: int,
+        retained_model_ids,
+        delete_server: bool = False,
+        legacy_operation_id=None,
     ) -> ModelRemovalSnapshot:
         if not isinstance(session, AsyncSession):
             raise TypeError("model removal requires a native AsyncSession")
@@ -107,6 +116,33 @@ class ModelDeletionRepository:
         provider_revision = hashlib.sha256(
             json.dumps((_revision(server), revisions), separators=(",", ":")).encode()
         ).hexdigest()
+        tombstones = {}
+        if legacy_operation_id is not None:
+            # Only resume the old operation's real deletion markers. New operations
+            # do not read or write this table and do not certify reverse hints.
+            model = ResourceReferenceTombstone
+            with session.no_autoflush, strict_tenant_filter():
+                rows = (
+                    (
+                        await session.execute(
+                            select(model)
+                            .where(
+                                model.tenant_id == tenant,
+                                model.target_tenant_id == tenant,
+                                model.target_type == "model",
+                                model.target_id.in_(tuple(str(ident) for ident in model_ids)),
+                                model.operation_id == legacy_operation_id,
+                            )
+                            .with_for_update()
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+            tombstones = {row.target_id: row for row in rows}
+        target_revisions = tuple(
+            (str(row.id), target_revision(row, server, tombstones.get(str(row.id)))) for row in models
+        )
         return ModelRemovalSnapshot(
             server.id,
             tenant,
@@ -115,4 +151,5 @@ class ModelDeletionRepository:
             tuple(TargetKey("model", str(value)) for value in model_ids if value not in retained_set),
             provider_revision,
             revisions,
+            target_revisions,
         )

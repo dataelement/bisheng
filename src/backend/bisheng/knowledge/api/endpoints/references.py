@@ -15,9 +15,7 @@ router = APIRouter(tags=["knowledge_references"])
 
 
 def get_reference_service():
-    from bisheng.knowledge.application.unification_coverage import production_coverage_factory
-
-    return KnowledgeReferenceService(coverage_factory=production_coverage_factory)
+    return KnowledgeReferenceService()
 
 
 class ReferenceSelectionRequest(BaseModel):

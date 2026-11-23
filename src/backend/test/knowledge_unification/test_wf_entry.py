@@ -257,7 +257,17 @@ async def test_real_core_transient_is_bound_to_original_request_and_never_writes
 
 
 async def test_real_core_missing_saved_index_does_not_bootstrap(real_core):
-    from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+    import sqlalchemy as sa
 
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await module.prepare_saved(real_core.identity, "wf", version_id=2)
+    from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+
+    result = await module.prepare_saved(real_core.identity, "wf", version_id=2)
+    assert result.source_key.source_version == "2"
+    async with AsyncSession(real_core.engine) as session:
+        assert (
+            not (
+                await session.execute(sa.select(BusinessReferenceSet).where(BusinessReferenceSet.source_version == "2"))
+            )
+            .scalars()
+            .all()
+        )

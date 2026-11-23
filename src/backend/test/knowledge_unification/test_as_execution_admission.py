@@ -43,7 +43,7 @@ async def admission_db(tmp_path, monkeypatch):
     snapshot = AuthorizedSourceSnapshot(
         SourceKey(101, "assistant", "as-a", "current"), (), "assistant-v1", payload_digest(payload), payload
     )
-    result = SourceReferenceReadResult(snapshot, (), 3, 4)
+    result = SourceReferenceReadResult(snapshot, ())
     scope = object()
     issue = AsyncMock(return_value=scope)
     execute = AsyncMock(return_value=result)
@@ -267,14 +267,14 @@ async def test_actual_core_and_source_owner_share_business_configuration_and_tra
     try:
         async with AsyncSession(engine) as session, session.begin():
             result = await AssistantExecutionAdmission.prepare(user, "owned", session=session)
-            assert result.source_revision == 3 and result.root_revision == 4
+            assert not hasattr(result, "source_revision")
             assert {ref.target.target_id for ref in result.snapshot.references} == {"7", "10"}
             assert not session.identity_map and session.in_transaction()
     finally:
         reset_current_permission_actor(token)
 
 
-async def test_actual_core_refuses_unindexed_business_drift_instead_of_repairing_it(source_db, monkeypatch):
+async def test_actual_core_uses_current_business_configuration_without_repairing_index(source_db, monkeypatch):
     from sqlalchemy import update
 
     from bisheng.database.models.assistant import Assistant
@@ -286,8 +286,8 @@ async def test_actual_core_refuses_unindexed_business_drift_instead_of_repairing
             await session.execute(
                 update(Assistant).where(Assistant.id == "owned", Assistant.tenant_id == 101).values(model_name="8")
             )
-            with pytest.raises(ReferenceCoverageNotReadyError):
-                await AssistantExecutionAdmission.prepare(user, "owned", session=session)
+            result = await AssistantExecutionAdmission.prepare(user, "owned", session=session)
+            assert result.snapshot.references
             assert not session.identity_map
     finally:
         reset_current_permission_actor(token)
@@ -340,7 +340,7 @@ async def test_real_deleted_target_is_inspectable_but_never_executable(source_db
         async with AsyncSession(engine) as session, session.begin():
             result = await AssistantExecutionAdmission.prepare(user, "owned", session=session, purpose="inspect")
             deleted = next(fact for fact in result.target_states if fact.key.target_type == kind)
-            assert deleted.state == "invalid_deleted" and not deleted.is_valid
+            assert deleted.state == "invalid_missing" and not deleted.is_valid
             with pytest.raises(ResourceReferenceInvalidError):
                 await AssistantExecutionAdmission.prepare(user, "owned", session=session)
             assert not session.identity_map

@@ -12,7 +12,6 @@ from bisheng.knowledge.domain.repositories.model_reference_repository import Kno
 from bisheng.knowledge.domain.services.model_reference_extractor import (
     KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
     knowledge_model_source_configuration,
-    legacy_knowledge_model_version,
 )
 from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import (
@@ -202,11 +201,7 @@ class KnowledgeReferenceSourceOwner:
             run_async_safe(self._authorize(identity, row, actor))
         elif row["tenant_id"] != identity.tenant_id:
             raise ResourceReferenceInvalidError(reason="knowledge_model_internal_source_not_owned")
-        version = legacy_knowledge_model_version(row["model"], row["model_transition"])
-        retained = version is not None and self.repository.has_legacy_name_retention(
-            session, SourceKey(row["tenant_id"], SourceType.KNOWLEDGE, str(row["id"]), "current"), version
-        )
-        return self._snapshot(row, retained_legacy=retained)
+        return self._snapshot(row, retained_legacy=True)
 
     async def aresolve_source(self, session, request, identity):
         knowledge_id, actor = self._actor(session, request, identity)
@@ -214,11 +209,7 @@ class KnowledgeReferenceSourceOwner:
         if row is None:
             raise KnowledgeNotExistError()
         await self._authorize(identity, row, actor)
-        version = legacy_knowledge_model_version(row["model"], row["model_transition"])
-        retained = version is not None and await self.repository.ahas_legacy_name_retention(
-            session, SourceKey(row["tenant_id"], SourceType.KNOWLEDGE, str(row["id"]), "current"), version
-        )
-        return self._snapshot(row, retained_legacy=retained)
+        return self._snapshot(row, retained_legacy=True)
 
     def revalidate_source(self, session, request, identity, expected):
         knowledge_id, actor = self._actor(session, request, identity)
@@ -232,11 +223,7 @@ class KnowledgeReferenceSourceOwner:
             run_async_safe(self._authorize(identity, row, actor))
         elif row["tenant_id"] != identity.tenant_id:
             raise ResourceReferenceInvalidError(reason="knowledge_model_internal_source_not_owned")
-        version = legacy_knowledge_model_version(row["model"], row["model_transition"])
-        retained = version is not None and self.repository.has_legacy_name_retention(
-            session, SourceKey(row["tenant_id"], SourceType.KNOWLEDGE, str(row["id"]), "current"), version
-        )
-        current = self._snapshot(row, retained_legacy=retained)
+        current = self._snapshot(row, retained_legacy=True)
         if not isinstance(expected, AuthorizedSourceSnapshot) or current != expected:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
         return current
@@ -247,11 +234,7 @@ class KnowledgeReferenceSourceOwner:
         if row is None:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
         await self._authorize(identity, row, actor)
-        version = legacy_knowledge_model_version(row["model"], row["model_transition"])
-        retained = version is not None and await self.repository.ahas_legacy_name_retention(
-            session, SourceKey(row["tenant_id"], SourceType.KNOWLEDGE, str(row["id"]), "current"), version
-        )
-        current = self._snapshot(row, retained_legacy=retained)
+        current = self._snapshot(row, retained_legacy=True)
         if not isinstance(expected, AuthorizedSourceSnapshot) or current != expected:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
         return current

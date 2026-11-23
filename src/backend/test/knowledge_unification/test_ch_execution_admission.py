@@ -19,7 +19,7 @@ from bisheng.channel.application.execution_admission import ChannelSyncExecution
 from bisheng.channel.application.reference_source_owner import ChannelReferenceSourceOwner
 from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
 from bisheng.channel.domain.schemas.channel_manager_schema import UpdateChannelRequest
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.knowledge.application.source_read_target_owner import KnowledgeSourceReadTargetOwner
@@ -174,8 +174,20 @@ async def test_missing_index_is_not_repaired_during_delivery(admitted):
                 BusinessReferenceSet.source_id == value.root.id, BusinessReferenceSet.tenant_id == 101
             )
         )
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await ChannelSyncExecutionAdmission.prepare(value.identity, value.root.id, value.config_id, value.detected_at)
+    result = await ChannelSyncExecutionAdmission.prepare(
+        value.identity, value.root.id, value.config_id, value.detected_at
+    )
+    assert result.config["knowledge_space_id"] == "10"
+    async with value.context.sessions() as session:
+        assert (
+            not (
+                await session.execute(
+                    sa.select(BusinessReferenceSet).where(BusinessReferenceSet.source_id == value.root.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
 
 @pytest.mark.parametrize("values", [{"knowledge_id": 20}, {"file_type": 1}])

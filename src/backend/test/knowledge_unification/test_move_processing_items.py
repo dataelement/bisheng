@@ -141,8 +141,8 @@ async def test_real_common_savepoint_and_peek_claim_mismatch_roll_back(applicati
         raise RuntimeError("real composed phase failed")
 
     monkeypatch.setattr(
-        app.owner.reference_owner if fault == "r2" else app.owner.jobs,
-        "amove_file_ownership" if fault == "r2" else "amark_move_ready",
+        app.owner.jobs,
+        "amark_move_ready",
         fail,
     )
     with pytest.raises(asyncio.CancelledError if fault == "cancel" else RuntimeError):

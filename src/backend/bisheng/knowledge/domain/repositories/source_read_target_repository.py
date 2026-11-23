@@ -19,7 +19,6 @@ from bisheng.resource_reference.application.contracts import (
     is_preserved_foreign_space_reference,
 )
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
-from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +35,6 @@ class KnowledgeReadObservation:
 class KnowledgeSourceReadTargetRepository:
     def __init__(self, verifier):
         self.verifier = verifier
-        self.sources = SourceReadRepository(verifier)
 
     @staticmethod
     async def _rows(session, statement):
@@ -72,7 +70,7 @@ class KnowledgeSourceReadTargetRepository:
         else:
             await self.verifier.aget_source_snapshot(session, scope, identity)
             tenant_id = snapshot.source_key.tenant_id
-            originals = (await self.sources.aread_source(session, scope, identity)).references
+            originals = ()
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
         selected = {(key.target_type.value, key.target_id) for key in keys}
         originals = tuple(row for row in originals if (row.target_type, row.target_id) in selected)

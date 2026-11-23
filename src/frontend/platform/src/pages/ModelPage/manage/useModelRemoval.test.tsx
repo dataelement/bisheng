@@ -88,7 +88,7 @@ afterEach(() => {
 });
 
 describe("the original command and confirmation stay together", () => {
-  it("cannot apply an old force acknowledgement to a refreshed impact", async () => {
+  it("refreshes the advisory impact without submitting the old command", async () => {
     vi.mocked(precheckLLMServerUpdate).mockResolvedValue(preview(true));
     const { result } = renderHook(() =>
       useModelRemoval({ enabled: true, identityKey: "operator" }),
@@ -98,15 +98,11 @@ describe("the original command and confirmation stay together", () => {
       outcome = result.current.requestUpdate(draft());
     });
     await waitFor(() => expect(result.current.view?.result).toBeDefined());
-    act(() => result.current.requestForce());
-    const oldConfirmation = confirm.mock.calls[0][0];
     act(() => result.current.refresh());
     await waitFor(() =>
       expect(precheckLLMServerUpdate).toHaveBeenCalledTimes(2),
     );
     await waitFor(() => expect(result.current.view?.pending).toBe(false));
-    expect(oldConfirmation.signal.aborted).toBe(true);
-    await oldConfirmation.onOk(vi.fn());
     expect(updateLLMServer).not.toHaveBeenCalled();
     act(() => result.current.cancel());
     expect(await outcome).toBe(false);
@@ -174,8 +170,10 @@ describe("the original command and confirmation stay together", () => {
     expect(deleteLLMServer).not.toHaveBeenCalled();
   });
 
-  it("blocks ordinary removal, then requires a separate explicit force confirmation", async () => {
-    vi.mocked(precheckLLMServerUpdate).mockResolvedValue(preview(true));
+  it.each([true, false])("allows ordinary removal when reference check completeness is %s", async (complete) => {
+    const resultPreview = preview(true);
+    resultPreview.inspection.check_complete = complete;
+    vi.mocked(precheckLLMServerUpdate).mockResolvedValue(resultPreview);
     const { result } = renderHook(() =>
       useModelRemoval({ enabled: true, identityKey: "operator" }),
     );
@@ -187,12 +185,8 @@ describe("the original command and confirmation stay together", () => {
     body.config!.api_key = "changed after precheck";
     await waitFor(() => expect(result.current.view?.result).toBeDefined());
     act(() => result.current.confirm());
-    expect(updateLLMServer).not.toHaveBeenCalled();
-    act(() => result.current.requestForce());
-    expect(confirm).toHaveBeenCalledOnce();
-    await act(async () => {
-      await confirm.mock.calls[0][0].onOk(vi.fn());
-    });
+    await waitFor(() => expect(result.current.view).toBeNull());
+    expect(confirm).not.toHaveBeenCalled();
     expect(await outcome).toBe(true);
     expect(updateLLMServer).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -200,7 +194,7 @@ describe("the original command and confirmation stay together", () => {
         models: [expect.not.objectContaining({ id: expect.anything() })],
       }),
       {
-        force: true,
+        force: false,
         confirmation_id: "native-confirmation",
         plan_digest: "a".repeat(64),
       },
@@ -222,7 +216,6 @@ describe("the original command and confirmation stay together", () => {
     act(() => result.current.confirm());
     await waitFor(() => expect(result.current.view?.error).toBe("offline"));
     expect(result.current.view?.dispatched).toBe(true);
-    act(() => result.current.requestForce());
     expect(confirm).not.toHaveBeenCalled();
     act(() => result.current.confirm());
     await waitFor(() => expect(result.current.view).toBeNull());
@@ -273,13 +266,12 @@ describe("the original command and confirmation stay together", () => {
       outcome = result.current.requestDelete(7);
     });
     await waitFor(() => expect(result.current.view?.errorCode).toBe(10994));
-    act(() => result.current.requestForce());
     expect(confirm).not.toHaveBeenCalled();
     act(() => result.current.cancel());
     expect(await outcome).toBe(false);
   });
 
-  it("invalidates an open force confirmation when current permission changes", async () => {
+  it("invalidates the reviewed command when current permission changes", async () => {
     vi.mocked(precheckLLMServerUpdate).mockResolvedValue(preview(true));
     const { result, rerender } = renderHook(
       ({ enabled }) => useModelRemoval({ enabled, identityKey: "operator" }),
@@ -290,12 +282,9 @@ describe("the original command and confirmation stay together", () => {
       outcome = result.current.requestUpdate(draft());
     });
     await waitFor(() => expect(result.current.view?.result).toBeDefined());
-    act(() => result.current.requestForce());
-    const second = confirm.mock.calls[0][0];
     rerender({ enabled: false });
     expect(await outcome).toBe(false);
-    expect(second.signal.aborted).toBe(true);
-    await second.onOk(vi.fn());
+    act(() => result.current.confirm());
     expect(updateLLMServer).not.toHaveBeenCalled();
   });
 

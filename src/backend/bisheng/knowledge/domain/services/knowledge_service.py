@@ -117,6 +117,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.resource_reference.application.contracts import canonical_target_id
+from bisheng.resource_reference.application.source_sync import notify_reference_sync, notify_reference_sync_sync
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
 from bisheng.utils.async_utils import run_async_safe
@@ -937,14 +938,13 @@ class KnowledgeService(KnowledgeUtils):
             if not skip_hook:
                 run_async_safe(cls._project_library_created(login_user, actual), timeout=60)
 
-        # The actual flushed row drives projection. Knowledge and outgoing
-        # bindings share one SQL transaction; a projection failure rolls both
-        # back without invoking a compensating DAO in another Session.
+        # Project the flushed business row before its normal commit.
         with get_sync_db_session() as session:
             KnowledgeModelReferenceApplication.create(
                 session, db_knowledge, login_user=login_user, project_created=project_created
             )
             session.commit()
+            notify_reference_sync_sync(get_current_tenant_id(), "knowledge", str(db_knowledge.id))
 
         # qa knowledge builds its index lazily on first Q&A add (different schema)
         cls._init_knowledge_indices_sync(login_user.user_id, db_knowledge)
@@ -1006,6 +1006,7 @@ class KnowledgeService(KnowledgeUtils):
                 session, db_knowledge, login_user=login_user, project_created=project_created
             )
             await session.commit()
+            await notify_reference_sync(get_current_tenant_id(), "knowledge", str(db_knowledge.id))
 
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
@@ -1099,8 +1100,7 @@ class KnowledgeService(KnowledgeUtils):
             )
             knowledge = prepared.row
             # Preserve the existing projection -> external cleanup -> SQL
-            # finalize order. Files, QA pairs, Knowledge and outgoing bindings
-            # now finalize inside this one transaction.
+            # finalize order. Files, QA pairs and Knowledge share this transaction.
             run_async_safe(
                 cls._project_library_deletion(login_user, knowledge_id=knowledge_id, include_container=not only_clear),
                 timeout=300,
@@ -1109,6 +1109,7 @@ class KnowledgeService(KnowledgeUtils):
             cls.delete_knowledge_file_in_minio(knowledge_id)
             KnowledgeModelReferenceApplication.apply_removal(session, prepared)
             session.commit()
+            notify_reference_sync_sync(get_current_tenant_id(), "knowledge", str(knowledge_id))
 
         # Clear dropped the Milvus collection + ES index above; recreate empty
         # indices so the cleared (still-existing) resource stays queryable instead
@@ -1190,6 +1191,7 @@ class KnowledgeService(KnowledgeUtils):
                         login_user.user_id,
                     )
             session.commit()
+            notify_reference_sync_sync(get_current_tenant_id(), "knowledge", str(knowledge_id))
         if command is not None:
             # A queue failure cannot roll back already committed business
             # configuration. Operators retry this same operation/revision.
