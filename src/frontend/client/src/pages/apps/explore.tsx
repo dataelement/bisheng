@@ -4,7 +4,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToastContext } from "~/Providers";
-import { getChatOnlineApi, getUncategorized, recordUsedAppApi } from "~/api/apps";
+import { getChatOnlineApi, recordUsedAppApi } from "~/api/apps";
 import { NotificationSeverity } from "~/common";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useLocalize, useMediaQuery } from "~/hooks";
@@ -14,33 +14,22 @@ import { cn, copyText } from "~/utils";
 import { type AppTypeFilter, flowTypeForFilter, HOSTED_APP_FLOW_TYPE } from "./appTypes";
 import { getAppShareUrl } from "./appUtils";
 import { AgentCard } from "./components/AgentCard";
-import { AgentNavigation, type AppCategoryId } from "./components/AgentNavigation";
 import { AppSearchBar } from "./components/AppSearchBar";
-import { AppTypeSegmented } from "./components/AppTypeSegmented";
+import { AppTypeTabs } from "./components/AppTypeTabs";
 import { squareTypePath } from "~/pages/square/squarePaths";
 
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = "app-last-origin";
-/** Sentinel understood by `getChatOnlineApi` as "do not filter by tag". */
-const ALL_CATEGORIES = -1;
+const ALL_TAGS = -1;
+const PAGE_SIZE = 20;
 
-export default function ExplorePlaza() {
-  const [activeTabId, setActiveTabId] = useState<AppCategoryId | null>(null);
+export function ExplorePlaza() {
   const [searchQuery, setSearchQuery] = useState("");
-  // Kind filter (F001). It composes with the tag tab and with the keyword alike;
-  // tab and keyword stay mutually exclusive as before. A ref feeds fetchAgents,
-  // whose identity only follows the loading flags.
   const [typeFilter, setTypeFilter] = useState<AppTypeFilter>("all");
-  const typeFilterRef = useRef<AppTypeFilter>("all");
-  const handleTypeChange = useCallback((next: AppTypeFilter) => {
-    typeFilterRef.current = next;
-    setTypeFilter(next);
-  }, []);
   const [agents, setAgents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Cursor pagination state.
   const [hasMore, setHasMore] = useState(true);
@@ -50,7 +39,6 @@ export default function ExplorePlaza() {
   // Bumped by every first-page request. A response whose ticket no longer
   // matches has been superseded by a newer tab/keyword and is discarded.
   const listSeqRef = useRef(0);
-  const pageSize = 20;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,23 +59,9 @@ export default function ExplorePlaza() {
     return 1;
   }, [isAtLeast768, isAtLeast1024]);
 
-  // Tab and keyword are alternative filters, never combined: a search spans
-  // every category, so picking a tab drops the keyword and gives the user
-  // that tab's own contents back. Must stay referentially stable —
-  // AgentNavigation keys its initial tag load off this callback.
-  const handleCategoryChange = useCallback((categoryId: AppCategoryId) => {
-    setActiveTabId(categoryId);
-    setSearchQuery("");
-  }, []);
-
   // Fetch one cursor page. `cursor === null` starts a fresh list (first page).
   const fetchAgents = useCallback(
-    async (query: string, categoryId: AppCategoryId, cursor: string | null, isAppend: boolean) => {
-      // Infinite scroll stays serialized. A first-page request never is: it
-      // carries a new tab or keyword, and the old shared lock silently dropped
-      // it whenever one was still in flight — the grid then kept showing the
-      // previous filter's apps with the new keyword sitting in the box.
-      if (isAppend && (loading || loadingMore)) return;
+    async (query: string, type: AppTypeFilter, cursor: string | null, isAppend: boolean) => {
       const seq = isAppend ? listSeqRef.current : ++listSeqRef.current;
       setLoadError(false);
       if (isAppend) setLoadingMore(true);
@@ -96,13 +70,7 @@ export default function ExplorePlaza() {
         setLoadingMore(false);
       }
       try {
-        const keyword = query.trim();
-        // Both All and keyword searches omit the tag filter.
-        const tagId = keyword || typeof categoryId !== "number" ? ALL_CATEGORIES : categoryId;
-        const flowType = flowTypeForFilter(typeFilterRef.current);
-        const result = !keyword && categoryId === "uncategorized"
-          ? await getUncategorized(cursor, pageSize, undefined, flowType)
-          : await getChatOnlineApi(cursor, keyword, tagId, pageSize, "visible", flowType);
+        const result = await getChatOnlineApi(cursor, query.trim(), ALL_TAGS, PAGE_SIZE, "visible", flowTypeForFilter(type));
 
         if (seq !== listSeqRef.current) return;
         const pageData = result.list || [];
@@ -136,16 +104,15 @@ export default function ExplorePlaza() {
         }
       }
     },
-    [loading, loadingMore],
+    [],
   );
 
   useEffect(() => {
-    if (activeTabId === null) return;
     cursorRef.current = null;
     setHasMore(true);
     loadMoreLockRef.current = false;
-    fetchAgents(searchQuery, activeTabId, null, false);
-  }, [searchQuery, activeTabId, typeFilter, refreshTrigger]);
+    void fetchAgents(searchQuery, typeFilter, null, false);
+  }, [searchQuery, typeFilter, fetchAgents]);
 
   useEffect(() => {
     if (!loadingMore) {
@@ -164,11 +131,10 @@ export default function ExplorePlaza() {
           !loadError &&
           hasMore &&
           cursorRef.current !== null &&
-          activeTabId !== null &&
           !loadMoreLockRef.current
         ) {
           loadMoreLockRef.current = true;
-          fetchAgents(searchQuery, activeTabId, cursorRef.current, true);
+          void fetchAgents(searchQuery, typeFilter, cursorRef.current, true);
         }
       },
       { threshold: 0, rootMargin: "400px 0px" },
@@ -179,10 +145,7 @@ export default function ExplorePlaza() {
     }
 
     return () => observer.disconnect();
-  }, [loading, loadingMore, loadError, hasMore, searchQuery, activeTabId, fetchAgents]);
-
-  // Show the spinner while the navigation initializes the default tab.
-  const showLoading = loading || activeTabId === null;
+  }, [loading, loadingMore, loadError, hasMore, searchQuery, typeFilter, fetchAgents]);
 
   const handleCardClick = (agent: any) => {
     const flowId = agent.id;
@@ -265,19 +228,15 @@ export default function ExplorePlaza() {
         )}
       </SquareBanner>
 
-      {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
-      <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
-        <div className="order-2 max-[576px]:order-1 max-[576px]:w-full min-w-0 min-[577px]:shrink-0 flex items-center gap-3 max-[576px]:flex-col max-[576px]:items-stretch">
-          <AppTypeSegmented value={typeFilter} onChange={handleTypeChange} className="shrink-0" />
+      <div className="z-10 flex w-full max-w-[1000px] shrink-0 items-center justify-between gap-3 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch">
+        <div className="order-2 shrink-0 max-[576px]:order-1">
           <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
         </div>
-        <div className="order-1 max-[576px]:order-2 w-full min-w-0">
-          <AgentNavigation
-            onCategoryChange={handleCategoryChange}
-            onRefresh={() => setRefreshTrigger((prev) => prev + 1)}
-            searchActive={searchQuery.trim().length > 0}
-          />
-        </div>
+        <AppTypeTabs
+          className="order-1 min-w-0 max-[576px]:order-2"
+          value={typeFilter}
+          onChange={setTypeFilter}
+        />
       </div>
 
       {/* 智能体网格：滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
@@ -304,11 +263,11 @@ export default function ExplorePlaza() {
               "flex w-full flex-col items-center",
               // Empty/loading: fill the region and place content via flex spacers at a
               // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
-              showLoading || agents.length === 0 ? "flex-1" : "py-10",
+              loading || agents.length === 0 ? "flex-1" : "py-10",
             )}
           >
-            {(showLoading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
-            {showLoading ? (
+            {(loading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
+            {loading ? (
               <div className="flex flex-col items-center gap-3 text-blue-500">
                 <LoadingIcon className="size-20 text-primary" />
                 <span className="text-sm font-['PingFang_SC'] text-[#999999]">
@@ -323,7 +282,7 @@ export default function ExplorePlaza() {
                 </span>
               </div>
             ) : null}
-            {!showLoading && !loadingMore && loadError && (
+            {!loading && !loadingMore && loadError && (
               <div role="alert">
                 <StateView
                   size="panel"
@@ -333,9 +292,7 @@ export default function ExplorePlaza() {
                       color="default"
                       variant="outlined"
                       onClick={() => {
-                        if (activeTabId !== null) {
-                          void fetchAgents(searchQuery, activeTabId, cursorRef.current, cursorRef.current !== null);
-                        }
+                        void fetchAgents(searchQuery, typeFilter, cursorRef.current, cursorRef.current !== null);
                       }}
                     >
                       {localize("com_ui_retry")}
@@ -349,7 +306,7 @@ export default function ExplorePlaza() {
                 {localize("com_app_explore_end_of_list")}
               </p>
             )}
-            {!showLoading && !loadError && agents.length === 0 && (
+            {!loading && !loadError && agents.length === 0 && (
               <div className="flex flex-col items-center">
                 <EmptyStateIllustration className="size-[120px] mb-4" />
                 <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">
@@ -357,7 +314,7 @@ export default function ExplorePlaza() {
                 </p>
               </div>
             )}
-            {(showLoading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
+            {(loading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
           </div>
         </div>
       </main>

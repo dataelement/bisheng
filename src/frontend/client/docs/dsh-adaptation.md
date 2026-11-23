@@ -16,7 +16,7 @@
 | 桌面语言 | [desktopLocale](../src/locales/desktopLocale.ts)、[useDesktopLocale](../src/layouts/useDesktopLocale.ts) | 复用 `dshLocale`、`dsh:locale`；该路径要求实际桌面桥接，不改网页用户的持久语言偏好 |
 | 全窗口弹窗与背景尺寸 | [desktopViewport](../src/layouts/desktopViewport.module.css)、[MainLayout](../src/layouts/MainLayout.tsx)、[useMediaQuery](../src/hooks/useMediaQuery.tsx) | 公共布局常驻加载宿主预留尺寸，不能放在聊天页的按需样式中；背景按内容区域排版，body Portal 仍使用整个原生窗口 |
 | 桌面主按钮 | [desktop-buttons.css](../src/desktop-buttons.css) | 命中已有 `.btn-brand-primary`，不逐页复制控件 |
-| 指定模块的桌面 Tab | [desktop-tabs.css](../src/desktop-tabs.css) | 在现有 `Tabs` 上加 `.dsh-home-tabs`；当前只接知识空间、工具与技能 |
+| 指定模块的桌面 Tab | [desktop-tabs.css](../src/desktop-tabs.css) | 在现有 `Tabs` 上加 `.dsh-home-tabs`；当前用于知识空间、工具与技能和智能应用首页 |
 | 桌面 Switch | [desktop-switches.css](../src/desktop-switches.css) | 通过共享 Switch 的 `data-slot` 接入，统一普通/小号的桌面外观，保留原状态与回调 |
 | 聊天专用外观 | [chat-surface.css](../src/components/Chat/chat-surface.css)、[chat-controls.css](../src/components/Chat/chat-controls.css) | 在聊天范围内维护，不把聊天标记当成全站桌面判断 |
 | 模块首页与内部页布局 | [ModuleHome](../src/components/ModuleHome/ModuleHome.tsx)、[布局说明](../../../../docs/module-home-layout.md) | 首页、知识空间内部页及频道浏览/阅读态复用桌面框架；局部规则分别位于 KnowledgeSpaceLayout / ChannelLayout CSS module。创建/编辑知识空间和频道共用 ModuleSettingsLayout CSS module。频道分栏容量和设置页双栏均使用扣除外侧留白后的内容容器 |

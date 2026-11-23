@@ -13,7 +13,7 @@ import type { SquareType } from './squarePaths';
 const PANES: Record<SquareType, ReturnType<typeof lazy>> = {
   knowledge: lazy(() => import('~/pages/knowledge/KnowledgeSquarePane').then((module) => ({ default: module.KnowledgeSquarePane }))),
   channel: lazy(() => import('~/pages/Subscription/ChannelSquarePane').then((module) => ({ default: module.ChannelSquarePane }))),
-  apps: lazy(() => import('~/pages/apps/explore')),
+  apps: lazy(() => import('~/pages/apps/explore').then((module) => ({ default: module.ExplorePlaza }))),
   skills: lazy(() => import('~/pages/skills/SkillSquarePane').then((module) => ({ default: module.SkillSquarePane }))),
 };
 

@@ -35,8 +35,8 @@ import { squareTypePath } from "~/pages/square/squarePaths";
 const WebView = lazy(() => import("@/components/WebView"));
 const AppChat = lazy(() => import("@/pages/appChat"));
 const AppChatEntry = lazy(() => import("@/pages/appChat/AppChatEntry"));
-const AgentCenter = lazy(() => import("@/pages/apps"));
-const ExplorePlaza = lazy(() => import("@/pages/apps/explore"));
+const AgentCenter = lazy(() => import("@/pages/apps").then((module) => ({ default: module.AppCenter })));
+const ExplorePlaza = lazy(() => import("@/pages/apps/explore").then((module) => ({ default: module.ExplorePlaza })));
 const Share = lazy(() => import("@/pages/share"));
 const SkillCenterPage = lazy(() =>
   import("~/pages/skills/SkillCenterPage").then((module) => ({
