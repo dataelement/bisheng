@@ -13,9 +13,9 @@ development_status: null
 acceptance_status: null
 deliveries: []
 artifacts:
-  requirements: requirements.html
-  design: design.html
-  development_cases: test-cases.html
+  requirements: requirements.md
+  design: design.md
+  development_cases: test-cases.md
   tasks: tasks.md
   resume: state.md
   handoff: handoff.md

@@ -1,0 +1,74 @@
+# Local app, middleware on 192.168.106.116. Database is the remote bisheng schema.
+# Password in database_url is Fernet-encrypted "1234" (same as docker compose default).
+
+database_url:
+  "mysql+pymysql://root:gAAAAABq12Gt1wl0aDiFU6Kpj81H47U9tNVdtPPICUjqfLeaFlvXb84us63xFRJtM7Lz__vTgjETlPiCvxH8xr0gE09jv8LRBCp8yZDNpHI5pCKaAxrFJCI=@192.168.106.116:3306/langflow?charset=utf8mb4"
+
+database_pool:
+  pool_size: 20
+  max_overflow: 10
+  pool_timeout: 30
+  pool_recycle: 3600
+  pool_pre_ping: true
+  ssl:
+    enabled: false
+
+redis_url: "redis://192.168.106.116:6379/1"
+
+openfga:
+  enabled: true
+  api_url: "http://192.168.106.116:8080"
+  force_write_model: false
+
+sso_sync:
+  gateway_hmac_secret: "bisheng-local-hmac-20260422"
+  signature_header: "X-Signature"
+
+celery_redis_url: "redis://192.168.106.116:6379/2"
+
+celery_task:
+  task_routers:
+    bisheng.worker.knowledge.*:
+      queue: knowledge_celery
+
+vector_stores:
+  milvus:
+    # connection_args: !env ${BS_MILVUS_CONNECTION_ARGS}
+    # is_partition: !env ${BS_MILVUS_IS_PARTITION}
+    # partition_suffix: !env ${BS_MILVUS_PARTITION_SUFFIX}
+    connection_args: '{"host":"192.168.106.116","port":"19530","user":"","password":"","secure":false}'
+    is_partition: true
+    partition_suffix: '1'
+  elasticsearch:
+    # url: !env ${BS_ELASTICSEARCH_URL}
+    # ssl_verify: !env ${BS_ELASTICSEARCH_SSL_VERIFY}
+    url: 'http://192.168.106.116:9200'
+    ssl_verify: '{}'
+
+object_storage:
+  type: minio
+  minio:
+    # schema: !env ${BS_MINIO_SCHEMA}
+    # cert_check: !env ${BS_MINIO_CERT_CHECK}
+    # endpoint: !env ${BS_MINIO_ENDPOINT}
+    # sharepoint: !env ${BS_MINIO_SHAREPOINT}
+    # access_key: !env ${BS_MINIO_ACCESS_KEY}
+    # secret_key: !env ${BS_MINIO_SECRET_KEY}
+    schema: false
+    cert_check: false
+    endpoint: '192.168.106.116:9000'
+    sharepoint: '192.168.106.116:9000'
+    access_key: 'minioadmin'
+    secret_key: 'minioadmin'
+    public_bucket: 'bisheng'
+    tmp_bucket: 'tmp-dir'
+
+environment:
+  env: dev
+  uns_support: ['png','jpg','jpeg','bmp','doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv', 'tiff']
+
+logger_conf:
+  level: DEBUG
+  format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+  handlers: []
+

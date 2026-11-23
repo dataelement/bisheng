@@ -7,7 +7,7 @@ description: >-
 # Sdd Design
 
 先读 [阶段交接规则](../sdd-workflow/references/stage-contract.md)，再用 [设计检查要点](references/design-checks.md) 选择适用检查。
-撰写或优化设计文档时，使用 [设计文档写作与完成标准](references/design-writing-standard.md) 和 [HTML 模板](assets/design-template.html)。模板提供阅读结构和可填写表格；生成正式方案时替换模板字段、移除撰写提示，不把模板示意当作项目事实。
+撰写或优化设计文档时，使用 [设计文档写作与完成标准](references/design-writing-standard.md) 和 [Markdown 模板](assets/design-template.md)。模板提供阅读结构和可填写表格；生成正式方案时替换模板字段、移除撰写提示，不把模板示意当作项目事实。
 
 ## 进入条件
 
@@ -37,7 +37,7 @@ description: >-
 
 ## 产物与完成
 
-按 [HTML 交付约定](../sdd-workflow/references/html-delivery.md) 交付实际 HTML 设计文档，含现状、关键决策和理由、必要契约、影响范围、已知限制、验证办法及需求映射。关联有效需求版本和稳定 REQ／AC；已有非 HTML 材料仍可作输入，记录来源，本轮新形成需求稿时交付 HTML。设计本身不能只输出 Markdown 或对话摘要。
+按 [Markdown 交付约定](../sdd-workflow/references/markdown-delivery.md) 交付实际 Markdown 设计文档，含现状、关键决策和理由、必要契约、影响范围、已知限制、验证办法及需求映射。关联有效需求版本和稳定 REQ／AC；已有 HTML、Word 等材料仍可作输入，记录来源；本轮新形成需求稿时交付 Markdown。设计必须保存为实际 `.md` 文件，不能只有对话摘要。
 按分层阅读检查：非技术读者能复述方案、重要取舍和失败后的结果；研发能定位职责、契约、状态和约束；测试能推导正常、异常、边界及副作用的验证点。首次技术术语先解释业务含义再保留技术名，摘要、图中名称和图注同样遵守，不能只在后文补解释。
 每项需求有安排，关键正确性约束在适用正常、异常和并发路径下均有明确机制、验证方法及证据边界，关键取舍和阻塞已处理，才能标记“设计就绪，待确认”。规则来源或关键保证不明时保留草稿与缺口，不凭作者判断补成已确认规则。
 完成前核对复杂难点及适用场景的选图安排、实际可见图解、图与需求／正文／契约／状态的一致性；必要图解缺失或矛盾应先处理。简单修改可复用有效图或用简短说明，不为数量增加图。

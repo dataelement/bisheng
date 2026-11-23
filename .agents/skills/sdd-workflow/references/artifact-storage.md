@@ -32,9 +32,9 @@ features/
     approval/
       087-delegated-approval/
         feature.yaml                # 项目没有等价登记时使用
-        requirements.html
-        design.html
-        test-cases.html              # 研发用例
+        requirements.md
+        design.md
+        test-cases.md              # 研发用例
         tasks.md
         state.md                    # 接续、待决事项、下一步
         handoff.md
