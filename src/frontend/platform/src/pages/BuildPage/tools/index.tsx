@@ -117,13 +117,14 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
     return (
         <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
-            <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main-content">
-                <div className="relative w-fit border-r border-border-base p-6">
+            <div className="relative flex h-full w-full overflow-hidden bg-background-main-content">
+                <div className="flex w-[17rem] shrink-0 flex-col overflow-y-auto border-r border-border-base p-6">
                     {type !== 'skill' && <SearchInput
+                        className="shrink-0"
                         placeholder={t("tools.search")}
                         onChange={(e) => setKeyword(e.target.value)}
                     />}
-                    <div className="mt-4">
+                    <div className="mt-4 shrink-0">
                         <div
                             className={`flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${type === "" && "bg-muted-foreground/10"
                                 }`}
@@ -154,16 +155,13 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             onClick={() => setType('skill')}
                         ><Sparkles /><span>{t('tools.skills')}</span></button>}
                     </div>
-                    {type !== 'skill' && <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
-                        <div className="flex items-center gap-2">
-                            <p className="text-sm text-muted-foreground break-keep">
-                                {t("tools.manageCustomTools")}
-                            </p>
-                            {/* F027 AC-12: "总记录数" badge removed from the tool list UI; backend response shape unchanged. */}
-                        </div>
-                    </div>}
+                    {type !== 'skill' && (
+                        <p className="mt-auto shrink-0 break-words pt-6 text-sm text-muted-foreground">
+                            {t("tools.manageCustomTools")}
+                        </p>
+                    )}
                 </div>
-                <div className="relative h-full w-full flex-1 overflow-auto p-5 pb-20 pt-2 scrollbar-hide">
+                <div className="relative h-full min-w-0 flex-1 overflow-auto p-5 pb-20 pt-2 scrollbar-hide">
                     {type === 'skill' ? <SkillManagement /> : <>
                     {
                         loading && <div className="absolute inset-0 z-10 flex items-center justify-center">
