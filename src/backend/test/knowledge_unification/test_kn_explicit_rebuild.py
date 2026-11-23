@@ -50,10 +50,7 @@ async def test_explicit_same_model_creates_operation_revision_and_generation(bus
         "current_model_id": "11",
         "pending_model_id": "11",
     }
-    assert {(item["slot_key"], item["target_id"]) for item in state["business_resource_reference"]} == {
-        ("model", "11"),
-        ("model_transition.pending_model_id", "11"),
-    }
+    assert not state["business_resource_reference"]
 
 
 async def test_normal_same_model_change_remains_metadata_only(business):

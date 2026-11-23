@@ -294,9 +294,7 @@ async def test_missing_stored_version_never_falls_back_to_current(evaluation_con
     ctx.score_llm.assert_not_awaited()
 
 
-async def test_source_becomes_unready_after_first_question_second_question_never_queues(
-    evaluation_context, monkeypatch
-):
+async def test_auxiliary_index_becoming_unready_does_not_stop_later_questions(evaluation_context, monkeypatch):
     ctx = evaluation_context
     runtime = workflow_runtime(ctx, monkeypatch)
 
@@ -310,15 +308,12 @@ async def test_source_becomes_unready_after_first_question_second_question_never
 
     runtime.execute.apply_async.side_effect = invalidate
     await service.add_evaluation_task(42, login_user=ctx.identity)
-    failed = row(ctx)
-    assert failed.status == EvaluationTaskStatus.failed.value
-    assert failed.result_score == {"old": "kept"} and failed.result_file_path == "old.csv"
-    assert runtime.execute.apply_async.call_count == 1 and len(runtime.callbacks) == 1
-    ctx.score_llm.assert_not_awaited()
-    ctx.redis.delete.assert_called_once()
+    assert row(ctx).status == EvaluationTaskStatus.success.value
+    assert runtime.execute.apply_async.call_count == 2 and len(runtime.callbacks) == 2
+    ctx.score_llm.assert_awaited()
 
 
-async def test_initial_bad_source_fails_before_csv_redis_provider_or_queue(evaluation_context, monkeypatch):
+async def test_initial_unready_auxiliary_index_does_not_stop_evaluation(evaluation_context, monkeypatch):
     ctx = evaluation_context
     runtime = workflow_runtime(ctx, monkeypatch)
     with ctx.sync.begin() as connection:
@@ -326,12 +321,10 @@ async def test_initial_bad_source_fails_before_csv_redis_provider_or_queue(evalu
             sa.update(BusinessReferenceSet).where(BusinessReferenceSet.source_version == "2").values(ready=False)
         )
     await service.add_evaluation_task(42, login_user=ctx.identity)
-    assert row(ctx).status == EvaluationTaskStatus.failed.value
-    ctx.read_csv.assert_not_called()
-    ctx.get_redis.assert_not_called()
-    runtime.factory.assert_not_called()
-    runtime.execute.apply_async.assert_not_called()
-    ctx.score_llm.assert_not_awaited()
+    assert row(ctx).status == EvaluationTaskStatus.success.value
+    ctx.read_csv.assert_called()
+    assert runtime.execute.apply_async.call_count == 2
+    ctx.score_llm.assert_awaited()
 
 
 async def test_assistant_original_jwt_identity_enters_agent_and_every_run(evaluation_context, monkeypatch):

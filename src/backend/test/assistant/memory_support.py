@@ -155,7 +155,7 @@ async def _prepare_source(login_user, assistant_id, session=None):
     snapshot = AuthorizedSourceSnapshot(
         SourceKey(row.tenant_id, "assistant", assistant_id, "current"), (), "v1", payload_digest(payload), payload
     )
-    return SourceReferenceReadResult(snapshot, (), 1, 1)
+    return SourceReferenceReadResult(snapshot, ())
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""F025 native sync/async slot admission preserves the full source guard."""
+"""Native slot admission checks business configuration independently of reverse hints."""
 
 import json
 
@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import update
 from sqlmodel import Session
 
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from test.knowledge_unification import test_llm_default_read as reading
@@ -45,16 +45,16 @@ async def test_same_model_in_multiple_slots_checks_only_selected_type_and_redact
 
 @pytest.mark.parametrize("native_sync", [True, False])
 @pytest.mark.parametrize(
-    "field,value,error",
+    "field,value",
     [
-        ("digest", "bad-digest", ReferenceCoverageNotReadyError),
-        ("ready", False, ReferenceCoverageNotReadyError),
-        ("effective", False, ResourceReferenceInvalidError),
-        ("extractor_version", "wrong", ReferenceCoverageNotReadyError),
-        ("source_revision", 7, ReferenceCoverageNotReadyError),
+        ("digest", "bad-digest"),
+        ("ready", False),
+        ("effective", False),
+        ("extractor_version", "wrong"),
+        ("source_revision", 7),
     ],
 )
-async def test_complete_source_guard_still_fails_selected_good_slot(reads, native_sync, field, value, error):
+async def test_stale_source_index_does_not_block_selected_valid_slot(reads, native_sync, field, value):
     with Session(reads.engine) as session, session.begin():
         native.seed_default(session, key="knowledge_llm", payload={"source_model_id": 11, "embedding_model_id": 22})
         session.execute(
@@ -66,8 +66,8 @@ async def test_complete_source_guard_still_fails_selected_good_slot(reads, nativ
             )
             .values(**{field: value})
         )
-    with pytest.raises(error):
-        await admit(reads, native_sync, "knowledge_llm", ("source_model_id",))
+    actual = await admit(reads, native_sync, "knowledge_llm", ("source_model_id",))
+    assert json.loads(actual.payload_json)["source_model_id"] == 11
 
 
 @pytest.mark.parametrize("native_sync", [True, False])

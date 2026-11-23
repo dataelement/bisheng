@@ -103,7 +103,6 @@ it.each([
           view={state}
           onCancel={vi.fn()}
           onConfirm={vi.fn()}
-          onForce={vi.fn()}
           onRefresh={vi.fn()}
           onLoadMore={onLoadMore}
         />
@@ -141,6 +140,6 @@ it.each([
       screen.getByRole("button", {
         name: i18n.t("model.removalConfirmDelete", { ns: "model" }),
       }),
-    ).toBeDisabled();
+    ).toBeEnabled();
   },
 );

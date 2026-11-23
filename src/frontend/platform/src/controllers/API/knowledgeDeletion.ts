@@ -36,6 +36,7 @@ export type ReferenceInspection = {
   source_page: ReferencePage;
 };
 export type DeleteImpact = {
+  reference_check_complete?: boolean;
   source_counts: Record<string, number>;
   restricted_counts: Record<string, number>;
   source_page: ReferencePage;

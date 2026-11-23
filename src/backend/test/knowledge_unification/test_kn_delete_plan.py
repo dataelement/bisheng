@@ -9,7 +9,6 @@ from sqlalchemy import select
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
-    ResourceReferenceConflictError,
     ResourceReferenceInvalidError,
 )
 from bisheng.knowledge.application import knowledge_deletion as module
@@ -156,20 +155,15 @@ async def test_cleanup_failure_retries_same_committed_business_job_with_current_
         assert len((await session.execute(select(KnowledgeSpaceDeleteJob))).scalars().all()) == 1
 
 
-async def test_known_direct_reference_cannot_be_bypassed_by_confirming_non_executable_plan(application, context):
+async def test_known_direct_reference_is_advisory_in_the_business_plan(application, context):
     await native.native.seed(context, (31, 101, "assistant", "configured", "current", "file"))
     plan = await application.aprecheck(
         identity=application.user, space_id=1, selections=native.native.selections(("knowledge_file", 31))
     )
-    assert not plan.can_execute
-    with pytest.raises(ResourceReferenceConflictError):
-        await application.aconfirm(
-            identity=application.user,
-            space_id=1,
-            request=ProcessingCreateRequest(
-                confirmation_id=plan.confirmation_id, plan_digest=plan.plan_digest, idempotency_key="cannot-force-file"
-            ),
-        )
+    assert plan.can_execute
+    async with context.db.sessions() as session:
+        stored = await session.get(KnowledgeOperationPlan, plan.confirmation_id)
+        assert stored.source_revisions.keys() == {"root"}
     with pytest.raises(ResourceReferenceInvalidError):
         await application.aprecheck(
             identity=application.user,

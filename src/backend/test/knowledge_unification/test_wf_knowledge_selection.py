@@ -71,7 +71,9 @@ async def knowledge(saved, monkeypatch):
     )
     saved.repository = ReferenceRepository(verifier=verifier)
     saved.runtime = ReferenceBindingRuntime(saved.repository, verifier)
-    monkeypatch.setattr(flow_service, "get_reference_binding_runtime", AsyncMock(return_value=saved.runtime))
+    monkeypatch.setattr(
+        flow_service, "get_reference_binding_runtime", AsyncMock(return_value=saved.runtime), raising=False
+    )
     saved.hidden = set()
     saved.permission_calls = []
     saved.actor = PermissionActor(tenant_id=101, user_id=11)
@@ -105,6 +107,9 @@ async def knowledge(saved, monkeypatch):
         authorization, "get_f048_resource_registry", AsyncMock(return_value=SimpleNamespace(resolve=resolve))
     )
     monkeypatch.setattr(authorization, "get_f048_runtime", AsyncMock(return_value=SimpleNamespace(check_action=check)))
+    from bisheng.knowledge.application import copy_execution
+
+    monkeypatch.setattr(copy_execution, "require_copy_ready", AsyncMock())
     monkeypatch.setattr(flow_service, "require_business_action", gate)
     return saved
 
@@ -196,6 +201,8 @@ async def test_partial_repair_checks_only_new_target_and_keeps_other_hidden_slot
     )
     assert (await save_fixtures.save(knowledge, 2, next_data)).status_code == 200
     assert knowledge_calls(knowledge) == [("knowledge_space", "32", "visible")]
+    assert not rows(knowledge, "business_resource_reference")
+    await save_fixtures.refresh(knowledge)
     assert {(row["slot_key"], row["target_id"]) for row in rows(knowledge, "business_resource_reference")} == {
         ("node:a.knowledge", "32"),
         ("node:b.knowledge", "31"),

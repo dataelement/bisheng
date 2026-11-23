@@ -16,7 +16,6 @@ interface ModelRemovalDialogProps {
   view: ModelRemovalView | null;
   onCancel: () => void;
   onConfirm: () => void;
-  onForce: () => void;
   onRefresh: () => void;
   onLoadMore: () => void;
 }
@@ -82,7 +81,6 @@ export function ModelRemovalDialog({
   view,
   onCancel,
   onConfirm,
-  onForce,
   onRefresh,
   onLoadMore,
 }: ModelRemovalDialogProps) {
@@ -133,6 +131,7 @@ export function ModelRemovalDialog({
               description={t("model.removalRetrySameCommand")}
             />
           )}
+          {inspection?.check_complete === false && <Alert type="warning" description={t("model.removalHintsUnavailable")} />}
           {inspection && (
             <>
               <p className="text-sm">
@@ -272,8 +271,7 @@ export function ModelRemovalDialog({
             {t("model.cancel")}
           </Button>
           {!view.result ||
-          view.needsRefresh ||
-          (!view.dispatched && view.errorCode === 10994) ? (
+          view.needsRefresh ? (
             <Button
               disabled={view.pending}
               loading={view.pending}
@@ -285,7 +283,7 @@ export function ModelRemovalDialog({
             <>
               <Button
                 color="danger"
-                disabled={view.pending || (!view.dispatched && blocked)}
+                disabled={view.pending}
                 loading={view.pending}
                 onClick={onConfirm}
               >
@@ -297,16 +295,6 @@ export function ModelRemovalDialog({
                       : "model.removalConfirmSave",
                 )}
               </Button>
-              {blocked && !view.dispatched && view.errorCode !== 10994 && (
-                <Button
-                  color="danger"
-                  variant="outlined"
-                  disabled={view.pending}
-                  onClick={onForce}
-                >
-                  {t("model.removalForce")}
-                </Button>
-              )}
             </>
           )}
         </DialogFooter>

@@ -1,15 +1,20 @@
 """Internal model-removal impact and bounded source disclosure, without execution.
 
-The current request and real model Owner authorize the exact targets. Coverage
-must be supplied by a same-session MIG adapter; absence is never readiness.
+Real model ownership authorizes the exact targets. Saved reverse hints are
+optional review data and have no role in authorizing or freezing deletion.
 """
 
+import asyncio
 import hashlib
 import json
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass
+from types import SimpleNamespace
 
+from loguru import logger
 from sqlalchemy import inspect as inspect_orm
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -37,9 +42,7 @@ from bisheng.llm.domain.services.model_reference_cursor import (
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.application.access_context import get_current_public_api_principal
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.contracts import (
-    ReferenceState,
     SourceKey,
     SourceType,
     TargetKey,
@@ -48,7 +51,7 @@ from bisheng.resource_reference.application.contracts import (
 from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 from bisheng.resource_reference.application.source_disclosure import SourceDisclosureRuntime
 from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
-from bisheng.resource_reference.domain.repositories.coverage_repository import CoverageRepository
+from bisheng.resource_reference.domain.repositories.reference_hint_repository import ReferenceHintRepository
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 
 
@@ -73,8 +76,6 @@ class ModelReferenceInspection:
 @dataclass(frozen=True, slots=True)
 class PreparedModelRemoval:
     inspection: ModelReferenceInspection
-    receipts: tuple
-    runtime: ReferenceBindingRuntime
 
 
 def _binding_digest(row) -> bytes:
@@ -136,12 +137,14 @@ class ModelReferenceService:
         coverage_factory=None,
         runtime: ReferenceBindingRuntime | None = None,
         disclosure_runtime: SourceDisclosureRuntime | None = None,
+        session_factory=None,
     ):
         self.repository = ModelDeletionRepository()
         self.runtime = runtime
         self.coverage_factory = coverage_factory
         self.identity = AuthenticatedSourceReadIdentity()
         self.disclosure_runtime = disclosure_runtime
+        self.sessions = session_factory
 
     async def _authorize(self, identity):
         tenant = ReferenceRepository.current_tenant_id()
@@ -244,103 +247,75 @@ class ModelReferenceService:
             server_id=server_id,
             retained_model_ids=retained_model_ids,
             delete_server=delete_server,
+            legacy_operation_id=execution.operation_id if execution is not None and execution.impact else None,
         )
         execution_pin = self._execution_pin(session, execution, identity, removal)
-        receipts, scope = (), None
-        runtime = self.runtime or await guard.call(get_reference_binding_runtime)
-        if not isinstance(runtime, ReferenceBindingRuntime):
-            raise ReferenceCoverageNotReadyError(reason="reference_runtime_unconfigured")
-        if removal.targets:
-            receipts = await guard.call(runtime.verifier.averify_owner_targets, session, removal.targets)
-            for receipt in receipts:
-                target = receipt.target
-                if execution is None:
-                    valid = target.state == ReferenceState.VALID
-                else:
-                    evidence = target.evidence
-                    valid = (
-                        target.state == ReferenceState.DELETING
-                        and evidence is not None
-                        and evidence.operation_id == execution.operation_id
-                        and evidence.target == target.key
-                        and evidence.target_tenant_id == removal.owner_tenant_id
-                        and evidence.stage == "deleting"
-                        and execution.model_execution_metadata.get("reserved_target_revisions", {}).get(
-                            f"model:{target.key.target_id}"
-                        )
-                        == target.target_revision
-                    )
-                if not valid:
-                    raise ResourceReferenceInvalidError(reason="model_removal_target_unavailable")
-            scope = runtime.repository.target_owner_scope(session, receipts)
-        if self.coverage_factory is None:
-            raise ReferenceCoverageNotReadyError(reason="model_reference_coverage_unconfigured")
-        coverage = self.coverage_factory(session)
-        if not isinstance(coverage, CoverageRepository):
-            raise ReferenceCoverageNotReadyError(reason="model_reference_coverage_unconfigured")
-        before = await guard.call(coverage.arequire_global_ready)
-        await guard.call(coverage.arequire_ready)
-        owners = {receipt.target.key: receipt.target.target_tenant_id for receipt in receipts}
-        sources, slots, observed_tenants = {}, dict.fromkeys(SourceType, 0), set()
-        digest, cursor = hashlib.sha256(b"f118-model-inbound-v2\0"), None
-        guard.check()
-        if scope is not None:
-            async for page in runtime.repository.aiter_inbound_for_owner_pages(session, scope, global_id_order=True):
-                guard.check()
-                for row in page:
-                    if type(row.id) is not int or not 0 < row.id < 2**64 or (cursor is not None and row.id <= cursor):
-                        raise ReferenceCoverageNotReadyError(reason="reference_inbound_order_invalid")
-                    if (
-                        row.target_tenant_id != owners[TargetKey(row.target_type, row.target_id)]
-                        or row.target_space_id is not None
-                        or row.legacy_invalid_reason is not None
-                    ):
-                        raise ReferenceCoverageNotReadyError(reason="reference_inbound_target_inconsistent")
-                    key = SourceKey(row.tenant_id, row.source_type, row.source_id, row.source_version)
-                    sources[key] = sources.get(key, 0) + 1
-                    slots[key.source_type] += 1
-                    observed_tenants.add(row.tenant_id)
-                    digest.update(row.id.to_bytes(8, "big"))
-                    digest.update(_binding_digest(row))
-                    cursor = row.id
-        guard.check()
+        before = SimpleNamespace(coverage_epoch=0, tenant_inventory_hash="")
         return {
             "guard": guard,
             "original": original,
             "stable": stable,
             "removal": removal,
-            "receipts": receipts,
-            "coverage": coverage,
-            "before": before,
-            "sources": sources,
-            "slots": slots,
-            "tenants": observed_tenants,
-            "digest": digest.hexdigest(),
-            "blocked": cursor is not None,
             "execution": execution,
             "execution_pin": execution_pin,
-            "runtime": runtime,
+            "receipts": (),
+            "runtime": None,
+            "before": before,
+            "sources": {},
+            "slots": dict.fromkeys(SourceType, 0),
+            "tenants": set(),
+            "digest": "",
+            "blocked": False,
+            "complete": True,
         }
+
+    @asynccontextmanager
+    async def _hint_session(self, business_session):
+        factory = self.sessions
+        if factory is None:
+            from sqlmodel.ext.asyncio.session import AsyncSession as HintSession
+
+            def factory():
+                return HintSession(business_session.bind, expire_on_commit=False)
+
+        async with factory() as session, session.begin():
+            yield session
+
+    async def _hints(self, session, identity, facts):
+        try:
+            async with asyncio.timeout(2), self._hint_session(session) as hint_session:
+                rows = await ReferenceHintRepository().aread(hint_session, facts["removal"].targets)
+                digest = hashlib.sha256()
+                for row in rows:
+                    try:
+                        key = SourceKey(row.tenant_id, row.source_type, row.source_id, row.source_version)
+                    except (TypeError, ValueError) as error:
+                        raise ReferenceCoverageNotReadyError(reason="malformed_reference_hint") from error
+                    facts["sources"][key] = facts["sources"].get(key, 0) + 1
+                    facts["slots"][key.source_type] += 1
+                    digest.update(_binding_digest(row))
+                facts["digest"] = digest.hexdigest()
+                facts["blocked"] = bool(rows)
+                candidates = self._candidates(facts)
+                disclosed = []
+                for offset in range(0, len(candidates), 200):
+                    disclosed.extend(await self._disclose(hint_session, identity, candidates[offset : offset + 200]))
+                return tuple(disclosed)
+        except (TimeoutError, SQLAlchemyError, ReferenceCoverageNotReadyError) as error:
+            logger.warning(
+                "Model reference hints unavailable server={} error={}", facts["removal"].server_id, type(error).__name__
+            )
+            facts.update(sources={}, slots=dict.fromkeys(SourceType, 0), complete=False, blocked=False)
+            return ()
 
     async def _finish(self, identity, facts):
         guard = facts["guard"]
-        before = facts["before"]
-        await guard.call(
-            facts["coverage"].arequire_global_ready,
-            observed_source_tenant_ids=tuple(sorted(facts["tenants"])),
-            expected_epoch=before.coverage_epoch,
-            expected_inventory_hash=before.tenant_inventory_hash,
-        )
-        await guard.call(facts["coverage"].arequire_ready)
         if (
-            await guard.call(self.identity.acapture, identity) != facts["original"]
-            or await guard.call(self._stable_identity, identity) != facts["stable"]
+            await self.identity.acapture(identity) != facts["original"]
+            or await self._stable_identity(identity) != facts["stable"]
         ):
             raise ResourceReferenceInvalidError(reason="model_reference_identity_changed")
-        if (
-            self._execution_pin(facts["guard"].session, facts["execution"], identity, facts["removal"])
-            != facts["execution_pin"]
-        ):
+        if self._execution_pin(guard.session, facts["execution"], identity, facts["removal"]) != facts["execution_pin"]:
             raise ResourceReferenceInvalidError(reason="model_deletion_execution_changed")
         guard.check()
 
@@ -354,20 +329,12 @@ class ModelReferenceService:
 
     @staticmethod
     def _context(facts, size, delete_server):
-        removal, before = facts["removal"], facts["before"]
+        removal = facts["removal"]
         return source_context(
             {
                 "command": [removal.server_id, removal.retained_model_ids, delete_server],
-                "revisions": [
-                    removal.server_revision,
-                    removal.model_revisions,
-                    [
-                        (r.target.key.target_type.value, r.target.key.target_id, r.target.target_revision)
-                        for r in facts["receipts"]
-                    ],
-                ],
-                "inbound_v2": facts["digest"],
-                "coverage": [before.coverage_epoch, before.tenant_inventory_hash],
+                "revisions": [removal.server_revision, removal.model_revisions],
+                "inbound": facts["digest"],
                 "identity": facts["stable"],
                 "page_size": size,
             }
@@ -424,6 +391,7 @@ class ModelReferenceService:
         delete_server: bool = False,
         source_page_size: int = 50,
         execution=None,
+        include_hints=True,
     ) -> PreparedModelRemoval:
         try:
             size = validate_page_size(source_page_size)
@@ -441,31 +409,40 @@ class ModelReferenceService:
             counts, qualified, first = dict.fromkeys(SourceType, 0), dict.fromkeys(SourceType, 0), []
             for key in facts["sources"]:
                 counts[key.source_type] += 1
-            for start in range(0, len(candidates), 200):
-                batch = candidates[start : start + 200]
-                for offset, item in enumerate(await guard.call(self._disclose, session, identity, batch)):
-                    if item is not None:
-                        qualified[item.source.source_type] += 1
-                        if start + offset < size:
-                            first.append(ModelReferenceSourceEntry(item, facts["sources"][item.source]))
+            disclosed = await self._hints(session, identity, facts) if include_hints else ()
+            candidates = self._candidates(facts)
+            for key in facts["sources"]:
+                counts[key.source_type] += 1
+            for offset, item in enumerate(disclosed):
+                if item is not None:
+                    qualified[item.source.source_type] += 1
+                    if offset < size:
+                        first.append(ModelReferenceSourceEntry(item, facts["sources"][item.source]))
             await self._finish(identity, facts)
             removal, before = facts["removal"], facts["before"]
             inspection = ModelReferenceInspection(
                 server_id=removal.server_id,
                 targets=removal.targets,
-                target_revisions=tuple((r.target.key, r.target.target_revision) for r in facts["receipts"]),
+                target_revisions=tuple((key, dict(removal.target_revisions)[key.target_id]) for key in removal.targets),
                 server_revision=removal.server_revision,
                 inbound_digest=facts["digest"],
-                source_counts=tuple((kind.value, counts[kind]) for kind in SourceType),
-                slot_counts=tuple((kind.value, facts["slots"][kind]) for kind in SourceType),
-                restricted_counts=tuple((kind.value, counts[kind] - qualified[kind]) for kind in SourceType),
-                qualified_counts=tuple((kind.value, qualified[kind]) for kind in SourceType),
+                source_counts=tuple((kind.value, counts[kind]) for kind in SourceType) if facts["complete"] else (),
+                slot_counts=tuple((kind.value, facts["slots"][kind]) for kind in SourceType)
+                if facts["complete"]
+                else (),
+                restricted_counts=tuple((kind.value, counts[kind] - qualified[kind]) for kind in SourceType)
+                if facts["complete"]
+                else (),
+                qualified_counts=tuple((kind.value, qualified[kind]) for kind in SourceType)
+                if facts["complete"]
+                else (),
                 source_page=self._source_page(first, candidates, 0, size, self._context(facts, size, delete_server)),
                 coverage_epoch=before.coverage_epoch,
                 inventory_hash=before.tenant_inventory_hash,
                 blocked=facts["blocked"],
+                check_complete=facts["complete"],
             )
-            return PreparedModelRemoval(inspection, facts["receipts"], facts["runtime"])
+            return PreparedModelRemoval(inspection)
         except BaseErrorCode:
             raise
         except Exception as error:
@@ -493,12 +470,15 @@ class ModelReferenceService:
             )
             guard = facts["guard"]
             guard.check()
+            disclosed = await self._hints(session, identity, facts)
+            if not facts["complete"]:
+                raise ReferenceCoverageNotReadyError(reason="reference_hints_unavailable")
             candidates = self._candidates(facts)
             context = self._context(facts, size, delete_server)
             start = decode_source_cursor(cursor, context=context, candidate_count=len(candidates))
             data = tuple(
                 ModelReferenceSourceEntry(item, facts["sources"][item.source])
-                for item in await guard.call(self._disclose, session, identity, candidates[start : start + size])
+                for item in disclosed[start : start + size]
                 if item is not None
             )
             await self._finish(identity, facts)

@@ -66,6 +66,7 @@ from bisheng.llm.domain.schemas import (
 from bisheng.llm.domain.services.context_window import ContextWindowService
 from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
 from bisheng.resource_reference.application.contracts import canonical_target_id
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -1281,6 +1282,7 @@ class LLMService:
         async with get_async_db_session() as active:
             result = await save(active)
             await active.commit()
+        await notify_reference_sync(current_model_default_tenant(tenant_id), "model_default", key)
         return result.config
 
     @classmethod

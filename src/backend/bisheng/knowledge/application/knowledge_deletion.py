@@ -3,21 +3,18 @@
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from types import SimpleNamespace
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
-    ResourceReferenceConflictError,
     ResourceReferenceInvalidError,
 )
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application import deletion_admission as admission
-from bisheng.knowledge.application.direct_delete_reference_query import DirectDeleteReferenceQuery
-from bisheng.knowledge.application.space_delete_reference_query import SpaceDeleteReferenceQuery
-from bisheng.knowledge.application.unification_coverage import production_coverage_factory
 from bisheng.knowledge.domain.models.knowledge_space_delete_job import DELETE_STEPS
 from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_repository import (
     KnowledgeDeletionExecutionRepository,
@@ -34,7 +31,6 @@ from bisheng.knowledge.domain.schemas.processing_job import (
 )
 from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_deletion_allowed
 from bisheng.knowledge.domain.services.knowledge_reference_service import KnowledgeReferenceService, impact_digest
-from bisheng.knowledge.domain.services.model_reference_extractor import KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION
 from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import (
     PermissionActor,
@@ -49,14 +45,10 @@ from bisheng.permission.application.knowledge_delete_projection import (
     KnowledgeDeleteProjectionRepository,
     delete_key,
 )
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.contracts import (
-    SourceKey,
-    SourceType,
-    TargetKey,
-    TargetType,
     TransactionIdentity,
 )
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 
 
 def get_deletion_application():
@@ -72,7 +64,7 @@ class KnowledgeDeletionApplication:
         self,
         *,
         session_factory=get_async_db_session,
-        coverage_factory=production_coverage_factory,
+        coverage_factory=None,
         runtime=None,
         reference_service=None,
         purge_step=None,
@@ -119,26 +111,14 @@ class KnowledgeDeletionApplication:
             yield
             self._quiescent(session)
 
-    async def _runtime(self):
-        return self.runtime or await get_reference_binding_runtime()
-
     async def _collect(self, session, *, space_id, selections, operation, operation_id=None):
-        runtime = await self._runtime()
         if operation != "knowledge_file_delete":
-            facts = await SpaceDeleteReferenceQuery(
-                runtime=runtime, coverage_factory=self.coverage_factory
-            ).acollect_space(session, space_id=space_id, operation_id=operation_id)
-            locked = await SpaceDeleteScopeRepository().aread_space_scope(session, space_id=space_id, for_update=True)
+            scope = await SpaceDeleteScopeRepository().aread_space_scope(session, space_id=space_id, for_update=True)
         else:
-            facts = await DirectDeleteReferenceQuery(runtime=runtime, coverage_factory=self.coverage_factory).acollect(
-                session, space_id=space_id, selections=selections, operation_id=operation_id
-            )
-            locked = await KnowledgeSpaceDeleteRepository().aread_delete_scope(
+            scope = await KnowledgeSpaceDeleteRepository().aread_delete_scope(
                 session, space_id=space_id, selections=selections, for_update=True
             )
-        if locked != facts.scope:
-            raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_scope_changed")
-        return facts
+        return SimpleNamespace(scope=scope)
 
     async def _permissions(self, identity, scope):
         actor, tenant = get_current_permission_actor(), admission.tenant()
@@ -207,10 +187,6 @@ class KnowledgeDeletionApplication:
         if not review.can_execute or review.invalid_items:
             if review.invalid_items and all(row.reason == "no_permission" for row in review.invalid_items):
                 raise PermissionDeniedError()
-            if any(review.impact["source_counts"].values()) or any(
-                row.reason == "referenced" for row in review.invalid_items
-            ):
-                raise ResourceReferenceConflictError()
             raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_explicit_review_required")
         await self.aconfirm(
             identity=identity,
@@ -312,24 +288,10 @@ class KnowledgeDeletionApplication:
             facts_holder["root"] = root
             return root
 
-        binding = None
-        if plan.operation == "knowledge_space_delete":
-            binding = await (await self._runtime()).aprepare_source_bindings(
-                session,
-                SourceKey(admission.tenant(), SourceType.KNOWLEDGE, str(plan.space_id), "current"),
-                (),
-                extractor_version=KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
-                lock_source_root=root_lock,
-                effective=False,
-            )
-        else:
-            await root_lock(session)
+        await root_lock(session)
         facts = facts_holder["facts"]
         scope = facts.scope if manifest is not None else _selected(facts.scope, tuple(values["valid_positions"]))
         expected_scope = plan.target_revisions["scope"] if manifest is None else manifest["execution"]["scope_digest"]
-        expected_inbound = (
-            plan.source_revisions["inbound"] if manifest is None else manifest["execution"]["inbound_digest"]
-        )
         if (
             impact_digest(
                 deletion_scope_payload(facts.scope)
@@ -337,24 +299,9 @@ class KnowledgeDeletionApplication:
                 else asdict(facts.scope)
             )
             != expected_scope
-            or impact_digest([asdict(row) for row in facts.references]) != expected_inbound
-            or (facts.coverage_epoch, facts.inventory_hash)
-            != (plan.source_revisions["epoch"], plan.source_revisions["inventory"])
         ):
             raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_impact_changed")
-        if plan.operation != "knowledge_space_delete" or not values["force"]:
-            if manifest is not None and facts.references:
-                raise ResourceReferenceConflictError()
-            if plan.operation != "knowledge_file_delete" and facts.references:
-                raise ResourceReferenceConflictError()
-        return facts_holder["root"], facts, scope, binding
-
-    @staticmethod
-    def _keys(scope, operation):
-        keys = [TargetKey(TargetType.KNOWLEDGE_FILE, row.id) for row in scope.resources]
-        if operation == "knowledge_space_delete":
-            keys.append(TargetKey(TargetType.KNOWLEDGE_SPACE, scope.space_id))
-        return tuple(sorted(keys, key=lambda key: key.lock_order_key))
+        return facts_holder["root"], facts, scope, None
 
     async def aconfirm(self, *, identity, space_id, request: ProcessingCreateRequest):
         async with self._session() as session:
@@ -362,8 +309,6 @@ class KnowledgeDeletionApplication:
         if plan.space_id != space_id or plan.plan_digest != request.plan_digest:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_confirmation_changed")
         if not plan.parameters["can_execute"]:
-            if any(plan.impact["source_counts"].values()):
-                raise ResourceReferenceConflictError()
             raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_no_executable_scope")
         async with admission.identity(plan.actor_reference, current=identity) as (actual, continuation):
             if plan.operation_id is not None:
@@ -382,13 +327,14 @@ class KnowledgeDeletionApplication:
                     expected = tuple(plan.parameters.get("authorized_positions", range(len(requested))))
                     if await admission.selected_positions(actual, requested) != expected:
                         raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_permissions_changed")
-                inspection = await self.references.ainspect(
-                    identity=actual,
-                    space_id=space_id,
-                    selections=_selections(plan.parameters["selections"]),
-                    whole_space=plan.operation != "knowledge_file_delete",
-                )
-                chosen = _selected(inspection.facts.scope, tuple(plan.parameters["valid_positions"]))
+                async with self._session() as session:
+                    current = await self._collect(
+                        session,
+                        space_id=space_id,
+                        selections=_selections(plan.parameters["selections"]),
+                        operation=plan.operation,
+                    )
+                chosen = _selected(current.scope, tuple(plan.parameters["valid_positions"]))
                 if plan.operation == "knowledge_file_delete" and not chosen.resources:
                     raise ResourceReferenceInvalidError(reason="knowledge_delete_no_valid_items")
                 if plan.operation == "knowledge_file_delete" and not {
@@ -400,7 +346,7 @@ class KnowledgeDeletionApplication:
                     raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_catalog_changed")
                 async with self._session() as session:
                     async with self._savepoint(session):
-                        root, facts, scope, _ = await self._locked(session, plan)
+                        root, _facts, scope, _ = await self._locked(session, plan)
                         locked = await self.plans.aget_for_execution(
                             session,
                             plan.id,
@@ -419,17 +365,6 @@ class KnowledgeDeletionApplication:
                         await self.plans.aconsume(
                             session, plan.id, operation_id=plan.id, expected_digest=request.plan_digest
                         )
-                        runtime = await self._runtime()
-                        keys = self._keys(scope, plan.operation)
-                        if keys:
-                            receipts = await runtime.verifier.averify_owner_targets(session, keys)
-                            await runtime.aprepare_target_deletion(
-                                session,
-                                receipts=receipts,
-                                operation_id=plan.id,
-                                operation_type=plan.operation,
-                                actor=get_current_permission_actor(),
-                            )
                         manifest = self.execution.cleanup_manifest(scope)
                         manifest.update(
                             {
@@ -450,9 +385,7 @@ class KnowledgeDeletionApplication:
                                     "actor_reference": plan.actor_reference,
                                     "selections": [asdict(row) for row in scope.selections],
                                     "scope_digest": impact_digest(deletion_scope_payload(scope)),
-                                    "inbound_digest": impact_digest([asdict(row) for row in facts.references])
-                                    if plan.operation != "knowledge_file_delete"
-                                    else impact_digest([]),
+                                    "inbound_digest": impact_digest([]),
                                 },
                             }
                         )
@@ -500,7 +433,7 @@ class KnowledgeDeletionApplication:
             async with self._session() as session:
                 async with self._savepoint(session):
                     plan = await self.execution.apeek_plan(session, job.id)
-                    root, _, scope, binding = await self._locked(
+                    root, _, scope, _binding = await self._locked(
                         session, plan, operation_id=job.id, manifest=job.manifest
                     )
                     current = await self.execution.aget(session, job.id, lock=True)
@@ -530,19 +463,13 @@ class KnowledgeDeletionApplication:
                         await self.proofs.arequire_finalized(
                             session, expectations=expected[start : start + 200], pin=plan.parameters["pin"]
                         )
-                    runtime, keys = await self._runtime(), self._keys(scope, plan.operation)
-                    if keys:
-                        receipts = await runtime.verifier.averify_owner_targets(session, keys)
-                        await runtime.afinalize_target_deletion(
-                            session, receipts=receipts, operation_id=job.id, operation_type=plan.operation, actor=actor
-                        )
                     await self.execution.afinalize_scope(session, scope=scope)
-                    if binding is not None:
-                        await runtime.aapply_source_bindings(session, binding)
+                    if plan.operation == "knowledge_space_delete":
                         await self.execution.acleanup_deleted_space(session, space_id=plan.space_id)
                         await session.delete(root)
                         await session.flush()
                     await self.execution.amark_finalized(session, job=current)
+            await notify_reference_sync(admission.tenant(), "knowledge", str(plan.space_id))
             job.business_phase = "finalized"
 
     async def apurge_claimed(self, job, *, repository, purge_step):

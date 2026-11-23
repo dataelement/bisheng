@@ -280,8 +280,10 @@ export function useKnowledgeDeletion(scopeKey: string, spaceScope?: KnowledgeQue
               page: { ...page, data: [...(old.page?.data ?? []), ...page.data] },
             },
         );
-    } catch (error) {
-      fail(entry, error);
+    } catch {
+      if (valid(entry)) setView((old) => old && {
+        ...old, busy: false, code: 10994, stale: false,
+      });
     } finally {
       if (current.current === entry) busy.current = false;
     }

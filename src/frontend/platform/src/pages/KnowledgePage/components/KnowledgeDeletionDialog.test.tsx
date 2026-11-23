@@ -214,3 +214,12 @@ it("explains failed source tasks instead of displaying only a generic resource c
   expect(screen.queryByText("Generic resource conflict")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "deletion.confirm" })).toBeDisabled();
 });
+
+it("allows business confirmation while reference impact is unknown", () => {
+  const view = { ...base, result: { ...base.result!, requires_skip_confirmation: false,
+    impact: { ...base.result!.impact, reference_check_complete: false } } };
+  render(<KnowledgeDeletionDialog operation={operation(view)} />);
+  expect(screen.getByText("deletion.hints_unavailable")).toBeVisible();
+  expect(screen.getByRole("button", { name: "deletion.confirm" })).toBeEnabled();
+  expect(screen.queryByRole("table", { name: "deletion.references" })).not.toBeInTheDocument();
+});

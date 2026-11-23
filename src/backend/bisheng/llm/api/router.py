@@ -16,6 +16,7 @@ from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.llm.application.model_default import ModelDefaultApplication, current_model_default_tenant
 from bisheng.llm.application.model_default_read import get_model_default_read_runtime
 from bisheng.llm.domain.services.default_reference_extractor import MODEL_DEFAULT_SCHEMAS
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.utils.http_middleware import _check_is_global_super
 from bisheng.utils.mask_data import JsonFieldMasker
 
@@ -512,6 +513,7 @@ async def restore_model_default_inheritance(
     async with get_async_db_session() as session:
         resolved = await ModelDefaultApplication.arestore_inheritance(session, key, login_user=login_user)
         await session.commit()
+    await notify_reference_sync(target, "model_default", key)
     config = json.loads(resolved.payload_json)
     await _audit_system_config_update(login_user, key, target, before=before, after=None)
     return resp_200(data=_envelope(config, resolved.inherited_from_root, resolved.fallback_blocked))

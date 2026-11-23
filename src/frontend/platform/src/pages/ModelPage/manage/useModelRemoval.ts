@@ -1,4 +1,3 @@
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
   deleteLLMServer,
   listLLMRemovalSources,
@@ -154,7 +153,7 @@ export function useModelRemoval(options: Options) {
           : await precheckLLMServerDelete(entry.command.serverId);
       if (!valid(entry)) return;
       if (
-        !result?.inspection?.check_complete ||
+        !result?.inspection ||
         result.inspection.server_id !==
           (entry.command.kind === "update"
             ? entry.command.server.id
@@ -210,7 +209,6 @@ export function useModelRemoval(options: Options) {
   const submit = async (force: boolean) => {
     const entry = current.current;
     if (!entry || !valid(entry) || locked.current || !entry.result) return;
-    if (!entry.dispatched && entry.result.inspection.blocked && !force) return;
     locked.current = true;
     entry.force = entry.dispatched ? entry.force : force;
     entry.dispatched = true;
@@ -239,35 +237,6 @@ export function useModelRemoval(options: Options) {
     } finally {
       if (current.current === entry) locked.current = false;
     }
-  };
-  const requestForce = () => {
-    const entry = current.current;
-    if (
-      !entry ||
-      !valid(entry) ||
-      locked.current ||
-      !entry.result ||
-      entry.dispatched ||
-      !entry.result.inspection.check_complete ||
-      view?.needsRefresh ||
-      view?.errorCode === 10994
-    )
-      return;
-    const signal = entry.controller.signal;
-    const confirmation = entry.result.confirmation;
-    bsConfirm({
-      title: String(t("model.removalForceTitle")),
-      desc: String(t("model.removalForceWarning")),
-      okTxt: String(t("model.removalForceConfirm")),
-      showClose: false,
-      signal,
-      async onOk(next) {
-        if (signal.aborted || entry.result?.confirmation !== confirmation)
-          return;
-        await submit(true);
-        if (current.current === entry) next();
-      },
-    });
   };
   const loadMore = async () => {
     const entry = current.current;
@@ -311,8 +280,10 @@ export function useModelRemoval(options: Options) {
               page: { ...page, data: [...before.data, ...page.data] },
             },
         );
-    } catch (error) {
-      fail(entry, error);
+    } catch {
+      if (valid(entry)) setView((previous) => previous && {
+        ...previous, pending: false, error: String(t("model.removalHintsUnavailable")),
+      });
     } finally {
       if (current.current === entry) locked.current = false;
     }
@@ -384,7 +355,6 @@ export function useModelRemoval(options: Options) {
     confirm: () => {
       void submit(current.current?.force === true);
     },
-    requestForce,
     loadMore,
   };
 }

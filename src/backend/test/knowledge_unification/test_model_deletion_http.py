@@ -104,10 +104,10 @@ async def test_public_source_page_and_force_without_confirmation_fail_closed(bus
             assert response["status_code"] != 200
             references.coverage_factory = None
             response = (await client.request("DELETE", "/api/v1/llm", json={"server_id": 5})).json()
-            assert response["status_code"] == 10994
+            assert response["status_code"] == 200
     async with factory() as session:
-        assert await session.get(LLMServer, 1) is not None and await session.get(LLMServer, 5) is not None
-        assert not (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().all()
+        assert await session.get(LLMServer, 1) is not None and await session.get(LLMServer, 5) is None
+        assert (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().all()
 
 
 async def test_original_nonremoval_put_remains_usable_without_coverage(business, monkeypatch):

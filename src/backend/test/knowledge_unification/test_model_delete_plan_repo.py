@@ -124,7 +124,7 @@ async def test_model_manifest_and_all_frozen_hashes_persist_without_file_space_o
         {"target_type": "model", "target_id": "11"},
     ]
     assert row.parameters == {"command_digest": "c" * 64}
-    assert row.impact == {"inbound_digest": "e" * 64, "coverage_epoch": 9, "inventory_hash": "f" * 64}
+    assert row.impact == {}
     assert row.source_revisions == {} and row.operation_id is None
     await plans.rollback()
     assert not (await plans.exec(select(KnowledgeOperationPlan))).all()
@@ -181,8 +181,6 @@ async def test_same_operation_consume_is_durable_idempotent_and_rollbackable(pla
         {"target_revisions": {"server:1": "a" * 64, "server:2": "b" * 64, "model:2": "a" * 64, "model:11": "b" * 64}},
         {"target_revisions": {"model:2": "a" * 64, "model:11": "b" * 64, "model:99": "c" * 64, "server:1": "d" * 64}},
         {"command_digest": "not-a-hash"},
-        {"coverage_epoch": 0},
-        {"coverage_epoch": True},
         {"operation": "embedding_rebuild"},
     ],
 )
@@ -252,7 +250,7 @@ async def test_real_owner_inspection_revisions_enter_the_model_plan_unchanged(im
     )
     stored = await load(repository, session, confirmation)
     assert stored.target_revisions == revisions
-    assert stored.impact["inbound_digest"] == inspected.inbound_digest
+    assert stored.impact == {}
     assert {item["target_id"] for item in stored.target_manifest} == {"12", "13", "14", "15"}
     await session.rollback()
 

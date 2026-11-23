@@ -589,7 +589,6 @@ export default function ModelConfig({
         view={removal.view}
         onCancel={removal.cancel}
         onConfirm={removal.confirm}
-        onForce={removal.requestForce}
         onRefresh={removal.refresh}
         onLoadMore={removal.loadMore}
       />

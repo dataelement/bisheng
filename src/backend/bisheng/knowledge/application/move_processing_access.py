@@ -22,14 +22,12 @@ from bisheng.permission.application.business_authorization import batch_check_bu
 from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
 from bisheng.permission.application.identity import get_current_permission_actor
 from bisheng.permission.application.knowledge_move_projection import KnowledgeMoveProjectionApplication
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
 
 
 async def get_move_owner():
     return KnowledgeMoveProcessingOwner(
         session_factory=get_async_db_session,
         projection=KnowledgeMoveProjectionApplication(session_factory=get_async_db_session),
-        reference_runtime=await get_reference_binding_runtime(),
     )
 
 

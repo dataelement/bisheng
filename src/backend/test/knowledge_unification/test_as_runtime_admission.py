@@ -38,7 +38,7 @@ def source_result(**changes):
     snapshot = AuthorizedSourceSnapshot(
         SourceKey(101, "assistant", "assistant-a", "current"), (), "assistant-v1", payload_digest(payload), payload
     )
-    return SourceReferenceReadResult(snapshot, (), 3, 4)
+    return SourceReferenceReadResult(snapshot, ())
 
 
 @pytest.fixture
