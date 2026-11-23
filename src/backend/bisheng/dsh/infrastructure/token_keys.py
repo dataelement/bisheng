@@ -11,12 +11,19 @@ KEY_ID = "dsh-local-v1"
 ISSUER = "bisheng-dsh"
 # Distinct from the access-token key so a refresh successor cannot be used as a JWT key.
 REFRESH_SUCCESSOR_LABEL = b"bisheng:dsh:refresh-successor:v1"
+# Separate from the desktop label so a phone token cannot be replayed as a desktop successor.
+MOBILE_REFRESH_SUCCESSOR_LABEL = b"bisheng:dsh:mobile-refresh-successor:v1"
 
 
 def successor_refresh_token(key: bytes, refresh: str) -> str:
     """Derive the only successor of a refresh token. Repeating the input returns the same value."""
     raw = hmac.digest(key, refresh.encode(), hashlib.sha256)
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def successor_mobile_refresh_token(key: bytes, refresh: str) -> str:
+    """Phone successor of one refresh token. The key must already be the phone label key."""
+    return successor_refresh_token(key, refresh)
 
 
 class LocalTokenKeys:
@@ -42,3 +49,7 @@ class LocalTokenKeys:
     async def resolve_refresh_successor_key(self) -> bytes:
         master = await self._master()
         return hmac.digest(master.encode(), REFRESH_SUCCESSOR_LABEL, hashlib.sha256)
+
+    async def resolve_mobile_refresh_successor_key(self) -> bytes:
+        master = await self._master()
+        return hmac.digest(master.encode(), MOBILE_REFRESH_SUCCESSOR_LABEL, hashlib.sha256)

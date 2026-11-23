@@ -1,6 +1,5 @@
 """Phone refresh sessions rotate, expire and revoke without changing web login."""
 
-import asyncio
 import hashlib
 import threading
 from contextlib import contextmanager
@@ -29,6 +28,7 @@ from bisheng.dsh.api.endpoints.mobile import router
 from bisheng.dsh.domain.models.mobile_session import DshMobileRefreshToken, DshMobileSession
 from bisheng.dsh.domain.repositories.mobile_session import MobileSessionRepository
 from bisheng.dsh.domain.services.mobile_session import MobileAccount, MobileSessionService
+from bisheng.dsh.infrastructure.token_keys import successor_mobile_refresh_token
 from bisheng.utils.http_middleware import owns_dsh_credential
 
 
@@ -92,13 +92,16 @@ def mobile(tmp_path):
 
     service = MobileSessionService(
         scope,
-        session_seconds=2592000,
+        session_seconds=15552000,
+        idle_seconds=1209600,
+        grace_seconds=86400,
         access_seconds=86400,
         now=lambda: clock["now"],
         load_account=load_account,
         issue_access_token=issue,
         allow_multi_login=allow_multi,
         current_session=current,
+        successor_key=b"mobile-test-successor",
     )
     return SimpleNamespace(
         engine=engine,
@@ -127,7 +130,8 @@ def _token_states(engine):
 
 def test_mobile_session_ttl_matches_the_desktop_session_default():
     settings = DshSettings()
-    assert settings.mobile_session_ttl_seconds == settings.session_ttl_seconds == 2592000
+    assert settings.mobile_session_idle_ttl_seconds == settings.session_idle_ttl_seconds == 1209600
+    assert settings.mobile_session_ttl_seconds == 15552000
 
 
 def test_refresh_and_logout_routes_own_their_credential():
@@ -141,56 +145,203 @@ async def test_open_stores_only_the_refresh_hash_and_current_access_token(mobile
     row = _session_row(mobile.engine)
     assert opened["refresh_token"] not in str(row)
     assert row.last_access_token_hash == hashlib.sha256(opened["access_token"].encode()).hexdigest()
-    assert row.expires_at - row.created_at == timedelta(seconds=2592000)
+    assert row.expires_at - row.created_at == timedelta(seconds=1209600)
     assert mobile.current.values[7] == opened["access_token"]
     assert _token_states(mobile.engine) == [(1, "ACTIVE")]
 
 
-async def test_refresh_rotates_without_extending_the_absolute_expiry(mobile):
+async def test_refresh_slides_idle_expiry_and_stops_at_the_absolute_cap(mobile):
     opened = await mobile.service.open(7, 3, "alice")
-    original_expiry = _session_row(mobile.engine).expires_at
+    created_at = _session_row(mobile.engine).created_at
     mobile.clock["now"] += timedelta(days=10)
     refreshed = await mobile.service.refresh(opened["refresh_token"])
     row = _session_row(mobile.engine)
-    assert refreshed["refresh_token"] != opened["refresh_token"]
+    assert refreshed["refresh_token"] == successor_mobile_refresh_token(
+        b"mobile-test-successor", opened["refresh_token"]
+    )
     assert refreshed["access_token"] != opened["access_token"]
-    assert row.expires_at == original_expiry
+    assert row.expires_at == mobile.clock["now"] + timedelta(days=14)
     assert row.last_access_token_hash == hashlib.sha256(refreshed["access_token"].encode()).hexdigest()
     assert mobile.current.values[7] == refreshed["access_token"]
     assert _token_states(mobile.engine) == [(1, "USED"), (2, "ACTIVE")]
-    again = await mobile.service.refresh(refreshed["refresh_token"])
-    assert _session_row(mobile.engine).expires_at == original_expiry
-    assert again["refresh_token"] != refreshed["refresh_token"]
+
+    token = refreshed["refresh_token"]
+    while mobile.clock["now"] + timedelta(days=14) < created_at + timedelta(days=180):
+        mobile.clock["now"] += timedelta(days=10)
+        stepped = await mobile.service.refresh(token)
+        token = stepped["refresh_token"]
+    mobile.clock["now"] = created_at + timedelta(days=170)
+    again = await mobile.service.refresh(token)
+    assert _session_row(mobile.engine).expires_at == created_at + timedelta(days=180)
+    assert again["refresh_token"] != token
 
 
-async def test_replaying_a_used_refresh_token_revokes_the_session(mobile):
+async def test_replaying_a_used_refresh_token_returns_the_same_successor_inside_grace(mobile):
     opened = await mobile.service.open(7, 3, "alice")
     refreshed = await mobile.service.refresh(opened["refresh_token"])
+    expiry_before_replay = _session_row(mobile.engine).expires_at
+    replayed = await mobile.service.refresh(opened["refresh_token"])
+    assert replayed["refresh_token"] == refreshed["refresh_token"]
+    assert _session_row(mobile.engine).state == "ACTIVE"
+    assert _session_row(mobile.engine).expires_at == expiry_before_replay
+    assert _token_states(mobile.engine) == [(1, "USED"), (2, "ACTIVE")]
+
+    followed = await mobile.service.refresh(refreshed["refresh_token"])
+    with pytest.raises(DshRefreshTokenReusedError):
+        await mobile.service.refresh(opened["refresh_token"])
+    assert _session_row(mobile.engine).state == "REVOKED"
+    with pytest.raises(DshSessionRevokedError):
+        await mobile.service.refresh(followed["refresh_token"])
+
+
+@pytest.mark.parametrize("multi_login", [False, True])
+@pytest.mark.parametrize("retry_seconds", [30, 60])
+async def test_grace_replay_survives_the_consumed_token_expiry(mobile, multi_login, retry_seconds):
+    mobile.flags["multi"] = multi_login
+    opened = await mobile.service.open(7, 3, "alice")
+    old_expiry = _session_row(mobile.engine).expires_at
+    mobile.clock["now"] = old_expiry - timedelta(seconds=30)
+    refreshed = await mobile.service.refresh(opened["refresh_token"])
+    renewed_expiry = _session_row(mobile.engine).expires_at
+
+    # A lost response may be retried at or after the consumed token's deadline.
+    mobile.clock["now"] += timedelta(seconds=retry_seconds)
+    replayed = await mobile.service.refresh(opened["refresh_token"])
+
+    assert replayed["refresh_token"] == refreshed["refresh_token"]
+    assert mobile.current.values[7] == replayed["access_token"]
+    assert _session_row(mobile.engine).state == "ACTIVE"
+    assert _session_row(mobile.engine).expires_at == renewed_expiry
+    assert _token_states(mobile.engine) == [(1, "USED"), (2, "ACTIVE")]
+    await mobile.service.refresh(replayed["refresh_token"])
+
+
+@pytest.mark.parametrize("deadline", ["idle", "absolute"])
+async def test_grace_replay_still_rejects_an_expired_session(mobile, deadline):
+    mobile.service.idle_seconds = 600
+    if deadline == "absolute":
+        mobile.service.session_seconds = 600
+    opened = await mobile.service.open(7, 3, "alice")
+    mobile.clock["now"] += timedelta(seconds=570)
+    await mobile.service.refresh(opened["refresh_token"])
+
+    # Both session limits outrank grace, even with an unspent successor.
+    mobile.clock["now"] = _session_row(mobile.engine).expires_at
+    with pytest.raises(DshSessionExpiredError):
+        await mobile.service.refresh(opened["refresh_token"])
+    assert _session_row(mobile.engine).state == "REVOKED"
+
+
+async def test_replaying_after_grace_or_while_disabled_revokes(mobile):
+    opened = await mobile.service.open(7, 3, "alice")
+    refreshed = await mobile.service.refresh(opened["refresh_token"])
+    mobile.clock["now"] += timedelta(seconds=mobile.service.grace_seconds + 1)
     with pytest.raises(DshRefreshTokenReusedError):
         await mobile.service.refresh(opened["refresh_token"])
     assert _session_row(mobile.engine).state == "REVOKED"
     with pytest.raises(DshSessionRevokedError):
         await mobile.service.refresh(refreshed["refresh_token"])
 
+    mobile.accounts[7].user_active = True
+    second = await mobile.service.open(7, 3, "alice")
+    await mobile.service.refresh(second["refresh_token"])
+    mobile.accounts[7].user_active = False
+    with pytest.raises(DshMobileUserDisabledError):
+        await mobile.service.refresh(second["refresh_token"])
+    assert _session_row(mobile.engine, second["session_id"]).state == "REVOKED"
 
-def test_concurrent_refresh_has_one_winner_and_replay_revokes(mobile):
-    opened = asyncio.run(mobile.service.open(7, 3, "alice"))
-    outcomes = []
 
-    def refresh_once():
-        try:
-            asyncio.run(mobile.service.refresh(opened["refresh_token"]))
-            outcomes.append("ok")
-        except DshRefreshTokenReusedError:
-            outcomes.append("reused")
+async def test_stale_single_login_replay_keeps_the_successor(mobile):
+    opened = await mobile.service.open(7, 3, "alice")
+    refreshed = await mobile.service.refresh(opened["refresh_token"])
+    mobile.current.values[7] = opened["access_token"]
+    with pytest.raises(DshMobileLoggedInElsewhereError):
+        await mobile.service.refresh(opened["refresh_token"])
+    assert _session_row(mobile.engine).state == "ACTIVE"
+    mobile.current.values[7] = refreshed["access_token"]
+    followed = await mobile.service.refresh(refreshed["refresh_token"])
+    assert followed["access_token"] != refreshed["access_token"]
+    assert _session_row(mobile.engine).state == "ACTIVE"
 
-    threads = [threading.Thread(target=refresh_once) for _ in range(2)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert sorted(outcomes) == ["ok", "reused"]
-    assert _session_row(mobile.engine).state == "REVOKED"
+
+async def test_grace_replay_keeps_the_session_when_redis_publication_fails(mobile):
+    from redis.exceptions import RedisError
+
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+
+    opened = await mobile.service.open(7, 3, "alice")
+    refreshed = await mobile.service.refresh(opened["refresh_token"])
+    published = mobile.current.values[7]
+
+    async def unavailable(*args):
+        raise RedisError("publication unavailable")
+
+    mobile.current.replace = unavailable
+    with pytest.raises(DshAuthorizationUnavailableError):
+        await mobile.service.refresh(opened["refresh_token"])
+    assert _session_row(mobile.engine).state == "ACTIVE"
+    assert mobile.current.values[7] == published
+    assert _session_row(mobile.engine).last_access_token_hash == hashlib.sha256(published.encode()).hexdigest()
+    mobile.current.replace = MemoryCurrentSession.replace.__get__(mobile.current, MemoryCurrentSession)
+    followed = await mobile.service.refresh(refreshed["refresh_token"])
+    assert mobile.current.values[7] == followed["access_token"]
+
+
+async def test_grace_replay_restores_the_hash_a_later_rotation_published(mobile):
+    """The restored hash must be the one the replay overwrote, not a stale read."""
+    from redis.exceptions import RedisError
+
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+
+    opened = await mobile.service.open(7, 3, "alice")
+    refreshed = await mobile.service.refresh(opened["refresh_token"])
+    published = mobile.current.values[7]
+    original_locate = MobileSessionRepository.locate_refresh
+
+    # Report the hash from before that rotation, as a locate racing the commit would.
+    def stale_locate(self, digest):
+        located = original_locate(self, digest)
+        if located is not None:
+            located["last_access_token_hash"] = hashlib.sha256(b"older-token").hexdigest()
+        return located
+
+    async def unavailable(*args):
+        raise RedisError("publication unavailable")
+
+    MobileSessionRepository.locate_refresh = stale_locate
+    mobile.current.replace = unavailable
+    try:
+        with pytest.raises(DshAuthorizationUnavailableError):
+            await mobile.service.refresh(opened["refresh_token"])
+    finally:
+        MobileSessionRepository.locate_refresh = original_locate
+        mobile.current.replace = MemoryCurrentSession.replace.__get__(mobile.current, MemoryCurrentSession)
+
+    row = _session_row(mobile.engine)
+    assert row.state == "ACTIVE"
+    assert row.last_access_token_hash == hashlib.sha256(published.encode()).hexdigest()
+    followed = await mobile.service.refresh(refreshed["refresh_token"])
+    assert mobile.current.values[7] == followed["access_token"]
+
+
+async def test_idle_expiry_rejects_refresh_without_moving_the_deadline(mobile):
+    opened = await mobile.service.open(7, 3, "alice")
+    original_expiry = _session_row(mobile.engine).expires_at
+    mobile.clock["now"] += timedelta(days=14, seconds=1)
+    with pytest.raises(DshSessionExpiredError):
+        await mobile.service.refresh(opened["refresh_token"])
+    row = _session_row(mobile.engine)
+    assert row.expires_at == original_expiry
+    assert row.state == "REVOKED"
+
+
+async def test_multi_login_replay_returns_the_same_refresh_token(mobile):
+    mobile.flags["multi"] = True
+    opened = await mobile.service.open(7, 3, "alice")
+    refreshed = await mobile.service.refresh(opened["refresh_token"])
+    replayed = await mobile.service.refresh(opened["refresh_token"])
+    assert replayed["refresh_token"] == refreshed["refresh_token"]
+    assert _session_row(mobile.engine).state == "ACTIVE"
 
 
 async def test_absolute_expiry_rejects_refresh_without_moving_the_deadline(mobile):
