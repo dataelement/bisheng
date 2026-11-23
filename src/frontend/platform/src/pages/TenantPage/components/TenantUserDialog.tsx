@@ -1,5 +1,5 @@
-import { Pagination, Button, SearchInput, notification } from '@bisheng/ui';
-import { Tag } from "@bisheng/ui";
+import { resolveUserAvatarUrl } from '@bisheng/identity';
+import { Pagination, Button, SearchInput, Tag, UserAvatar, notification } from '@bisheng/ui';
 import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable";
 import { SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -42,7 +42,7 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
     total,
     setPage,
     subjectSearch,
-  } = useSubjectTable<TenantUser & { external_id?: string | null }>({ pageSize: 10 }, (param, signal) =>
+  } = useSubjectTable<TenantUser>({ pageSize: 10 }, (param, signal) =>
     getTenantUsersApi(
       tenant.id,
       {
@@ -128,13 +128,8 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
                   <TableRow key={user.user_id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {user.avatar ? (
-                          <img src={user.avatar} alt="" className="w-6 h-6 rounded-full" />
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs">
-                            {user.user_name?.charAt(0)}
-                          </div>
-                        )}
+                        <UserAvatar className="size-6" fallbackClassName="text-xs" name={user.user_name}
+                          src={resolveUserAvatarUrl(user.avatar, __APP_ENV__.BASE_URL)} />
                         <span>{user.user_name}</span>
                         {isAdmin && (
                           <Tag size="small" className="ml-1 shrink-0 whitespace-nowrap">

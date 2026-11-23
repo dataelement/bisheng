@@ -30,8 +30,10 @@ export function AppSwitcherDropdown() {
 
   const trigger = (
     <button
+      type="button"
+      aria-label={localize('com_app_switch_app')}
       disabled={disabled}
-      className="p-1 text-gray-400 transition-colors fine-pointer:hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
+      className="p-1 text-text-3 transition-colors hover:text-text-2 disabled:opacity-30 disabled:cursor-not-allowed"
     >
       <ArrowLeftRight size={14} />
     </button>
@@ -50,17 +52,17 @@ export function AppSwitcherDropdown() {
       <PopoverContent
         align="start"
         sideOffset={6}
-        className="w-[240px] p-0 bg-white shadow-[0px_4px_16px_rgba(0,0,0,0.08)] border border-border-base rounded-lg flex flex-col overflow-hidden"
+        className="w-[240px] p-0 bg-bg-page shadow-popup border border-border-base rounded-lg flex flex-col overflow-hidden"
       >
         {/* Search input */}
         <div className="px-[12px] pt-[12px] pb-[8px] shrink-0">
           <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-border-base rounded-md focus-within:border-border-deep focus-within:shadow-focus transition-[border-color,box-shadow]">
-            <Search size={14} className="text-[#a9aeb8] shrink-0" />
+            <Search size={14} className="text-text-3 shrink-0" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={localize('com_app_search_by_name')}
-              className="flex-1 bg-transparent border-none outline-none text-[13px] text-text-1 placeholder:text-[#a9aeb8]"
+              className="flex-1 bg-transparent border-none outline-none text-[13px] text-text-1 placeholder:text-text-3"
               autoFocus
             />
           </div>
@@ -73,10 +75,10 @@ export function AppSwitcherDropdown() {
         >
           {loading ? (
             <div className="flex items-center justify-center py-6">
-              <Loader2 size={16} className="animate-spin text-gray-400" />
+              <Loader2 size={16} className="animate-spin text-text-3" />
             </div>
           ) : allApps.length === 0 ? (
-            <div className="text-center py-6 text-[13px] text-gray-400">
+            <div className="text-center py-6 text-[13px] text-text-3">
               {localize('com_app_no_matching_apps')}
             </div>
           ) : (

@@ -24,6 +24,7 @@ export type DesktopPresentation = Readonly<{
   reportLanding?: (landing: boolean) => void;
   reportKnowledgeDialog?: (open: boolean) => void;
   reportNavigation?: (navigation: unknown) => void;
+  onProfileChanged?: (listener: () => void) => (() => void);
   onProjectsChanged?: (listener: () => void) => (() => void);
   reportSettings?: (section: string) => void;
   requestSettingsClose?: () => void;

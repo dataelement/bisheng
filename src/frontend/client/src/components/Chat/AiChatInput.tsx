@@ -7,11 +7,13 @@ import {
     memo,
     useCallback,
     useEffect,
+    useImperativeHandle,
     useLayoutEffect,
     useMemo,
     useRef,
     useState,
     type KeyboardEvent,
+    type Ref,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
@@ -23,7 +25,7 @@ import { getSelectableSkills } from '~/api/linsight';
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 
-import { ComposerEditor } from "./Input/ComposerEditor";
+import { ComposerEditor, insertComposerPrompt } from "./Input/ComposerEditor";
 import { useComposerReferences } from "./Input/useComposerReferences";
 import { labelForGroup, type AvailableToolGroup } from "./Input/AgentToolSelector";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
@@ -45,6 +47,7 @@ import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import type { AttachmentAsk } from "./chatAskHandoff";
+import type { ApplyChatWelcomeExample } from "./ChatWelcomeExamples";
 
 export interface AiChatInputFeatures {
     modelSelect?: boolean;
@@ -149,6 +152,7 @@ interface AiChatInputProps {
      * the legacy navigate fallback is used (the /linsight Sop usage relies on it).
      */
     onToggleTaskMode?: () => void;
+    welcomeExampleRef?: Ref<ApplyChatWelcomeExample>;
 }
 
 const AiChatInput = memo(
@@ -185,6 +189,7 @@ const AiChatInput = memo(
         onToggleTaskMode,
         attachmentAsk,
         onAttachmentAskDone,
+        welcomeExampleRef,
     }: AiChatInputProps) => {
         const localize = useLocalize();
         const { showToast } = useToastContext();
@@ -523,6 +528,21 @@ const AiChatInput = memo(
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0 || mountedTools.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
+
+        useImperativeHandle(welcomeExampleRef, (): ApplyChatWelcomeExample => (example) => {
+            const editor = textAreaRef.current;
+            if (!editor?.isConnected || disabled || isStreaming || isComposingRef.current ||
+                sendPendingRef.current?.identity === composerIdentity || attachmentAsk) return 'unavailable';
+            const changesMode = taskMode !== example.deepResearch;
+            if (changesMode && (!taskModeEntry || !onToggleTaskMode)) return 'researchUnavailable';
+            if (taskMode && changesMode && (references.length || hasInlineAttachments || fileUploading)) {
+                return 'keepAttachments';
+            }
+            if (!insertComposerPrompt(editor, example.prompt)) return 'unavailable';
+            if (changesMode) onToggleTaskMode?.();
+            editor.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }, [attachmentAsk, composerIdentity, disabled, fileUploading, hasInlineAttachments, isStreaming,
+            onToggleTaskMode, references.length, taskMode, taskModeEntry]);
 
         // Tell the landing page whether the attachment bar is present so it can
         // hide/show the welcome subtitle without shifting the title or input box.

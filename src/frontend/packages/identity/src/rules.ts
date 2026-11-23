@@ -1,3 +1,5 @@
+export { resolveUserAvatarUrl } from './avatarUrl';
+
 export type CheckState = 'neutral' | 'pass' | 'fail';
 export type PasswordRequirement = 'length' | 'uppercase' | 'lowercase' | 'number' | 'symbol';
 export type IdentityError =

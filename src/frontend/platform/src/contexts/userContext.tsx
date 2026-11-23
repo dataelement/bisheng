@@ -40,8 +40,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const handleIdentityRefresh = useCallback((identity: CurrentIdentity) => {
         setUser((previous: Partial<User> | null) => {
             if (previous?.user_id !== identity.user_id) return previous;
-            if (previous.user_name === identity.user_name && previous.external_id === identity.external_id) return previous;
-            return { ...previous, user_name: identity.user_name, external_id: identity.external_id };
+            const { user_name, external_id, avatar } = identity;
+            if (previous.user_name === user_name && previous.external_id === external_id && previous.avatar === avatar) return previous;
+            return { ...previous, user_name, external_id, avatar };
         });
     }, []);
     useCurrentIdentityRefresh(user, handleIdentityRefresh);

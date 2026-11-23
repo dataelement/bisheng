@@ -59,6 +59,7 @@ export interface DepartmentMember {
   external_id?: string | null
   user_id: number
   user_name: string
+  avatar?: string | null
   /** Raw account alias returned by the department API. */
   person_id?: string | null
   department_id: number

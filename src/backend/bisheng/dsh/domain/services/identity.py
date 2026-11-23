@@ -52,6 +52,12 @@ class IdentityService:
         self.avatar_reader = avatar_reader
 
     async def check(self, tenant_id: str, user_id: str) -> DshIdentitySnapshot:
+        snapshot, _ = await self._check_current_identity(tenant_id, user_id)
+        return snapshot
+
+    async def _check_current_identity(
+        self, tenant_id: str, user_id: str
+    ) -> tuple[DshIdentitySnapshot, IdentityRecord | None]:
         if not re.fullmatch(r"[1-9][0-9]*", tenant_id) or not re.fullmatch(r"[1-9][0-9]*", user_id):
             raise DshInvalidGrantError()
         record = await self.identities.get(tenant_id, user_id)
@@ -61,8 +67,8 @@ class IdentityService:
         elif not record.tenant_active or record.tenant_id != tenant_id or record.user_id != user_id:
             reason = "tenant_unavailable"
         if reason:
-            return DshIdentitySnapshot(tenant_id=tenant_id, user_id=user_id, active=False, reason=reason)
-        return DshIdentitySnapshot(
+            return DshIdentitySnapshot(tenant_id=tenant_id, user_id=user_id, active=False, reason=reason), None
+        snapshot = DshIdentitySnapshot(
             tenant_id=tenant_id,
             user_id=user_id,
             active=True,
@@ -74,13 +80,15 @@ class IdentityService:
             tenant=DshTenantDisplay(id=tenant_id, name=(record.tenant_name or "").strip() or f"Tenant {tenant_id}"),
             profile_version=record.profile_version,
         )
+        return snapshot, record
 
     async def profile(self, tenant_id: str, user_id: str) -> dict:
         """Read current display data independently of the token issuance snapshot."""
-        snapshot = await self.check(tenant_id, user_id)
-        if not snapshot.active:
+        snapshot, record = await self._check_current_identity(tenant_id, user_id)
+        if record is None:
             raise DshUserDisabledError()
         user = snapshot.user.model_dump()
+        user["external_id"] = record.external_id
         user["avatar"] = await self.avatar_reader(tenant_id, user_id) if self.avatar_reader is not None else None
         return {"user": user, "tenant": snapshot.tenant.model_dump()}
 

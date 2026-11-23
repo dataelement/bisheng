@@ -92,6 +92,28 @@ beforeEach(() => {
   mockApi.clearMemoryItemsApi.mockResolvedValue(undefined);
 });
 
+it("shows loading while fetching the memory list and while retrying after a failure", async () => {
+  let resolveRetry: (items: MemoryItem[]) => void = () => { throw new Error("Retry has not started"); };
+  mockApi.listMemoryItemsApi
+    .mockRejectedValueOnce(new Error("Memory list unavailable"))
+    .mockImplementationOnce(() => new Promise<MemoryItem[]>((resolve) => { resolveRetry = resolve; }));
+
+  renderPane();
+
+  expect(screen.getByRole("status")).toHaveTextContent("com_list_loading");
+  expect(screen.queryByText("memory.empty")).not.toBeInTheDocument();
+  const retry = await screen.findByRole("button", { name: "memory.retry" });
+  expect(screen.getByText("memory.load_failed")).toBeInTheDocument();
+
+  fireEvent.click(retry);
+
+  expect(await screen.findByRole("status")).toHaveTextContent("com_list_loading");
+  expect(retry).not.toBeInTheDocument();
+  resolveRetry(ITEMS);
+  expect(await screen.findByText("Prefers short answers")).toBeInTheDocument();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
 it("groups memories by type and shows each summary with its date, nothing else (AC-88)", async () => {
   renderPane();
   await screen.findByText("Prefers short answers");

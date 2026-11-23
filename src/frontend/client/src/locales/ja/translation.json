@@ -1296,9 +1296,11 @@
   },
   "com_app": {
     "all": "すべて",
+    "bisheng_apps": "Bisheng アプリ",
     "center_title": "アプリセンター",
-    "empty_go_explore": "利用したアプリはまだありません。アプリ広場へどうぞ",
-    "explore_more": "さらにアプリを探す",
+    "empty_title": "最近使用したアプリはありません",
+    "search_empty_title": "一致するアプリがありません",
+    "search_empty_description": "別のキーワードで検索するか、検索をクリアして最近使用したアプリを表示してください",
     "explore_plaza": "アプリ広場で <cta>さらにアプリを探す<arrow /></cta>",
     "recent_apps_hint": "最近使用したアプリはすべてここにあります～",
     "service_maintenance_title": "おっと、システムに少し問題が発生しました",
@@ -3002,7 +3004,26 @@
     "preview": "プレビュー",
     "source": "ソース",
     "closeResearch": "詳細リサーチを終了",
-    "welcome": "一緒につくりましょう"
+    "welcome": "一緒につくりましょう",
+    "welcomeExamples": {
+      "heading": "例から始める",
+      "keepAttachments": "下書きに添付ファイルや参照があります。内容を確認してから、詳細リサーチを手動で終了してください。",
+      "next": "別の例を表示",
+      "researchUnavailable": "このアカウントでは詳細リサーチを利用できません。",
+      "titles": {
+        "confirm-event": "イベント企画の確認メールを書く",
+        "ai-brief": "今日の AI ニュースをチェック",
+        "enterprise-agents": "企業の AI エージェント活用を調べる",
+        "headphones": "高性能なノイズキャンセリングヘッドホンを比較する",
+        "commercial-space": "商業宇宙産業のビジネスモデルを調べる",
+        "booking-scope": "予約管理ツールの要件を整理する",
+        "support-feedback": "顧客からの問い合わせを整理する",
+        "team-event": "チーム交流会のプランを比較する",
+        "museum-collections": "博物館のデジタルコレクションを比較する",
+        "urban-cooling": "都市の暑さ対策を調べる"
+      },
+      "unavailable": "入力できませんでした。入力欄を編集できることを確認して、もう一度お試しください。"
+    }
   },
   "chat.sidebar.title": "チャット",
   "chat.sidebar.newConversation": "新しい会話",

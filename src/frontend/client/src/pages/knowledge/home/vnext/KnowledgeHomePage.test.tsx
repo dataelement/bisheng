@@ -5,11 +5,13 @@ import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import type { KnowledgeSpace } from '~/api/knowledge';
+import type { TUser } from '~/types/chat';
 import translation from '~/locales/en/translation.json';
 import { KnowledgeHomePage } from '../../KnowledgeHomePage';
 
 jest.mock('./componentMode', () => ({ USE_PRODUCT_COMPONENTS: false }));
 jest.mock('@bisheng/ui', () => ({
+  ...jest.requireActual('../../../../../../packages/ui/src/components/Avatar'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Tooltip/Tooltip.tsx'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Tabs/Tabs.tsx'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Button/Button.tsx'),
@@ -34,11 +36,12 @@ let mockLoading = false;
 let mockError: Error | null = null;
 let mockPermissionLoading = false;
 let mockData: { mine: KnowledgeSpace[]; joined: KnowledgeSpace[]; department: KnowledgeSpace[] };
+let mockUser: Pick<TUser, 'id' | 'username' | 'avatar'>;
 
 jest.mock('~/api/knowledge', () => ({ SpaceSortType: { UPDATE_TIME: 'update_time' }, getSpaceInfoApi: (...args: unknown[]) => mockCreatorInfo(...args) }));
 jest.mock('~/api/request', () => ({ showApiError: jest.fn() }));
 jest.mock('~/hooks', () => ({
-  useAuthContext: () => ({ user: { id: 'test-user' } }),
+  useAuthContext: () => ({ user: mockUser }),
   useWorkbenchMenuNames: () => ({ knowledge: 'Knowledge spaces' }),
   useLocalize: () => (key: string) => key,
 }));
@@ -69,11 +72,14 @@ function row(id: string, name: string, date = '2026-01-01'): KnowledgeSpace {
 }
 const callbacks = { onSpaceSelect: jest.fn(), onSpaceSettings: jest.fn(), onCreateSpace: jest.fn(), onKnowledgeSquare: jest.fn() };
 function mount(path = '/knowledge') {
-  return render(<MemoryRouter initialEntries={[path]}>
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = () => <MemoryRouter initialEntries={[path]}>
+    <QueryClientProvider client={client}>
       <KnowledgeHomePage {...callbacks} />
     </QueryClientProvider>
-  </MemoryRouter>);
+  </MemoryRouter>;
+  const view = render(page());
+  return { ...view, refresh: () => view.rerender(page()) };
 }
 
 beforeEach(() => {
@@ -81,6 +87,8 @@ beforeEach(() => {
   mockExitStatus.mockReset();
   mockExitStatus.mockImplementation(async (id: string) => ({ can_exit: id === '2', reason: id === '2' ? null : 'creator' }));
   mockData = { mine: [row('1', 'Alpha')], joined: [row('2', 'Beta', '2026-02-01'), row('3', 'Department')], department: [row('3', 'Department')] };
+  mockUser = { id: 'test-user', username: 'Tester', avatar: '' };
+  mockCreatorInfo.mockReset();
   mockPermissions = {}; mockLoading = false; mockError = null; mockPermissionLoading = false;
   mockLeave.mockReset(); mockLeave.mockResolvedValue(undefined); mockConfirm.mockReset();
   mockUpdate.mockReset(); mockUpdate.mockResolvedValue(undefined); mockPin.mockResolvedValue(undefined); mockConfirm.mockResolvedValue(true);
@@ -384,7 +392,44 @@ it('loads the actual creator from detail only when the list omits it', async () 
   mockCreatorInfo.mockResolvedValue({ ...mockData.mine[0], creator: 'Actual creator' });
   mount();
   expect(await screen.findByText('Actual creator')).toBeInTheDocument();
+  expect(screen.getByText('A')).toHaveClass('bg-fill-4', 'text-white');
   expect(mockCreatorInfo).toHaveBeenCalledWith('1');
+});
+
+it('uses the sidebar photo for the signed-in creator without assigning it to a namesake', () => {
+  mockUser = { id: '42', username: 'jingyao', avatar: '/object/bucket/avatar/42/current.png' };
+  Object.assign(mockData.mine[0], { creatorId: '42', creator: 'jingyao' });
+  Object.assign(mockData.joined[0], { creatorId: '43', creator: 'jingyao' });
+  Object.assign(mockData.department[0], { creatorId: '44', creator: 'Another creator', creatorAvatar: '/other.png' });
+  mount();
+
+  const own = screen.getByRole('link', { name: 'Alpha' });
+  const namesake = screen.getByRole('link', { name: 'Beta' });
+  const other = screen.getByRole('link', { name: 'Department' });
+  const photo = own.querySelector('footer img');
+  expect(photo).toHaveAttribute('src', mockUser.avatar);
+  expect(within(namesake).getByText('J')).toHaveClass('bg-fill-4', 'text-white');
+  expect(other.querySelector('footer img')).toHaveAttribute('src', '/other.png');
+  expect(mockCreatorInfo).not.toHaveBeenCalled();
+
+  fireEvent.error(photo!);
+  expect(within(own).getByText('J')).toHaveClass('bg-fill-4', 'text-white');
+});
+
+it('updates the signed-in creator name and fallback on the current page when their nickname changes', () => {
+  mockUser = { id: '42', username: 'Kinyoo', avatar: '' };
+  Object.assign(mockData.mine[0], { creatorId: '42', creator: 'Kinyoo' });
+  const view = mount();
+  const card = within(screen.getByRole('link', { name: 'Alpha' }));
+  expect(card.getByText('Kinyoo')).toBeInTheDocument();
+  expect(card.getByText('K')).toHaveClass('bg-fill-4', 'text-white');
+
+  mockUser = { ...mockUser, username: 'admin' };
+  view.refresh();
+  expect(card.getByText('admin')).toBeInTheDocument();
+  expect(card.getByText('A')).toHaveClass('bg-fill-4', 'text-white');
+  expect(card.queryByText('Kinyoo')).not.toBeInTheDocument();
+  expect(mockCreatorInfo).not.toHaveBeenCalled();
 });
 
 it('opens existing space settings instead of renaming inline', async () => {

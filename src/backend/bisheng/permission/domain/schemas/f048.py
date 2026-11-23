@@ -303,6 +303,7 @@ class GrantSubjectDTO(BaseModel):
     type: str
     id: str
     name: str | None = None
+    avatar: str | None = None
 
 
 class GrantModelDTO(BaseModel):

@@ -20,15 +20,6 @@ jest.mock('~/components/ui/Sheet', () => ({
     SheetHeader: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
     SheetTitle: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
 }));
-jest.mock('~/components/ui/Avatar', () => ({
-    Avatar: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
-    AvatarImage: () => <div />, AvatarName: () => <div />,
-}));
-jest.mock('~/components/ui/Tooltip2', () => ({
-    Tooltip: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
-    TooltipContent: () => <div />,
-    TooltipTrigger: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
-}));
 jest.mock('~/components/ui/Button', () => ({ Button: ({ children, disabled, onClick }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button disabled={disabled} onClick={onClick}>{children}</button> }));
 jest.mock('./ArticleList/ArticleCard', () => ({ ArticleCard: () => <div>Article content</div> }));
 jest.mock('./ArticleList/ArticleList', () => ({ mapToArticle: (article: unknown) => article }));
@@ -57,5 +48,19 @@ it('shows approval and revocation from fresh server data while the drawer stays 
     expect(await screen.findByRole('button', { name: 'com_subscription.subscribe' })).toBeEnabled();
     await waitFor(() => expect(screen.queryByText('Article content')).toBeNull());
     expect(screen.getByText('com_subscription.channel_content_access_required')).toBeVisible();
+    unmount(); client.clear();
+});
+
+it('shows the channel creator avatar and falls back to the creator initial when it fails', async () => {
+    jest.mocked(getChannelDetailApi).mockResolvedValue({
+        id: 'c1', name: 'News', creator_name: 'creator', creator_avatar: 'https://example.test/creator.png',
+        subscription_status: 'not_subscribed', visibility: 'review', actions: [], source_infos: [],
+        article_count: 1, subscriber_count: 1, source_list: [], is_released: true,
+    });
+    const { client, unmount } = mountDrawer();
+    const image = await screen.findByAltText('');
+    expect(image).toHaveAttribute('src', 'https://example.test/creator.png');
+    fireEvent.error(image);
+    expect(screen.getByText('C')).toBeVisible();
     unmount(); client.clear();
 });

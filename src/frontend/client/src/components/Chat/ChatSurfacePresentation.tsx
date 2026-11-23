@@ -8,8 +8,7 @@ import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel
 import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
 import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
 import { cn } from "~/utils";
-import Landing from "./Landing";
-import { DailyFeaturedApps } from "./DailyFeaturedApps";
+import { ChatLanding } from "./ChatLanding";
 import Presentation from "./Presentation";
 import { listUploadableSpacesApi } from "~/api/messageExport";
 import {
@@ -41,8 +40,6 @@ export function ChatSurfacePresentation({
     chatModel,
     searchType,
     setSearchType,
-    landingHasSelection,
-    setLandingHasSelection,
     selectedOrgKbs,
     knowledgeAccessMessage,
     setSelectedOrgKbs,
@@ -55,7 +52,6 @@ export function ChatSurfacePresentation({
     retryHistory,
     isStreaming,
     isParsingMedia,
-    stopGenerating,
     regenerate,
     selectionState,
     isH5,
@@ -80,8 +76,6 @@ export function ChatSurfacePresentation({
     latestTaskVersionId,
     handleModelChange,
     handleModelAutoChange,
-    attachmentAsk,
-    retireAttachmentAsk,
     isTextAskPending,
     handleToggleTaskMode,
     taskArtifacts,
@@ -144,11 +138,6 @@ export function ChatSurfacePresentation({
                 <div
                   className={cn(
                     "flex min-h-0 flex-1 flex-col relative",
-                    // Landing (non-messages) layout keeps auto height on the desktop
-                    // shell (≥768) so the vh-positioned welcome block + apps flow
-                    // naturally. The H5 shell (≤767) needs a definite height so the
-                    // landing block's `min-h-full` centering resolves against the
-                    // visible scroll-area height.
                     useMessagesLayout ? "h-full" : "dsh-chat-column h-full",
                   )}
                 >
@@ -478,99 +467,7 @@ export function ChatSurfacePresentation({
                       {citationPanelElement}
                     </div>
                   ) : (
-                    /* Landing page branch — the welcome block is pinned to the
-                     region's vertical center via absolute positioning, so its
-                     position is INDEPENDENT of whether recommended apps exist
-                     (apps just flow below it and scroll if they overflow).
-
-                     ≥768 (desktop): center at 45vh; apps sit 40px below via
-                     `paddingTop: calc(45vh + halfBlock + 40px)`.
-
-                     ≤767 (H5 shell): can't use `vh` (MobileNav + Banner sit above
-                     this scroll container). The parent is a definite `h-full` box,
-                     so the block centers at 35% of it (`top-[35%]`) and the apps
-                     offset is computed in px from the measured region height
-                     (landingParentHeight) — a `%` paddingTop would resolve against
-                     width, not height. */
-                    <div className="dsh-chat-landing">
-                      {/* Welcome message + input, absolutely centered. ≥768 at 45vh,
-                        ≤767 at 40% of the definite-height region. */}
-                      <div className="dsh-chat-hero">
-                        {/* F035 Track H (P5): daily/task mode switch removed —
-                          task mode is reached via the sidebar "new task" entry
-                          and the input-bar task-mode button. */}
-                        <Landing
-                          isNew={isNew}
-                          hideSubtitle={landingHasSelection}
-                          onStarterClick={setInputText}
-                        />
-
-                        {/* Input area for landing page */}
-                        {!shareToken && (
-                          <div className="w-full">
-                            {inviteQuotaBar}
-                            {composerConfigNotice}
-                            <AiChatInput
-                              key={composerIdentity}
-                              composerIdentity={composerIdentity}
-                              elevated
-                              disabled={
-                                Boolean(historyError) ||
-                                isLoading ||
-                                isClearing ||
-                                !bsConfig?.models?.length ||
-                                !!shareToken
-                              }
-                              sendDisabled={taskRunning}
-                              isStreaming={isStreaming}
-                              isParsingMedia={isParsingMedia}
-                              features={{
-                                taskModeEntry: canUseTaskMode,
-                                taskMode: taskMode && canUseTaskMode,
-                              }}
-                              onToggleTaskMode={handleToggleTaskMode}
-                              placeholder={
-                                taskMode
-                                  ? (
-                                      bsConfig as {
-                                        linsightConfig?: {
-                                          input_placeholder?: string;
-                                        };
-                                      }
-                                    )?.linsightConfig?.input_placeholder ||
-                                    t("com_linsight_input_placeholder")
-                                  : undefined
-                              }
-                              onScrollToBottom={() => {}}
-                              modelOptions={bsConfig?.models}
-                              modelValue={chatModel.id}
-                              onModelChange={handleModelChange}
-                              onModelAutoChange={handleModelAutoChange}
-                              onSend={handleSend}
-                              onStop={stopGenerating}
-                              value={inputText}
-                              onChange={setInputText}
-                              bsConfig={bsConfig}
-                              selectedOrgKbs={selectedOrgKbs}
-                              knowledgeAccessMessage={knowledgeAccessMessage}
-                              onSelectedOrgKbsChange={setSelectedOrgKbs}
-                              searchType={searchType}
-                              onSearchTypeChange={setSearchType}
-                              onSelectionPresenceChange={setLandingHasSelection}
-                              attachmentAsk={attachmentAsk}
-                              onAttachmentAskDone={retireAttachmentAsk}
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Recommended apps: 40px below the centered block, so the
-                        block's own position never shifts when apps appear.
-                        offset = (block center) + (half block height) + 40px.
-                        ≥768 block center = 45vh; ≤767 = 40% of the measured region
-                        height (px, since `vh`/`%`-padding don't work here). */}
-                      <DailyFeaturedApps t={t} />
-                    </div>
+                    <ChatLanding model={model} composerConfigNotice={composerConfigNotice} />
                   )}
                 </div>
               );

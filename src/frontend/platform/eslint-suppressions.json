@@ -86,7 +86,7 @@
   },
   "src/components/bs-comp/cardComponent/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -649,7 +649,7 @@
   },
   "src/controllers/API/tenant.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 11
+      "count": 10
     }
   },
   "src/controllers/API/tools.ts": {
@@ -808,7 +808,7 @@
   },
   "src/layout/MainLayout.tsx": {
     "@typescript-eslint/ban-ts-comment": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -1144,9 +1144,6 @@
       "count": 2
     },
     "no-console": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
       "count": 1
     }
   },

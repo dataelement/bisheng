@@ -2,6 +2,8 @@
 import { cname } from "@/components/bs-ui/utils";
 import { showApiError } from "@/controllers/request";
 import { AppNumType,AppType } from "@/types/app";
+import type { User } from "@/types/api/user";
+import { resolveUserAvatarUrl } from "@bisheng/identity";
 import { Outlined } from "bisheng-icons";
 import { Shield } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -11,7 +13,7 @@ import { useTranslation } from "react-i18next";
 
 
 
-import { Dropdown, DropdownItem, DropdownSeparator, Switch, Tooltip, TooltipProvider } from "@bisheng/ui";
+import { Dropdown, DropdownItem, DropdownSeparator, Switch, Tooltip, TooltipProvider, UserAvatar } from "@bisheng/ui";
 import { Card,CardContent,CardDescription,CardFooter,CardHeader,CardTitle } from "../../bs-ui/card";
 
 interface IProps<T> {
@@ -24,8 +26,9 @@ interface IProps<T> {
   edit?: boolean,
   description: React.ReactNode | string,
   checked?: boolean,
-  user?: string,
-  currentUser?: any,
+  user?: string | number,
+  creatorId?: string | number | null,
+  currentUser?: Pick<Partial<User>, 'user_id' | 'avatar'> | null,
   labelPannel?: React.ReactNode,
   isAdmin?: boolean,
   canAddTemplate?: boolean,
@@ -95,6 +98,8 @@ export default function CardComponent<T>({
   type,
   edit = false,
   user,
+  creatorId,
+  currentUser,
   labelPannel = null,
   title,
   checked,
@@ -156,6 +161,9 @@ export default function CardComponent<T>({
   const hasPlainActions = Boolean(onPermission) || showAddTemp || showCopyItem
   const showDisabledDeleteItem = Boolean(onDelete && checked && deleteDisabledHint)
   const showActionBar = hasPlainActions || showDelete || showDisabledDeleteItem || Boolean(onMenuOpen)
+  const creatorAvatar = currentUser?.user_id && String(creatorId) === String(currentUser.user_id)
+    ? currentUser.avatar
+    : undefined
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -236,7 +244,8 @@ export default function CardComponent<T>({
       {labelPannel}
       <div className="flex justify-between items-center h-10">
         <div className="flex gap-1 items-center">
-          <Outlined.PeopleRound className="size-4 shrink-0" />
+          <UserAvatar className="size-4" fallbackClassName="text-caption-sm" name={typeof user === 'string' ? user : undefined}
+            src={resolveUserAvatarUrl(creatorAvatar, __APP_ENV__.BASE_URL)} />
           <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
           <span className="text-sm font-medium overflow-hidden text-ellipsis max-w-32 ">{user}</span>
         </div>

@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -11,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.group import Group
 from bisheng.database.models.tenant import Tenant, UserTenant
+from bisheng.permission.domain.services import grant_subject_service
 from bisheng.tenant.domain.repositories import grant_department_repository
 from bisheng.tenant.domain.repositories import grant_subject_search_repository as queries
 from bisheng.tenant.domain.services.f048_permission_subject import TenantPermissionSubjectDirectory
@@ -159,9 +161,36 @@ async def test_historical_membership_is_not_a_grant_candidate(directory):
     assert await directory.count_candidate_users(scope(), keyword="jia-other") == 0
 
 
-async def test_stale_selected_user_has_a_specific_membership_error(directory, monkeypatch):
-    from unittest.mock import AsyncMock
+async def test_candidate_avatar_lookup_only_receives_the_scoped_page(directory, monkeypatch):
+    monkeypatch.setattr(grant_subject_service, "get_grant_subject_directory", AsyncMock(return_value=directory))
+    monkeypatch.setattr(grant_subject_service, "_primary_department_paths", AsyncMock(return_value={}))
+    avatar = "/object/bisheng/avatar/3/current.png?signature=new"
+    lookup = AsyncMock(return_value={3: avatar})
+    monkeypatch.setattr(directory, "user_avatar_urls", lookup)
 
+    rows = await grant_subject_service.list_candidate_users(scope("/1/2/"), keyword="jia", page=1, page_size=2)
+
+    lookup.assert_awaited_once_with(1, (3, 2))
+    assert [(row["user_id"], row["user_name"], row["avatar"]) for row in rows] == [
+        (3, "same", avatar),
+        (2, "same", None),
+    ]
+
+
+async def test_roster_avatar_lookup_excludes_users_outside_the_resource_department(directory, monkeypatch):
+    monkeypatch.setattr(grant_subject_service, "resolve_department_space_path", AsyncMock(return_value="/1/2/"))
+    avatar = "/object/bisheng/avatar/2/current.png?signature=new"
+    lookup = AsyncMock(return_value={2: avatar})
+    monkeypatch.setattr(directory, "user_avatar_urls", lookup)
+    target = SimpleNamespace(tenant_id=1, resource_type="knowledge_space", resource_id="5")
+
+    result = await directory.resource_user_avatar_urls(target, (1, 2, 4, 5))
+
+    lookup.assert_awaited_once_with(1, (2,))
+    assert result == {2: avatar}
+
+
+async def test_stale_selected_user_has_a_specific_membership_error(directory, monkeypatch):
     from bisheng.common.errcode.permission import PermissionSubjectUnavailableError
     from bisheng.database.models.tenant import UserTenantDao
 

@@ -259,7 +259,8 @@
     "back": "Back to apps",
     "failed": "Cloud workbenches could not be loaded. Retry or ask your administrator to check server support.",
     "open": "Open workbench",
-    "empty": "No cloud workbenches available. Start with “Build my workbench” in BiSheng Desktop, or ask the app owner for access.",
+    "empty": "No cloud workbenches available",
+    "emptyDescription": "Select “Build my workbench” in BiSheng Desktop or ask the app owner for access",
     "more": "Load more",
     "guide": "Online development guide"
   }

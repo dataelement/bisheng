@@ -4,18 +4,21 @@ import ChatMessages from './ChatMessages';
 import { emitAreaTextEvent } from './useAreaText';
 
 let mockRunning = { guideWord: ['Example question'], error: { code: '', data: null }, inputDisabled: false, inputForm: false as boolean | object };
+type PresentedUserMessage = { kind: 'user'; category: 'question'; raw: { user_id: number; user_name: string } };
+let mockUserMessage: PresentedUserMessage | undefined;
 jest.mock('recoil', () => ({ useRecoilValue: (key: string) => key === 'running' ? mockRunning : key === 'chat' ? { flow: { flow_type: 5 } } : {} }));
 jest.mock('./store/atoms', () => ({ currentRunningState: 'running', currentChatState: 'chat', bishengConfState: 'config' }));
 jest.mock('~/store', () => ({ __esModule: true, default: { LaTeXParsing: 'latex' } }));
 jest.mock('./useMessages', () => ({ useMessage: () => ({ messages: [], chatId: 'assistant-chat', messageScrollRef: { current: null } }) }));
-jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: {} }) }));
+jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: '7', username: 'Viewer', avatar: '/private-avatar.png' } }) }));
 jest.mock('@bisheng/chat', () => ({
-  ConversationMessages: () => null,
+  ConversationMessages: ({ slots }: { slots: { avatar: (message: PresentedUserMessage) => React.ReactNode; title: (message: PresentedUserMessage) => string } }) => (
+    mockUserMessage ? <>{slots.avatar(mockUserMessage)}{slots.title(mockUserMessage)}</> : null
+  ),
   SuggestedQuestions: ({ questions, onSelect }: { questions: string[]; onSelect: (value: string) => void }) => <>{questions.map(question => <button key={question} onClick={() => onSelect(question)}>{question}</button>)}</>,
 }));
 jest.mock('@bisheng/chat/core', () => ({ messagesForPresentation: () => [], createRunLabels: () => ({}) }));
 jest.mock('~/components/Chat/MessageSelection', () => ({ SelectionMessagesProvider: ({ children }: React.PropsWithChildren) => <>{children}</>, SelectAllBelowBanner: () => null, MessageCheckbox: () => null }));
-jest.mock('~/components/ui/Avatar', () => ({ Avatar: () => null, AvatarImage: () => null, AvatarName: () => null }));
 jest.mock('./components/ClientChatMarkdown', () => ({ ClientChatMarkdown: () => null }));
 jest.mock('./components/ClientMessageFooter', () => ({ ClientMessageFooter: () => null }));
 jest.mock('./components/ClientMessageAttachments', () => ({ ClientMessageAttachments: () => null }));
@@ -25,6 +28,7 @@ jest.mock('./components/InputFormSkill', () => ({ __esModule: true, default: () 
 jest.mock('./useAreaText', () => ({ emitAreaTextEvent: jest.fn(), EVENT_TYPE: { INPUT_SUBMIT: 'input_submit' } }));
 
 beforeEach(() => {
+  mockUserMessage = undefined;
   mockRunning = { guideWord: ['Example question'], error: { code: '', data: null }, inputDisabled: false, inputForm: false };
   jest.clearAllMocks();
 });
@@ -58,4 +62,20 @@ it('hides the input form when there is an actual error', () => {
   mockRunning.error.code = '13010';
   open();
   expect(screen.queryByText('Skill form')).not.toBeInTheDocument();
+});
+
+it('uses the author name and shared fallback for read-only or guest conversations', () => {
+  mockUserMessage = { kind: 'user', category: 'question', raw: { user_id: 7, user_name: 'Public author' } };
+  const { rerender } = open();
+  expect(screen.getByAltText('')).toHaveAttribute('src', '/private-avatar.png');
+  expect(screen.getByText('Viewer')).toBeVisible();
+
+  rerender(<ChatMessages title="Assistant" logo={null} readOnly="share-token" />);
+  expect(screen.queryByAltText('')).not.toBeInTheDocument();
+  expect(screen.getByText('P')).toBeVisible();
+  expect(screen.getByText('Public author')).toBeVisible();
+
+  rerender(<ChatMessages title="Assistant" logo={null} readOnly={false} isGuestMode />);
+  expect(screen.queryByAltText('')).not.toBeInTheDocument();
+  expect(screen.getByText('Public author')).toBeVisible();
 });

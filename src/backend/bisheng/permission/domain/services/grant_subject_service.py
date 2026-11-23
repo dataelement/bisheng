@@ -81,13 +81,16 @@ async def list_candidate_users(
     rows = await directory.candidate_users(scope, keyword=_keyword(keyword), page=page, page_size=page_size)
     # The picker prints the staff id after the name and the department under it,
     # so people with the same display name can be told apart.
-    paths = await _primary_department_paths([int(row.user_id) for row in rows])
+    user_ids = tuple(int(row.user_id) for row in rows)
+    paths = await _primary_department_paths(list(user_ids))
+    avatars = await directory.user_avatar_urls(scope.tenant_id, user_ids) if user_ids else {}
     return [
         {
             "user_id": int(row.user_id),
             "user_name": row.user_name,
             "external_id": row.external_id,
             "primary_department_path": paths.get(int(row.user_id)),
+            "avatar": avatars.get(int(row.user_id)),
         }
         for row in rows
     ]

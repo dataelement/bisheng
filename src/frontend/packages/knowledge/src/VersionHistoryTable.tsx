@@ -124,11 +124,11 @@ export function VersionHistoryTable({ rows, compact = false }: VersionHistoryTab
                 <dt className={styles.fieldLabel}>{t('columns.filename')}</dt>
                 <dd>{row.fileName}</dd>
               </div>
-              {[
+              {([
                 { label: 'file_code', value: row.fileCode },
                 { label: 'uploader', value: row.uploader },
                 { label: 'upload_time', value: row.uploadedAt?.replace('T', ' ') },
-              ].map(({ label, value }) => (
+              ] as const).map(({ label, value }) => (
                 <div key={label} className="min-w-0">
                   <dt className={styles.fieldLabel}>{t(`columns.${label}`)}</dt>
                   <dd>{value || '—'}</dd>

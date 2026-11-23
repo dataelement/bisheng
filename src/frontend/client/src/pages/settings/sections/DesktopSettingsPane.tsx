@@ -16,14 +16,14 @@ import { AiAccessPane } from "./AiAccessPane";
 
 function DesktopAccountPane() {
   const { user } = useAuthContext();
-  const [avatarUrl, setAvatarUrl] = useState(user?.avatar ?? "");
   // Desktop owns enterprise logout. Reuse only the existing account editor here.
   return (
     <AccountSection
+      key={user?.id}
+      userId={user?.id}
       username={user?.username ?? ""}
       account={user?.external_id}
-      avatarUrl={avatarUrl}
-      onAvatarUpdated={setAvatarUrl}
+      avatarUrl={user?.avatar ?? ""}
     />
   );
 }

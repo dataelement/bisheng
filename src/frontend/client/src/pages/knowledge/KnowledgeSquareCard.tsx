@@ -1,5 +1,5 @@
 import { Lock } from "lucide-react";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
+import { UserAvatar } from "@bisheng/ui";
 import { Button } from "~/components/ui/Button";
 import { Card, CardContent } from "~/components/ui/Card";
 import { cn } from "~/utils";
@@ -48,8 +48,6 @@ export default function KnowledgeSquareCard({
 
     const buttonConfig = getButtonConfig();
     const isPrivateOrLocked = space.visibility !== VisibilityType.PUBLIC;
-
-    const creatorAvatar = space.icon;
 
     return (
         <Card
@@ -101,12 +99,13 @@ export default function KnowledgeSquareCard({
 
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-[#A9AEB8] touch-desktop:flex-nowrap touch-desktop:gap-2.5">
                     <div className="flex shrink-0 items-center gap-1.5">
-                        <Avatar className="border border-white h-5 w-5">
-                            {creatorAvatar ? (
-                                <AvatarImage src={creatorAvatar} alt={space.creator} />
-                            ) : null}
-                            <AvatarName name={space.creator} className="text-xs" />
-                        </Avatar>
+                        <UserAvatar
+                            className="size-5 border border-white"
+                            fallbackClassName="text-caption"
+                            src={space.creatorAvatar}
+                            name={space.creator}
+                            alt={space.creator}
+                        />
                     </div>
 
                     <span className="whitespace-nowrap">
