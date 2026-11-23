@@ -432,10 +432,10 @@ steps:
       - name: socket
         path: /var/run/docker.sock
     environment:
-      CR_DOCKERHUB_USERNAME:
-        from_secret: CR_DOCKERHUB_USERNAME
-      CR_DOCKERHUB_TOKEN:
-        from_secret: CR_DOCKERHUB_TOKEN
+      docker_user:
+        from_secret: DOCKER_USER
+      docker_password:
+        from_secret: DOCKER_PASSWORD
       NEXUS_USER:
         from_secret: NEXUS_CI_USER
       NEXUS_PASS:
@@ -447,12 +447,13 @@ steps:
     commands:
       - apk add --no-cache bash python3 zstd git coreutils
       - version=$(cat .offline-version)
-      - export GIT_REF="refs/tags/${version}"
-      - docker login -u "$CR_DOCKERHUB_USERNAME" -p "$CR_DOCKERHUB_TOKEN" cr.dataelem.com
-      - docker manifest inspect "cr.dataelem.com/dataelement/bisheng-backend:${version}"
-      - ./scripts/collect-images.sh --arch amd64 --version "$version" > images.txt
-      - ./scripts/make-bundle.sh --version "${version#v}" --arch amd64 --images-file images.txt --docker-dir docker --out dist --compress zstd --split-size 2G
-      - ./scripts/nexus-upload.sh --dir dist --version "${version#v}" --arch amd64 --base-url "$NEXUS_BASE" --repo "$NEXUS_REPO" --method rest --verify sha256 --update-latest
+      - test -n "$version"
+      - export GIT_REF="refs/tags/$${version}"
+      - docker login -u $docker_user -p $docker_password cr.dataelem.com
+      - docker manifest inspect "cr.dataelem.com/dataelement/bisheng-backend:$${version}"
+      - ./scripts/collect-images.sh --arch amd64 --version "$${version}" > images.txt
+      - ./scripts/make-bundle.sh --version "$${version#v}" --arch amd64 --images-file images.txt --docker-dir docker --out dist --compress zstd --split-size 2G
+      - ./scripts/nexus-upload.sh --dir dist --version "$${version#v}" --arch amd64 --base-url "$NEXUS_BASE" --repo "$NEXUS_REPO" --method rest --verify sha256 --update-latest
   - name: notify
     image: plugins/webhook
     failure: ignore

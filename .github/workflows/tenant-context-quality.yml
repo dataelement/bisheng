@@ -20,9 +20,10 @@ jobs:
         working-directory: src/backend
     env:
       PYTHONPATH: .
-      config: ${{ runner.temp }}/tenant-context-ci.yaml
     steps:
       - uses: actions/checkout@v4
+      - name: Export test config path
+        run: echo "config=${RUNNER_TEMP}/tenant-context-ci.yaml" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: '3.11'
