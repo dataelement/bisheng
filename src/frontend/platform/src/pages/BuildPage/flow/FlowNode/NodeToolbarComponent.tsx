@@ -5,7 +5,12 @@ import { Filled, Outlined } from "bisheng-icons";
 
 import { useTranslation } from "react-i18next";
 
-export default function NodeToolbarComponent({ nodeId, type, onRun }) {
+export default function NodeToolbarComponent({ nodeId, type, onRun, runPending = false }: {
+    nodeId: string;
+    type: string;
+    onRun: () => void;
+    runPending?: boolean;
+}) {
     const { t } = useTranslation('flow')
     const handleDelete = () => {
         const event = new CustomEvent('nodeDelete', {
@@ -26,7 +31,8 @@ export default function NodeToolbarComponent({ nodeId, type, onRun }) {
     return <div className="rounded-xl shadow-sm p-1 bg-gradient-to-r from-gray-50 to-[#fff] dark:from-gray-900 dark:to-gray-950 border">
         {["agent", "tool", "llm", "platform_llm", "platform_agent", "rag", "qa_retriever", "code"].includes(type) && (
             <Tip content={t('runNode')} side="top">
-                <Button size="medium" variant="text" className="size-8" onClick={onRun} color="default" iconOnly>
+                <Button type="button" size="medium" variant="text" className="size-8" onClick={onRun}
+                    disabled={runPending} aria-label={t('runNode')} color="default" iconOnly>
                     <Filled.PlayerPlay size={16} />
                 </Button>
             </Tip>

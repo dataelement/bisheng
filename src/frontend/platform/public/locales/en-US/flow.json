@@ -728,6 +728,7 @@
   "valueType": "Value type",
   "selectDbType": "Select a database type",
   "platformAgent": {
+    "validating": "Validating…",
     "executionMode": "Execution mode",
     "syncMode": "Synchronous",
     "asyncMode": "Asynchronous",

@@ -44,6 +44,7 @@ export default function Parameter({
     onStatusChange,
     onVarEvent,
     onAddSysPrompt,
+    onFouceUpdate,
     selectedKnowledgeIds
 }: {
     nodeId: string;
@@ -61,11 +62,12 @@ export default function Parameter({
 
     const handleOnNewValue = (newValue: any, validate?: any) => {
         item.value = newValue;
+        if (node.type === 'platform_agent' && item.key === 'user_prompt') onFouceUpdate?.();
         if (validate) bindValidate(validate);
     };
 
-    const bindValidate = (validate: any) => {
-        onStatusChange(item.key, { param: item, validate });
+    const bindValidate = (validate: any, pending = false) => {
+        onStatusChange(item.key, { param: item, validate, pending });
     };
 
     const bindVarValidate = (validate: any) => {

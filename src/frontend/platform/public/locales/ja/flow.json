@@ -728,6 +728,7 @@
   "valueType": "値のタイプ",
   "selectDbType": "データベースの種類を選択",
   "platformAgent": {
+    "validating": "検証中",
     "executionMode": "実行方式",
     "syncMode": "同期",
     "asyncMode": "非同期",

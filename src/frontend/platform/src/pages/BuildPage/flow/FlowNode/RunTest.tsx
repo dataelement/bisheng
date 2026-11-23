@@ -65,6 +65,7 @@ export const RunTest = forwardRef((props, ref) => {
     const [inputs, setInputs] = useState<Input[]>([])
     const trialGeneration = useRef(0)
     const [loading, setLoading] = useState(false)
+    const [agentValidating, setAgentValidating] = useState(false)
     const [node, setNode] = useState<WorkflowNode>(null)
 
     const { t } = useTranslation('flow')
@@ -75,6 +76,7 @@ export const RunTest = forwardRef((props, ref) => {
     useEffect(() => {
         if (!open) {
             trialGeneration.current += 1
+            setAgentValidating(false)
             setInputs([])
             setResults([])
         }
@@ -89,6 +91,7 @@ export const RunTest = forwardRef((props, ref) => {
             setNode(node)
             trialGeneration.current += 1
             setLoading(false)
+            setAgentValidating(false)
             setInputs([])
             setResults([])
 
@@ -164,6 +167,7 @@ export const RunTest = forwardRef((props, ref) => {
 
     const [results, setResults] = useState<any[]>([])
     const handleRunClick = async () => {
+        if (loading) return;
         if (node.type === 'platform_knowledge_retriever') {
             const generation = ++trialGeneration.current;
             setLoading(true);
@@ -190,24 +194,36 @@ export const RunTest = forwardRef((props, ref) => {
             return;
         }
         if (node.type === 'platform_agent') {
+            const generation = ++trialGeneration.current;
             setLoading(true);
+            setAgentValidating(true);
             setResults([]);
             try {
                 const flow = useFlowStore.getState().flow;
-                const graph = { ...flow, nodes: flow.nodes.map(item => item.id === node.id ? { ...item, data: node } : item) };
-                const validation = await validatePlatformAgents(workflow_id, graph, node.id);
+                const nodes = flow.nodes.map(item => item.id === node.id ? { ...item, data: node } : item);
+                if (!nodes.some(item => item.id === node.id)) nodes.push({ id: node.id, data: node });
+                const validation = await validatePlatformAgents(workflow_id, { ...flow, nodes }, node.id);
+                if (generation !== trialGeneration.current) return;
                 if (!validation.valid) {
                     toast.show({ type: 'warning', message: t('platformAgent.invalidConfiguration') });
                     return;
                 }
                 const nodeInput = Object.fromEntries(inputs.map(input => [input.key, input.jsonExpected ? JSON.parse(input.value) : input.value]));
+                setAgentValidating(false);
                 const result = await runWorkflowNodeApi({ node_input: nodeInput, data: node, workflow_id });
+                if (generation !== trialGeneration.current) return;
                 setCurrentIndex(0);
                 setResults(result.map(batch => TranslationName(batch)));
             } catch (error) {
+                if (generation !== trialGeneration.current) return;
                 if (error instanceof SyntaxError) toast.show({ type: 'warning', message: t('platformAgent.invalidJson') });
                 else showApiError(error);
-            } finally { setLoading(false); }
+            } finally {
+                if (generation === trialGeneration.current) {
+                    setAgentValidating(false);
+                    setLoading(false);
+                }
+            }
             return;
         }
         inputs.some(input => {
@@ -319,9 +335,10 @@ export const RunTest = forwardRef((props, ref) => {
                         </div>
                     ))}
 
-                    <Button className="w-full mb-2" disabled={loading} onClick={handleRunClick}>
+                    <Button type="button" className="w-full mb-2" disabled={loading} onClick={handleRunClick}>
                         {t('run')}
                     </Button>
+                    {agentValidating && <p role="status">{t('platformAgent.validating')}</p>}
                     {results.length !== 0 && <p className="mt-2 mb-3 text-sm font-bold">{t('runResults')}</p>}
                     {results.length > 1 && <div className="mb-2">
                         <Select

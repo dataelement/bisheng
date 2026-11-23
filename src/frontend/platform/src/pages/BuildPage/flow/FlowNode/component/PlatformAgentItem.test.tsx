@@ -1,11 +1,11 @@
 /** 覆盖 AC: AC-01, AC-02, AC-03, AC-04, AC-05, AC-20, AC-23。 */
 import { ApiError } from '@bisheng/api-client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useContext, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlatformAgentItem } from './PlatformAgentItem';
-import type { PlatformAgentBindings, PlatformAgentReference } from '@/types/flow';
+import type { PlatformAgentBindings, PlatformAgentReference, PlatformAgentValidation } from '@/types/flow';
 import { userContext } from '@/contexts/userContext';
 import { getPlatformAgentCapabilities, getPlatformAgents, getPlatformAgentVersion, validatePlatformAgents } from '@/controllers/API/workflow';
 
@@ -20,7 +20,7 @@ vi.mock('./SelectVar', () => ({ default: ({ children }: { children: React.ReactN
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { user_id: 12, tenant_id: 7 } }) }));
 // 使用可操作的选择器桩。测试配置状态与接口调用契约。
 vi.mock('@bisheng/ui', () => ({
-    Select: ({ options, value, onChange, ...props }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void; 'aria-label': string }) => <select aria-label={props['aria-label']} value={value || ''} onChange={e => onChange(e.target.value)}><option value="">--</option>{options.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}</select>,
+    Select: ({ options, value, onChange, ...props }: { options: { value: string; label: string; disabled?: boolean }[]; value: string; onChange: (value: string) => void; 'aria-label': string }) => <select aria-label={props['aria-label']} value={value || ''} onChange={e => onChange(e.target.value)}><option value="">--</option>{options.map(row => <option key={row.value} value={row.value} disabled={row.disabled}>{row.label}</option>)}</select>,
     Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
     Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
     Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
@@ -37,6 +37,82 @@ describe('PlatformAgentItem', () => {
         });
     });
     afterEach(() => { cleanup(); vi.clearAllMocks(); });
+    it('blocks play after switching versions until the current configuration passes validation', async () => {
+        let finishValidation!: (result: PlatformAgentValidation) => void;
+        const nextValidation = new Promise<PlatformAgentValidation>(resolve => {
+            finishValidation = resolve;
+        });
+        const openTrial = vi.fn();
+        let validate: () => string | false = () => 'not ready';
+        let playResult: string | false | undefined;
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+        function Harness({ selected = false }: { selected?: boolean }) {
+            const [reference, setReference] = useState<PlatformAgentReference | null>({ agent_id: 'echo', version_id: 'v1' });
+            const graph = { nodes: [{ id: 'platform_agent_1', data: {}, selected }], edges: [] };
+            return <QueryClientProvider client={client}>
+                <PlatformAgentItem workflowId="flow" nodeId="platform_agent_1" reference={reference} bindings={{}}
+                    workflowGraph={graph} onChange={setReference} onValidate={next => { validate = next; }} />
+                <button onClick={() => {
+                    playResult = validate();
+                    if (playResult === false) openTrial();
+                }}>Play</button>
+            </QueryClientProvider>;
+        }
+
+        const { rerender } = render(<Harness />);
+        await waitFor(() => expect(validate()).toBe(false));
+        const initialRequestCount = vi.mocked(validatePlatformAgents).mock.calls.length;
+        vi.mocked(validatePlatformAgents).mockReturnValueOnce(nextValidation);
+        fireEvent.change(screen.getByLabelText('platformAgent.version'), { target: { value: 'v2' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+        expect(playResult).toBe('platformAgent.validating');
+        expect(screen.getByText('platformAgent.validating')).toHaveAttribute('role', 'status');
+        expect(openTrial).not.toHaveBeenCalled();
+        await waitFor(() => expect(validatePlatformAgents).toHaveBeenCalledTimes(initialRequestCount + 1));
+        await act(async () => finishValidation({ valid: true, issues: [] }));
+        await waitFor(() => expect(validate()).toBe(false));
+        expect(screen.queryByText('platformAgent.validating')).not.toBeInTheDocument();
+        rerender(<Harness selected />);
+        expect(validate()).toBe(false);
+        expect(validatePlatformAgents).toHaveBeenCalledTimes(initialRequestCount + 1);
+        fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+        expect(openTrial).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        { supported: undefined, savedMode: undefined },
+        { supported: undefined, savedMode: 'async' },
+        { supported: true, savedMode: undefined },
+    ] as const)('only offers async for a supported version: $supported $savedMode', async ({ supported, savedMode }) => {
+        const optionsChanged = vi.fn();
+        vi.mocked(getPlatformAgentVersion).mockResolvedValueOnce({
+            ref: { agent_id: 'echo', version_id: 'v1' }, available: true, can_use: true,
+            provider_mode: 'real', policy_revision: 'real-v1', long_tasks_available: true,
+            ...(supported === true ? { supports_async: true } : {}),
+            input_schema: { type: 'object' }, output_schema: { type: 'object' },
+        });
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        render(<QueryClientProvider client={client}>
+            <PlatformAgentItem workflowId="flow" nodeId="platform_agent_1"
+                reference={{ agent_id: 'echo', version_id: 'v1' }} bindings={{}} executionMode={savedMode}
+                onChange={() => {}} onOptionsChange={optionsChanged} onValidate={() => {}} />
+        </QueryClientProvider>);
+        await screen.findByRole('checkbox', { name: 'platformAgent.allowInteraction' });
+        const select = screen.queryByRole('combobox', { name: 'platformAgent.executionMode' });
+        if (supported) {
+            expect(select).toHaveValue('sync');
+            fireEvent.change(select!, { target: { value: 'async' } });
+            expect(optionsChanged).toHaveBeenCalledWith('async', false);
+        } else if (savedMode) {
+            expect(screen.getByRole('option', { name: 'platformAgent.asyncMode' })).toBeDisabled();
+            fireEvent.change(select!, { target: { value: 'sync' } });
+            expect(optionsChanged).toHaveBeenCalledWith('sync', false);
+        } else {
+            expect(select).toBeNull();
+        }
+    });
+
     it.each([
         { available: true, supported: true, mode: 'async', enabled: true },
         { available: false, supported: true, mode: 'async', enabled: false },

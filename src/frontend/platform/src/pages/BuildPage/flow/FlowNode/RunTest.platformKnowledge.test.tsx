@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createRef, type ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { runWorkflowNodeApi } from '@/controllers/API/workflow';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { runWorkflowNodeApi, validatePlatformAgents } from '@/controllers/API/workflow';
+import type { PlatformAgentValidation } from '@/types/flow';
 import { RunTest } from './RunTest';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -28,6 +29,38 @@ vi.mock('@bisheng/ui', () => ({
         <textarea {...props} className={textareaClassName} />,
     toast: { show: vi.fn() },
 }));
+
+beforeEach(() => vi.clearAllMocks());
+
+describe('platform Agent node trial', () => {
+    it('shows pending validation and runs once the current trial is accepted', async () => {
+        let finishValidation!: (result: PlatformAgentValidation) => void;
+        vi.mocked(validatePlatformAgents).mockReturnValueOnce(new Promise(resolve => {
+            finishValidation = resolve;
+        }));
+        vi.mocked(runWorkflowNodeApi).mockResolvedValueOnce([[{ key: 'result', value: 'hello', type: 'text' }]]);
+        const handle = createRef<{ run: (node: unknown) => void }>();
+        render(<RunTest ref={handle} />);
+        const node = { type: 'platform_agent', id: 'platform_agent_1', name: 'Agent', group_params: [] };
+        act(() => handle.current?.run(node));
+
+        const run = screen.getByRole('button', { name: 'run' });
+        fireEvent.click(run);
+        expect(run).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent('platformAgent.validating');
+        expect(validatePlatformAgents).toHaveBeenCalledWith('flow', {
+            nodes: [{ id: node.id, data: node }], edges: [],
+        }, node.id);
+        fireEvent.click(run);
+        expect(validatePlatformAgents).toHaveBeenCalledTimes(1);
+        expect(runWorkflowNodeApi).not.toHaveBeenCalled();
+
+        await act(async () => finishValidation({ valid: true, issues: [] }));
+        expect(await screen.findByDisplayValue('hello')).toBeInTheDocument();
+        expect(runWorkflowNodeApi).toHaveBeenCalledTimes(1);
+        expect(runWorkflowNodeApi).toHaveBeenCalledWith({ node_input: {}, data: node, workflow_id: 'flow' });
+    });
+});
 
 describe('knowledge node trial', () => {
     it('sends the selected variable and clears output when the next trial fails', async () => {

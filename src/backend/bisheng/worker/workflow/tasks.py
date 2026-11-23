@@ -205,7 +205,11 @@ def _execute_workflow(
         # init workflow
         workflow_conf = settings.get_workflow_conf()
         workflow_name = workflow_info.name if workflow_info else workflow_id
-        interaction = platform_context is not None and uses_agent_interaction(workflow_data)
+        interaction = (
+            platform_context is not None
+            and platform_context["service"].config.mode == "mock"
+            and uses_agent_interaction(workflow_data)
+        )
         entry = platform_context["execution"]["dispatches"][platform_context["dispatch"].dispatch_id] if platform_context else {}
         long_task_resume = entry.get("long_task_resume") is True
         if interaction or long_task_resume:

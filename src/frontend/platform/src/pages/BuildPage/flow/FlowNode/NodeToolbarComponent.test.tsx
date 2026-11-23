@@ -3,6 +3,21 @@ import { afterEach, expect, it, vi } from 'vitest'
 import NodeToolbarComponent from './NodeToolbarComponent'
 
 afterEach(cleanup)
+it('keeps platform Agent play disabled while the node is validating', () => {
+    const onRun = vi.fn()
+    const { rerender } = render(<NodeToolbarComponent nodeId="platform_agent_1" type="platform_agent" onRun={onRun} runPending />)
+    const play = screen.getByRole('button', { name: 'runNode' })
+    expect(play).toBeDisabled()
+    fireEvent.click(play)
+    expect(onRun).not.toHaveBeenCalled()
+
+    rerender(<NodeToolbarComponent nodeId="platform_agent_1" type="platform_agent" onRun={onRun} />)
+    const readyPlay = screen.getByRole('button', { name: 'runNode' })
+    expect(readyPlay).toBeEnabled()
+    fireEvent.click(readyPlay)
+    expect(onRun).toHaveBeenCalledTimes(1)
+})
+
 it('renders the installed icons and preserves run, copy and delete actions', () => {
     const onRun = vi.fn()
     const onCopy = vi.fn()

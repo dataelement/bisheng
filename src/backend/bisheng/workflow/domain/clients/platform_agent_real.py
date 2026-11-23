@@ -20,6 +20,7 @@ from bisheng.common.errcode.flow import (
     PlatformAgentBadRequestError,
     PlatformAgentError,
     PlatformAgentExecutionError,
+    PlatformAgentNonterminalError,
     PlatformAgentNotReadyError,
     PlatformAgentOutputError,
     PlatformAgentPermissionError,
@@ -337,8 +338,8 @@ class KunlianPlatformAgentClient:
         raw_actions = data.get("allowed_actions")
         can_use = ("use" in raw_actions) if isinstance(raw_actions, list) else True
         available = bool(data.get("available", status not in ("disabled", "unavailable", "offline")))
-        supports_async = bool(data.get("supports_async", True))
-        supports_interaction = bool(data.get("supports_interaction", True))
+        supports_async = data.get("supports_async") is True
+        supports_interaction = data.get("supports_interaction") is True
 
         return AgentVersion(
             ref=AgentReference(
@@ -873,31 +874,44 @@ class RealPlatformAgentProvider:
         scope: str = SCOPE_AGENT_INVOKE,
         trace_id: str,
         require_scope: bool = False,
+        retry_on_unconfirmed: bool = False,
     ) -> ExchangedResourceToken:
         if not actor.workflow_context_id or not actor.workflow_session_id:
             raise PlatformAgentTokenError()
-        try:
-            creds = await self.callback_credentials_resolver(oidc_token_url=self.config.oidc_token_url)
-            exchanged = await shared_exchange_workflow_callback_token(
-                oidc_token_url=creds.oidc_token_url,
-                client_id=creds.client_id,
-                client_secret=creds.client_secret,
-                context_id=actor.workflow_context_id,
-                remote_session_id=actor.workflow_session_id,
-                scope=scope,
-                timeout_seconds=self.config.list_timeout_seconds,
-                trace_id=trace_id,
-                transport=self.client._transport,
-            )
-        except Exception as exc:
-            logger.debug(
-                "platform agent callback token exchange error user_id={} trace_id={} scope={} err_type={}",
-                actor.user_id,
-                sanitize_log_field(trace_id),
-                sanitize_log_field(scope),
-                type(exc).__name__,
-            )
-            raise _map_identity_error(exc) from None
+        delays = (0.4, 0.8) if retry_on_unconfirmed else ()
+        attempt = 0
+        while True:
+            try:
+                creds = await self.callback_credentials_resolver(oidc_token_url=self.config.oidc_token_url)
+                exchanged = await shared_exchange_workflow_callback_token(
+                    oidc_token_url=creds.oidc_token_url,
+                    client_id=creds.client_id,
+                    client_secret=creds.client_secret,
+                    context_id=actor.workflow_context_id,
+                    remote_session_id=actor.workflow_session_id,
+                    scope=scope,
+                    timeout_seconds=self.config.list_timeout_seconds,
+                    trace_id=trace_id,
+                    transport=self.client._transport,
+                )
+                break
+            except Exception as exc:
+                mapped = _map_identity_error(exc)
+                if attempt < len(delays) and isinstance(
+                    mapped,
+                    (PlatformAgentTokenError, PlatformAgentUpstreamError, PlatformAgentUnknownError),
+                ):
+                    await self.poll_sleep(delays[attempt])
+                    attempt += 1
+                    continue
+                logger.debug(
+                    "platform agent callback token exchange error user_id={} trace_id={} scope={} err_type={}",
+                    actor.user_id,
+                    sanitize_log_field(trace_id),
+                    sanitize_log_field(scope),
+                    type(exc).__name__,
+                )
+                raise mapped from None
 
         if require_scope and scope not in (exchanged.scope or "").split():
             raise PlatformAgentPermissionError()
@@ -910,6 +924,7 @@ class RealPlatformAgentProvider:
         scope: str,
         trace_id: str,
         require_scope: bool = False,
+        retry_on_unconfirmed: bool = False,
     ) -> ExchangedResourceToken:
         if actor.workflow_context_id and actor.workflow_session_id:
             return await self._exchange_callback_token(
@@ -917,6 +932,7 @@ class RealPlatformAgentProvider:
                 scope=scope,
                 trace_id=trace_id,
                 require_scope=require_scope,
+                retry_on_unconfirmed=retry_on_unconfirmed,
             )
         try:
             material = await self.token_material_resolver(
@@ -953,7 +969,13 @@ class RealPlatformAgentProvider:
         return exchanged
 
     async def _exchange_read_token(self, actor: VerifiedAgentActor, *, trace_id: str) -> ExchangedResourceToken:
-        return await self._exchange_token(actor, scope=SCOPE_RESOURCES_READ, trace_id=trace_id)
+        return await self._exchange_token(
+            actor,
+            scope=SCOPE_RESOURCES_READ,
+            trace_id=trace_id,
+            require_scope=True,
+            retry_on_unconfirmed=bool(actor.workflow_context_id and actor.workflow_session_id),
+        )
 
     async def list_agents(
         self,
@@ -1054,6 +1076,7 @@ class RealPlatformAgentProvider:
         deadline = self.clock() + budget
 
         token_state: dict[str, Any] = {"token": None, "expires_at": 0.0}
+        agent_run_id = (existing_agent_run_id or "").strip() or None
 
         async def ensure_token(force_refresh: bool = False) -> SecretStr:
             now = self.clock()
@@ -1063,11 +1086,14 @@ class RealPlatformAgentProvider:
                 and token_state["expires_at"] - now > 15.0
             ):
                 return token_state["token"]
-            exchanged = await self._exchange_callback_token(
+            exchanged = await self._exchange_token(
                 actor,
                 scope=SCOPE_AGENT_INVOKE,
                 trace_id=trace_id,
                 require_scope=True,
+                retry_on_unconfirmed=bool(
+                    not agent_run_id and actor.workflow_context_id and actor.workflow_session_id
+                ),
             )
             token_state["token"] = exchanged.access_token
             token_state["expires_at"] = now + max(float(exchanged.expires_in), 30.0)
@@ -1088,7 +1114,6 @@ class RealPlatformAgentProvider:
             if inspect.isawaitable(res):
                 await res
 
-        agent_run_id = (existing_agent_run_id or "").strip() or None
         last_snapshot: AgentRuntimeRunSnapshot | None = None
         if not agent_run_id:
             try:
@@ -1144,6 +1169,16 @@ class RealPlatformAgentProvider:
                         output=output,
                         agent_run_id=last_snapshot.agent_run_id,
                     )
+                if last_snapshot.status in RUNTIME_WAITING_STATES and not (
+                    actor.workflow_context_id and actor.workflow_session_id
+                ):
+                    # 非昆联工作台回调上下文无外部交表单接口，立即显式终止避免空等 120s
+                    logger.warning(
+                        "kunlian agent-runtime entered {} without workflow callback context agent_run_id={}",
+                        last_snapshot.status,
+                        sanitize_log_field(last_snapshot.agent_run_id),
+                    )
+                    raise PlatformAgentNonterminalError()
                 if last_snapshot.status == "cancelled":
                     logger.warning(
                         "kunlian agent-runtime cancelled agent_run_id={} request_id={} error_code={}",
@@ -1203,6 +1238,7 @@ class RealPlatformAgentProvider:
         on_agent_run_started=None,
         on_status_change=None,
         is_cancelled=None,
+        execution_mode: str = "sync",
     ) -> AgentInvokeResult:
         trace_id = uuid4().hex
         version = resolved_version or await self.check_use(actor, ref)
@@ -1218,7 +1254,7 @@ class RealPlatformAgentProvider:
         nd_run = (node_run_id or "").strip() or call_id or trace_id
         idem = (idempotency_key or "").strip() or call_id or trace_id
 
-        if actor.workflow_context_id and actor.workflow_session_id:
+        if (actor.workflow_context_id and actor.workflow_session_id) or execution_mode == "async":
             return await self._invoke_runtime_callback(
                 actor,
                 version,

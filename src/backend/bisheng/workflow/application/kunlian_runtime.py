@@ -30,6 +30,10 @@ def run_subject_from_request(access):
 
 
 class KunlianRuntimeService(WorkflowInvocationService):
+    def __init__(self, repository, resolve_user, dispatch, *, authorize_operation=None, resolve_candidate_user=None):
+        super().__init__(repository, resolve_user, dispatch, authorize_operation=authorize_operation)
+        self._resolve_candidate_user = resolve_candidate_user
+
     async def submit(
         self,
         subject,
@@ -89,7 +93,17 @@ class KunlianRuntimeService(WorkflowInvocationService):
             row.user_id,
         ):
             raise RunError("FORBIDDEN")
-        return await self.authorize(subject, row.workflow_id)
+        material = row.material if isinstance(row.material, dict) else {}
+        is_candidate = (
+            subject.credential_id is None
+            and subject.policy_revision is None
+            and (
+                material.get("kunlian_protocol") == "kunlian-workflow-candidate-v1"
+                or (isinstance(material.get("context_id"), str) and bool(material["context_id"].strip()))
+            )
+        )
+        resolver = self._resolve_candidate_user if is_candidate and self._resolve_candidate_user is not None else None
+        return await self.authorize(subject, row.workflow_id, resolve_user=resolver)
 
     def check_node_entry(self, row):
         # Called from the graph thread, not the async worker loop.
@@ -98,7 +112,9 @@ class KunlianRuntimeService(WorkflowInvocationService):
         run_async_task(lambda: self.authorize_run(row))
 
 
-def create_kunlian_runtime_service(*, resolve_user, dispatch, repository=None):
+def create_kunlian_runtime_service(
+    *, resolve_user, dispatch, repository=None, resolve_candidate_user=None
+):
     """Explicit composition port also usable by independent workers/tests."""
 
     async def allow_operation(subject, workflow_id, operation):
@@ -124,12 +140,16 @@ def create_kunlian_runtime_service(*, resolve_user, dispatch, repository=None):
         resolve_user,
         dispatch,
         authorize_operation=allow_operation,
+        resolve_candidate_user=resolve_candidate_user,
     )
 
 
 async def get_kunlian_runtime_service(app=None):
     """Production factory; no test registration or in-memory availability facts."""
+    from types import SimpleNamespace
+
     from bisheng.open_api.application.kunlian_access import revalidate_kunlian_subject
+    from bisheng.user.application.runtime_identity import read_current_person_facts
     from bisheng.worker.workflow.kunlian_runtime import dispatch_run
 
     async def resolve(subject):
@@ -141,4 +161,15 @@ async def get_kunlian_runtime_service(app=None):
         except (KunlianAccessError, KunlianError) as exc:
             raise RunError("UNAVAILABLE" if exc.http_status >= 500 else "FORBIDDEN") from exc
 
-    return create_kunlian_runtime_service(resolve_user=resolve, dispatch=dispatch_run)
+    async def resolve_candidate(subject):
+        # 候选 OIDC 协议运行使用 introspect 返回的 context_id，没有 API Key credential_id
+        facts = (await read_current_person_facts([subject.user_id])).get(subject.user_id, {})
+        if facts.get("state") != "active" or facts.get("tenant_id") != subject.tenant_id:
+            raise RunError("FORBIDDEN")
+        return SimpleNamespace(user_id=subject.user_id, tenant_id=subject.tenant_id)
+
+    return create_kunlian_runtime_service(
+        resolve_user=resolve,
+        dispatch=dispatch_run,
+        resolve_candidate_user=resolve_candidate,
+    )

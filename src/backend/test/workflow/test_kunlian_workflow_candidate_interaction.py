@@ -271,6 +271,12 @@ async def test_real_provider_callback_runtime_waits_and_recovers_on_succeeded():
     assert res.agent_run_id == "ar-99"
     assert res.output["content"] == "设备数量为 5"
     assert observed_statuses == ["queued", "waiting_input", "succeeded"]
+    assert [(method, path) for method, path, _ in calls] == [
+        ("POST", "/oidc/workflow-callback/token"),
+        ("POST", "/api/platform/v1/agent-runtime/invoke"),
+        ("GET", "/api/platform/v1/agent-runtime/runs/ar-99"),
+        ("GET", "/api/platform/v1/agent-runtime/runs/ar-99"),
+    ]
 
 
 async def test_real_provider_callback_runtime_handles_cancel_and_failure():
@@ -418,3 +424,128 @@ async def test_candidate_endpoints_capabilities_invoke_lookup_session_cancel(
         assert cancelled.status_code == 200
         assert cancelled.json()["data"]["status"] == "cancelled"
         assert cancelled.json()["data"]["cancel_state"] == "CONFIRMED"
+
+
+async def test_worker_runtime_service_authorizes_candidate_run_without_api_key_credential(monkeypatch):
+    from bisheng.common.services import config_service
+    from bisheng.core.config.settings import WorkflowConf
+    from bisheng.open_api.application import kunlian_access
+    from bisheng.user.application import runtime_identity
+    from bisheng.workflow.application import kunlian_runtime as runtime_mod
+    from bisheng.workflow.application import kunlian_workflow_invocation as inv_mod
+
+    monkeypatch.setattr(config_service.ConfigService, "get_workflow_conf", lambda _self: WorkflowConf())
+    monkeypatch.setattr(inv_mod, "require_business_action", AsyncMock())
+    monkeypatch.setattr(
+        runtime_identity,
+        "read_current_person_facts",
+        AsyncMock(return_value={12: {"state": "active", "tenant_id": 7}}),
+    )
+
+    revalidate_calls = 0
+
+    async def fail_revalidate(_subject, *, app=None):
+        nonlocal revalidate_calls
+        revalidate_calls += 1
+        raise RunError("FORBIDDEN")
+
+    monkeypatch.setattr(kunlian_access, "revalidate_kunlian_subject", fail_revalidate)
+
+    service = await runtime_mod.get_kunlian_runtime_service()
+    monkeypatch.setattr(service.repository, "verify_target", lambda _tid, _wid: None)
+
+    candidate_row = SimpleNamespace(
+        tenant_id=7,
+        connection_id="kunlian",
+        user_id=12,
+        workflow_id=FLOW_ID,
+        material={
+            "kunlian_protocol": "kunlian-workflow-candidate-v1",
+            "context_id": "ctx-worker-1",
+            "kunlian_identity": {
+                "tenant_id": 7,
+                "connection_id": "kunlian",
+                "user_id": 12,
+                "credential_id": None,
+                "identity_connection_id": "kunlian",
+                "external_tenant_id": "ext-t",
+                "external_user_id": "ext-u",
+                "policy_revision": None,
+            },
+        },
+    )
+    user = await service.authorize_run(candidate_row)
+    assert (user.user_id, user.tenant_id) == (12, 7)
+    assert revalidate_calls == 0
+
+    formal_missing_cred = SimpleNamespace(
+        tenant_id=7,
+        connection_id="kunlian",
+        user_id=12,
+        workflow_id=FLOW_ID,
+        material={
+            "kunlian_identity": {
+                "tenant_id": 7,
+                "connection_id": "kunlian",
+                "user_id": 12,
+                "credential_id": None,
+            }
+        },
+    )
+    with pytest.raises(RunError, match="FORBIDDEN"):
+        await service.authorize_run(formal_missing_cred)
+    assert revalidate_calls == 1
+
+
+async def test_callback_token_exchange_retries_briefly_when_session_unconfirmed():
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        if request.url.path == "/oidc/workflow-callback/token":
+            attempts += 1
+            if attempts == 1:
+                return httpx.Response(401, json={"error": "session_not_ready"})
+            return httpx.Response(200, json={"access_token": "cb-tok-retry", "expires_in": 120, "scope": "platform.agent.invoke"})
+        if request.url.path == "/api/platform/v1/agent-runtime/invoke":
+            return httpx.Response(202, json={"data": {"agent_run_id": "ar-retry", "status": "succeeded", "result": {"content": "已确认"}}})
+        return httpx.Response(404)
+
+    async def fake_creds(*, oidc_token_url: str = ""):
+        return KunlianClientCredentialsMaterial(
+            client_id="cid",
+            client_secret=SecretStr("csec"),
+            oidc_token_url="http://idp.test/oidc/token",
+            issuer="http://idp.test",
+        )
+
+    conf = PlatformAgentConf(mode="real", resource_base_url="http://gw.test", oidc_token_url="http://idp.test/oidc/token")
+    sleep_mock = AsyncMock()
+    provider = RealPlatformAgentProvider(
+        conf,
+        callback_credentials_resolver=fake_creds,
+        transport=httpx.MockTransport(handler),
+        poll_sleep=sleep_mock,
+    )
+    actor = VerifiedAgentActor(user_id=12, tenant_id=7, workflow_context_id="ctx-1", workflow_session_id="sess-1")
+    ref = AgentReference(agent_id="agent-1", version_id="ver-1", call_id="release-agent-1")
+    version = AgentVersion(
+        ref=ref,
+        name="子Agent",
+        input_schema={"type": "object", "properties": {}, "required": []},
+        output_schema={"type": "object", "properties": {}, "required": []},
+        call_id="release-agent-1",
+    )
+
+    res = await provider.invoke(
+        actor,
+        ref,
+        {},
+        user_prompt="确认",
+        idempotency_key="fixed-retry-key-123456",
+        resolved_version=version,
+    )
+    assert attempts == 2
+    assert sleep_mock.await_count == 1
+    assert res.status == "SUCCEEDED"
+    assert res.output["content"] == "已确认"

@@ -1184,7 +1184,12 @@ class WorkFlowService(BaseService):
                 trial_inputs=set(node_input),
             )
             dispatch = service.repository.claim_dispatch(execution["execution_id"], dispatch_id)
-            platform_context = {"service": service, "login_user": login_user, "dispatch": dispatch}
+            platform_context = {
+                "service": service,
+                "login_user": login_user,
+                "dispatch": dispatch,
+                "single_node_trial": True,
+            }
 
         knowledge_run = None
         if node_data.type == NodeType.PLATFORM_KNOWLEDGE_RETRIEVER.value:

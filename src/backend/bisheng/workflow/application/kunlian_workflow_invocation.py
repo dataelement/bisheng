@@ -35,12 +35,12 @@ class WorkflowInvocationService:
         self.dispatch = dispatch
         self.authorize_operation = authorize_operation
 
-    async def authorize(self, subject, workflow_id):
+    async def authorize(self, subject, workflow_id, *, resolve_user=None):
         with tenant_execution_scope(subject.tenant_id):
             try:
                 # TODO [F122][EXT-01] 按双方合同解析连接资格与当前自然人身份。
                 # TODO [F123][EXT-01] 确认交互提交及恢复时实际用户的解析与授权时效。
-                user = await self.resolve_user(subject)
+                user = await (resolve_user or self.resolve_user)(subject)
                 if user is None or (user.tenant_id, user.user_id) != (subject.tenant_id, subject.user_id):
                     raise RunError("FORBIDDEN")
                 await to_thread(self.repository.verify_target, subject.tenant_id, workflow_id)

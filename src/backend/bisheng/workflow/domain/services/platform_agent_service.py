@@ -478,6 +478,7 @@ class PlatformAgentService:
         on_agent_run_started=None,
         on_status_change=None,
         is_cancelled=None,
+        execution_mode: str | None = None,
     ):
         if node_configuration(node).execution_mode == "async" and self.config.mode == "mock":
             return await self.invoke_long_node(login_user, workflow_id, dispatch, node, ordinal, lookup)
@@ -546,6 +547,8 @@ class PlatformAgentService:
                             on_status_change=on_status_change,
                             is_cancelled=is_cancelled,
                         )
+                    if "execution_mode" in invoke_params and execution_mode is not None:
+                        extra_kwargs["execution_mode"] = execution_mode
                     result = await provider.invoke(
                         actor,
                         version.ref,

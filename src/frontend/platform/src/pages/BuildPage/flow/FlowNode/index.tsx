@@ -172,10 +172,19 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     }
 
     const [nodeError, setNodeError] = useBorderColor(node)
+    const [agentValidationPending, setAgentValidationPending] = useState(false)
     const { paramValidateEntities, varValidateEntities, validateAll } = useEventMaster(node, setNodeError)
+    const registerParamValidation = (key, entry) => {
+        paramValidateEntities.current[key] = entry
+        if (node.type === 'platform_agent' && key === 'agent_ref') {
+            setAgentValidationPending(Boolean(entry.pending))
+            if (entry.pending) setNodeError(false)
+        }
+    }
     const handleRun = async () => {
         // vilidate node
         const errors = await validateAll({ tmp: true })
+        if (node.type === 'platform_agent' && paramValidateEntities.current.agent_ref?.pending) return
 
         if (errors.length) return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
 
@@ -241,7 +250,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
             className={`${selected ? 'border-primary' : 'border-transparent'} border rounded-[25px]`}>
             {/* head bars */}
             <NodeToolbar isVisible align="end" className={`${isVisible ? '' : 'hidden'}`} >
-                <NodeToolbarComponent nodeId={node.id} type={node.type} onRun={handleRun}></NodeToolbarComponent>
+                <NodeToolbarComponent nodeId={node.id} type={node.type} onRun={handleRun} runPending={agentValidationPending} />
             </NodeToolbar>
 
             <div
@@ -340,7 +349,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 nodeId={node.id}
                                 node={node}
                                 cate={group}
-                                onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
+                                onStatusChange={registerParamValidation}
                                 onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}
                                 tab={currentTab}
                             />
@@ -352,8 +361,8 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 cate={group}
                                 onOutPutChange={handleChangeOutPut}
                                 onAddSysPrompt={handleAddSysPrompt}
-                                onFouceUpdate={() => setFocusUpdate(!focusUpdate)}
-                                onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
+                                onFouceUpdate={() => setFocusUpdate(previous => !previous)}
+                                onStatusChange={registerParamValidation}
                                 onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}
                                 selectedKnowledgeIds={getSelectedKnowledgeIds}
                             />
@@ -398,6 +407,9 @@ const useEventMaster = (node, setNodeError) => {
     }
 
     const validateAll = async (config) => {
+        if (node.type === 'platform_agent' && paramValidateEntities.current.agent_ref?.pending) {
+            return [t('platformAgent.validating')];
+        }
         // item
         const errors = validateParams(false);
 

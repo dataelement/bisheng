@@ -9,6 +9,7 @@ import pytest
 from loguru import logger
 from pydantic import SecretStr
 
+from bisheng.api.services import workflow as workflow_service
 from bisheng.api.v1.endpoints import get_env
 from bisheng.common.errcode.flow import (
     PlatformAgentBadRequestError,
@@ -285,6 +286,100 @@ async def test_fixed_version_detail_parses_kunlian_envelope_and_falls_back_null_
 
     with pytest.raises(PlatformAgentVersionError):
         await client.get_agent_version(SecretStr("tok"), resource_id="agent-finance-001", version_id="latest")
+
+
+@pytest.mark.parametrize("capability", ["supports_interaction", "supports_async"])
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        pytest.param((), False, id="missing"),
+        pytest.param((False,), False, id="false"),
+        pytest.param((None,), False, id="null"),
+        pytest.param(("true",), False, id="string"),
+        pytest.param((1,), False, id="number"),
+        pytest.param((True,), True, id="true"),
+    ],
+)
+async def test_version_requires_explicit_boolean_to_support_capability(capability, values, expected):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/platform/v1/resources/agent/agent-finance-001/versions/ver-101"
+        detail = {capability: values[0]} if values else {}
+        return httpx.Response(200, json={"code": "OK", "data": detail})
+
+    client = KunlianPlatformAgentClient(_conf(), transport=httpx.MockTransport(handler))
+    version = await client.get_agent_version(
+        SecretStr("tok"), resource_id="agent-finance-001", version_id="ver-101"
+    )
+
+    assert getattr(version, capability) is expected
+
+
+@pytest.mark.parametrize(
+    ("version_details", "execution_options", "accepted"),
+    [
+        pytest.param({"supports_async": True}, [{"key": "execution_mode", "value": "async"}], True, id="async"),
+        pytest.param({}, [], True, id="missing-default-sync"),
+        pytest.param({}, [{"key": "execution_mode", "value": "async"}], False, id="missing-explicit-async"),
+    ],
+)
+async def test_real_platform_agent_single_node_routing(agent_store, monkeypatch, version_details, execution_options, accepted):
+    import json
+    import time
+
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        if request.url.path == "/oidc/token":
+            scope = parse_qs(request.content.decode())["scope"][0]
+            return httpx.Response(200, json={"access_token": "agent-test-token", "expires_in": 120, "scope": scope})
+        if request.url.path == "/api/platform/v1/resources/agent/agent-1/versions/release-1":
+            return httpx.Response(200, json={"code": "OK", "data": {"call_id": "release-1", **version_details}})
+        if request.url.path == "/api/platform/v1/chat/completions":
+            assert json.loads(request.content)["stream"] is False
+            return httpx.Response(
+                200,
+                json={"id": "chatcmpl-1", "choices": [{"finish_reason": "stop", "message": {"content": "运行成功"}}]},
+            )
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    config = _conf()
+    repo, _, _, _ = agent_store
+    repo.clock = time.time
+    provider = RealPlatformAgentProvider(
+        config, token_material_resolver=AsyncMock(return_value=_material()), transport=httpx.MockTransport(handler)
+    )
+    service = domain.PlatformAgentService(config=config, repository=repo, provider=provider)
+    monkeypatch.setattr(app_platform_agent, "get_service", lambda: service)
+    monkeypatch.setattr(domain, "require_business_action", AsyncMock())
+    monkeypatch.setattr(workflow_service, "require_business_action", AsyncMock())
+    workflow = SimpleNamespace(id="f" * 32, name="fixture", tenant_id=7)
+    monkeypatch.setattr(workflow_service.FlowDao, "get_flow_by_id", lambda _: workflow)
+    actor = SimpleNamespace(
+        user_id=12, tenant_id=7, _runtime_credential_reference={"kind": "kunlian_session", "reference": "sess-1"}
+    )
+    params = [
+        {"key": "agent_ref", "value": {"agent_id": "agent-1", "version_id": "release-1"}},
+        {"key": "user_prompt", "value": "测试输入"},
+        *execution_options,
+    ]
+    node = {
+        "data": {
+            "id": "platform_agent_1",
+            "name": "fixture",
+            "type": "platform_agent",
+            "group_params": [{"params": params}],
+        }
+    }
+    if not accepted:
+        with pytest.raises(PlatformAgentVersionError):
+            await workflow_service.WorkFlowService.run_once(actor, {}, node, workflow.id)
+        assert {path for _, path in calls} == {"/oidc/token", "/api/platform/v1/resources/agent/agent-1/versions/release-1"}
+        return
+
+    [result] = await workflow_service.WorkFlowService.run_once(actor, {}, node, workflow.id)
+    assert next(item["value"] for item in result if item["key"] == "result")["content"] == "运行成功"
+    assert calls[-1] == ("POST", "/api/platform/v1/chat/completions")
 
 
 def test_unconfigured_real_provider_raises_not_ready():
@@ -606,3 +701,81 @@ async def test_service_validate_graph_accepts_enriched_agent_reference_metadata(
     res = await service.validate_graph(SimpleNamespace(user_id=12, tenant_id=7), "wf-1", graph)
     assert res["valid"] is True
     assert res["nodes"]["pa-1"]["ref"] == {"agent_id": "agent-1", "version_id": "ver-1"}
+
+
+async def test_real_provider_full_workflow_async_uses_agent_runtime_and_guards_waiting_input():
+    from bisheng.common.errcode.flow import PlatformAgentNonterminalError
+    from bisheng.workflow.domain.schemas.platform_agent import AgentVersion
+
+    calls: list[tuple[str, str]] = []
+    poll_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal poll_count
+        calls.append((request.method, request.url.path))
+        if request.url.path == "/oidc/token":
+            scope = parse_qs(request.content.decode())["scope"][0]
+            return httpx.Response(200, json={"access_token": "sso-tok-1", "expires_in": 120, "scope": scope})
+        if request.url.path == "/api/platform/v1/agent-runtime/invoke":
+            return httpx.Response(202, json={"data": {"agent_run_id": "ar-sso-1", "status": "queued"}})
+        if request.url.path == "/api/platform/v1/agent-runtime/runs/ar-sso-1":
+            poll_count += 1
+            if poll_count == 1:
+                return httpx.Response(200, json={"data": {"agent_run_id": "ar-sso-1", "status": "running"}})
+            return httpx.Response(
+                200,
+                json={"data": {"agent_run_id": "ar-sso-1", "status": "succeeded", "result": {"content": "异步完成"}}},
+            )
+        if request.url.path == "/api/platform/v1/agent-runtime/runs/ar-wait":
+            return httpx.Response(200, json={"data": {"agent_run_id": "ar-wait", "status": "waiting_input"}})
+        return httpx.Response(404)
+
+    async def resolver(user_id: int, *, session_reference=None, oidc_token_url=""):
+        return _material()
+
+    provider = RealPlatformAgentProvider(
+        _conf(),
+        token_material_resolver=resolver,
+        transport=httpx.MockTransport(handler),
+        poll_sleep=AsyncMock(),
+    )
+    version = AgentVersion(
+        ref=AgentReference(agent_id="agent-async", version_id="ver-async"),
+        name="Async Agent",
+        call_id="release-async",
+        input_schema={"type": "object", "properties": {}, "required": []},
+        output_schema={"type": "object", "properties": {}, "required": []},
+        available=True,
+        can_use=True,
+        supports_async=True,
+    )
+    res = await provider.invoke(
+        VerifiedAgentActor(12, 7),
+        version.ref,
+        {},
+        "exec1:pa_1:0",
+        user_prompt="执行异步任务",
+        resolved_version=version,
+        execution_mode="async",
+    )
+    assert res.status == "SUCCEEDED"
+    assert res.agent_run_id == "ar-sso-1"
+    assert res.output["content"] == "异步完成"
+    assert calls == [
+        ("POST", "/oidc/token"),
+        ("POST", "/api/platform/v1/agent-runtime/invoke"),
+        ("GET", "/api/platform/v1/agent-runtime/runs/ar-sso-1"),
+        ("GET", "/api/platform/v1/agent-runtime/runs/ar-sso-1"),
+    ]
+
+    with pytest.raises(PlatformAgentNonterminalError):
+        await provider.invoke(
+            VerifiedAgentActor(12, 7),
+            version.ref,
+            {},
+            "exec1:pa_1:1",
+            user_prompt="需要输入",
+            resolved_version=version,
+            existing_agent_run_id="ar-wait",
+            execution_mode="async",
+        )

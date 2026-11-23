@@ -1,7 +1,7 @@
 import { Button, Checkbox, Input, Select, Textarea } from '@bisheng/ui';
 import { isApiError } from '@bisheng/api-client';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import { userContext } from '@/contexts/userContext';
@@ -27,9 +27,9 @@ interface Props {
     executionMode?: PlatformAgentExecutionMode;
     allowInteraction?: boolean;
     onOptionsChange?: (mode: PlatformAgentExecutionMode, allowInteraction: boolean) => void;
-    workflowGraph?: { nodes: { id: string; data: unknown }[]; edges: unknown[] };
+    workflowGraph?: { nodes: { id: string; data: unknown }[]; edges: { source: string; target: string }[] };
     onChange: (reference: PlatformAgentReference | null, bindings: PlatformAgentBindings, outputSchema?: PlatformAgentSchema) => void;
-    onValidate: (validate: () => string | false) => void;
+    onValidate: (validate: () => string | false, pending: boolean) => void;
 }
 
 interface BindingFieldProps {
@@ -181,23 +181,33 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, use
     const canInteract = (isMockMode ? (canRunAsync && executionMode === 'async') : true)
         && version.data?.interaction_available === true && version.data.supports_interaction === true
         && version.data.available === true && version.data.can_use === true;
-    const graph = { nodes: [{ id: nodeId, data: { id: nodeId, type: 'platform_agent', group_params: [{ params: [
+    const node = { id: nodeId, data: { id: nodeId, type: 'platform_agent', group_params: [{ params: [
         { key: 'agent_ref', value: currentReference }, { key: 'input_bindings', value: bindings },
         ...(typeof userPrompt === 'string' && userPrompt ? [{ key: 'user_prompt', value: userPrompt }] : []),
         ...(executionMode === 'async' ? [{ key: 'execution_mode', value: 'async' }] : []),
         ...(allowInteraction ? [{ key: 'allow_interaction', value: true }] : []),
-    ] }] } }], edges: [] };
-    const candidate = workflowGraph ? { ...workflowGraph, nodes: workflowGraph.nodes.map(node => node.id === nodeId ? { ...node, data: graph.nodes[0].data } : node) } : graph;
+    ] }] } };
+    // 画布的选中、位置和尺寸变化不影响节点校验。
+    const nodes = workflowGraph?.nodes.map(({ id, data }) => id === nodeId ? node : { id, data }) ?? [];
+    if (!nodes.some(item => item.id === nodeId)) nodes.push(node);
+    const candidate = {
+        nodes,
+        edges: workflowGraph?.edges.map(({ source, target }) => ({ source, target })) ?? [],
+    };
     const validation = useQuery({ queryKey: [...scope, 'validate', nodeId, candidate], queryFn: () => validatePlatformAgents(workflowId, candidate, nodeId),
         enabled: canLoadAgents && Boolean(version.data) && !Object.values(invalidFields).some(Boolean), cacheTime: 0 });
+    const validationPending = Boolean(currentReference?.agent_id && currentReference.version_id)
+        && (capability.isInitialLoading || version.isFetching || validation.isFetching);
     useEffect(() => { const error = capability.error || directory.error || version.error || validation.error; if (error) showApiError(error); }, [capability.error, directory.error, version.error, validation.error]);
-    useEffect(() => {
+    useLayoutEffect(() => {
         callbacks.current.onValidate(() => {
+            if (validationPending) return t('platformAgent.validating');
             if (allowInteraction && !canInteract) return t('platformAgent.interactionUnsupported');
             return currentReference?.agent_id && currentReference.version_id && version.data?.available && version.data.can_use
-                && validation.data?.valid && !Object.values(invalidFields).some(Boolean) ? false : t('platformAgent.invalidConfiguration');
-        });
-    }, [currentReference, version.data, validation.data, invalidFields, allowInteraction, canInteract, t]);
+                && validation.isSuccess && validation.data.valid && !Object.values(invalidFields).some(Boolean)
+                ? false : t('platformAgent.invalidConfiguration');
+        }, validationPending);
+    }, [currentReference, version.data, validation.isSuccess, validation.data, validationPending, invalidFields, allowInteraction, canInteract, t]);
     useEffect(() => { if (version.data) callbacks.current.onChange(callbacks.current.reference, callbacks.current.bindings, version.data.output_schema); }, [version.data]);
     const directoryErrorCode = isApiError(directory.error) ? directory.error.status_code : null;
     const directoryErrorMessage = directoryErrorCode === 10587
@@ -250,11 +260,12 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, use
             }} />
         {currentReference && <p className="text-sm">{currentReference.name || currentReference.agent_id} / {currentReference.version || currentReference.version_id}</p>}
         {changed && <p role="status">{t('platformAgent.versionChanged')}</p>}
+        {validationPending && <p role="status">{t('platformAgent.validating')}</p>}
         {onOptionsChange && version.data && <div className="space-y-2">
             {(canRunAsync || executionMode === 'async') && <Select {...labels} aria-label={t('platformAgent.executionMode')}
                 value={executionMode} options={[
                     { value: 'sync', label: t('platformAgent.syncMode') },
-                    { value: 'async', label: t('platformAgent.asyncMode') },
+                    { value: 'async', label: t('platformAgent.asyncMode'), disabled: !canRunAsync },
                 ]} onChange={value => {
                     if (value === 'sync') onOptionsChange('sync', false);
                     if (value === 'async' && canRunAsync) onOptionsChange('async', allowInteraction);
@@ -276,6 +287,6 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, use
                 <pre className="whitespace-pre-wrap break-all text-xs">{JSON.stringify(version.data.output_schema, null, 2)}</pre>
             </>}
         </>}
-        {validation.data && !validation.data.valid && <p role="alert">{t('platformAgent.invalidConfiguration')}</p>}
+        {!validationPending && validation.data && !validation.data.valid && <p role="alert">{t('platformAgent.invalidConfiguration')}</p>}
     </div>;
 }

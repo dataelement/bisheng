@@ -82,6 +82,7 @@ class PlatformAgentNode(BaseNode):
             invoke_kwargs = {
                 "node_run_id": unique_id,
                 "rendered_user_prompt": rendered_prompt,
+                "execution_mode": "sync" if context.get("single_node_trial") else configuration.execution_mode,
             }
             for opt_key in (
                 "workflow_context_id",

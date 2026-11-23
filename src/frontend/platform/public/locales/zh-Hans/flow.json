@@ -728,6 +728,7 @@
   "valueType": "值类型",
   "selectDbType": "请选择数据库类型",
   "platformAgent": {
+    "validating": "校验中",
     "executionMode": "执行方式",
     "syncMode": "同步",
     "asyncMode": "异步",

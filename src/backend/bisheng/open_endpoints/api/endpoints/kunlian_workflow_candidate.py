@@ -239,6 +239,7 @@ async def candidate_or_legacy_invoke(request: Request, response: Response):
             run_req,
             allow_platform_agent=True,
             extra_material={
+                "kunlian_protocol": "kunlian-workflow-candidate-v1",
                 "context_id": introspected.context_id,
                 "operation_key": operation_key,
             },
