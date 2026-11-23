@@ -70,3 +70,14 @@ class FilelibSyncRepository(BaseRepository[KnowledgeFile, int], ABC):
         file_level_path: str,
     ) -> list[KnowledgeFile]:
         pass
+
+    @abstractmethod
+    async def find_files_for_sync_replace(
+        self,
+        knowledge_id: int,
+        *,
+        file_name: str,
+        file_level_path: str,
+    ) -> list[KnowledgeFile]:
+        """Same-name live files for sync replace, including parse failures."""
+        pass

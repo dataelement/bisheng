@@ -1362,15 +1362,13 @@ class FilelibSyncService:
         )
         candidates: dict[int, KnowledgeFile] = {}
 
+        # Include FAILED/TIMEOUT/VIOLATION; get_file_by_condition excludes them
+        # and would leave a failed row beside the next successful sync.
         for path in self._file_level_path_variants(file_level_path):
-            for existing_file in (
-                await asyncio.to_thread(
-                    KnowledgeFileDao.get_file_by_condition,
-                    knowledge_id=knowledge_id,
-                    file_name=file_name,
-                    file_level_path=path,
-                )
-                or []
+            for existing_file in await self.repository.find_files_for_sync_replace(
+                knowledge_id,
+                file_name=file_name,
+                file_level_path=path,
             ):
                 candidates[int(existing_file.id)] = existing_file
 
