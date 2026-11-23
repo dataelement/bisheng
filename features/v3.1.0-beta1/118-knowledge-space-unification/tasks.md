@@ -8682,19 +8682,153 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 
 现场边界：按用户要求，本轮不连接或修改 165 环境；本地验证不代替发行镜像的真实中间件演练。
 
-## 2026-11-20 显式目录继承与私有库保留（AC-115/116）
 
-- [x] INHERIT-INTENT：用户后续明确要求继续现场升级，并确认缺失目录应继承父库；旧私有库保留，不新增授权。此为后续操作范围，前轮只读/不部署边界不追溯改写。
-- [x] INHERIT-CLI：独立选中计划、原生 mode/投影围栏及 checksum 恢复，不生成 Creator/人员/角色 Grant，原计划不覆盖，父子按顺序补齐。
-- [x] PRIVATE-RETAIN：type=2 历史文件/文档在合法归属/父链检查后保留，不成为新 mode/层级修复对象；活动库仍严格校验。
-- [x] INHERIT-VERIFY：新增 21 项，相关组合 318 通过；N/2N SQL/事务/写请求计数线性，关键 MySQL 索引只读 EXPLAIN 通过；Ruff、架构守卫、CLI 帮助与差异检查通过。
-- [x] INHERIT-DOCS：脚本 README、D12 及 [审查记录](../../../docs/reviews/f118-folder-inheritance-repair-20261120.md) 说明权限意图、边界、串行执行及独立后续历史计划。
+## 2026-11-20 默认恢复及历史保留（已获用户授权实施并继续生产升级）
 
-## 2026-11-20 取消租户身份残留保留（AC-135～137）
+- [x] MIG-DEFAULT-1：AC-138、AC-143；同步分类与验收合同，文档自审；保存分支、验证及部署检查点。
+- [x] MIG-DEFAULT-2：AC-139；历史孤儿保留、正式盘点/冻结/重验接线，原有物理删除条件及旧 Run 兼容不放宽。
+- [x] MIG-DEFAULT-3：AC-140；旧知识模型名称来源保留、M4/在线读取/显式修复/执行拒绝完整链路。
+- [x] MIG-DEFAULT-4：AC-141、AC-142；普通文件原生继承初始化及原失败授权续办、围栏和中断恢复。
+- [x] MIG-DEFAULT-5：AC-138–AC-143；真实 SQL schema 与原生权限/引用运行时的端到端、负向和规模回归，Ruff、架构守卫及特性审查；范围和基线失败见[审查记录](../../../docs/reviews/f118-upgrade-default-classification-20261120.md)。
+- [ ] MIG-DEFAULT-6：AC-143；按用户后续要求，先拷贝带哈希清单的修复代码到生产维护容器验证，同配置且禁用维护容器健康检查；全部升级完成后再正式推送 GitHub 发布线。
+- [ ] MIG-DEFAULT-7：AC-143；按用户最新范围通过正式脚本完成历史准备、M2/M3/权限发布及 Redis 回填，原生权限完成后抽检开服并升级 Gateway；历史引用/M4 后置，不直接改业务数据或伪造 Coverage。
+- [x] MIG-DEFAULT-8：AC-144；失效创建者闭合保留、成员零新增、原生 apply/verify 身份重验；完整迁移、续跑、账号重现拒绝及 200/400 资源有界查询测试。
+- [x] MIG-DEFAULT-9：AC-145；原文件定位标量与实际存储键分离，原值不改、不发起外部读取；编码器及完整迁移回归。
+- [x] MIG-DEFAULT-10：AC-146；已关闭权限/保留 payload 的闭合证明，残留服务账号 marker 原生关闭、冗余父边合并，schema-2 原计划续跑及提交未知恢复；完整 M2→M4/覆盖及晚期漂移拒绝验证。
 
-- [x] UNMOUNT-INTENT：用户确认保留原数据、冻结重验、仅迁移实际租户，旧 Run 不重分类。
-- [x] UNMOUNT-FACTS：原生只读 acquisition，精确审计、零绑定/挂载、原预置副本及工具子项、已迁出助手、原权限及 FINALIZED 操作闭合，分页计算原事实摘要。
-- [x] UNMOUNT-FROZEN：新 Run 封闭元数据及 baseline/plan 一致；首次写入前、权限中间状态和最终切换原事务重验，保留 FGA 端点键集合不变。
-- [x] UNMOUNT-TEST：新增 31 项原生回归通过，包括 SQL/FGA/最终切换取消后的原 Run 恢复；实际 MySQL 只读候选核对通过，185 SELECT、约 1.7 秒。
-- [x] UNMOUNT-REVIEW：最新定向组合 67 通过；扩展 2385 通过、1 项基线计数失败独立复现；架构/静态及七维审查通过，`5af4ac2e1a` 已推送 beta1。
-- [ ] UNMOUNT-ROLLOUT：165 新代码全量预检→原身份首次冻结/执行→Redis 回填/verify→恢复既有服务；保留旧计划及运行日志。
+- [x] MIG-DEFAULT-11：AC-147；工作流缺失审计创建者同根证明、版本数/账号/配置原生复核，完整迁移及完成续跑、200/400 根查询成本验证。
+- [x] MIG-DEFAULT-12：AC-148；失败 DELETE 当前 pin 新回执、原账本保留；builtin AFTER-only 原生收尾，schema 3/补充入口，漂移及幂等回归。
+
+- [x] MIG-DEFAULT-13：AC-149；空根原生关闭初始化、完整图/SQL 空证明、原计划 claim/最终回包丢失恢复、2/4 规模及关闭根完整迁移/Coverage 验证。
+
+- [x] MIG-DEFAULT-14：AC-150；保存无效工作流配置的显式隔离、整行/标记/无索引证明、完整 M2→M4/Coverage/续跑、当前版本与有效旧 type1 共存、缺创建者组合、2/4 全程规模及新写严格拒绝。
+
+- [x] MIG-DEFAULT-15：AC-138/140；冻结 SQL 明确 INACTIVE 的普通来源及空活动集 Grant 残留图分类，完整组件闭合、聚合 ACTIVE 贡献保留、旧 policy-1、原生 DELETE ACK 丢失续跑与完整 Coverage 回归。
+
+
+- [x] MIG-DEFAULT-16：用户明确要求的权限阶段执行：`--apply --permissions-only` 复用完整原生 SQL/权限收敛，保留 `ready=false` 与未完成引用事实；26 项 CLI/runtime 原生集成、静态/架构检查通过。
+- [ ] MIG-DEFAULT-17：后续引用回填及 M4/Coverage：在线开服后先评估原冻结 Run 与当前来源宇宙漂移，再按受控方案回填和验证；不可覆盖原制品或伪造空引用就绪。
+
+### 2026-11-20 引用仅登记（用户已确认 AC-154～157）
+
+- [x] 实现独立轻量 admission、所需叶读取与有界增量证明。
+- [x] 原生登记单次执行、原子检查点、已提交前缀续跑及阶段进度。
+- [x] CLI 默认预览/显式 apply，原生事务回归和规模检查、审查。结果见 docs/reviews/f118-reference-registration-only-20261120.md。
+- [x] 拷贝维护容器验证，执行仅登记；保持维护、不发布 GitHub。12:04:55 退出 0，四租户来源 55,279、新增正确来源保留 2、退役收尾 13,788；未签发 Ready。
+
+- [x] 用户确认后扩展频道纯时间戳规则；不可变追加证明、原游标续跑，验证并部署执行。22 项测试通过；原 39,444 游标续跑完成，不覆盖旧证明。
+
+## 2026-11-20 升级流程统一改造：规格准备检查点
+
+- 目标：用户要求从最新 beta1 独立分支实施升级流程改造；引用辅助化明确延期。正式增量为 spec.md AC-158～166。
+- 分支：`codex/f118-upgrade-flow-20261120`；远端基线 `87debb3fcc2eac3e122e189d5df1b02cb79a8c7a`，本轮 fetch 已确认。
+- 依赖：合流既有生产分类/仅登记修复至 `a1eefaa316`。保留发布线取消租户身份规则 AC-135～137，原生产分支新增 AC-135～154 顺延为 AC-138～157；spec/design/tasks/test-cases 及两份新审查记录的引用同步。
+- 状态：需求发现范围已明确；增量规格审查后待用户确认，随后进入正式设计及其审查确认。未将本次实施指令记成新 spec/design 已确认；历史已有确认不变。
+- 规格审查：两项缺口修订后二次独立审查 LGTM；[审查记录](../../../docs/reviews/f118-upgrade-flow-spec-review-20261120.md)。AC-158～166 仍待用户确认，不将审查通过等同用户确认。
+- 设计调查：只读预检需要一致的 SQL/原生权限图修复后事实，完整权限 tuple 分类及引用来源/目标规划；不能仅串联两个旧 dry-run。新增身份需要计划逻辑身份与原生回执的受限映射，临时预检制品须覆盖完整预检生命周期。
+- 实现状态：未验证的性能/引用实验草稿已归档到工作区外的本机临时补丁，六个代码路径已恢复到合流基线；不会作为实现交付或测试通过依据。
+- 合流验证：CLI/引用登记/历史默认分类/孤儿保留 63 项通过（35.81 秒），离线配置及禁真实网络；只证明合流基线，非新流程实现验收。
+- 下一步：用户确认增量规格后完成设计审查与确认，再拆解并实施、执行 E2E/特性审查；不操作生产，不推送或合入发布线。
+
+### 2026-11-20 用户确认增量规格，进入技术设计
+
+| 本轮材料 | 当前状态 | 范围 |
+| --- | --- | --- |
+| spec.md | ✅ 已评审，用户已确认 | 本聊天本轮“确认”，AC-158～166；不重开历史规格 |
+| design.md | ✅ 增量审查通过，待用户确认 | §16 统一升级流程；未进入本轮实现 |
+| test-cases.md | 尚未生成本轮用例 | 设计确认后按八列模板生成/复查 |
+| tasks.md | 本节仅记录检查点 | 设计确认后再拆实施任务 |
+
+设计调查结论已整理至 design.md §16，涵盖修复后只读事实、共享原生效果、逻辑身份物化、预检制品生命周期、串行执行、current-after 回执验证、引用有界批次及旧 Run 证据边界。采用现有 Run 状态，不提供在线签证，不调整引用辅助化策略。当前代码仍为合流基线，本轮没有应用归档草稿或改迁移逻辑。
+
+独立设计审查及两条协议专项复查均 LGTM；[审查记录](../../../docs/reviews/f118-upgrade-flow-design-review-20261120.md)。已修订 8 项实质缺口，包含共享恢复材料、完整 dirty-after、原提交链/当前验证分流、补充材料选择、失锁阻塞边界及独立 sql_results_v1 有界持久结果页。用户尚未确认设计，不提前生成正式实施 tasks 或 QA 用例。
+
+### 2026-11-20 独立分支发布与 165 已有脚本测试
+
+用户授权推送独立分支并在 165 运行已有升级脚本、统计耗时，禁止现场临时修复。实际测试源码为 `1429c7463e` 完整 backend 归档（runtime 依赖声明及 uv.lock 与原镜像一致），没有实施本轮设计；执行顺序与先完成流程改造的原目标有偏差，已向用户说明，不能记作 AC-158～166 实现验收。
+
+已有 `--delete-closures-only` 新补充计划原生闭合四个服务账号残留，五个业务文件全部保留；原历史计划 SHA 不变。原 Run `upgrade-310b1-20261119` / env dev / operator 1 完整 apply 于 20:29:46 结束，耗时 497.466 秒，ready=true；两实际租户均 completed、coverage_epoch=1。Redis apply/verify ready=true；八次脚本合计 768.015 秒（含初次失败预检）。未恢复业务服务，未做业务验收，未合入 beta1。
+
+完整证据与剩余范围见 [165 执行记录](../../../docs/reviews/165-f118-existing-scripts-1429c7463e-20261120.md)。源码收尾核对 5,364 文件零差异，未应用临时补丁；只读观测及状态收尾完成，SSH 连接已关闭。
+
+
+## 2026-11-20 用户确认按已审查规格/设计实施
+
+本次最新指令明确先完成迁移简化与监控开发，暂停165服务恢复。本节为唯一实施进度；spec AC-158～166、design §16已确认，QA八列用例已生成。工作树1a2f59a727及既有spec首行用户改动保留；不把此前165旧脚本执行当本轮验收。
+
+Owner：H=历史与事实视图，P=权限/SQL恢复与性能，R=引用批次/增量，M=主Agent统一入口/材料/互斥/监控/集成。每个Owner持续负责真实消费者接线与配对验证，不以helper完成代替闭环。测试先写失败再实施，同名fixture已有时扩展；表内路径以src/backend为根。无新增前端或Celery功能；后台引用辅助化不在本轮。所有公共签名在Owner消息中固定，跨文件先协调单写者。
+
+| ID | 类型/Owner | 配对与依赖 | 文件/可验收结果 |
+| --- | --- | --- | --- |
+| T2000 | 基础设施/M | 无 | knowledge/domain/models/knowledge_unification_executor_lock.py、knowledge/domain/repositories/unification_executor_repository.py：独立锁行/有界bootstrap/控制代际，模型发现建表，不改历史DDL；失败不删业务，回滚仅释放互斥种子，已迁移数据不能仅回退版本 |
+| T2001 | 测试/M | 配对T2002；依赖T2000 | test/knowledge_unification/test_upgrade_progress.py、test_upgrade_executor.py：心跳、脱敏、聚合、竞争/失锁/旧token；覆盖 AC: AC-162, AC-164, AC-166 |
+| T2002 | 实现/M | T2001 | knowledge/application/unification_progress.py、common/services/metric_log.py：可关闭reporter、ACK计数、上下文指标聚合，线上默认不变 |
+| T2003 | 测试/M | 配对T2004；T2000 | test/knowledge_unification/test_upgrade_materials.py、test_upgrade_coordinator.py：不可变计划、缺失/漂移零业务写、共享恢复；覆盖 AC: AC-158, AC-159, AC-161, AC-164, AC-166 |
+| T2004 | 实现/M | T2003 | knowledge/application/unification_upgrade_materials.py、unification_upgrade_executor.py：原生四字段回执/共享descriptor/有限外部意图，不用TTL假接管 |
+| T2005 | 测试/H | 配对T2006至T2011；T2000 | test/knowledge_unification/test_history_fact_view.py、test_history_identity_retention_view.py、test_history_fact_targets_membership.py：纯SQL/原生图after、多步/生成身份/dirty闭包及所有已知历史规则；覆盖 AC: AC-159, AC-160, AC-164 |
+| T2006 | 实现/H | T2005 | knowledge/application/unification_history.py：capture/replay/close、明确diagnostics和Owner read ports，app不反向import scripts |
+| T2007 | 实现/H | T2005 | permission/application/migration_history.py、permission/application/sql_runtime.py：共享原生纯预期效果与真实finalizer，无伪CURRENT/FINALIZED |
+| T2008 | 实现/H | T2005 | knowledge/domain/repositories/unification_inventory_repository.py、unification_resource_repository.py：分页after谓词/全dirty/global探针 |
+| T2009 | 实现/H | T2005 | knowledge/domain/repositories/unification_history_view_repository.py、unification_space_membership_repository.py：同视图计数与闭包 |
+| T2010 | 实现/H | T2006至T2009 | knowledge/application/unification_inventory.py、unification_inventory_codec.py：注入、固定planned_at、完整preview生命周期及sealed sink |
+| T2011 | 实现/H | T2005 | knowledge/domain/repositories/unification_target_repository.py、unification_delete_retention_repository.py：目标与原操作/tuple读取同一after |
+| T2012 | 实现/H | T2006、T2007 | scripts/prepare_f118_history.py、f118_history_business.py：旧CLI/schema/checksum兼容，SQL转Owner仓储，不把blocked预览退出0 |
+| T2013 | 实现/H | T2006、T2007 | scripts/f118_history_permissions.py、f118_history_snapshot.py：兼容原计划与私有索引生命周期 |
+| T2014 | 实现/H | T2006、T2007 | scripts/f118_delete_closure.py、f118_empty_root.py：只导出共享Owner规则/保留旧入口原生恢复 |
+| T2015 | 测试/P | 配对T2016至T2021；T2000 | test/knowledge_unification/test_migration_execution_inputs.py、test_migration_stage_receipts.py：封口/损坏/内存与磁盘、未知COMMIT和tail链；覆盖 AC: AC-159, AC-163, AC-164 |
+| T2016 | 实现/P | T2015 | knowledge/application/unification_execution_inputs.py、unification_artifacts.py：64MiB+磁盘本执行cache，上传真实回读 |
+| T2017 | 实现/P | T2015、T2016 | knowledge/application/unification_permission_inventory.py：首遍compiler结果sink，整图finish后seal |
+| T2018 | 实现/P | T2015 | knowledge/application/unification_stage_receipts.py、knowledge/domain/services/unification_conversion.py：独立sql_results_v1同事务tail和原cursor不变 |
+| T2019 | 实现/P | T2018 | knowledge/application/unification_conversion.py、knowledge/domain/repositories/unification_conversion_repository.py：current-after、共享结果页链及sql_admission，旧Run按当前phase补证 |
+| T2020 | 实现/P | T2017、T2019 | knowledge/application/unification_permissions.py：permission_admission、复用完整namespace/tuple，保留before/staged/after及当前事实 |
+| T2021 | 测试/P | T2016至T2020 | test/knowledge_unification/test_migration_stage_receipts.py、test_cli_legacy_executor.py、test_permission_publication_maintenance_guard.py：实际入口恢复不重走已完成链，当前漂移拒绝；覆盖 AC: AC-163, AC-164 |
+| T2022 | 测试/R | 配对T2023至T2027；T2000 | test/knowledge_unification/test_reference_upgrade_batches.py、test_reference_reconciliation_materials.py、test_reference_batch_repository.py：批中回滚/ACK未知、原ordinal/hash、完整增量证书；覆盖 AC: AC-163, AC-164, AC-165 |
+| T2023 | 实现/R | T2022 | resource_reference/application/backfill.py、resource_reference/domain/repositories/reference_backfill_repository.py：同事务Prepared批、稳定锁序、批量前后读 |
+| T2024 | 实现/R | T2023 | knowledge/application/unification_references.py、unification_reference_sources.py：有界批末CAS、全量census、两条核验链 |
+| T2025 | 实现/R | T2022 | knowledge/application/unification_reference_reconciliation.py、unification_reference_plan.py：旧proof/新增/语义目录、当前证明只读输出 |
+| T2026 | 实现/R | T2025 | knowledge/application/unification_registration.py：共享准备，原证明/前缀保留，完整入口消费 |
+| T2027 | 测试/R | T2024至T2026 | test/knowledge_unification/test_migration_registration.py、test_migration_references_application.py：旧入口与N/2N真实事务回归；覆盖 AC: AC-163, AC-164, AC-165 |
+| T2028 | 实现/M | T2004、T2010、T2020、T2026 | knowledge/application/unification_upgrade.py、scripts/unify_knowledge_spaces.py：唯一dry-run/apply、环境识别、全部检查汇总、同Run自动恢复、标准结果码 |
+| T2029 | 测试/M | T2028 | test/e2e/test_e2e_f118_upgrade_flow.py、test/knowledge_unification/test_upgrade_coordinator.py：CLI→原生Owner→投影→Coverage，禁止模拟关键planner，场景隔离；覆盖 AC: AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-164, AC-165, AC-166 |
+| T2030 | 实现/M | T2028、T2029 | scripts/README.md、docs/upgrades/v3.1.0-beta1.md：两命令/同计划恢复/报告及独立升级边界 |
+| T2031 | 验证/全部 | T2000至T2030 | native E2E、原生权限/迁移回归、N/2N计数、Ruff/arch-guard/七维审查；真实MySQL/DM8/FGA/MinIO需集成环境，不把SQLite当其证据；覆盖 AC: AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-164, AC-165, AC-166 |
+
+进度：T2000～T2030及T2032～T2039的本地实现与定向回归已完成；T2031的本地原生E2E、规模、静态/架构门禁及七维审查已完成。广回归7850通过，其余147个既有失败/错误已在HEAD逐项复现同首因，1个本轮CLI断言已修复并定向通过；最后入口组合87通过，另fresh/共享恢复3通过。真实MySQL/DM8行锁、真实中间件与现场维护窗口仍待集成演练，不勾选为已验收。以本节覆盖上方历史“待确认/未实施”检查点，不把本地通过等同生产验证。实际文件映射如下；不新增本轮之外的在线策略。
+
+实施分层补充（均已由Owner报告、主Agent授权；不改变已确认AC或在线策略）：
+
+| ID | 类型/Owner | 配对与依赖 | 文件/可验收结果 |
+| --- | --- | --- | --- |
+| T2032 | 实现/H | T2005、T2012 | knowledge/domain/repositories/unification_history_repository.py、unification_history_business.py：原历史CLI业务SQL搬入Owner，旧schema/checksum/幂等身份保留 |
+| T2033 | 实现/H | T2005、T2013 | knowledge/domain/repositories/unification_history_permissions.py、unification_history_snapshot.py：原生回执读取/私有索引，禁止app导入scripts |
+| T2034 | 实现/H | T2005、T2014 | knowledge/domain/repositories/unification_history_delete_closure.py、unification_history_empty_root.py：共享历史规则及原生恢复 |
+| T2035 | 实现/H | T2005、T2010 | knowledge/domain/repositories/unification_history_view_repository.py、permission/domain/services/projection_effects.py：有界dirty闭包与共享纯finalizer效果 |
+| T2036 | 实现/H | T2007 | permission/application/control_state.py、permission/application/migration_history.py：显式维护作用域的原生SQL事务围栏，默认在线行为不变 |
+| T2037 | 实现/M | T2003、T2028 | knowledge/domain/repositories/unification_upgrade_repository.py、unification_run_repository.py：原Run四字段绑定、实际连接/结构身份、阶段推进原子关闭/继承attempt |
+| T2038 | 实现/R | T2022、T2025 | knowledge/domain/repositories/unification_reference_batch_repository.py、knowledge/application/unification_reference_reconciliation.py：按真实来源类型的有界批精确读取；history同一after合同，不以页边界冒充批SQL |
+| T2039 | 测试/P | T2015、T2035 | test/knowledge_unification/test_history_fact_targets_membership.py：真实目标/成员after闭包与租户过滤；实现由P独占target/membership两仓储并交H注入 |
+
+T2021、T2027、T2029为集成后的行为回归；配对红测分别在T2015、T2022、T2003提前执行，不以这些后置回归替代测试先行。上述新增仓储迁移每次仅搬移对应Owner代码，旧CLI保持导出兼容并以原生回归确认。
+
+实际接线补充（仍归原业务链，无新增功能）：
+
+| 原任务 | 实际文件/闭环 |
+| --- | --- |
+| T2004、T2028、T2037 | unification_upgrade_repository.py、unification_run_repository.py、unification_coverage_repository.py：preparing创建/attempt/材料绑定同事务，失败阶段只读DTO，原生Coverage终态关闭当前attempt |
+| T2006、T2010、T2032～T2035 | unification_tuple_sort.py、unification_history_materials.py；test_migration_tuple_sort.py、test_history_material_pages.py：稳定tuple顺序、共享历史有界分页及尾页完整性，保留原checksum |
+| T2007、T2019、T2020、T2036 | permission/domain/services/maintenance_guard.py、permission/application/catalog_api.py、permission/domain/repositories/catalog_repository.py、permission/migration/f048_runtime_storage.py：显式维护事务围栏、原生外部意图与当前提交位置；默认在线路径不启用 |
+| T2010、T2011、T2035 | unification_identity_retention.py、unification_identity_retention_repository.py：after身份保留与真实视图读取；test_history_identity_retention_view.py覆盖 |
+| T2023～T2025、T2038 | unification_reference_sources.py、unification_reference_batch_repository.py、reference_backfill_repository.py：批量真实读取、完整索引/配置尾检、原孤儿及租户全集门禁，防strict tenant过滤隐藏跨租户子行 |
+| T2003、T2028、T2029 | test_upgrade_new_run.py、test_upgrade_review_regressions.py及test_e2e_f118_upgrade_flow.py：新Run至真实Coverage、历史前后中断/全部本地材料丢失恢复、报告IO/坏材料/取消/冻结后来源漂移零写拒绝 |
+
+逐项验证、性能实测与尚未执行的环境门禁见[实施验证记录](../../../docs/reviews/f118-upgrade-flow-implementation-20261120.md)；七维问题及关闭证据见[代码审查](../../../docs/reviews/f118-upgrade-flow-code-review-20261120.md)。
+
+任务自审：逐项检查AC158～166均有测试映射、测试先于对应实现、依赖ID存在、无范围编号用于测试AC标注、无前端/Worker混用、未加入本轮外功能；以现有release-contract/constitution为边界。执行中按task-review完成任务核查；最终e2e-test按维护CLI分类，不生成无关HTTP/UI样板，sdd-code-review对本轮增量及集成依赖执行七维检查。现有SG旧清单把Client写Zustand与当前AGENTS冲突，本轮不涉及前端，遵从AGENTS。
+
+### 2026-11-23 发布线合入与升级文档
+
+按用户授权，将`codex/f118-upgrade-flow-20261120`（`952165f85e`）合入最新`feat/3.1.0-beta1`基线`ec59c5a0fa`，合并提交`56a461e2d7`。隔离worktree无冲突合并，原工作区未提交改动未纳入；保留发布线分享链接、工具归属和注册规则三组修复，引用辅助化继续延期。
+
+本次定向迁移/结构/价格/运行时组合685项通过；Token模块混合集合的6项SQLite metadata建表错误按模块原有说明隔离运行，22项全部通过，与组合有重叠；发布线三组回归31项通过。125个Python文件格式和架构检查通过，124个lint通过，另1个文件38项既有lint与基线逐项相同。没有把组合初次非零退出或全仓测试写成全绿。完整证据及边界见[合入核对记录](../../../docs/reviews/f118-upgrade-beta1-merge-20261123.md)。
+
+已同步[3.0.0→3.1.0-beta1升级指南](../../../docs/upgrades/v3.1.0-beta1.md)：累计Alembic链、镜像digest核对、停服/一致备份、模型配置与价格、统一dry-run/apply和同Run恢复、Redis回填、分拆用量消费及开服验收、跨存储回滚。源码合并不代表镜像已发布或现场已上线，本轮没有重新操作165。

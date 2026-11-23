@@ -662,7 +662,9 @@ class ProjectionService:
     ) -> str:
         writes = tuple(delta for delta in deltas if delta.action == "WRITE")
         deletes = tuple(delta for delta in deltas if delta.action == "DELETE")
-        return await self._fga.write_atomic(writes=writes, deletes=deletes)
+        from bisheng.permission.domain.services.maintenance_guard import guarded_fga_write
+
+        return await guarded_fga_write(self._fga, writes=writes, deletes=deletes)
 
     async def _pending_stage_deltas(
         self,

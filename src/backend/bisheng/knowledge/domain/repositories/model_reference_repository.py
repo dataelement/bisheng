@@ -30,6 +30,41 @@ class KnowledgeModelReferenceRepository:
 
     _protected = ("model", "model_transition", "model_config_revision", "index_generation")
 
+    def _legacy_retention_statement(self, source_key, extractor_version):
+        from bisheng.resource_reference.application.contracts import SourceKey, SourceType
+        from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+
+        tenant = self._tenant_id()
+        if (
+            type(source_key) is not SourceKey
+            or source_key.tenant_id != tenant
+            or source_key.source_type != SourceType.KNOWLEDGE
+            or source_key.source_version != "current"
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_legacy_model_scope")
+        model = BusinessReferenceSet
+        return select(model.id).where(
+            model.tenant_id == tenant,
+            model.source_type == "knowledge",
+            model.source_id == source_key.source_id,
+            model.source_version == "current",
+            model.record_kind == "source",
+            model.extractor_version == extractor_version,
+            model.ready.is_(True),
+            model.effective.is_(True),
+            model.source_revision > 0,
+        )
+
+    def has_legacy_name_retention(self, session, source_key, extractor_version):
+        with session.no_autoflush, strict_tenant_filter():
+            return session.execute(self._legacy_retention_statement(source_key, extractor_version)).first() is not None
+
+    async def ahas_legacy_name_retention(self, session, source_key, extractor_version):
+        with session.no_autoflush, strict_tenant_filter():
+            return (
+                await session.execute(self._legacy_retention_statement(source_key, extractor_version))
+            ).first() is not None
+
     async def aload_disclosure_sources(self, session, *, knowledge_ids: tuple[int, ...]):
         """Only real metadata needed by the existing loaded-target adapter."""
         self._tenant_id()

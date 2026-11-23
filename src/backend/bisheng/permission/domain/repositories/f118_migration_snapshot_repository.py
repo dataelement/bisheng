@@ -61,6 +61,62 @@ def _record(cls, row, **overrides):
 
 
 class PermissionMigrationSnapshotRepository:
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
+    async def adiscover_environment(self, session, *, environment=None):
+        """Resolve one CURRENT Catalog's actual ACTIVE pin, never machine use."""
+        self._scope(session)
+        release, pin = PermissionCatalogRelease.__table__, AuthorizationModelRelease.__table__
+        rows = await self._read(
+            session,
+            select(release.c.id, release.c.write_fenced, pin.c.environment, pin.c.status)
+            .outerjoin(pin, pin.c.id == release.c.required_authorization_model_release_id)
+            .where(release.c.status == "CURRENT")
+            .limit(2),
+        )
+        if len(rows) != 1:
+            _blocked("current_catalog_not_unique")
+        row = rows[0]
+        actual = row["environment"]
+        if row["write_fenced"] or row["status"] != "ACTIVE" or type(actual) is not str or not actual.strip():
+            _blocked("authorization_pin_not_ready")
+        if environment is not None and environment != actual:
+            _blocked("environment_mismatch")
+        await self.aload_catalog_baseline(session, environment=actual)
+        return actual
+
+    async def ainspect_rootless_file_authorization(self, session, *, file_ids):
+        """Global absence proof for isolated IDs, never an authorization grant."""
+        self._scope(session)
+        if (
+            type(file_ids) is not tuple
+            or not 1 <= len(file_ids) <= 199
+            or any(type(v) is not int or v <= 0 for v in file_ids)
+            or len(set(file_ids)) != len(file_ids)
+        ):
+            _blocked("invalid_exact_file_ids")
+        occupied = set()
+        ids = tuple(map(str, file_ids))
+        with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+            for model in (ResourcePermissionMode, PermissionGrant, PermissionVisibleSourceProjection):
+                rows = await session.execute(
+                    select(model.resource_id).where(
+                        model.resource_type.in_(("folder", "knowledge_file")), model.resource_id.in_(ids)
+                    )
+                )
+                occupied.update(int(row[0]) for row in rows)
+            rows = await session.execute(
+                select(PermissionProjectionOperation.scope_key).where(
+                    PermissionProjectionOperation.scope_type == "resource",
+                    PermissionProjectionOperation.scope_key.in_(
+                        tuple(f"{kind}:{ident}" for ident in ids for kind in ("folder", "knowledge_file"))
+                    ),
+                )
+            )
+            occupied.update(int(row[0].partition(":")[2]) for row in rows)
+        return frozenset(occupied)
+
     async def acount_file_authorization_rows(self, session, *, file_ids):
         tenant = self._scope(session)
         if (
@@ -87,6 +143,8 @@ class PermissionMigrationSnapshotRepository:
     async def avalidate_global_integrity(self, session, *, retained_tenant_ids=()):
         """One run-wide raw probe per original table, never per tenant."""
         self._scope(session)
+        if self.fact_view is not None:
+            return await self.fact_view.validate_permission_global(session, retained_tenant_ids=retained_tenant_ids)
         if not session.in_transaction():
             _blocked("native_transaction_required")
         if (
@@ -434,8 +492,21 @@ class PermissionMigrationSnapshotRepository:
         tenant = self._scope(session)
         self._bounds(after_id, limit)
         table = model.__table__
-        statement = select(*table.c).where(table.c.id > (after_id or 0)).order_by(table.c.id).limit(limit)
-        rows = await self._read(session, statement)
+        statement = select(*table.c)
+        if self.fact_view is not None:
+            rows = await self.fact_view.page_mappings(
+                session,
+                model=model,
+                statement=statement,
+                after=after_id,
+                limit=limit,
+                read=self._read,
+                tenant=tenant,
+            )
+        else:
+            rows = await self._read(
+                session, statement.where(table.c.id > (after_id or 0)).order_by(table.c.id).limit(limit)
+            )
         if any(row["tenant_id"] != tenant for row in rows):
             _blocked("page_tenant_mismatch")
         return rows
@@ -448,6 +519,10 @@ class PermissionMigrationSnapshotRepository:
         operations = await self._read(
             session, select(table.c.id, table.c.tenant_id, table.c.status).where(table.c.id.in_(ids))
         )
+        if self.fact_view is not None:
+            states = self.fact_view.states(PermissionProjectionOperation.__tablename__, ids)
+            operations = [row for row in operations if row["id"] not in states]
+            operations.extend(after for _before, after in states.values() if after is not None)
         expected = {row["id"]: row for row in operations}
         tenant = self._scope(session)
         if any(
@@ -472,18 +547,26 @@ class PermissionMigrationSnapshotRepository:
         # Keep invalid parent chains visible as NULL/cross-tenant facts. A raw
         # alias prevents automatic child filtering from hiding broken joins.
         parent = PermissionGrant.__table__.alias("f118_original_grant_parent")
-        rows = await self._read(
-            session,
-            select(
-                *(getattr(PermissionGrantAssignee, column.name) for column in source.c),
-                parent.c.id.label("parent_id"),
-                parent.c.tenant_id.label("parent_tenant"),
-            )
-            .outerjoin(parent, parent.c.id == source.c.grant_id)
-            .where(source.c.id > (after_id or 0))
-            .order_by(source.c.id)
-            .limit(limit),
+        query = select(
+            *(getattr(PermissionGrantAssignee, column.name) for column in source.c),
+            parent.c.id.label("parent_id"),
+            parent.c.tenant_id.label("parent_tenant"),
         )
+        query = query.outerjoin(parent, parent.c.id == source.c.grant_id)
+        if self.fact_view is not None:
+            rows = await self.fact_view.page_mappings(
+                session,
+                model=PermissionGrantAssignee,
+                statement=query,
+                after=after_id,
+                limit=limit,
+                read=self._read,
+                tenant=tenant,
+            )
+        else:
+            rows = await self._read(
+                session, query.where(source.c.id > (after_id or 0)).order_by(source.c.id).limit(limit)
+            )
         if any(
             row["tenant_id"] != tenant or row["parent_id"] is None or row["parent_tenant"] != tenant for row in rows
         ):

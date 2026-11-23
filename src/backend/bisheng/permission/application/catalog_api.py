@@ -71,6 +71,7 @@ from bisheng.permission.domain.services.catalog_service import (
     CatalogService,
     CatalogTupleChange,
 )
+from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
     ModelReferenceSummary,
@@ -154,6 +155,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     existing = (
                         (
                             await session.execute(
@@ -233,6 +235,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     release = (
                         (
                             await session.execute(
@@ -347,6 +350,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     draft = (
                         (
                             await session.execute(
@@ -501,6 +505,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     draft = (
                         (
                             await session.execute(
@@ -604,6 +609,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     rows = list(
                         (
                             await session.execute(
@@ -645,6 +651,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogRelease)
                         .where(
@@ -675,6 +682,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogRelease)
                         .where(PermissionCatalogRelease.id == context.draft.release_id)
@@ -724,6 +732,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     result = await session.execute(
                         update(PermissionCatalogRelease)
                         .where(
@@ -1467,6 +1476,7 @@ class OpenFGACatalogProjector:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     existing = set(
                         (
                             await session.execute(
@@ -1515,6 +1525,7 @@ class OpenFGACatalogProjector:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogProjectionTuple)
                         .where(

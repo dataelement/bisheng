@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 import sqlalchemy as sa
-from test.knowledge_unification import test_prepare_history as fixtures
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.models.space_channel_member import SpaceChannelMember
@@ -17,6 +16,7 @@ from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from scripts import prepare_f118_history as script
+from test.knowledge_unification import test_prepare_history as fixtures
 
 history, native, resource_native = fixtures.history, fixtures.native, fixtures.resource_native
 
@@ -151,7 +151,9 @@ async def test_missing_library_requires_original_binding_evidence(history, with_
         assert item["file"]["id"] == 90 and item["knowledge"]["index_name"] == "original-es"
     else:
         assert not plan["business"]["physical"]
-        assert any(row["reason"] == "orphan_original_index_binding_unavailable" for row in plan["business"]["blocked"])
+        assert not plan["business"]["blocked"]
+        assert [item["before"]["id"] for item in plan["business"]["retained"]] == [90]
+        assert script.warning_summary(plan)["historical_orphan_preserved"] == 1
     assert history.fga.writes == 0
 
 
@@ -200,5 +202,9 @@ async def test_empty_embedding_cleanup_does_not_clear_invalid_ids_or_nonempty_qa
         if with_qa:
             session.add(QAKnowledge(id=91, tenant_id=101, user_id=7, knowledge_id=12, questions=["q"], answers="a"))
     plan = await script.capture(history.sessions, history.fga)
-    assert any(row["table"] == "knowledge" and row["id"] == 12 for row in plan["business"]["blocked"])
+    if with_qa:
+        assert not plan["business"]["blocked"]
+        assert script.warning_summary(plan)["legacy_embedding_preserved"] == 1
+    else:
+        assert any(row["table"] == "knowledge" and row["id"] == 12 for row in plan["business"]["blocked"])
     assert not any(row["table"] == "knowledge" and row["before"]["id"] == 12 for row in plan["business"]["updates"])
