@@ -161,10 +161,11 @@ class MobileSessionRepository:
         if row.state != "ACTIVE" or token.state == "REVOKED":
             return None, "session_revoked", False, None
         absolute_deadline = row.created_at + timedelta(seconds=absolute_seconds)
-        if now >= absolute_deadline or now >= row.expires_at or now >= token.expires_at:
+        if now >= absolute_deadline or now >= row.expires_at:
             self.revoke(row)
             return None, "session_expired", False, None
         if token.state == "USED":
+            # Its old deadline must not cut short the unspent successor's replay grace.
             return self._replay_or_revoke(
                 row,
                 token,
@@ -176,6 +177,9 @@ class MobileSessionRepository:
                 current_hash=current_hash,
                 grace_seconds=grace_seconds,
             )
+        if now >= token.expires_at:
+            self.revoke(row)
+            return None, "session_expired", False, None
         if token.state != "ACTIVE" or token.generation >= 9223372036854775807:
             return None, "invalid_refresh_token", False, None
         if reject:
@@ -259,6 +263,4 @@ class MobileSessionRepository:
 
     @staticmethod
     def _replaced_elsewhere(require_current: bool, current_hash: str | None, row) -> bool:
-        return bool(
-            require_current and current_hash is not None and current_hash != row.last_access_token_hash
-        )
+        return bool(require_current and current_hash is not None and current_hash != row.last_access_token_hash)

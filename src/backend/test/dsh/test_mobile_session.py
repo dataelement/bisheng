@@ -194,6 +194,44 @@ async def test_replaying_a_used_refresh_token_returns_the_same_successor_inside_
         await mobile.service.refresh(followed["refresh_token"])
 
 
+@pytest.mark.parametrize("multi_login", [False, True])
+@pytest.mark.parametrize("retry_seconds", [30, 60])
+async def test_grace_replay_survives_the_consumed_token_expiry(mobile, multi_login, retry_seconds):
+    mobile.flags["multi"] = multi_login
+    opened = await mobile.service.open(7, 3, "alice")
+    old_expiry = _session_row(mobile.engine).expires_at
+    mobile.clock["now"] = old_expiry - timedelta(seconds=30)
+    refreshed = await mobile.service.refresh(opened["refresh_token"])
+    renewed_expiry = _session_row(mobile.engine).expires_at
+
+    # A lost response may be retried at or after the consumed token's deadline.
+    mobile.clock["now"] += timedelta(seconds=retry_seconds)
+    replayed = await mobile.service.refresh(opened["refresh_token"])
+
+    assert replayed["refresh_token"] == refreshed["refresh_token"]
+    assert mobile.current.values[7] == replayed["access_token"]
+    assert _session_row(mobile.engine).state == "ACTIVE"
+    assert _session_row(mobile.engine).expires_at == renewed_expiry
+    assert _token_states(mobile.engine) == [(1, "USED"), (2, "ACTIVE")]
+    await mobile.service.refresh(replayed["refresh_token"])
+
+
+@pytest.mark.parametrize("deadline", ["idle", "absolute"])
+async def test_grace_replay_still_rejects_an_expired_session(mobile, deadline):
+    mobile.service.idle_seconds = 600
+    if deadline == "absolute":
+        mobile.service.session_seconds = 600
+    opened = await mobile.service.open(7, 3, "alice")
+    mobile.clock["now"] += timedelta(seconds=570)
+    await mobile.service.refresh(opened["refresh_token"])
+
+    # Both session limits outrank grace, even with an unspent successor.
+    mobile.clock["now"] = _session_row(mobile.engine).expires_at
+    with pytest.raises(DshSessionExpiredError):
+        await mobile.service.refresh(opened["refresh_token"])
+    assert _session_row(mobile.engine).state == "REVOKED"
+
+
 async def test_replaying_after_grace_or_while_disabled_revokes(mobile):
     opened = await mobile.service.open(7, 3, "alice")
     refreshed = await mobile.service.refresh(opened["refresh_token"])
