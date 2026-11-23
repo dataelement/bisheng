@@ -3,9 +3,9 @@ import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
 import { Trans } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_INTRO, ModuleHomeHeader } from '~/components/ModuleHome';
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_INTRO, MODULE_HOME_TOOLBAR, ModuleHomeHeader } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
-import { AppTypeSegmented } from './components/AppTypeSegmented';
+import { AppTypeTabs } from './components/AppTypeTabs';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { EmptyStateIllustration } from '~/components/illustrations';
@@ -13,7 +13,7 @@ import { useAppCenter } from './hooks/useAppCenter';
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
 import { cn } from '~/utils';
 
-export default function AppCenter() {
+export function AppCenter() {
     const localize = useLocalize();
     // 页面标题跟随后台配置的菜单显示名称
     const menuNames = useWorkbenchMenuNames();
@@ -183,8 +183,13 @@ export default function AppCenter() {
                     />
                 </span>
             </p>
-            <div className={cn(MODULE_HOME_COLUMN, 'shrink-0 min-w-0', isMobileLayout ? 'mt-3' : 'mb-4')}>
-                <AppTypeSegmented value={typeFilter} onChange={setTypeFilter} />
+            <div className={cn(
+                MODULE_HOME_COLUMN,
+                MODULE_HOME_TOOLBAR,
+                'shrink-0 min-w-0',
+                isMobileLayout ? 'mt-3' : 'mb-4',
+            )}>
+                <AppTypeTabs className="dsh-home-tabs" value={typeFilter} onChange={setTypeFilter} />
             </div>
             {isMobileLayout && (
                 <div className={cn(MODULE_HOME_COLUMN, 'mt-3 mb-4 shrink-0 min-w-0')}>

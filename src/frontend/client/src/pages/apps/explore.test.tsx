@@ -1,11 +1,8 @@
 /**
- * All and keyword search span every category. A first-page request is never
- * dropped because an earlier one is still in flight.
- *
- * Both list endpoints are F027 cursor waterfalls: the first page asks with a
- * `null` cursor and the answer is `{ list, hasMore, nextCursor }`.
+ * The type tabs and keyword share a cursor-paginated list. A first-page
+ * request supersedes any earlier request still in flight.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const mockGetChatOnlineApi = jest.fn();
 const mockGetHomeLabelApi = jest.fn();
@@ -26,7 +23,6 @@ jest.mock('react-router-dom', () => ({
 }));
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
 jest.mock('~/hooks', () => ({
-  useAuthContext: () => ({ user: { role: 'user' } }),
   useLocalize: () => (key: string) => key,
   useMediaQuery: () => false,
 }));
@@ -46,8 +42,6 @@ jest.mock('./components/AgentCard', () => ({
   AgentCard: ({ agent }: { agent: { name: string } }) => <div data-testid="agent">{agent.name}</div>,
 }));
 
-jest.mock('./components/MarkLabel', () => ({ __esModule: true, default: () => null }));
-
 jest.mock('./components/AppSearchBar', () => ({
   AppSearchBar: ({ query, onSearch }: { query: string; onSearch: (value: string) => void }) => (
     <input
@@ -58,13 +52,12 @@ jest.mock('./components/AppSearchBar', () => ({
   ),
 }));
 
-import ExplorePlaza from './explore';
+import { ExplorePlaza } from './explore';
 
 const PAGE_SIZE = 20;
 
-async function selectTaggedTab() {
-  fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Finance' }));
-  await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, '', 7, PAGE_SIZE, 'visible', undefined));
+function selectTypeTab(name: string) {
+  fireEvent.mouseDown(screen.getByRole('tab', { name }));
 }
 
 beforeAll(() => {
@@ -92,6 +85,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockIntersections.clear();
+  mockRuntimeEnabled.mockReturnValue(true);
   mockGetChatOnlineApi.mockResolvedValue({ list: [], hasMore: false, nextCursor: null });
   mockGetHomeLabelApi.mockResolvedValue({ data: [{ id: 7, name: 'Finance' }] });
   mockGetUncategorized.mockResolvedValue({ list: [], hasMore: false, nextCursor: null });
@@ -103,84 +97,63 @@ async function showLoader() {
   });
 }
 
-describe('ExplorePlaza search scope', () => {
-  it('defaults to All and can return to it from a category', async () => {
-    mockGetChatOnlineApi.mockImplementation(async (_cursor, _query, tagId) => ({
-      list: tagId === -1
-        ? [{ id: '1', name: 'Categorized app' }, { id: '2', name: 'Untagged app' }]
-        : [{ id: '1', name: 'Categorized app' }],
+describe('ExplorePlaza type tabs', () => {
+  it('shows the four types in order, defaults to All types, and can return to it', async () => {
+    mockGetChatOnlineApi.mockImplementation(async (_cursor, _keyword, _tagId, _limit, _action, flowType) => ({
+      list: flowType === undefined
+        ? [{ id: '1', name: 'Hosted app' }, { id: '2', name: 'Assistant app' }]
+        : [{ id: '1', name: 'Hosted app' }],
       hasMore: false,
       nextCursor: null,
     }));
     render(<ExplorePlaza />);
 
-    await screen.findByText('Untagged app');
+    await screen.findByText('Assistant app');
     expect(mockGetChatOnlineApi).toHaveBeenNthCalledWith(1, null, '', -1, PAGE_SIZE, 'visible', undefined);
-    const allTab = screen.getByRole('tab', { name: 'com_app.all', selected: true });
-    expect(screen.getAllByRole('tab')[0]).toBe(allTab);
+    const tabList = screen.getByRole('tablist', { name: 'com_app.type_filter' });
+    const expectedTypes = [
+      'com_app.type_all', 'com_app.type_hosted_app', 'com_app.type_assistant', 'com_app.type_workflow',
+    ];
+    expect(within(tabList).getAllByRole('tab')).toEqual(
+      expectedTypes.map((name) => within(tabList).getByRole('tab', { name })),
+    );
+    const allTab = within(tabList).getByRole('tab', { name: 'com_app.type_all', selected: true });
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
 
-    await selectTaggedTab();
-    await waitFor(() => expect(screen.queryByText('Untagged app')).not.toBeInTheDocument());
+    selectTypeTab('com_app.type_hosted_app');
+    await waitFor(() => expect(screen.queryByText('Assistant app')).not.toBeInTheDocument());
+    expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, '', -1, PAGE_SIZE, 'visible', 35);
 
     fireEvent.keyDown(allTab, { key: 'Enter' });
-    await screen.findByText('Untagged app');
-    expect(screen.getByText('Categorized app')).toBeInTheDocument();
+    await screen.findByText('Assistant app');
+    expect(screen.getByText('Hosted app')).toBeInTheDocument();
     expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, '', -1, PAGE_SIZE, 'visible', undefined);
+    expect(mockGetHomeLabelApi).not.toHaveBeenCalled();
     expect(mockGetUncategorized).not.toHaveBeenCalled();
   });
 
-  it('loads the selected tab through the tag-filtered endpoint', async () => {
+  it('combines the keyword with the current type and keeps it when switching tabs', async () => {
     render(<ExplorePlaza />);
-
-    await selectTaggedTab();
-    expect(mockGetUncategorized).not.toHaveBeenCalled();
-  });
-
-  it('drops the tag filter while a keyword is present so search spans every tab', async () => {
-    render(<ExplorePlaza />);
-    await selectTaggedTab();
-
-    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
+    selectTypeTab('com_app.type_workflow');
+    const search = screen.getByTestId('search-input');
+    fireEvent.change(search, { target: { value: '  expense  ' } });
 
     await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE, 'visible', undefined),
+      expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, 'expense', -1, PAGE_SIZE, 'visible', 10),
     );
-    expect(mockGetUncategorized).not.toHaveBeenCalled();
-    expect(screen.queryByRole('tab', { selected: true })).not.toBeInTheDocument();
-  });
+    expect(screen.getByRole('tab', { name: 'com_app.type_workflow', selected: true })).toBeInTheDocument();
 
-  it('searches across tabs from the uncategorized tab too', async () => {
-    render(<ExplorePlaza />);
-
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_app_uncategorized' }));
-    await waitFor(() => expect(mockGetUncategorized).toHaveBeenCalledWith(null, PAGE_SIZE, undefined, undefined));
-
-    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
-
+    selectTypeTab('com_app.type_assistant');
     await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE, 'visible', undefined),
+      expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, 'expense', -1, PAGE_SIZE, 'visible', 5),
     );
-  });
-
-  it('clears the keyword when a tab is picked, so the tab shows its own apps', async () => {
-    render(<ExplorePlaza />);
-    await selectTaggedTab();
-
-    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
-    await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE, 'visible', undefined),
-    );
-
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_app_uncategorized' }));
-
-    await waitFor(() => expect(mockGetUncategorized).toHaveBeenCalledWith(null, PAGE_SIZE, undefined, undefined));
-    expect(screen.getByTestId('search-input')).toHaveValue('');
-    expect(screen.getByRole('tab', { name: 'com_app_uncategorized', selected: true })).toBeInTheDocument();
+    expect(search).toHaveValue('  expense  ');
+    expect(screen.getByRole('tab', { name: 'com_app.type_assistant', selected: true })).toBeInTheDocument();
   });
 
   it('keeps the search result when the previous request resolves late', async () => {
     render(<ExplorePlaza />);
-    const financeTab = await screen.findByRole('tab', { name: 'Finance' });
+    await screen.findByText('com_app_explore_no_agents');
 
     let resolveFirstPage: (value: { list: unknown[]; hasMore: boolean; nextCursor: string | null }) => void =
       () => undefined;
@@ -196,18 +169,34 @@ describe('ExplorePlaza search scope', () => {
       nextCursor: null,
     });
 
-    fireEvent.mouseDown(financeTab);
-    await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, '', 7, PAGE_SIZE, 'visible', undefined));
+    selectTypeTab('com_app.type_assistant');
+    await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, '', -1, PAGE_SIZE, 'visible', 5));
 
     // Keyword typed while the tab's own page is still in flight.
     fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
     await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE, 'visible', undefined),
+      expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, 'expense', -1, PAGE_SIZE, 'visible', 5),
     );
-    resolveFirstPage({ list: [{ id: '1', name: 'stale tab app' }], hasMore: false, nextCursor: null });
+    await act(async () => {
+      resolveFirstPage({ list: [{ id: '1', name: 'stale tab app' }], hasMore: false, nextCursor: null });
+    });
 
     await waitFor(() => expect(screen.getAllByTestId('agent')).toHaveLength(1));
     expect(screen.getByTestId('agent')).toHaveTextContent('searched app');
+  });
+
+  it('hides the hosted-app tab where the runtime layer is unavailable', async () => {
+    mockRuntimeEnabled.mockReturnValue(false);
+    render(<ExplorePlaza />);
+    await screen.findByText('com_app_explore_no_agents');
+    expect(screen.queryByRole('tab', { name: 'com_app.type_hosted_app' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'com_app.type_assistant' })).toBeInTheDocument();
+  });
+
+  it('shows the type-specific empty state when the tab has no apps', async () => {
+    render(<ExplorePlaza />);
+    selectTypeTab('com_app.type_assistant');
+    expect(await screen.findByText('com_app.type_empty')).toBeInTheDocument();
   });
 });
 
@@ -280,14 +269,14 @@ describe('ExplorePlaza failed pages', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('allows changing category after the first page fails', async () => {
+  it('allows changing type after the first page fails', async () => {
     mockGetChatOnlineApi.mockRejectedValueOnce(new Error('Unavailable')).mockResolvedValue({
-      list: [{ id: '2', name: 'Finance app' }], hasMore: false, nextCursor: null,
+      list: [{ id: '2', name: 'Assistant app' }], hasMore: false, nextCursor: null,
     });
     render(<ExplorePlaza />);
     await screen.findByRole('alert');
-    await selectTaggedTab();
-    await screen.findByText('Finance app');
+    selectTypeTab('com_app.type_assistant');
+    await screen.findByText('Assistant app');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -342,10 +331,12 @@ describe('ExplorePlaza failed pages', () => {
     render(<ExplorePlaza />);
     await screen.findByText('Old result');
     await showLoader();
-    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'new' } });
+    selectTypeTab('com_app.type_workflow');
     await screen.findByText('New result');
     await showLoader();
     expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(4);
+    expect(mockGetChatOnlineApi).toHaveBeenNthCalledWith(3, null, '', -1, PAGE_SIZE, 'visible', 10);
+    expect(mockGetChatOnlineApi).toHaveBeenNthCalledWith(4, 'new-page', '', -1, PAGE_SIZE, 'visible', 10);
     await act(async () => {
       resolveOld({ list: [{ id: '3', name: 'Stale append' }], hasMore: false, nextCursor: null });
     });
@@ -357,43 +348,5 @@ describe('ExplorePlaza failed pages', () => {
     });
     expect(screen.getByText('Current append')).toBeInTheDocument();
     expect(screen.queryByText('Stale append')).not.toBeInTheDocument();
-  });
-});
-
-describe('ExplorePlaza kind filter (F001)', () => {
-  beforeEach(() => mockRuntimeEnabled.mockReturnValue(true));
-
-  it('sends the chosen kind to the server and keeps the tag tab', async () => {
-    render(<ExplorePlaza />);
-    await selectTaggedTab();
-    fireEvent.click(screen.getByRole('radio', { name: 'com_app.type_hosted_app' }));
-    await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, '', 7, PAGE_SIZE, 'visible', 35),
-    );
-  });
-
-  it('narrows a keyword search by kind as well', async () => {
-    render(<ExplorePlaza />);
-    await selectTaggedTab();
-    fireEvent.click(screen.getByRole('radio', { name: 'com_app.type_workflow' }));
-    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
-    await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, 'expense', -1, PAGE_SIZE, 'visible', 10),
-    );
-  });
-
-  it('offers no hosted-app kind where the runtime layer is not deployed', async () => {
-    mockRuntimeEnabled.mockReturnValue(false);
-    render(<ExplorePlaza />);
-    await selectTaggedTab();
-    expect(screen.queryByRole('radio', { name: 'com_app.type_hosted_app' })).toBeNull();
-    expect(screen.getByRole('radio', { name: 'com_app.type_assistant' })).toBeTruthy();
-  });
-
-  it('says so when a kind has no apps', async () => {
-    render(<ExplorePlaza />);
-    await selectTaggedTab();
-    fireEvent.click(screen.getByRole('radio', { name: 'com_app.type_assistant' }));
-    expect(await screen.findByText('com_app.type_empty')).toBeTruthy();
   });
 });

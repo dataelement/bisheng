@@ -1,11 +1,10 @@
-import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AliveScope } from 'react-activation';
 import { createMemoryRouter, Link, Navigate, Outlet, RouterProvider, useLocation } from 'react-router-dom';
 import MainLayout from '~/layouts/MainLayout';
 import AppRoot from '~/routes/AppRoot';
 import AppChatEntry from '~/pages/appChat/AppChatEntry';
-import ExplorePlaza from './explore';
+import { ExplorePlaza } from './explore';
 import { readAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 
 const mockUser = { id: 'tester' };
@@ -21,6 +20,7 @@ jest.mock('~/hooks', () => ({
   useScrollRevealRef: () => ({ current: null }),
 }));
 jest.mock('~/hooks/queries/data-provider', () => ({ useGetBsConfig: () => ({ data: {} }) }));
+jest.mock('~/hooks/useAppRuntimeEnabled', () => ({ useAppRuntimeEnabled: () => true }));
 jest.mock('~/components/Chat/desktopEmbedding', () => ({ isDesktopEmbedded: () => true }));
 jest.mock('~/api/apps', () => ({
   getBysConfigApi: async () => ({ data: {} }),
@@ -42,7 +42,7 @@ jest.mock('~/pages/appChat/components/ChatEmptyState', () => ({ ChatEmptyState: 
 jest.mock('~/components/Avator', () => ({ __esModule: true, default: () => null }));
 jest.mock('~/components/Banners', () => ({ Banner: () => null }));
 jest.mock('~/components/Nav', () => ({ MobileNav: ({ appSurfaceBackAction }: { appSurfaceBackAction: () => void }) => <button onClick={appSurfaceBackAction}>Mobile back</button> }));
-jest.mock('~/components/Nav/MobileSidebarHeaderTabs', () => ({ MobileSidebarHeaderTabs: () => null }));
+jest.mock('~/components/Nav/MobileSidebarHeaderTabs', () => ({ MobileSidebarHeader: () => null }));
 jest.mock('~/components/Nav/MobileAppHistoryDropdown', () => ({ MobileAppHistoryDropdown: () => null }));
 jest.mock('~/components/Nav/NavToggle', () => ({ __esModule: true, default: () => null }));
 jest.mock('~/components/Chat/Input/AgentToolSelector', () => ({ useAgentToolPreferences: () => {} }));
@@ -54,19 +54,12 @@ jest.mock('~/layouts/useWorkbenchNavLinks', () => ({ useWorkbenchNavLinks: () =>
 jest.mock('~/components/ui/Button', () => ({ Button: () => null }));
 jest.mock('~/components/ui/icon/Loading', () => ({ LoadingIcon: () => null }));
 jest.mock('~/components/ui/Dialog', () => ({ Dialog: () => null, DialogContent: () => null, DialogFooter: () => null, DialogHeader: () => null, DialogTitle: () => null }));
-jest.mock('~/components/ui/Tooltip2', () => ({
-  TooltipProvider: ({ children }: React.PropsWithChildren) => children,
-  Tooltip: ({ children }: React.PropsWithChildren) => children,
-  TooltipTrigger: ({ children }: React.PropsWithChildren) => children,
-  TooltipContent: () => null,
-}));
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
 jest.mock('~/common', () => ({ NotificationSeverity: {} }));
 jest.mock('~/utils', () => ({ cn: (...args: unknown[]) => args.filter(Boolean).join(' '), generateUUID: () => 'fresh-chat' }));
 jest.mock('./appUtils', () => ({ getAppShareUrl: () => '' }));
 jest.mock('~/components/illustrations', () => ({ EmptyStateIllustration: () => null }));
 jest.mock('./components/AppSearchBar', () => ({ AppSearchBar: () => null }));
-jest.mock('./components/AgentNavigation', () => ({ AgentNavigation: ({ onCategoryChange }: { onCategoryChange: (id: number) => void }) => <button onClick={() => onCategoryChange(28)}>Category</button> }));
 jest.mock('./components/AgentCard', () => ({ AgentCard: ({ agent, onStartChat }: { agent: unknown; onStartChat: (agent: unknown) => void }) => <button onClick={() => onStartChat(agent)}>Open assistant</button> }));
 
 // The router only needs request metadata; these routes have no loaders.
@@ -108,7 +101,7 @@ function open(initial = '/square?type=apps') {
   render(<RouterProvider router={router} />);
 }
 async function enterFromSquare() {
-  fireEvent.click(await screen.findByRole('button', { name: 'Category' }));
+  await screen.findByRole('tab', { name: 'com_app.type_all', selected: true });
   fireEvent.click(await screen.findByRole('button', { name: 'Open assistant' }));
   const chatId = mockHistory[0]?.chat_id ?? 'fresh-chat';
   await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(`/app/${chatId}/assistant/5`));
@@ -123,19 +116,19 @@ it.each([false, true])('returns a square conversation to the apps tab (history=%
   expect(readAppChatReturnTo(hasHistory ? 'existing-chat' : 'fresh-chat')).toBe('/square?type=apps');
   fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
   await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent('/square?type=apps'));
-  await screen.findByRole('button', { name: 'Category' });
+  await screen.findByRole('tab', { name: 'com_app.type_all', selected: true });
 });
 
 it('uses the square entry after previously opening an app-center conversation', async () => {
   open('/app/center-chat/assistant/5?returnTo=%2Fapps');
   await screen.findByTestId('chat-address');
   fireEvent.click(screen.getByRole('link', { name: 'Square' }));
-  await screen.findByRole('button', { name: 'Category' });
+  await screen.findByRole('tab', { name: 'com_app.type_all', selected: true });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
   await enterFromSquare();
   fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
   await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent('/square?type=apps'));
-  await screen.findByRole('button', { name: 'Category' });
+  await screen.findByRole('tab', { name: 'com_app.type_all', selected: true });
 });
 
 it('returns an app-center conversation to the app center', async () => {
@@ -153,5 +146,5 @@ it('keeps the mobile explore return target', async () => {
   expect(readAppChatReturnTo('fresh-chat')).toBe('/apps/explore');
   fireEvent.click(screen.getByRole('button', { name: 'Mobile back' }));
   await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(/^\/apps\/explore$/));
-  await screen.findByRole('button', { name: 'Category' });
+  await screen.findByRole('tab', { name: 'com_app.type_all', selected: true });
 });
