@@ -200,3 +200,10 @@ def test_backfill_script_adds_rows_only_for_models_without_one(store):
         assert repo.visibility(5)["everyone"] is True and repo.visibility(8)["everyone"] is True
         # The narrowed model keeps its stored scope.
         assert repo.visibility(7)["everyone"] is False
+
+
+@pytest.fixture(autouse=True)
+def ordinary_model_operator(monkeypatch):
+    from bisheng.dsh.domain.services import model_access
+
+    monkeypatch.setattr(model_access, "require_model_operator", AsyncMock(return_value=False))

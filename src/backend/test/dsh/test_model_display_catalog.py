@@ -180,3 +180,10 @@ async def test_ordinary_display_keeps_personal_visibility_filter(monkeypatch):
     operator = SimpleNamespace(user_id=191, tenant_id=1, is_global_super=False)
     assert await model_catalog.workbench_models_for_display(operator) == expected
     reader.assert_awaited_once_with(191, None)
+
+
+@pytest.fixture(autouse=True)
+def ordinary_model_operator(monkeypatch):
+    from bisheng.dsh.domain.services import model_access
+
+    monkeypatch.setattr(model_access, "require_model_operator", AsyncMock(return_value=False))

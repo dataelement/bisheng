@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshOperationConflictError
-from bisheng.core.context.tenant import strict_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
 from bisheng.database.models.tenant import UserTenant
 from bisheng.dsh.domain.models.unified_policy import (
     CreditRule,
@@ -265,3 +265,35 @@ class UnifiedPolicyRepository:
         return DshPolicySnapshot(
             tenant_id=tenant, user_id=user_id, rows=rows, shared_token_limit=limit, ledger_epoch=epoch
         )
+
+    def ledger_policy(self, user_id: int, *, lock: bool = False) -> DshPolicySnapshot:
+        """Ledger metadata without personal grants; grants no model or allowance."""
+        tenant = require_tenant()
+        if lock:
+            self.memberships._lock_tenant()
+        with strict_tenant_filter():
+            ledger = self.session.exec(
+                select(PersonalLedgerState).where(PersonalLedgerState.user_id == user_id)
+            ).one_or_none()
+        return DshPolicySnapshot(
+            tenant_id=tenant,
+            user_id=user_id,
+            rows=[],
+            shared_token_limit=0,
+            ledger_epoch=ledger.quota_epoch if ledger else 1,
+        )
+
+    def accounting_policy(self, user_id: int, *, lock: bool = False) -> DshPolicySnapshot:
+        """Recover historical/operator usage even if the person belongs elsewhere.
+
+        Admission still verifies current identity and model access. A foreign
+        person's accounting partition must never acquire personal grants.
+        """
+        tenant = require_tenant()
+        with bypass_tenant_filter():
+            home = self.session.exec(
+                select(UserTenant.tenant_id).where(
+                    UserTenant.user_id == user_id, UserTenant.is_active == 1, UserTenant.status == "active"
+                )
+            ).one_or_none()
+        return self.effective(user_id, lock=lock) if home == tenant else self.ledger_policy(user_id, lock=lock)

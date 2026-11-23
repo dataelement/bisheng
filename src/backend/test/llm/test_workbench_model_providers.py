@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from bisheng.api.v1.schemas import WSModel
 from bisheng.dsh.domain.services import vision
 from bisheng.llm.domain.models import LLMDao
@@ -89,3 +91,10 @@ async def test_public_workstation_config_only_loads_final_model_catalog(monkeypa
     response = await endpoint.get_config(None, login_user=SimpleNamespace(user_id=20))
     reader.assert_awaited_once_with(include_models=False)
     assert response.data["models"][0]["provider_name"] == "Provider"
+
+
+@pytest.fixture(autouse=True)
+def ordinary_model_operator(monkeypatch):
+    from bisheng.dsh.domain.services import model_access
+
+    monkeypatch.setattr(model_access, "require_model_operator", AsyncMock(return_value=False))

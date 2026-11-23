@@ -24,6 +24,9 @@ async def ordinary_catalog(monkeypatch, request):
             get_linsight_conf=lambda: SimpleNamespace(default_temperature=0),
         ),
     )
+    from bisheng.linsight.domain.services import agent_factory
+
+    monkeypatch.setattr(agent_factory, "settings", config_service.settings)
     server = SimpleNamespace(id=1, name="Own provider", type="openai", tenant_id=1)
     models = [
         (SimpleNamespace(id=mid, server_id=1, tenant_id=1, model_name=f"m{mid}", name=f"m{mid}"), server)
@@ -70,3 +73,10 @@ async def test_chat_rejects_hidden_explicit_id_before_session_or_model_creation(
     ordinary_catalog.visible.assert_awaited_once_with(42, [7, 8])
     insert.assert_not_awaited()
     factory.assert_not_awaited()
+
+
+@pytest.fixture(autouse=True)
+def ordinary_model_operator(monkeypatch):
+    from bisheng.dsh.domain.services import model_access
+
+    monkeypatch.setattr(model_access, "require_model_operator", AsyncMock(return_value=False))

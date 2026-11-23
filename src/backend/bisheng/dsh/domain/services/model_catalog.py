@@ -7,7 +7,7 @@ from bisheng.dsh.domain.services.model_display import read_workbench_metadata
 
 
 async def workbench_models_for_display(operator, config=None):
-    """Management display only; runtime callers keep personal policy checks."""
+    """Management display; runtime independently verifies the model operator."""
     from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id
     from bisheng.llm.domain.services.llm import LLMService
 
@@ -45,12 +45,17 @@ async def user_workbench_models(user_id: int, config=None):
     image support); a model needs no entry to be offered. DSH credit checks run
     at invocation and never define the candidate catalog.
     """
+    from bisheng.dsh.domain.services.model_access import require_model_operator
     from bisheng.llm.domain.services.llm import LLMService
 
     if config is None:
         config = await read_workbench_metadata()
     candidates = await LLMService.aget_online_chat_models()
-    visible = await read_visible_model_ids(user_id, [model.id for model, _ in candidates])
+    visible = (
+        {model.id for model, _ in candidates}
+        if await require_model_operator(user_id)
+        else await read_visible_model_ids(user_id, [model.id for model, _ in candidates])
+    )
     return await _project_visible_models(config, candidates, visible)
 
 
