@@ -1,5 +1,7 @@
 # Design: 企业云端工作台
 
+> **已部分撤销（v3.1.0-alpha1 F001，2026-11-23）**：本特性的桌面专用部分——桌面一次性票据与访问会话、桌面发布 / 进度 / 取源码、员工端单独的云端工作台页面与 `/api/v1/apps/workbenches`、面向 Agent 的在线规范与协作样例——已由 [v3.1.0-alpha1 F001](../../v3.1.0-alpha1/001-hosted-app-entry/spec.md) 撤销。仍保留的部分（桌面列表接口、SSE 撤权断连、发布准入锁、SDK 历史版本下载）及原因见其 [design.md](../../v3.1.0-alpha1/001-hosted-app-entry/design.md) 决策 6。本文只供追溯，不再代表现状。
+
 **关联**：[spec.md](./spec.md) · [tasks.md](./tasks.md)。**版本**：v3.0.0 work-130。**最后更新**：2026-11-09。
 
 本设计补记 PR #2595 `b45d8258d3` 的已实现行为及此次集成验证，不追认不存在的历史确认。遵循 `docs/constitution.md`；领域归属继承 [release-contract.md](../release-contract.md) 的 F054/F055/F062 和权限运行时。

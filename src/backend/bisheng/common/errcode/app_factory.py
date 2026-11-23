@@ -231,6 +231,22 @@ class AppEntryRecoveringError(AppFactoryError):
     Msg: str = "The application is restarting; retry shortly"
 
 
+class AppDesktopClientUpgradeRequiredError(AppFactoryError):
+    """A retired Desktop-only hosted-app capability was called by an old client (v3.1.0-alpha1 F001).
+
+    BISHENG Desktop 1.3.0 still calls launch / deploy / source download on
+    ``/api/v1/dsh/apps``. Those routes now answer with this code instead of
+    disappearing, so the old client surfaces a reason rather than a bare 404.
+    1.3.0 shows ``status_message`` verbatim and does not look up ``api_errors``,
+    which is why this one message carries both languages.
+    """
+
+    Code: int = 16149
+    Msg: str = (
+        "请将毕昇桌面端升级到 1.3.1 或以上后使用此功能 / Upgrade BISHENG Desktop to 1.3.1 or later to use this feature"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 16160-16179 — data plane / logs
 # ---------------------------------------------------------------------------

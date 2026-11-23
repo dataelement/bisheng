@@ -1454,8 +1454,13 @@ class WorkFlowService(BaseService):
         cursor: str | None = None,
         page_size: int = 8,
         keyword: str | None = None,
+        flow_type: int | None = None,
     ) -> "PageInfiniteCursorData":
         """Unsorted (untagged) online apps as an F027 cursor envelope.
+
+        ``flow_type`` narrows the page to one kind (v3.1.0-alpha1 F001, the app
+        square's kind filter); a kind this deployment does not list answers an
+        empty page, as ``/chat/online`` does.
 
         Regular-user candidates are first bounded by OpenFGA's visible-object
         enumeration, then narrowed to online apps NOT bound to any APPLICATION
@@ -1475,11 +1480,14 @@ class WorkFlowService(BaseService):
         except CursorDecodeError as exc:
             raise AppInvalidCursorError(exception=exc)
 
+        if flow_type is not None and flow_type not in cls.enabled_app_types():
+            return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
+
         actor = await resolve_permission_actor(user)
         is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
         visible_id_list: list[str] | None = None
         if not is_admin:
-            visible_id_list = await cls._collect_visible_app_ids(actor, flow_type=None)
+            visible_id_list = await cls._collect_visible_app_ids(actor, flow_type=flow_type)
             if not visible_id_list:
                 return PageInfiniteCursorData(
                     data=[],
@@ -1513,6 +1521,7 @@ class WorkFlowService(BaseService):
             status=FlowStatus.ONLINE.value,
             id_list=visible_id_list,
             id_list_not_in=flow_ids_not_in,
+            flow_type=flow_type,
             action="visible",
             additional_actions=(),
             # Same pinning as the tagged-tab entry — miss it here and hosted

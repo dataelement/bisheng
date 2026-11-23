@@ -11,22 +11,31 @@ import { useLocalize, useMediaQuery } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { SquareBanner } from "~/pages/square/SquareBanner";
 import { cn, copyText } from "~/utils";
+import { type AppTypeFilter, flowTypeForFilter, HOSTED_APP_FLOW_TYPE } from "./appTypes";
 import { getAppShareUrl } from "./appUtils";
 import { AgentCard } from "./components/AgentCard";
 import { AgentNavigation, type AppCategoryId } from "./components/AgentNavigation";
 import { AppSearchBar } from "./components/AppSearchBar";
+import { AppTypeSegmented } from "./components/AppTypeSegmented";
 import { squareTypePath } from "~/pages/square/squarePaths";
 
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = "app-last-origin";
-/** F054 hosted application — the one card type that leaves this SPA. */
-const HOSTED_APP_FLOW_TYPE = 35;
 /** Sentinel understood by `getChatOnlineApi` as "do not filter by tag". */
 const ALL_CATEGORIES = -1;
 
 export default function ExplorePlaza() {
   const [activeTabId, setActiveTabId] = useState<AppCategoryId | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  // Kind filter (F001). It composes with the tag tab and with the keyword alike;
+  // tab and keyword stay mutually exclusive as before. A ref feeds fetchAgents,
+  // whose identity only follows the loading flags.
+  const [typeFilter, setTypeFilter] = useState<AppTypeFilter>("all");
+  const typeFilterRef = useRef<AppTypeFilter>("all");
+  const handleTypeChange = useCallback((next: AppTypeFilter) => {
+    typeFilterRef.current = next;
+    setTypeFilter(next);
+  }, []);
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -90,9 +99,10 @@ export default function ExplorePlaza() {
         const keyword = query.trim();
         // Both All and keyword searches omit the tag filter.
         const tagId = keyword || typeof categoryId !== "number" ? ALL_CATEGORIES : categoryId;
+        const flowType = flowTypeForFilter(typeFilterRef.current);
         const result = !keyword && categoryId === "uncategorized"
-          ? await getUncategorized(cursor, pageSize)
-          : await getChatOnlineApi(cursor, keyword, tagId, pageSize);
+          ? await getUncategorized(cursor, pageSize, undefined, flowType)
+          : await getChatOnlineApi(cursor, keyword, tagId, pageSize, "visible", flowType);
 
         if (seq !== listSeqRef.current) return;
         const pageData = result.list || [];
@@ -135,7 +145,7 @@ export default function ExplorePlaza() {
     setHasMore(true);
     loadMoreLockRef.current = false;
     fetchAgents(searchQuery, activeTabId, null, false);
-  }, [searchQuery, activeTabId, refreshTrigger]);
+  }, [searchQuery, activeTabId, typeFilter, refreshTrigger]);
 
   useEffect(() => {
     if (!loadingMore) {
@@ -257,7 +267,8 @@ export default function ExplorePlaza() {
 
       {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
       <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
-        <div className="order-2 max-[576px]:order-1 max-[576px]:w-full min-w-0 min-[577px]:shrink-0">
+        <div className="order-2 max-[576px]:order-1 max-[576px]:w-full min-w-0 min-[577px]:shrink-0 flex items-center gap-3 max-[576px]:flex-col max-[576px]:items-stretch">
+          <AppTypeSegmented value={typeFilter} onChange={handleTypeChange} className="shrink-0" />
           <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
         </div>
         <div className="order-1 max-[576px]:order-2 w-full min-w-0">
@@ -342,7 +353,7 @@ export default function ExplorePlaza() {
               <div className="flex flex-col items-center">
                 <EmptyStateIllustration className="size-[120px] mb-4" />
                 <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">
-                  {localize("com_app_explore_no_agents")}
+                  {localize(typeFilter !== "all" && !searchQuery.trim() ? "com_app.type_empty" : "com_app_explore_no_agents")}
                 </p>
               </div>
             )}

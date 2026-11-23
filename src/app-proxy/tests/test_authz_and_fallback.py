@@ -203,3 +203,20 @@ class TestRecovering:
         """The manager's 404 ("no instance right now") is an expected answer."""
         fake_manager.routes[DEFAULT_APP_ID] = None
         assert "恢复中" in logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS).text
+
+
+class TestRetiredDesktopAccess:
+    """v3.1.0-alpha1 F001: Desktop opens hosted apps with its embedded web session."""
+
+    def test_desktop_cookie_is_not_a_session(self, proxy_client, fake_backend):
+        """A cookie left by Desktop 1.3.0 is never presented to the backend as a session."""
+        fake_backend.response = deny_response("login")
+        proxy_client.cookies.set("bisheng_app_session_foo", "bs-view-" + "s" * 43)
+        proxy_client.get("/apps/foo/", headers=NAVIGATE_HEADERS)
+        assert fake_backend.calls, "the entry still asks for a verdict"
+        assert not fake_backend.calls[0]["access_token"]
+
+    def test_desktop_launch_route_is_gone(self, proxy_client):
+        """The one-shot ticket exchange no longer sets an app-scoped cookie."""
+        response = proxy_client.post("/apps/foo/_desktop", data={"ticket": "t" * 43}, follow_redirects=False)
+        assert "bisheng_app_session_" not in response.headers.get("set-cookie", "")

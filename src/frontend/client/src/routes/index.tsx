@@ -36,7 +36,6 @@ const WebView = lazy(() => import("@/components/WebView"));
 const AppChat = lazy(() => import("@/pages/appChat"));
 const AppChatEntry = lazy(() => import("@/pages/appChat/AppChatEntry"));
 const AgentCenter = lazy(() => import("@/pages/apps"));
-const CloudWorkbenches = lazy(() => import("@/pages/apps/CloudWorkbenches").then(module => ({ default: module.CloudWorkbenches })));
 const ExplorePlaza = lazy(() => import("@/pages/apps/explore"));
 const Share = lazy(() => import("@/pages/share"));
 const SkillCenterPage = lazy(() =>
@@ -285,12 +284,10 @@ export const router = createBrowserRouter(
                   ),
                 },
                 {
+                  // v3.1.0-alpha1 F001: the standalone cloud-workbench page is gone; hosted apps live in
+                  // the app center and square. Keep the address so bookmarks land on the app center.
                   path: "apps/cloud-workbenches",
-                  element: suspended(
-                    <MenuApprovalPluginGate pluginId="apps">
-                      <CloudWorkbenches />
-                    </MenuApprovalPluginGate>,
-                  ),
+                  element: <Navigate to="/apps" replace />,
                 },
                 {
                   path: "apps/explore",

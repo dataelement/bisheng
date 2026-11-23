@@ -64,3 +64,16 @@ it('reports a network failure and keeps the current list', async () => {
   expect(mockList).toHaveBeenCalledTimes(1);
   expect(mockShowToast).toHaveBeenCalledWith({ message: 'com_app_pin_failed', severity: 'warning' });
 });
+
+it('asks the server for one kind and restarts from the first page (F001)', async () => {
+  const { result } = renderHook(() => useAppCenter(), { wrapper: RecoilRoot });
+  await act(async () => { await result.current.fetchApps(); });
+  expect(mockList).toHaveBeenLastCalledWith(1, 20, undefined);
+  await act(async () => { result.current.setTypeFilter('hosted'); });
+  expect(result.current.typeFilter).toBe('hosted');
+  expect(mockList).toHaveBeenLastCalledWith(1, 20, 35);
+  await act(async () => { result.current.setTypeFilter('hosted'); });
+  expect(mockList).toHaveBeenCalledTimes(2);
+  await act(async () => { result.current.setTypeFilter('all'); });
+  expect(mockList).toHaveBeenLastCalledWith(1, 20, undefined);
+});

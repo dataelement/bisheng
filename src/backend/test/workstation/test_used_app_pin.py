@@ -120,3 +120,25 @@ async def test_denied_assistant_preserves_empty_pin_store(pin_store):
     reply = await apps_mod.pin_used_app(login_user=pin_store.user, data=UsedAppPin(flow_id="asst-1"))
     assert reply.status_code == 403
     assert link_mod.UserLinkDao.get_user_link(pin_store.user.user_id, [apps_mod.USED_APP_PIN_TYPE]) == []
+
+
+@pytest.mark.parametrize("flow_type,expected", [(10, ["wf-1"]), (5, ["asst-1"]), (None, ["wf-1", "asst-1"])])
+async def test_kind_filter_narrows_the_recent_list(pin_store, flow_type, expected):
+    """v3.1.0-alpha1 F001 — the app center's kind filter is applied by the server."""
+    page = await apps_mod.get_used_apps(login_user=pin_store.user, flow_type=flow_type)
+    assert [row["id"] for row in page.data["list"]] == expected
+    assert page.data["total"] == len(expected)
+
+
+async def test_hosted_kind_skips_conversation_history(pin_store, monkeypatch):
+    """Hosted apps have no conversations, so asking for them reads only recorded opens."""
+    monkeypatch.setattr(apps_mod.WorkFlowService, "enabled_app_types", classmethod(lambda cls: {5, 10, 35}))
+    page = await apps_mod.get_used_apps(login_user=pin_store.user, flow_type=35)
+    assert page.data == {"list": [], "total": 0}
+    apps_mod.MessageSessionDao.get_user_used_apps.assert_not_awaited()
+
+
+async def test_kind_this_deployment_does_not_list_is_empty(pin_store, monkeypatch):
+    monkeypatch.setattr(apps_mod.WorkFlowService, "enabled_app_types", classmethod(lambda cls: {5, 10}))
+    page = await apps_mod.get_used_apps(login_user=pin_store.user, flow_type=35)
+    assert page.data == {"list": [], "total": 0}

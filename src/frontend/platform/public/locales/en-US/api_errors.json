@@ -322,6 +322,7 @@
   "16146": "The permission service is unavailable, so access was denied",
   "16147": "The application is being published, please retry shortly",
   "16148": "The application is restarting, please retry shortly",
+  "16149": "Upgrade BISHENG Desktop to 1.3.1 or later to use this feature",
   "16161": "You do not have permission to view this application's runtime logs",
   "16162": "You do not have permission to access this application's data",
   "16163": "The application has not created its database yet",

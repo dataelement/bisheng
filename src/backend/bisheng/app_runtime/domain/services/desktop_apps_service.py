@@ -1,8 +1,7 @@
-"""Desktop identity adapters for hosted app access and development."""
+"""Desktop identity adapter for the hosted-app catalog (v3.1.0-alpha1 F001: catalog only)."""
 
 from dataclasses import dataclass
 
-from bisheng.common.errcode.app_factory import AppManageForbiddenError, AppNotFoundError
 from bisheng.common.errcode.dsh import DshUserDisabledError
 from bisheng.dsh.domain.services.access import principal_scope
 
@@ -12,12 +11,6 @@ async def current_global_super(user_id):
     from bisheng.utils.http_middleware import _check_is_global_super
 
     return await _check_is_global_super(user_id)
-
-
-async def require_action(actor, **target):
-    from bisheng.permission.application.business_authorization import require_business_action
-
-    await require_business_action(actor, **target)
 
 
 async def check_action(actor, **target):
@@ -35,8 +28,8 @@ class DesktopActor:
 
 
 class DesktopAppsService:
-    def __init__(self, runtime, repository, sessions):
-        self.runtime, self.repository, self.sessions = runtime, repository, sessions
+    def __init__(self, runtime, repository):
+        self.runtime, self.repository = runtime, repository
 
     async def actor(self, principal):
         with principal_scope(principal):
@@ -54,47 +47,26 @@ class DesktopAppsService:
                 bool(await current_global_super(int(principal.user_id))),
             )
 
-    async def require(self, principal, app_id, *actions):
+    async def page(self, principal, *, after=None):
         with principal_scope(principal):
             actor = await self.actor(principal)
-            app = await self.repository.get(app_id)
-            if app is None or app.state == "deleted" or int(app.tenant_id) != actor.tenant_id:
-                raise AppNotFoundError()
-            for action in actions:
-                await require_action(actor, resource_type="app", resource_id=app.id, action=action)
-            return actor, app
-
-    async def page(self, principal, *, after=None, managed=False):
-        with principal_scope(principal):
-            actor = await self.actor(principal)
-            return await workbench_page(actor, self.repository, after=after, managed=managed)
-
-    async def launch(self, principal, app_id):
-        _actor, app = await self.require(principal, app_id, "use")
-        if app.state != "online":
-            raise AppManageForbiddenError()
-        ticket = await self.sessions.issue(principal, app_id=app.id, slug=app.slug)
-        return {
-            "app_id": app.id,
-            "slug": app.slug,
-            "entry_path": f"/apps/{app.slug}/",
-            "launch_path": f"/apps/{app.slug}/_desktop",
-            "ticket": ticket,
-            "expires_in": 60,
-        }
+            return await workbench_page(actor, self.repository, after=after)
 
 
-async def workbench_page(actor, repository, *, after=None, managed=False):
-    """One tenant- and action-scoped catalog for Desktop and browser app entrances."""
+async def workbench_page(actor, repository, *, after=None):
+    """Desktop catalog: same tenant, online, visible to the actor (spec AC-22 / INV-2).
+
+    ``use`` is the legacy alias of ``visible`` (``normalize_legacy_action``), the
+    action the app square filters by. The square also lists stopped apps;
+    Desktop lists online ones only. The id keyset and response shape are what
+    BISHENG Desktop 1.3.0 validates — keep them (design 决策 3).
+    """
     rows, cursor = await repository.page(after=after)
     items = []
     for app in rows:
-        if int(app.tenant_id) != actor.tenant_id or app.state == "deleted":
+        if int(app.tenant_id) != actor.tenant_id or app.state != "online":
             continue
-        if not managed and app.state != "online":
-            continue
-        action = "edit" if managed else "use"
-        if await check_action(actor, resource_type="app", resource_id=app.id, action=action):
+        if await check_action(actor, resource_type="app", resource_id=app.id, action="use"):
             items.append(
                 {
                     "id": app.id,

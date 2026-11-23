@@ -407,11 +407,12 @@ export function getVariablesApi(params) {
         }) as any[]
     });
 }
-export async function getFrequently(page, limit) {
+export async function getFrequently(page, limit, flowType?: number) {
     return await request.get('/api/v1/workstation/app/used', {
         params: {
             page,
-            limit
+            limit,
+            flow_type: flowType
         }
     })
 }
@@ -434,12 +435,13 @@ export async function recordUsedAppApi(flowId: string) {
 
 /** F027 cursor waterfall. Pass the previous response's `nextCursor` to load more;
  * omit for the first page. Returns { list, hasMore, nextCursor }. */
-export async function getUncategorized(cursor: string | null = null, pageSize: number = 8, keyword?: string) {
+export async function getUncategorized(cursor: string | null = null, pageSize: number = 8, keyword?: string, flowType?: number) {
     const res = await request.get('/api/v1/workstation/app/uncategorized', {
         params: {
             cursor: cursor || undefined,
             limit: pageSize,
-            keyword: keyword || undefined
+            keyword: keyword || undefined,
+            flow_type: flowType
         }
     }) as { data?: { data?: unknown[]; has_more?: boolean; next_cursor?: string | null } }
     const env = res?.data || {}
@@ -469,13 +471,15 @@ export const getChatOnlineApi = async (
     keyword: string,
     tag_id: number,
     pageSize = 8,
-    action: 'visible' | 'use' = 'visible'
+    action: 'visible' | 'use' = 'visible',
+    flowType?: number
 ) => {
     const params: Record<string, unknown> = {
         cursor: cursor || undefined,
         keyword: keyword || undefined,
         limit: pageSize,
-        action
+        action,
+        flow_type: flowType
     }
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id

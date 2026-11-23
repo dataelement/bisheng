@@ -97,6 +97,7 @@ async def get_uncategorized_chat(
     limit: int | None = 8,
     keyword: str | None = None,
     cursor: str | None = None,
+    flow_type: int | None = None,
 ):
     """Untagged online apps (F027 cursor waterfall).
 
@@ -111,12 +112,13 @@ async def get_uncategorized_chat(
             cursor=cursor,
             page_size=limit or 8,
             keyword=keyword,
+            flow_type=flow_type,
         )
     return resp_200(data=data)
 
 
 @router.get("/app/used")
-async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20):
+async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20, flow_type: int | None = None):
     """List the apps the user has recently used (pinned-first, then by last-used).
 
     The candidate set is the user's own used-app history — bounded per-user, so it
@@ -126,14 +128,26 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     so that per-request enrichment is bounded by ``limit`` rather than the whole
     history (the previous code enriched every used app before slicing).
     """
-    flow_types = [FlowType.ASSISTANT.value, FlowType.WORKFLOW.value]
-    used_apps = await MessageSessionDao.get_user_used_apps(user_id=login_user.user_id, flow_types=flow_types)
+    # ``flow_type`` narrows the list to one kind (v3.1.0-alpha1 F001, the app
+    # center's kind filter); a kind this deployment does not list is empty.
+    if flow_type is not None and flow_type not in WorkFlowService.enabled_app_types():
+        return resp_200(data={"list": [], "total": 0})
+    flow_types = [one for one in (FlowType.ASSISTANT.value, FlowType.WORKFLOW.value) if flow_type in (None, one)]
+    used_apps = (
+        await MessageSessionDao.get_user_used_apps(user_id=login_user.user_id, flow_types=flow_types)
+        if flow_types
+        else []
+    )
     last_used_time_map = {app[0]: app[1] for app in used_apps}
     # Hosted applications have no MessageSession (they are not conversational), so
     # their "recently used" is recorded explicitly on entry via UserLink
     # (USED_APP_RECENT_TYPE). Merge that history in so a hosted app the user has
     # opened shows up here alongside chatted-with workflows / assistants.
-    recent_hosted_links = UserLinkDao.get_user_link(login_user.user_id, [USED_APP_RECENT_TYPE])
+    recent_hosted_links = (
+        UserLinkDao.get_user_link(login_user.user_id, [USED_APP_RECENT_TYPE])
+        if flow_type in (None, FlowType.HOSTED_APP.value)
+        else []
+    )
     for link in recent_hosted_links:
         last_used_time_map[link.type_detail] = link.update_time or link.create_time
     if not last_used_time_map:
@@ -149,6 +163,8 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     # a legitimate "recently used" entry; the recorded candidate set above is what
     # bounds the list. ``filter_apps_by_action`` still drops anything the user may
     # no longer see (action="visible" routes flow_type=35 to the F048 app adapter).
+    if flow_type is not None:
+        apps = [app for app in apps if int(app.get("flow_type") or 0) == flow_type]
     apps = await WorkFlowService.filter_apps_by_action(
         login_user,
         apps,

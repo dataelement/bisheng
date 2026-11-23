@@ -106,6 +106,8 @@ def _filter_cookie(value: str, session_cookie_name: str) -> str:
         if not pair:
             continue
         name = pair.split("=", 1)[0].strip()
+        # ``bisheng_app_session_*``: cookies left by BISHENG Desktop 1.3.0 (retired in
+        # v3.1.0-alpha1 F001). Never forward them to application code.
         if name == session_cookie_name or name.startswith("bisheng_app_session_"):
             continue
         kept.append(pair)

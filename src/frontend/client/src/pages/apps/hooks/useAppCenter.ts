@@ -6,6 +6,7 @@ import type { AppItem } from "~/@types/app";
 import { getFrequently, pinAppApi, recordUsedAppApi } from "~/api/apps";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { type AppTypeFilter, flowTypeForFilter } from "~/pages/apps/appTypes";
 import { getAppShareUrl } from "~/pages/apps/appUtils";
 import {
   appSearchQueryState,
@@ -68,6 +69,9 @@ export function useAppCenter() {
   const [page, setPage] = useState(1);
   const appsRef = useRef<AppItem[]>([]);
   const requestSeqRef = useRef(0);
+  // Kind filter (F001). A ref feeds fetchApps so switching kinds does not rebuild it.
+  const [typeFilter, setTypeFilterState] = useState<AppTypeFilter>("all");
+  const typeFilterRef = useRef<AppTypeFilter>("all");
 
   /** Fetch apps with recent history */
   const fetchApps = useCallback(
@@ -86,7 +90,7 @@ export function useAppCenter() {
       }
 
       try {
-        const res: unknown = await getFrequently(nextPage, APP_CENTER_PAGE_SIZE);
+        const res: unknown = await getFrequently(nextPage, APP_CENTER_PAGE_SIZE, flowTypeForFilter(typeFilterRef.current));
         if (requestId !== requestSeqRef.current) return;
 
         const payload = ((res as { data?: { list?: AppItem[]; total?: number } })?.data ?? {}) as {
@@ -129,6 +133,17 @@ export function useAppCenter() {
       }
     },
     [setRecentApps],
+  );
+
+  /** Show one kind of app; the list pages on the server, so the kind goes to the request. */
+  const setTypeFilter = useCallback(
+    (next: AppTypeFilter) => {
+      if (next === typeFilterRef.current) return;
+      typeFilterRef.current = next;
+      setTypeFilterState(next);
+      fetchApps(1, false);
+    },
+    [fetchApps],
   );
 
   const loadMore = useCallback(() => {
@@ -248,6 +263,8 @@ export function useAppCenter() {
     hasMore,
     searchQuery,
     setSearchQuery,
+    typeFilter,
+    setTypeFilter,
     fetchApps,
     loadMore,
     togglePin,

@@ -97,10 +97,7 @@ async def _fake_action_map(user, data, actions, actions_by_type=None):
     # F056 asks the square for per-resource-type actions (``actions_by_type``);
     # these rows are all plain workflows, so the default set is what applies.
     del actions_by_type
-    return {
-        str(item["id"]): (frozenset(actions) if str(item["id"]) in _VISIBLE_IDS else frozenset())
-        for item in data
-    }
+    return {str(item["id"]): (frozenset(actions) if str(item["id"]) in _VISIBLE_IDS else frozenset()) for item in data}
 
 
 @pytest.mark.asyncio
@@ -259,3 +256,37 @@ async def test_online_cursor_strips_ranking_columns_without_eager_edit_or_share(
         assert "can_share" not in item
     assert scan.await_args.kwargs["additional_actions"] == ()
     assert enrich.call_args.kwargs["writeable_ids"] == set()
+
+
+@pytest.mark.asyncio
+async def test_uncategorized_kind_filter_reaches_both_the_visible_set_and_the_scan():
+    """v3.1.0-alpha1 F001 — the square's kind filter narrows the uncategorised tab too."""
+    user = MagicMock()
+    actor = SimpleNamespace(super_admin=False, current_tenant_id=25, tenant_admin_tenant_ids=frozenset())
+    collect_visible = AsyncMock(return_value=["app-1"])
+    scan = AsyncMock(return_value=([], False, {}))
+
+    with (
+        patch.object(wf, "resolve_permission_actor", new=AsyncMock(return_value=actor)),
+        patch.object(WorkFlowService, "_collect_visible_app_ids", new=collect_visible),
+        patch.object(wf.TagDao, "asearch_tags", new=AsyncMock(return_value=[])),
+        patch.object(WorkFlowService, "_scan_visible_apps_cursor", new=scan),
+        patch.object(WorkFlowService, "enabled_app_types", new=classmethod(lambda cls: {5, 10, 35})),
+    ):
+        await WorkFlowService.get_uncategorized_flows_envelope(user, page_size=20, flow_type=35)
+
+    assert collect_visible.await_args.kwargs["flow_type"] == 35
+    assert scan.await_args.kwargs["flow_type"] == 35
+
+
+@pytest.mark.asyncio
+async def test_uncategorized_kind_this_deployment_does_not_list_is_empty():
+    scan = AsyncMock()
+    with (
+        patch.object(WorkFlowService, "_scan_visible_apps_cursor", new=scan),
+        patch.object(WorkFlowService, "enabled_app_types", new=classmethod(lambda cls: {5, 10})),
+    ):
+        result = await WorkFlowService.get_uncategorized_flows_envelope(MagicMock(), page_size=20, flow_type=35)
+
+    assert result.data == [] and result.has_more is False
+    scan.assert_not_awaited()

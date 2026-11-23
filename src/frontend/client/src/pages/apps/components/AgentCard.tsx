@@ -1,6 +1,7 @@
 import {
   Dropdown,
   DropdownItem,
+  Tag,
   Tooltip as SharedTooltip,
   TooltipProvider as SharedTooltipProvider,
 } from "@bisheng/ui";
@@ -13,6 +14,7 @@ import { useLocalize, useMediaQuery } from "~/hooks";
 import { cn } from "~/utils";
 import { Outlined } from "bisheng-icons";
 import { MoreVertical } from "lucide-react";
+import { appTypeLabelKey, HOSTED_APP_FLOW_TYPE } from "../appTypes";
 import { useLazyAppSharePermission } from "../hooks/useLazyAppSharePermission";
 
 interface AgentCardProps {
@@ -21,7 +23,6 @@ interface AgentCardProps {
   isPinned?: boolean;
   onTogglePin?: (agent: AppItem) => void;
   onStartChat: (agent: AppItem) => void;
-  openLabel?: string;
   onShare: (agent: AppItem) => void;
 }
 
@@ -30,7 +31,6 @@ export function AgentCard({
   isPinned = false,
   onTogglePin,
   onStartChat,
-  openLabel,
   onShare,
 }: AgentCardProps) {
   const localize = useLocalize();
@@ -43,9 +43,9 @@ export function AgentCard({
   const showPin = typeof onTogglePin === "function";
   // Hosted applications (flow_type 35) are not conversational — they open a web
   // surface at `/apps/{slug}`. Their primary action says "enter app", not "start chat".
-  const HOSTED_APP_FLOW_TYPE = 35;
   const primaryActionLabel =
-    openLabel ?? (agent.flow_type === HOSTED_APP_FLOW_TYPE ? localize("com_app_enter_app") : localize("com_app_start_chat"));
+    agent.flow_type === HOSTED_APP_FLOW_TYPE ? localize("com_app_enter_app") : localize("com_app_start_chat");
+  const typeLabelKey = appTypeLabelKey(agent.flow_type);
 
   const handleShare = () => {
     onShare({ ...agent, can_share: true });
@@ -94,7 +94,7 @@ export function AgentCard({
       }}
     >
       {/* Header Info */}
-      <div className="flex items-start justify-between w-full relative z-10 shrink-0">
+      <div className="flex items-start justify-between gap-2 w-full relative z-10 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <AppAvator
             className="size-[32px] min-w-[20px] shrink-0 rounded-md"
@@ -116,6 +116,10 @@ export function AgentCard({
           <DemoTag id={agent.id} className="shrink-0" />
         </div>
 
+        {/* Type tag first, then the existing pin / more actions (F001: the kind is told
+            apart at the card's top-right corner; one neutral colour per the Tag spec). */}
+        <div className="flex shrink-0 items-center gap-1">
+        {typeLabelKey ? <Tag className="shrink-0">{localize(typeLabelKey)}</Tag> : null}
         {isMobileCard ? (
           showPin || canShare ? (
             <div
@@ -204,6 +208,7 @@ export function AgentCard({
             </SharedTooltip>
           </SharedTooltipProvider>
         ) : null}
+        </div>
       </div>
 
       {/* Description — fixed 3-line block (h = 3 × leading) so every card keeps a

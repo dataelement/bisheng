@@ -1371,6 +1371,12 @@
   },
   "com_app": {
     "all": "All",
+    "type_all": "All types",
+    "type_hosted_app": "Hosted app",
+    "type_assistant": "Assistant",
+    "type_workflow": "Workflow",
+    "type_filter": "Filter by type",
+    "type_empty": "No apps of this type yet",
     "center_title": "App Center",
     "empty_go_explore": "No apps used yet. Head to the app marketplace",
     "explore_more": "Explore more apps",

@@ -3,9 +3,9 @@ import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
 import { Trans } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Button } from '@bisheng/ui';
 import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_INTRO, ModuleHomeHeader } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
+import { AppTypeSegmented } from './components/AppTypeSegmented';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { EmptyStateIllustration } from '~/components/illustrations';
@@ -26,6 +26,8 @@ export default function AppCenter() {
         hasMore,
         searchQuery,
         setSearchQuery,
+        typeFilter,
+        setTypeFilter,
         fetchApps,
         loadMore,
         togglePin,
@@ -160,7 +162,6 @@ export default function AppCenter() {
         >
             {!isMobileLayout && (
                 <ModuleHomeHeader title={menuNames.apps}>
-                    <Button variant="link" asChild><Link to="/apps/cloud-workbenches">{localize('shared:cloudWorkbenches.title')}</Link></Button>
                     <div className="w-auto min-w-[120px] shrink-0">
                         <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                     </div>
@@ -172,7 +173,6 @@ export default function AppCenter() {
                 isMobileLayout ? 'text-body-sm' : [MODULE_HOME_INTRO, 'my-4 text-body'],
             )}>
                 <span>{localize('com_app.recent_apps_hint')}</span>
-                {isMobileLayout && <Link to="/apps/cloud-workbenches" className="text-body-sm text-primary">{localize('shared:cloudWorkbenches.title')}</Link>}
                 <span>
                     <Trans
                         i18nKey="com_app.explore_plaza"
@@ -183,6 +183,9 @@ export default function AppCenter() {
                     />
                 </span>
             </p>
+            <div className={cn(MODULE_HOME_COLUMN, 'shrink-0 min-w-0', isMobileLayout ? 'mt-3' : 'mb-4')}>
+                <AppTypeSegmented value={typeFilter} onChange={setTypeFilter} />
+            </div>
             {isMobileLayout && (
                 <div className={cn(MODULE_HOME_COLUMN, 'mt-3 mb-4 shrink-0 min-w-0')}>
                     <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
@@ -212,10 +215,12 @@ export default function AppCenter() {
                         // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
                         <div className="w-full flex-1 flex flex-col items-center">
                             <div className="flex-[8] md:flex-[9]" aria-hidden />
-                            {searchQuery ? (
+                            {searchQuery || typeFilter !== 'all' ? (
                                 <>
                                     <EmptyStateIllustration className="size-[120px] mb-4" />
-                                    <p className="text-[14px] font-normal text-text-3">{localize('com_list_no_results')}</p>
+                                    <p className="text-[14px] font-normal text-text-3">
+                                        {localize(searchQuery ? 'com_list_no_results' : 'com_app.type_empty')}
+                                    </p>
                                 </>
                             ) : (
                                 <AppEmptyState />

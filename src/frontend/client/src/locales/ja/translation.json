@@ -1296,6 +1296,12 @@
   },
   "com_app": {
     "all": "すべて",
+    "type_all": "すべての種類",
+    "type_hosted_app": "ホスト型アプリ",
+    "type_assistant": "アシスタント",
+    "type_workflow": "ワークフロー",
+    "type_filter": "種類で絞り込む",
+    "type_empty": "この種類のアプリはまだありません",
     "center_title": "アプリセンター",
     "empty_go_explore": "利用したアプリはまだありません。アプリ広場へどうぞ",
     "explore_more": "さらにアプリを探す",

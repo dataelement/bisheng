@@ -127,6 +127,13 @@ class TestStepOrder:
         verdict = await _verdict("needs-login", None)
         assert verdict["decision"] == "login"
 
+    async def test_retired_desktop_view_session_is_not_a_session(self, app_db, app_factory, runtime_enabled):
+        """v3.1.0-alpha1 F001 — the ``bs-view-`` session Desktop 1.3.0 obtained by ticket
+        is no longer an identity; only the platform web session opens an app."""
+        _app, _ = await app_factory(slug="desktop-view", state=AppState.ONLINE.value)
+        verdict = await _verdict("desktop-view", "bs-view-" + "s" * 43)
+        assert verdict == {"decision": "login", "reason": "no_session"}
+
     async def test_token_version_mismatch_denied(
         self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist
     ):

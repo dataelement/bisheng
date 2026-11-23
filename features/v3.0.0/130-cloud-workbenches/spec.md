@@ -1,5 +1,7 @@
 # Feature: 企业云端工作台
 
+> **已部分撤销（v3.1.0-alpha1 F001，2026-11-23）**：本特性的桌面专用部分——桌面一次性票据与访问会话、桌面发布 / 进度 / 取源码、员工端单独的云端工作台页面与 `/api/v1/apps/workbenches`、面向 Agent 的在线规范与协作样例——已由 [v3.1.0-alpha1 F001](../../v3.1.0-alpha1/001-hosted-app-entry/spec.md) 撤销。仍保留的部分（桌面列表接口、SSE 撤权断连、发布准入锁、SDK 历史版本下载）及原因见其 [design.md](../../v3.1.0-alpha1/001-hosted-app-entry/design.md) 决策 6。本文只供追溯，不再代表现状。
+
 **版本**：v3.0.0 / `feat/bisheng-work-130`。**关联**：[design.md](./design.md) · [tasks.md](./tasks.md)。
 
 本文件于 2026-11-09 按用户“修复两个 PR、验证后合并并部署”的授权，补记 [PR #2595](https://github.com/dataelement/bisheng/pull/2595) 已实现的需求边界；不声称此前执行过缺失的 SDD 确认步骤，不新增产品能力。

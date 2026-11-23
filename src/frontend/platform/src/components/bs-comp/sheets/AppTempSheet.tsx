@@ -4,17 +4,23 @@ import { FlowIcon, HelperIcon } from "@/components/bs-icons/app";
 import { readTempsDatabase } from "@/controllers/API";
 import { showApiError } from "@/controllers/request";
 import { AppType, AppTypeToNum } from "@/types/app";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { locationContext } from "@/contexts/locationContext";
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
 import AppAvator from "../cardComponent/avatar";
+import { HostedAppGuide } from "./HostedAppGuide";
 
 /** 应用模板选择 */
 export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
     const [open, setOpen] = useState(false)
     const [type, setType] = useState<AppType>(AppType.FLOW)
+    // Hosted apps are not a template category; selecting one shows its guide (F001).
+    const [hostedSelected, setHostedSelected] = useState(false)
+    const { appConfig } = useContext(locationContext)
     const { t } = useTranslation('flow')
     const createDesc = useMemo(() => {
         const descs = {
@@ -61,7 +67,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
         return templates.filter(el => el.name.toLowerCase().includes(keyword.toLowerCase()))
     }, [keyword, templates])
 
-    return <Sheet open={open} onOpenChange={setOpen}>
+    return <Sheet open={open} onOpenChange={(next) => { setOpen(next); if (!next) setHostedSelected(false) }}>
         <SheetTrigger asChild>
             {children}
         </SheetTrigger>
@@ -70,31 +76,35 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                 <div className="w-fit p-6">
                     <SheetTitle>{t('appTemplate')}</SheetTitle>
                     <SheetDescription>{t('chooseTemplateOrCreateBlank')}</SheetDescription>
-                    <SearchInput value={keyword} placeholder={t('search')} onChange={(e) => setKeyword(e.target.value)} className={"my-6"} />
+                    <SearchInput value={keyword} placeholder={t('search')} onChange={(e) => setKeyword(e.target.value)} className={"my-6"} disabled={hostedSelected} />
                     {/* type */}
                     <div className="mt-4">
                         <div
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
-                            onClick={() => setType(AppType.FLOW)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${!hostedSelected && type === AppType.FLOW && 'bg-muted-foreground/10'}`}
+                            onClick={() => { setType(AppType.FLOW); setHostedSelected(false) }}
                         >
                             <FlowIcon />
                             <span>{t('workflow')}</span>
                         </div>
                         <div
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
-                            onClick={() => setType(AppType.ASSISTANT)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${!hostedSelected && type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
+                            onClick={() => { setType(AppType.ASSISTANT); setHostedSelected(false) }}
                         >
                             <HelperIcon />
                             <span>{t('assistant')}</span>
                         </div>
                     </div>
-                    {/* Hosted app: not a template category — a shortcut to the
-                        "write your own code and deploy it" tutorial. Opens in a new
-                        tab so the drawer / builder stays put. */}
+                    {/* Hosted app: not a template category. Selecting it explains the
+                        "write your own code and deploy it" path on the right, with the
+                        tutorial one click away (F001), instead of leaving the sheet. */}
                     <div className="mt-4 pt-4 border-t border-border w-[210px]">
                         <div
-                            className="group flex flex-col gap-1.5 px-4 py-3 rounded-lg cursor-pointer border border-dashed border-border transition-all hover:border-primary/60 hover:bg-primary/5"
-                            onClick={() => window.open('/tutorial/hosted-app.html', '_blank', 'noopener')}
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={hostedSelected}
+                            className={`group flex flex-col gap-1.5 px-4 py-3 rounded-lg cursor-pointer border transition-all hover:border-primary/60 hover:bg-primary/5 ${hostedSelected ? 'border-solid border-primary bg-primary/5' : 'border-dashed border-border'}`}
+                            onClick={() => setHostedSelected(true)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHostedSelected(true) } }}
                         >
                             <div className="flex items-center gap-2 text-sm font-medium">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
@@ -105,11 +115,12 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                                 <span>{t('hostedApp')}</span>
                             </div>
                             <span className="text-xs text-muted-foreground leading-snug">{t('hostedAppDesc')}</span>
-                            <span className="text-xs font-medium text-primary group-hover:underline">{t('viewTutorial')} →</span>
+                            <span className="text-xs font-medium text-primary group-hover:underline">{t('hostedAppLearnHow')} →</span>
                         </div>
                     </div>
                 </div>
                 <div className="flex-1 min-w-[696px] bg-[#fff] dark:bg-[#030712] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
+                    {hostedSelected ? <HostedAppGuide runtimeEnabled={!!appConfig.appRuntimeEnabled} /> : <>
                     <CardComponent
                         id={0}
                         type="sheet"
@@ -132,6 +143,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             />
                         ))
                     }
+                    </>}
                 </div>
             </div>
         </SheetContent>

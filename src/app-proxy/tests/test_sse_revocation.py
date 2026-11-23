@@ -24,9 +24,9 @@ async def test_idle_sse_rechecks_access_and_closes_upstream(monkeypatch):
     check = AsyncMock(return_value=Verdict(decision="forbidden"))
     monkeypatch.setattr(sse, "authorize", check)
     request = Request({"type": "http", "path": "/apps/demo/api/events", "path_params": {"slug": "demo"},
-                       "headers": [(b"cookie", b"bisheng_app_session_demo=bs-view-session")]})
+                       "headers": [(b"cookie", b"access_token_cookie=platform-session")]})
     stream = sse.authorized_events(Upstream(), request, Verdict(decision="allow"), slug="demo", request_id="request")
     with pytest.raises(StopAsyncIteration):
         await asyncio.wait_for(anext(stream), 3)
     assert closed.is_set()
-    check.assert_awaited_once_with(slug="demo", access_token="bs-view-session", request_id="request")
+    check.assert_awaited_once_with(slug="demo", access_token="platform-session", request_id="request")
