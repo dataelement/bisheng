@@ -450,6 +450,48 @@ def _slice_workspace_text(text: str, offset: int, limit: int | None) -> str:
     return _CHAR_PAGE_NOTICE.format(total=len(pages), size=_CHAR_PAGE_SIZE) + "\n".join(selected)
 
 
+def _text_read_result(text: str, offset: int, limit: int | None) -> ReadResult:
+    """Build the ``ReadResult`` for a decoded text file, with its read window.
+
+    deepagents' ``read_file`` prints a ``@@ lines A-B of T | next offset N @@``
+    header, but only from the window fields the backend fills in. Returning bare
+    content left the model with no total and no resume point, so a partial read
+    looked like the whole file: on 106 (2026-11-20) a sub-agent read a report to
+    line 498 of 600+, missed the financial appendix, and looped for 17 minutes
+    on figures that were in the unread tail.
+
+    Line-mode reads mirror upstream ``slice_read_response``: blank files and
+    ``limit<=0`` carry no window (so the middleware's empty-file and
+    no-lines-requested notices stay accurate), and an offset past the end is an
+    error that states the length — previously it came back as ``""``, which the
+    middleware reports as "File exists but has empty contents". Character-paged
+    reads keep their own notice and no window: their offset counts pages, and a
+    line range over them would be false.
+    """
+    if not text.strip():
+        return ReadResult(file_data=FileData(content=text, encoding="utf-8"))
+
+    lines = text.splitlines()
+    if len(lines) <= 2 and len(text) > _CHAR_PAGE_MIN_CHARS:
+        return ReadResult(file_data=FileData(content=_slice_workspace_text(text, offset, limit), encoding="utf-8"))
+
+    offset = max(int(offset), 0)
+    if limit is not None and int(limit) <= 0:
+        return ReadResult(file_data=FileData(content="", encoding="utf-8"), no_lines_requested=True)
+
+    total = len(lines)
+    if offset >= total:
+        return ReadResult(error=f"Line offset {offset} exceeds file length ({total} lines)")
+    end = total if limit is None else min(offset + int(limit), total)
+    return ReadResult(
+        file_data=FileData(content="\n".join(lines[offset:end]), encoding="utf-8"),
+        total_lines=total,
+        start_line=offset + 1,
+        end_line=end,
+        next_offset=end if end < total else None,
+    )
+
+
 def _binary_read_result(rel_path: str, data: bytes) -> ReadResult:
     """Build the ``ReadResult`` for content that is not text.
 
@@ -1185,8 +1227,7 @@ class WorkspaceBackend(FilesystemBackend):
             # Binary: offset/limit are meaningless here (slicing bytes by "lines"
             # would corrupt the payload), so the whole object is decided on at once.
             return _binary_read_result(rel, data)
-        sliced = _slice_workspace_text(text, offset, limit)
-        return ReadResult(file_data=FileData(content=sliced, encoding="utf-8"))
+        return _text_read_result(text, offset, limit)
 
     # -- ls (authoritative from MinIO) --------------------------------------
     def ls(self, path: str = "") -> LsResult:
@@ -1499,7 +1540,7 @@ class WorkspaceBackend(FilesystemBackend):
             # Same contract as the sync path: binary is decided whole, never sliced.
             return _binary_read_result(rel, data)
         # Same slicing contract as the sync path — they must not diverge.
-        return ReadResult(file_data=FileData(content=_slice_workspace_text(text, offset, limit), encoding="utf-8"))
+        return _text_read_result(text, offset, limit)
 
     async def als(self, path: str = "") -> LsResult:
         return await asyncio.to_thread(self.ls, path)
