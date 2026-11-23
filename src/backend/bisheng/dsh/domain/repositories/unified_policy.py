@@ -61,9 +61,11 @@ class UnifiedPolicyRepository:
         }
 
     def visibility(self, model_id: int, *, default_everyone: bool = False) -> dict:
-        """``default_everyone`` describes a model without a stored row: DSH grants
-        access explicitly (no row = hidden), the platform without DSH shows every
-        online model until an administrator narrows it."""
+        """``default_everyone`` describes a model without a stored row.
+
+        Platform catalog callers use True in both deployment modes; accounting
+        callers retain their explicit policy-row contract.
+        """
         require_tenant()
         with strict_tenant_filter():
             row = self.session.exec(select(ModelVisibility).where(ModelVisibility.model_id == model_id)).one_or_none()
@@ -198,7 +200,7 @@ class UnifiedPolicyRepository:
         return effective_token_limit(user_id=user_id, departments=departments, roles=roles, rules=rules)
 
     def visible_model_ids(self, user_id: int, model_ids: list[int]) -> set[int]:
-        """Models of ``model_ids`` this user may pick when DSH is not deployed.
+        """Models of ``model_ids`` this user may pick in either deployment mode.
 
         A model without a stored visibility row is visible to everyone; a stored
         row applies exactly as under DSH. Credits are not involved.
