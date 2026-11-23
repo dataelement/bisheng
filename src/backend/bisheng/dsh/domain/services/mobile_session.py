@@ -25,6 +25,7 @@ from bisheng.common.errcode.dsh import (
     DshSessionRevokedError,
 )
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
+from bisheng.dsh.infrastructure.token_keys import successor_mobile_refresh_token
 
 _REFRESH_ERRORS = {
     "invalid_refresh_token": DshInvalidRefreshTokenError,
@@ -114,22 +115,30 @@ class MobileSessionService:
         self,
         repository_scope,
         *,
-        session_seconds: int = 2592000,
+        session_seconds: int = 15552000,
+        idle_seconds: int = 1209600,
+        grace_seconds: int = 86400,
         access_seconds: int = 86400,
         now=None,
         load_account=None,
         issue_access_token=None,
         allow_multi_login=None,
         current_session=None,
+        successor_key: bytes | None = None,
     ):
         self.repository_scope = repository_scope
+        # session_seconds is the absolute cap measured from creation.
         self.session_seconds = session_seconds
+        self.idle_seconds = idle_seconds
+        self.grace_seconds = grace_seconds
         self.access_seconds = access_seconds
         self.now = now or (lambda: datetime.now(UTC).replace(tzinfo=None))
         self.load_account = load_account or self._load_account
         self.issue_access_token = issue_access_token or self._issue_access_token
         self.allow_multi_login = allow_multi_login or self._allow_multi_login
         self.current_session = current_session or RedisCurrentSession()
+        self.successor_key = successor_key
+        self._derived_successor_key: bytes | None = None
 
     async def run(self, action):
         def execute():
@@ -166,7 +175,7 @@ class MobileSessionService:
                     tenant_id=account.tenant_id,
                     user_id=account.user_id,
                     token_version=int(account.token_version or 0),
-                    expires_at=now + timedelta(seconds=self.session_seconds),
+                    expires_at=now + timedelta(seconds=self.idle_seconds),
                     digest=self.digest(refresh),
                     access_hash=self.access_digest(access),
                     now=now,
@@ -176,7 +185,8 @@ class MobileSessionService:
         return self.payload(account, row, access, refresh)
 
     async def refresh(self, refresh: str | None) -> dict:
-        digest = self.digest(refresh or "")
+        presented = refresh or ""
+        digest = self.digest(presented)
         located = await self.run(lambda repository: repository.locate_refresh(digest))
         if located is None:
             raise DshInvalidRefreshTokenError()
@@ -188,7 +198,7 @@ class MobileSessionService:
         if require_current and reject is None:
             current = await self.current_session.get(account.user_id)
             current_hash = self.access_digest(current) if current else None
-        next_refresh = secrets.token_urlsafe(32)
+        next_refresh = successor_mobile_refresh_token(await self._successor_key(), presented)
         access = None if reject else self.issue_access_token(account)
         principal = DshPrincipal(
             tenant_id=str(located["tenant_id"]),
@@ -196,7 +206,7 @@ class MobileSessionService:
             session_id=located["session_id"],
         )
         with principal_scope(principal):
-            row, error = await self.run(
+            row, error, replayed, replaced_access_hash = await self.run(
                 lambda repository: repository.rotate(
                     located["session_id"],
                     digest,
@@ -206,6 +216,9 @@ class MobileSessionService:
                     next_access_hash=None if access is None else self.access_digest(access),
                     require_current=require_current,
                     current_hash=current_hash,
+                    grace_seconds=self.grace_seconds,
+                    idle_seconds=self.idle_seconds,
+                    absolute_seconds=self.session_seconds,
                 )
             )
         if error:
@@ -217,18 +230,51 @@ class MobileSessionService:
                 )
             except RedisError as error:
                 logger.exception("mobile refresh publication failed user={}", account.user_id)
-                with principal_scope(principal):
-                    await self.run(lambda repository: repository.revoke_by_digest(self.digest(next_refresh)))
+                await self._undo_unpublished(
+                    principal, next_refresh, located["session_id"], replayed, replaced_access_hash
+                )
                 raise DshAuthorizationUnavailableError() from error
             if not published:
-                # SQL rotation has committed; revoke only this old phone's grant.
+                # A fresh rotation has committed a grant this client never received.
+                # A replay must not revoke the successor a phone may already hold.
                 # Never restore/delete Redis here: a newer login owns that key.
-                with principal_scope(principal):
-                    await self.run(lambda repository: repository.revoke_by_digest(self.digest(next_refresh)))
+                await self._undo_unpublished(
+                    principal, next_refresh, located["session_id"], replayed, replaced_access_hash
+                )
                 raise DshMobileLoggedInElsewhereError()
         else:
             await self.current_session.put(account.user_id, access, self.access_seconds + 3600)
         return self.payload(account, row, access, next_refresh)
+
+    async def _undo_unpublished(
+        self,
+        principal,
+        next_refresh: str,
+        session_id: str,
+        replayed: bool,
+        replaced_access_hash: str | None,
+    ) -> None:
+        with principal_scope(principal):
+            if replayed:
+                # The hash was moved to an access token Redis did not accept.
+                # Put back the one this replay overwrote, so the access token the
+                # phone already holds still matches what Redis kept.
+                await self.run(
+                    lambda repository: repository.remember_access_hash(session_id, replaced_access_hash)
+                )
+                return
+            await self.run(lambda repository: repository.revoke_by_digest(self.digest(next_refresh)))
+
+    async def _successor_key(self) -> bytes:
+        if self.successor_key is not None:
+            return self.successor_key
+        if self._derived_successor_key is None:
+            from bisheng.dsh.infrastructure.token_keys import LocalTokenKeys
+
+            # The service is a process singleton and the master secret is already
+            # cached in-process, so derive this once instead of on every refresh.
+            self._derived_successor_key = await LocalTokenKeys().resolve_mobile_refresh_successor_key()
+        return self._derived_successor_key
 
     async def revoke(self, refresh: str | None) -> None:
         try:
@@ -344,5 +390,7 @@ def build_mobile_session_service() -> MobileSessionService:
     return MobileSessionService(
         lambda: repository_scope(MobileSessionRepository),
         session_seconds=settings.dsh.mobile_session_ttl_seconds,
+        idle_seconds=settings.dsh.mobile_session_idle_ttl_seconds,
+        grace_seconds=settings.dsh.refresh_reuse_grace_seconds,
         access_seconds=settings.cookie_conf.jwt_token_expire_time,
     )

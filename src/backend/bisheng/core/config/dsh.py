@@ -61,11 +61,21 @@ class DshSettings(BaseModel):
             "Zero keeps strict replay revocation."
         ),
     )
-    mobile_session_ttl_seconds: int = Field(
-        default=2592000,
+    mobile_session_idle_ttl_seconds: int = Field(
+        default=1209600,
         ge=600,
         le=2592000,
-        description="Absolute lifetime in seconds of a phone refresh session. Rotation does not extend it.",
+        description="Each phone refresh extends the session by this idle lifetime, up to the absolute cap.",
+    )
+    mobile_session_ttl_seconds: int = Field(
+        default=15552000,
+        ge=600,
+        le=31536000,
+        description=(
+            "Absolute cap in seconds of a phone refresh session, measured from creation. "
+            "Refresh cannot extend the session past it. A deployment that set the old "
+            "30-day lifetime here now sets this cap instead."
+        ),
     )
 
     enabled: bool = Field(
