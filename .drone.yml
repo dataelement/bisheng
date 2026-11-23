@@ -432,11 +432,10 @@ steps:
       - name: socket
         path: /var/run/docker.sock
     environment:
-      docker_registry: http://192.168.106.8:6082
       docker_user:
-        from_secret: NEXUS_USER
+        from_secret: CR_USER
       docker_password:
-        from_secret: NEXUS_PASSWORD
+        from_secret: CR_PASSWORD
       NEXUS_USER:
         from_secret: NEXUS_CI_USER
       NEXUS_PASS:
@@ -450,7 +449,7 @@ steps:
       - version=$(cat .offline-version)
       - test -n "$version"
       - export GIT_REF="refs/tags/$${version}"
-      - docker login -u $docker_user -p $docker_password $docker_registry
+      - docker login -u $docker_user -p $docker_password cr.dataelem.com
       - docker manifest inspect "cr.dataelem.com/dataelement/bisheng-backend:$${version}"
       - ./scripts/collect-images.sh --arch amd64 --version "$${version}" > images.txt
       - ./scripts/make-bundle.sh --version "$${version#v}" --arch amd64 --images-file images.txt --docker-dir docker --out dist --compress zstd --split-size 2G
