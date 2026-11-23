@@ -189,11 +189,6 @@
       "count": 1
     }
   },
-  "src/components/Avator/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/components/Banners/Banner.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -961,9 +956,6 @@
     }
   },
   "src/components/Nav/MobileAppHistoryDropdown.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     }
@@ -2232,9 +2224,6 @@
     }
   },
   "src/pages/appChat/SideNav.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     }
@@ -2242,11 +2231,6 @@
   "src/pages/appChat/appUtils/skillMethod.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 5
-    }
-  },
-  "src/pages/appChat/components/AppInfoCard.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/pages/appChat/components/AppSidebarConvoItem.tsx": {

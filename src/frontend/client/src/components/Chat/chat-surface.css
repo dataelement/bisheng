@@ -140,6 +140,25 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
   padding-block-end:16px;
 }
 .chat-welcome-apps-header { margin-block-end:12px; }
+/* Web chat has a pane-specific palette. App cards use the same root colors as the app center. */
+:root:not([data-bisheng-surface='desktop']) {
+  --app-card-page:var(--bg-page);
+  --app-card-fill-1:var(--fill-1);
+  --app-card-fill-2:var(--fill-2);
+  --app-card-border:var(--border-base);
+  --app-card-text-1:var(--text-1);
+  --app-card-text-2:var(--text-2);
+  --app-card-text-3:var(--text-3);
+}
+:root:not([data-bisheng-surface='desktop']) .chat-welcome-app-grid {
+  --bg-page:var(--app-card-page);
+  --fill-1:var(--app-card-fill-1);
+  --fill-2:var(--app-card-fill-2);
+  --border-base:var(--app-card-border);
+  --text-1:var(--app-card-text-1);
+  --text-2:var(--app-card-text-2);
+  --text-3:var(--app-card-text-3);
+}
 .chat-welcome-examples-header {
   display:flex; align-items:flex-start; justify-content:space-between; gap:6px 12px;
   margin-block-end:10px;

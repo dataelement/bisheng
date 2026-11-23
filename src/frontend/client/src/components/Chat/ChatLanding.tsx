@@ -78,7 +78,7 @@ export function ChatLanding({ model, composerConfigNotice }: ChatLandingProps) {
               }}
             />
           )}
-          <DailyFeaturedApps t={t} />
+          {bsConfig && <DailyFeaturedApps t={t} configuredAppIds={bsConfig.recommendedApps} />}
         </div>
       </div>
     </div>

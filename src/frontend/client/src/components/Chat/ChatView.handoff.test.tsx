@@ -121,6 +121,7 @@ beforeEach(() => {
 });
 
 test('ordinary new chats still show the welcome page', () => {
+  mockConfigReady = true;
   open();
   expect(screen.getByText('Welcome')).toBeInTheDocument();
   expect(screen.getByText('Featured apps')).toBeInTheDocument();

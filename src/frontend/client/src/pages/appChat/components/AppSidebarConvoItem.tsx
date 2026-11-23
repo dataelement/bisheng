@@ -162,7 +162,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
         <div
             className={cn(
                 "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors cursor-pointer",
-                isActive ? "bg-[#EEE]" : "fine-pointer:hover:bg-fill-1 coarse-pointer:hover:bg-transparent",
+                isActive ? "bg-[#EEE] dark:bg-fill-2" : "fine-pointer:hover:bg-fill-1 coarse-pointer:hover:bg-transparent",
                 // Pin the hover fill while the row owns a transient UI — an open
                 // options menu or the rename input — since the pointer leaves the
                 // row (into the portaled menu) long before the interaction is over.
@@ -183,7 +183,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                     <input
                         ref={inputRef}
                         type="text"
-                        className="w-full rounded bg-white px-1 text-[14px] leading-tight focus-visible:outline-none text-text-1"
+                        className="w-full rounded bg-bg-page px-1 text-[14px] leading-tight focus-visible:outline-none text-text-1"
                         value={titleInput ?? ''}
                         onChange={(e) => setTitleInput(e.target.value)}
                         onKeyDown={handleKeyDown}
