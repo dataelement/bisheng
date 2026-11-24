@@ -25,6 +25,7 @@ import {
 } from "react";
 import { SendIcon } from "~/components/svg";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
+import { InlineChatReference } from "~/components/Chat/InlineChatReference";
 import type { BsConfig } from "~/api/chatApi";
 import { TagPicker } from "./TagPicker";
 import {
@@ -64,12 +65,6 @@ interface KnowledgeAiInputProps {
   /** Overrides the default placeholder (which advertises the `#` tag picker). */
   placeholder?: string;
 }
-
-const TAG_TEXT_GAP_PX = 4;
-
-/** Tag chip: background #335CFF @ ~35% alpha; label text #212121 */
-const TAG_BG = "rgb(var(--brand-500)/0.35)";
-const TAG_TEXT_CLASS = "text-text-1";
 
 export function KnowledgeAiInput({
   availableTags,
@@ -142,14 +137,14 @@ export function KnowledgeAiInput({
     if (!inputText) setMultiline(false);
   }, [inputText]);
 
-  // First-line indent = badge width + gap so wrapped lines use full width under the badge.
+  // The measured wrapper includes the reference's trailing space.
   useEffect(() => {
     const el = badgeRef.current;
     if (!selectedTag || !el) {
       setBadgeIndentPx(undefined);
       return;
     }
-    const apply = () => setBadgeIndentPx(el.offsetWidth + TAG_TEXT_GAP_PX);
+    const apply = () => setBadgeIndentPx(el.offsetWidth);
     apply();
     const ro = new ResizeObserver(() => apply());
     ro.observe(el);
@@ -399,23 +394,13 @@ export function KnowledgeAiInput({
             {selectedTag && (
               <span
                 ref={badgeRef}
-                className={`absolute left-0 top-0 z-10 box-border inline-flex h-5 max-h-5 min-h-5 max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-0 text-xs font-medium leading-none ${TAG_TEXT_CLASS} select-none transition-[background-color,box-shadow] duration-150 ease-out`}
-                style={{
-                  boxSizing: "border-box",
-                  backgroundColor: tagDeleteHighlight
-                    ? "rgb(var(--brand-500)/0.28)"
-                    : TAG_BG,
-                  boxShadow: tagDeleteHighlight
-                    ? "inset 0 0 0 1.5px rgb(var(--brand-500))"
-                    : "inset 0 0 0 1.5px rgb(var(--brand-500)/0)",
-                }}
+                className={cn(
+                  "absolute left-0 top-0 z-10 inline-flex max-w-[90%] text-sm leading-5",
+                  tagDeleteHighlight && "rounded-sm bg-blue-50 ring-1 ring-inset ring-blue-500",
+                )}
                 aria-selected={tagDeleteHighlight}
               >
-                <span
-                  className={`min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap ${TAG_TEXT_CLASS}`}
-                >
-                  #{selectedTag.name}
-                </span>
+                <InlineChatReference kind="tag" label={`#${selectedTag.name}`} />
               </span>
             )}
             <textarea

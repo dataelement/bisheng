@@ -102,6 +102,39 @@ beforeEach(() => {
   mockQueue.calls = [];
 });
 
+it("renders composer references at their text positions using the input box styles", () => {
+  const view = renderBubble(taskRow({
+    text: "Make a report",
+    isCreatedByUser: true,
+    composerReferences: [
+      { kind: "skill", label: "Web report", offset: 0 },
+      { kind: "tool", label: "Search", offset: 5 },
+      { kind: "space", label: "#Library", offset: 13 },
+      { kind: "space", label: "#Reports", offset: 13, is_tag: true },
+    ],
+  }), true);
+  const bubble = view.container.querySelector(".dsh-user-bubble")!;
+  expect(bubble.textContent).toBe("Web reportMake Searcha report#Library#Reports");
+  expect(Array.from(bubble.querySelectorAll(".dsh-inline-reference"), (element) => element.textContent))
+    .toEqual(["Web report", "Search", "#Library", "#Reports"]);
+  expect(bubble.querySelector('[data-reference-kind="space"] svg')).toBeInTheDocument();
+  const tag = bubble.querySelector('[data-reference-kind="tag"]')!;
+  expect(tag).toHaveTextContent("#Reports");
+  expect(tag).toHaveClass("dsh-inline-reference");
+  expect(tag.querySelector("svg")).toBeNull();
+});
+
+it("uses the same inline style for a tag saved in an older knowledge question", () => {
+  const view = renderBubble(taskRow({
+    text: ':::tag {"id":7,"name":"Reports"}:::\nMake a report',
+    isCreatedByUser: true,
+  }), true);
+  const tag = view.container.querySelector('[data-reference-kind="tag"]')!;
+  expect(tag).toHaveClass("dsh-inline-reference");
+  expect(tag).toHaveTextContent("#Reports");
+  expect(tag.querySelector("svg")).toBeNull();
+});
+
 describe("carrier that follows no run events (share view)", () => {
   it("renders a task turn in the inline task panel with its live channel", () => {
     renderBubble(taskRow(), false);

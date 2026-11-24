@@ -12,6 +12,7 @@ import http from "~/api/request";
 import { runRowMarks } from "~/hooks/unifiedRun";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 import { getShareTokenFromPath } from "~/utils/shareToken";
+import type { SentComposerReference } from "~/components/Chat/Input/composerReferences";
 
 // --- Endpoints ---
 const API = {
@@ -142,6 +143,8 @@ export interface ChatMessage {
     searchResult?: SearchWebItem[];
     // Reference sources
     references?: ReferenceSource[];
+    /** References shown inline in the user's prompt, at UTF-16 offsets. */
+    composerReferences?: SentComposerReference[];
     citations?: ChatCitation[] | null;
     files?: any[];
     /** Persisted 点赞/点踩 verdict on this answer row: 0 none / 1 up / 2 down.
@@ -315,6 +318,17 @@ function mapAgentResponseItem(row: any): ChatMessage {
     Object.assign(base, runRowMarks(failureExtra));
     if (category === "question" && raw && typeof raw === "object") {
         base.text = raw.query ?? "";
+        if (Array.isArray(raw.composer_references)) {
+            base.composerReferences = raw.composer_references.filter(
+                (reference: SentComposerReference | null) => reference
+                    && (reference.kind === "skill" || reference.kind === "tool" || reference.kind === "space")
+                    && (reference.is_tag === undefined || (reference.kind === "space" && reference.is_tag === true))
+                    && typeof reference.label === "string"
+                    && Number.isInteger(reference.offset)
+                    && reference.offset >= 0
+                    && reference.offset <= base.text.length,
+            );
+        }
         if (!base.files?.length && Array.isArray(raw.files)) {
             base.files = normalizeHistoryMediaFiles(raw.files);
         }

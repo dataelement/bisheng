@@ -23,7 +23,8 @@ import { getSelectableSkills } from '~/api/linsight';
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 
-import { ComposerEditor } from "./Input/ComposerEditor";
+import { ComposerEditor, readSentComposerReferences } from "./Input/ComposerEditor";
+import type { SentComposerReference } from "./Input/composerReferences";
 import { useComposerReferences } from "./Input/useComposerReferences";
 import { labelForGroup, type AvailableToolGroup } from "./Input/AgentToolSelector";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
@@ -97,7 +98,7 @@ interface AiChatInputProps {
     onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
-    onSend: (text: string, files?: any[] | null) => void | boolean | Promise<void | boolean>;
+    onSend: (text: string, files?: any[] | null, references?: SentComposerReference[]) => void | boolean | Promise<void | boolean>;
     onStop: () => void;
     onScrollToBottom: () => void;
     /** Optional controlled value — for filling in preset questions */
@@ -357,6 +358,22 @@ const AiChatInput = memo(
         const showToolPicker = tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled || runLocked;
 
+        // Resource IDs share the native editor document while execution metadata stays in state.
+        const mountedSkills = !isLingsi ? dailySkills : [];
+        const showMountedTools = !!tools && agentMode && !isLingsi && !!onSelectedOrgKbsChange;
+        const mountedTools = useMemo(
+            () => (showMountedTools ? selectedTools : []),
+            [showMountedTools, selectedTools],
+        );
+        const { references, onReferencesChange } = useComposerReferences(
+            mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
+            mountedTools, setSelectedTools,
+            (tool) => labelForGroup(
+                (bsConfig?.tools as AvailableToolGroup[] | undefined)?.find(group => group.id === tool.id) ?? tool,
+                localize,
+            ),
+        );
+
         const navigate = useNavigate();
 
         // Drag & paste file support (only when not disabled by exclusion)
@@ -412,15 +429,15 @@ const AiChatInput = memo(
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
             // bubble goes back to `cover_filepath` once parsing produces it.
+            const files = chatFiles?.map((file) => file?.mediaCoverUrl?.startsWith('blob:')
+                ? { ...file, mediaCoverUrl: undefined }
+                : file) ?? chatFiles;
+            const sentReferences = textAreaRef.current ? readSentComposerReferences(textAreaRef.current, references) : [];
             const pending = { identity: composerIdentity };
             sendPendingRef.current = pending;
             let accepted: void | boolean;
             try {
-                accepted = await onSend(trimmed, chatFiles?.map((file) => (
-                    file?.mediaCoverUrl?.startsWith('blob:')
-                        ? { ...file, mediaCoverUrl: undefined }
-                        : file
-                )) ?? chatFiles);
+                accepted = await (sentReferences.length ? onSend(trimmed, files, sentReferences) : onSend(trimmed, files));
             } finally {
                 if (sendPendingRef.current === pending) sendPendingRef.current = null;
             }
@@ -441,7 +458,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, blockedByRun, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity]);
+        }, [text, disabled, blockedByRun, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity, references]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -500,21 +517,6 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        // Resource IDs share the native editor document while execution metadata stays in state.
-        const mountedSkills = !isLingsi ? dailySkills : [];
-        const showMountedTools = !!tools && agentMode && !isLingsi && !!onSelectedOrgKbsChange;
-        const mountedTools = useMemo(
-            () => (showMountedTools ? selectedTools : []),
-            [showMountedTools, selectedTools],
-        );
-        const { references, onReferencesChange } = useComposerReferences(
-            mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
-            mountedTools, setSelectedTools,
-            (tool) => labelForGroup(
-                (bsConfig?.tools as AvailableToolGroup[] | undefined)?.find(group => group.id === tool.id) ?? tool,
-                localize,
-            ),
-        );
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0 || mountedTools.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;

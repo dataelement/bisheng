@@ -107,6 +107,45 @@ beforeEach(() => {
 });
 
 describe("conversation page", () => {
+  it("shows saved references after the run ends, on reload and on the share page", async () => {
+    mockSendRunMessage.mockResolvedValue(
+      sendAnswer({ run_id: "r1", disposition: "started", message_id: "m1", conversation_id: "c9" }),
+    );
+    const { result, unmount } = renderChat("new");
+    const composerReferences = [
+      { kind: "skill", label: "Web report", offset: 0 },
+      { kind: "space", label: "Library", offset: 7 },
+      { kind: "space", label: "#Reports", offset: 7, is_tag: true },
+    ] as const;
+
+    await act(async () => {
+      await result.current.sendMessage("Make a report", [], { composerReferences: [...composerReferences] });
+    });
+
+    expect(mockSendRunMessage).toHaveBeenCalledWith(expect.objectContaining({
+      text: "Make a report",
+      composer_references: composerReferences,
+    }), expect.anything());
+    expect(result.current.messages[0]).toMatchObject({ messageId: "m1", composerReferences });
+
+    mockGetAgentMessages.mockResolvedValue([
+      { ...row("101", true, "Make a report"), category: "question", composerReferences: [...composerReferences] },
+      row("102", false, "Here is your report"),
+    ]);
+    emit("c9", { type: "run_finished" });
+
+    await waitFor(() => expect(result.current.messages.map((message) => message.messageId)).toEqual(["101", "102"]));
+    expect(result.current.messages[0]).toMatchObject({ text: "Make a report", composerReferences });
+
+    unmount();
+    act(() => useRunStore.setState({ conversations: {} }));
+    const reopened = renderChat("c9");
+    await waitFor(() => expect(reopened.result.current.messages[0]).toMatchObject({ messageId: "101", composerReferences }));
+
+    const shared = renderHook(() => useAiChat("c9", "share-token"));
+    await waitFor(() => expect(shared.result.current.messages[0]).toMatchObject({ messageId: "101", composerReferences }));
+  });
+
   it("starts a run, shows it in one row and lets the stored turn replace that row", async () => {
     mockSendRunMessage.mockResolvedValue(
       sendAnswer({ run_id: "r1", disposition: "started", message_id: "m1", conversation_id: "c9" }),

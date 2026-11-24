@@ -18,6 +18,7 @@ let mockUseRealUploader = false;
 const mockUpload = jest.fn();
 const mockSkills = [{ name: 'research' }];
 let mockAvailableSkills = mockSkills;
+let mockSelectedTools: { id: number; name: string; auto?: boolean }[] = [];
 jest.mock('~/store', () => ({ __esModule: true, default: { selectedAgentTools: 'tools' } }));
 jest.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mockAvailableSkills }) }));
 jest.mock('~/api/linsight', () => ({ getSelectableSkills: jest.fn(), checkFileParseStatus: jest.fn() }));
@@ -26,7 +27,7 @@ jest.mock('recoil', () => ({
   useRecoilValue: () => ({}),
   useRecoilState: (atom) => {
     const React = jest.requireActual('react');
-    const [skills, setSkills] = React.useState(atom === 'skills' ? mockSkills : []);
+    const [skills, setSkills] = React.useState(atom === 'skills' ? mockSkills : mockSelectedTools);
     const update = React.useCallback((value) => { if (atom === 'skills') mockSetSkills(value); setSkills(value); }, [atom]);
     return [skills, update];
   },
@@ -54,7 +55,7 @@ jest.mock('~/components/ui', () => {
   };
 });
 jest.mock('./Input/ChatSkillSelector', () => ({ ChatSkillSelector: ({ onChange }) => <button onClick={() => onChange(mockSkills)}>skills</button> }));
-jest.mock('./Input/AgentToolSelector', () => () => <button>tools</button>);
+jest.mock('./Input/AgentToolSelector', () => ({ labelForGroup: ({ name }) => name }));
 jest.mock('./Input/ChatFormTools', () => ({ ChatToolDown: () => <button>legacy tools</button> }));
 jest.mock('./Input/ChatResourceMenu', () => ({
   ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, fileUploadDisabled, fileUploadDisabledReason, onFileUploadClick, showTools, showResearch, researchActive, onResearchChange, children }) => (
@@ -94,6 +95,10 @@ jest.mock('~/pages/appChat/components/InputFiles', () => {
 
 const config = { tools: [{ id: 'web' }], fileUpload: { enabled: true }, skillEntry: { enabled: true } };
 const knowledge = [{ id: 'space-1', name: 'Reference', type: 'space' }];
+const defaultReferences = [
+  { kind: 'skill', label: 'research', offset: 0 },
+  { kind: 'space', label: 'Reference', offset: 0 },
+];
 function props() {
   return {
     bsConfig: config, selectedOrgKbs: knowledge, onSelectedOrgKbsChange: jest.fn(),
@@ -101,7 +106,7 @@ function props() {
     onSend: jest.fn(), onStop: jest.fn(), onScrollToBottom: jest.fn(), onToggleTaskMode: jest.fn(),
   };
 }
-beforeEach(() => { mockSetSkills.mockClear(); mockAvailableSkills = mockSkills; mockUseRealUploader = false; });
+beforeEach(() => { mockSetSkills.mockClear(); mockAvailableSkills = mockSkills; mockSelectedTools = []; mockUseRealUploader = false; });
 
 test('established chat keeps the setup entries and the selected context', () => {
   const input = props();
@@ -136,8 +141,26 @@ test('follow-up retains attachment upload and sends its text and file', () => {
   screen.getByRole('textbox').append(document.createTextNode('Summarize this file'));
   fireEvent.input(screen.getByRole('textbox'));
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-  expect(input.onSend).toHaveBeenCalledWith('Summarize this file', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
+  expect(input.onSend).toHaveBeenCalledWith('Summarize this file', [{ name: 'notes.txt', filepath: '/notes.txt' }], defaultReferences);
   expect(input.onSelectedOrgKbsChange).not.toHaveBeenCalled();
+});
+
+test('sends the four visible inline resources in editor order', async () => {
+  mockSelectedTools = [{ id: 7, name: 'Lookup tool' }, { id: 8, name: 'Default tool', auto: true }];
+  const input = props();
+  render(<AiChatInput {...input} features={{ taskMode: false }} bsConfig={{ ...config, tools: mockSelectedTools }}
+    selectedOrgKbs={[{ ...knowledge[0], tag: { id: 4, name: 'Report' } }]} />);
+  const editor = screen.getByRole('textbox');
+  const token = (label: string) => screen.getByText(label).closest('[data-composer-reference]')!;
+  editor.replaceChildren('  Collect 😀 ', token('Lookup tool'), '\n', token('Reference'), token('#Report'), ' then use ', token('research'), '  ');
+  fireEvent.input(editor);
+  await act(async () => { fireEvent.keyDown(editor, { key: 'Enter' }); });
+  expect(input.onSend).toHaveBeenCalledWith('Collect 😀 \n then use', null, [
+    { kind: 'tool', label: 'Lookup tool', offset: 'Collect 😀 '.length },
+    { kind: 'space', label: 'Reference', offset: 'Collect 😀 \n'.length },
+    { kind: 'space', label: '#Report', offset: 'Collect 😀 \n'.length, is_tag: true },
+    { kind: 'skill', label: 'research', offset: 'Collect 😀 \n then use'.length },
+  ]);
 });
 
 test('running conversation retains stop action', () => {
@@ -158,7 +181,7 @@ test('media parsing keeps drafting available while blocking send until parsing c
   expect(input.onSend).not.toHaveBeenCalled();
   view.rerender(<AiChatInput {...input} isParsingMedia={false} />);
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-  expect(input.onSend).toHaveBeenCalledWith('Draft while parsing', null);
+  expect(input.onSend).toHaveBeenCalledWith('Draft while parsing', null, defaultReferences);
 });
 
 
@@ -199,7 +222,7 @@ test.each([true, false])('send acceptance %s preserves selected skills while res
   editor.append(document.createTextNode('Prepare a report'));
   fireEvent.input(editor);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
-  expect(input.onSend).toHaveBeenCalledWith('Prepare a report', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
+  expect(input.onSend).toHaveBeenCalledWith('Prepare a report', [{ name: 'notes.txt', filepath: '/notes.txt' }], defaultReferences);
   if (accepted) {
     expect(mockSetSkills).not.toHaveBeenCalled();
     expect(editor).not.toHaveTextContent('Prepare a report');
@@ -208,7 +231,7 @@ test.each([true, false])('send acceptance %s preserves selected skills while res
     editor.append(document.createTextNode('Continue the report'));
     fireEvent.input(editor);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
-    expect(input.onSend).toHaveBeenLastCalledWith('Continue the report', null);
+    expect(input.onSend).toHaveBeenLastCalledWith('Continue the report', null, defaultReferences);
     expect(editor).toHaveTextContent('research');
     expect(mockSetSkills).not.toHaveBeenCalled();
   } else {
@@ -270,7 +293,7 @@ test('keeps image and text on an unsupported send, then sends after selecting a 
   expect(screen.getByRole('textbox')).toHaveTextContent('Describe this image');
   view.rerender(<AiChatInput {...input} modelValue="vision" />);
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-  expect(input.onSend).toHaveBeenCalledWith('Describe this image', [expect.objectContaining({ filepath: expect.stringMatching(/image-.*\.png/) })]);
+  expect(input.onSend).toHaveBeenCalledWith('Describe this image', [expect.objectContaining({ filepath: expect.stringMatching(/image-.*\.png/) })], defaultReferences);
 });
 
 test('sends through image parsing with a text model', () => {
@@ -305,7 +328,7 @@ test('clipboard image passes the real uploader and reaches the send payload with
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
   expect(input.onSend).toHaveBeenCalledWith('Describe this image', [expect.objectContaining({
     filepath: '/uploads/pasted-image.png', file_id: 'uploaded-image', type: 'image/png',
-  })]);
+  })], defaultReferences);
   expect(mockToast).not.toHaveBeenCalled();
 });
 
@@ -346,7 +369,7 @@ test('an explicit new composer discards unsent files without a late send clearin
   const view = render(<AiChatInput key="draft-a" {...input} composerIdentity="draft-a" value="Question A" />);
   fireEvent.click(screen.getByRole('button', { name: 'upload' }));
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-  expect(onSend).toHaveBeenCalledWith('Question A', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
+  expect(onSend).toHaveBeenCalledWith('Question A', [{ name: 'notes.txt', filepath: '/notes.txt' }], defaultReferences);
   view.rerender(<AiChatInput key="draft-b" {...input} composerIdentity="draft-b" value="Question B" />);
   expect(screen.queryByTestId('attachments')).toBeNull();
   await act(async () => { finish(true); });
@@ -354,7 +377,7 @@ test('an explicit new composer discards unsent files without a late send clearin
   expect(screen.getByRole('textbox')).toHaveTextContent('Question B');
   onSend.mockResolvedValue(true);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
-  expect(onSend).toHaveBeenLastCalledWith('Question B', null);
+  expect(onSend).toHaveBeenLastCalledWith('Question B', null, defaultReferences);
 });
 
 // ── F004 T048: a run in progress accepts messages on the conversation page ──
@@ -365,7 +388,7 @@ test('conversation composer keeps the text box and send button usable next to st
   expect(screen.getByRole('button', { name: 'Stop generating' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-  expect(input.onSend).toHaveBeenCalledWith('Change step 3', null);
+  expect(input.onSend).toHaveBeenCalledWith('Change step 3', null, defaultReferences);
   fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }));
   expect(input.onStop).toHaveBeenCalledTimes(1);
 });
@@ -425,7 +448,7 @@ test('conversation composer sends on Enter while a run is in progress (AC-12)', 
   const input = { ...props(), features: { taskMode: false } };
   render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming value="Go on" />);
   fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
-  expect(input.onSend).toHaveBeenCalledWith('Go on', null);
+  expect(input.onSend).toHaveBeenCalledWith('Go on', null, defaultReferences);
 });
 
 test('conversation composer shows no stop button when nothing runs', () => {

@@ -38,6 +38,8 @@ import {
 import { cn } from "~/utils";
 import { CopyButton } from "~/components/Chat/MessageCopyButton";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
+import { UserMessageReferences } from "~/components/Chat/Messages/UserMessageReferences";
+import { InlineChatReference } from "~/components/Chat/InlineChatReference";
 import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
 import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
 import { renderGeneratedFileLink } from "~/components/Chat/attachments/GeneratedFileLink";
@@ -362,10 +364,11 @@ function UserBubble({
         !!message.conversationId &&
         isActiveForChat(message.conversationId);
 
-    // Pull out the optional `:::tag {...}:::` chip prefix
+    const composerReferences = message.composerReferences;
+    // Knowledge chat history may still contain the older tag prefix.
     const { tag, bodyText } = useMemo(
-        () => parseUserMessageText(message.text || ""),
-        [message.text]
+        () => composerReferences?.length ? { tag: null, bodyText: message.text } : parseUserMessageText(message.text || ""),
+        [composerReferences, message.text]
     );
 
     return (
@@ -411,23 +414,10 @@ function UserBubble({
                                     : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
                             )}
                         >
-                            {tag && (
-                                <span
-                                    className={cn(
-                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
-                                        knowledgeChatLayout
-                                            ? "text-[14px] font-normal leading-[22px]"
-                                            : "h-5 text-xs font-medium leading-none align-middle"
-                                    )}
-                                    style={{ backgroundColor: "rgb(var(--brand-500)/0.35)" }}
-                                    title={`#${tag.name}`}
-                                >
-                                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                                        #{tag.name}
-                                    </span>
-                                </span>
-                            )}
-                            {bodyText}
+                            {tag && <InlineChatReference kind="tag" label={`#${tag.name}`} />}
+                            {composerReferences?.length
+                                ? <UserMessageReferences text={bodyText} references={composerReferences} />
+                                : bodyText}
                         </div>
                     </div>
                 </div>
