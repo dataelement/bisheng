@@ -193,6 +193,35 @@ describe("planKnowledgeRows", () => {
     });
 });
 
+describe("describeKnowledgeCall per knowledge base", () => {
+    it("reports each knowledge base's own hit count, including one that returned nothing", () => {
+        const tc = call("c1", "q", ["1", "2"], [
+            chunk("1", "KB1", "A.docx", "rag_c1:0"),
+            chunk("1", "KB1", "B.docx", "rag_c1:1"),
+        ]);
+        const info = describeKnowledgeCall(tc, { "2": "空空间" });
+        expect(info.kbDetails).toEqual([
+            { name: "KB1", chunkCount: 2, failed: false },
+            { name: "空空间", chunkCount: 0, failed: false },
+        ]);
+    });
+
+    it("marks a knowledge base that failed instead of counting it as no hit", () => {
+        const tc = call("c1", "q", ["1", "2"], [chunk("1", "KB1", "A.docx", "rag_c1:0"), failedKb("2", "KB2", "timeout")]);
+        expect(describeKnowledgeCall(tc, {}).kbDetails).toEqual([
+            { name: "KB1", chunkCount: 1, failed: false },
+            { name: "KB2", chunkCount: 0, failed: true },
+        ]);
+    });
+
+    it("merges knowledge bases that share a name", () => {
+        const tc = call("c1", "q", ["1", "2"], [chunk("1", "同名", "A.docx", "rag_c1:0")]);
+        expect(describeKnowledgeCall(tc, { "2": "同名" }).kbDetails).toEqual([
+            { name: "同名", chunkCount: 1, failed: false },
+        ]);
+    });
+});
+
 describe("knownKnowledgeBaseNames", () => {
     it("maps the selected knowledge bases and spaces by id, org and space alike", () => {
         expect(
