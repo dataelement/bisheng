@@ -4731,6 +4731,8 @@
     "partialRepair": "You can save partial repairs. All references must be valid before running or publishing.",
     "invalid_deleted": "Deleted",
     "invalid_legacy": "Missing historical reference",
+    "invalid_missing": "Referenced resource does not exist",
+    "invalid_scope": "Unavailable to the current tenant",
     "deleting": "Deletion in progress"
   },
   "accountIdentity": {

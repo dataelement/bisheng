@@ -4676,6 +4676,8 @@
     "partialRepair": "一部の修正を保存できます。実行や公開にはすべての参照が有効である必要があります。",
     "invalid_deleted": "削除済み",
     "invalid_legacy": "過去の参照が見つかりません",
+    "invalid_missing": "参照先のリソースが存在しません",
+    "invalid_scope": "現在のテナントでは利用できません",
     "deleting": "削除中"
   },
   "accountIdentity": {

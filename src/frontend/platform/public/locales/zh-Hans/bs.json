@@ -4676,6 +4676,8 @@
     "partialRepair": "可保存部分修复；所有引用有效后才能运行或发布。",
     "invalid_deleted": "已删除",
     "invalid_legacy": "历史引用已失效",
+    "invalid_missing": "引用的资源不存在",
+    "invalid_scope": "当前租户不可用",
     "deleting": "正在删除"
   },
   "accountIdentity": {
