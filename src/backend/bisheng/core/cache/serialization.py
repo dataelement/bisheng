@@ -1,11 +1,16 @@
-"""Authenticated, key-bound Redis objects. Never accept legacy/raw pickle."""
+"""Redis object encoding: managed authenticated envelopes or legacy pickle.
+
+Managed mode (BS_SECRET_KEYS_FILE set) writes BSREDIS1 envelopes and never
+unpickles raw cache values. Legacy mode (unset) matches feat/3.1.0-beta1:
+pickle.dumps / pickle.loads for application objects.
+"""
 
 import base64
 import binascii
 import json
 import pickle
 
-from bisheng.core.config.secret_crypto import CredentialDecryptionError, get_keyring
+from bisheng.core.config.secret_crypto import CredentialDecryptionError, get_keyring, is_legacy_secret_mode
 
 _PREFIX = b"BSREDIS1:"
 _DOMAIN = "bisheng.redis.object"
@@ -33,6 +38,8 @@ def _unique(pairs):
 
 
 def encode_redis_value(key, value) -> bytes:
+    if is_legacy_secret_mode():
+        return pickle.dumps(value)
     document = {
         "domain": _DOMAIN,
         "version": 1,
@@ -43,6 +50,17 @@ def encode_redis_value(key, value) -> bytes:
 
 
 def decode_redis_value(key, value):
+    if is_legacy_secret_mode():
+        if not isinstance(value, bytes):
+            raise RedisSerializationError("Redis object authentication failed")
+        if value.startswith(_PREFIX):
+            # Rare: managed-written value read under legacy; treat as miss upstream.
+            raise RedisSerializationError("Redis object authentication failed")
+        try:
+            return pickle.loads(value)
+        except Exception:
+            raise RedisSerializationError("Redis object authentication failed") from None
+
     # Resolve configuration outside the untrusted-input handler: deployment errors
     # must not be mislabeled cache corruption or trigger a legacy fallback.
     ring = get_keyring()

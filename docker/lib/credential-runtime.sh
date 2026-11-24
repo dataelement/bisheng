@@ -132,9 +132,23 @@ credential_wait_apps() {
   die '应用启动等待超时；现用凭据已保留，修复后重新执行原命令'
 }
 
+# Bitnami Elasticsearch (chart/fsGroup and image) runs as UID/GID 1001. A host
+# bind created by Docker as root (or left at 1000) makes node.lock AccessDenied
+# and the container restart forever. Prepare before the first compose up.
+credential_prepare_native_data_dirs() {
+  local es_data=$volume/data/es
+  mkdir -p "$es_data" || die '无法创建 Elasticsearch 数据目录，尚未启动服务'
+  if [[ $(id -u) -eq 0 ]]; then
+    chown -R 1001:1001 "$es_data" || die '无法将 Elasticsearch 数据目录属主设为 1001:1001（Bitnami ES 运行用户），尚未启动服务'
+  elif [[ ! -w $es_data ]]; then
+    die "Elasticsearch 数据目录不可写：$es_data；请由 root 执行 chown -R 1001:1001 后重试"
+  fi
+}
+
 credential_start_native() {
   local ready attempt service container state executable network
   credential_ensure_openfga_env
+  credential_prepare_native_data_dirs
   if [[ -z ${credential_es_override:-} ]] && command -v credential_es_preserve_runtime >/dev/null 2>&1; then
     credential_es_preserve_runtime
   fi

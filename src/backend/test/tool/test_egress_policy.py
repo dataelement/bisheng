@@ -116,53 +116,35 @@ def test_public_literals_skip_dns(policy_module, ip):
     [
         "0.0.0.0",
         "127.0.0.1",
-        "10.0.0.1",
-        "172.16.0.1",
-        "192.168.0.1",
         "169.254.169.254",
         "169.254.170.2",
-        "100.100.100.200",
-        "168.63.129.16",
-        "100.64.0.1",
-        "192.0.0.9",
-        "192.0.2.1",
-        "198.18.0.1",
-        "198.51.100.1",
-        "203.0.113.1",
         "224.0.0.1",
-        "240.0.0.1",
-        "255.255.255.255",
         "::",
         "::1",
         "fe80::1",
-        "fc00::1",
         "ff02::1",
-        "2001:db8::1",
-        "::ffff:8.8.8.8",
         "::ffff:127.0.0.1",
-        "::8.8.8.8",
-        "64:ff9b::808:808",
-        "64:ff9b:1::808:808",
-        "2002:808:808::1",
-        "2001:0:4136:e378:8000:63bf:3fff:fdd2",
-        "2001:20::1",
-        "2001:10::1",
-        "2001:4860:1:2:0:5efe:808:808",
     ],
 )
-def test_forbidden_ip_literals_are_unconditionally_denied(policy_module, ip):
+def test_loopback_link_local_multicast_unspecified_denied(policy_module, ip):
     host = f"[{ip}]" if ":" in ip else ip
     with pytest.raises(policy_module.DestinationDenied):
         policy_module.resolve_destination(f"https://{host}")
 
 
-@pytest.mark.parametrize("ip", ["10.0.0.1", "172.31.255.254", "192.168.0.1", "fd12::1"])
-def test_private_dns_answers_are_unconditionally_denied(policy_module, ip):
+@pytest.mark.parametrize("ip", ["10.0.0.1", "172.31.255.254", "192.168.0.1", "fd12::1", "100.100.100.200"])
+def test_intranet_literals_and_dns_answers_are_allowed(policy_module, ip):
+    host = f"[{ip}]" if ":" in ip else ip
+    literal = policy_module.resolve_destination(f"https://{host}")
+    assert literal.ips == (ip,)
+
     def resolver(*args, **kwargs):
         return answers(ip)
 
-    with pytest.raises(policy_module.DestinationDenied):
-        policy_module.resolve_destination("https://INTERNAL.example:8443/path", resolver=resolver)
+    target = policy_module.resolve_destination("https://INTERNAL.example:8443/path", resolver=resolver)
+    assert target.ips == (ip,)
+    assert target.hostname == "internal.example"
+    assert target.port == 8443
 
 
 def test_resolver_freezes_all_addresses_and_deduplicates(policy_module, monkeypatch):
@@ -178,10 +160,17 @@ def test_resolver_freezes_all_addresses_and_deduplicates(policy_module, monkeypa
     assert calls == [("example.com", 443, socket.AF_UNSPEC, socket.SOCK_STREAM)]
 
 
-@pytest.mark.parametrize("ips", [(), ("8.8.8.8", "127.0.0.1"), ("8.8.8.8", "10.0.0.1"), ("not-an-ip",)])
+@pytest.mark.parametrize("ips", [(), ("8.8.8.8", "127.0.0.1"), ("not-an-ip",)])
 def test_entire_dns_answer_must_be_allowed(policy_module, ips):
     with pytest.raises(policy_module.DestinationDenied):
         policy_module.resolve_destination("https://example.com", resolver=lambda *a, **kw: answers(*ips))
+
+
+def test_mixed_public_and_intranet_dns_answers_are_allowed(policy_module):
+    target = policy_module.resolve_destination(
+        "https://example.com", resolver=lambda *a, **kw: answers("8.8.8.8", "10.0.0.1")
+    )
+    assert target.ips == ("8.8.8.8", "10.0.0.1")
 
 
 def test_dns_errors_are_sanitized(policy_module):

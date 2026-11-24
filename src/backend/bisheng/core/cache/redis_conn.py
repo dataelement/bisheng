@@ -12,10 +12,30 @@ from redis.cluster import ClusterNode
 from redis.retry import Retry
 from redis.sentinel import Sentinel
 
-from bisheng.core.cache.serialization import decode_redis_value, encode_redis_value
+from bisheng.core.cache.serialization import RedisSerializationError, decode_redis_value, encode_redis_value
+
+
+def _decode_cache_value(key, value):
+    """Decode a stored object; managed-mode corrupt/legacy values become a miss."""
+    try:
+        return decode_redis_value(key, value)
+    except RedisSerializationError:
+        return None
 
 
 class RedisClient:
+    def _drop_bad_cache_key(self, key) -> None:
+        try:
+            self.connection.delete(key)
+        except Exception:
+            logger.warning("failed to delete unreadable redis cache key")
+
+    async def _adrop_bad_cache_key(self, key) -> None:
+        try:
+            await self.async_connection.delete(key)
+        except Exception:
+            logger.warning("failed to delete unreadable redis cache key")
+
     def __init__(self, redis_url, max_connections=100):
         # # Sentry Mode
         if isinstance(redis_url, dict):
@@ -173,8 +193,16 @@ class RedisClient:
             if not keys:
                 return []
             values = self.connection.mget(keys)
-
-            return [decode_redis_value(k, v) for k, v in zip(keys, values, strict=True) if v is not None]
+            out = []
+            for k, v in zip(keys, values, strict=True):
+                if v is None:
+                    continue
+                decoded = _decode_cache_value(k, v)
+                if decoded is None:
+                    self._drop_bad_cache_key(k)
+                    continue
+                out.append(decoded)
+            return out
         except TypeError as exc:
             raise TypeError("RedisCache only accepts values that can be pickled. ") from exc
 
@@ -184,7 +212,16 @@ class RedisClient:
             if not keys:
                 return []
             values = await self.async_connection.mget(keys)
-            return [decode_redis_value(k, v) for k, v in zip(keys, values, strict=True) if v is not None]
+            out = []
+            for k, v in zip(keys, values, strict=True):
+                if v is None:
+                    continue
+                decoded = _decode_cache_value(k, v)
+                if decoded is None:
+                    await self._adrop_bad_cache_key(k)
+                    continue
+                out.append(decoded)
+            return out
         except TypeError as exc:
             raise TypeError("RedisCache only accepts values that can be pickled. ") from exc
 
@@ -315,7 +352,12 @@ class RedisClient:
         try:
             self.cluster_nodes(key)
             value = self.connection.get(key)
-            return decode_redis_value(key, value) if value is not None else None
+            if value is None:
+                return None
+            decoded = _decode_cache_value(key, value)
+            if decoded is None:
+                self._drop_bad_cache_key(key)
+            return decoded
         except Exception as e:
             raise e
 
@@ -323,9 +365,13 @@ class RedisClient:
         try:
             await self.acluster_nodes(key)
             value = await self.async_connection.get(key)
-            return decode_redis_value(key, value) if value is not None else None
+            if value is None:
+                return None
+            decoded = _decode_cache_value(key, value)
+            if decoded is None:
+                await self._adrop_bad_cache_key(key)
+            return decoded
         except Exception as e:
-            # Handle the case where the value is None or not picklable
             raise e
 
     def incr(self, key, expiration=3600) -> int:
@@ -406,7 +452,11 @@ class RedisClient:
         try:
             await self.acluster_nodes(key)
             value = await self.async_connection.blpop(key, timeout)
-            return decode_redis_value(value[0], value[1]) if value is not None else None
+            if value is None:
+                return None
+            decoded = _decode_cache_value(value[0], value[1])
+            # Already popped; unreadable payloads are dropped as a miss.
+            return decoded
         except Exception as e:
             raise e
 
@@ -414,7 +464,15 @@ class RedisClient:
         try:
             await self.acluster_nodes(key)
             values = await self.async_connection.lrange(key, start, end)
-            return [decode_redis_value(key, v) for v in values if v is not None]
+            out = []
+            for v in values:
+                if v is None:
+                    continue
+                decoded = _decode_cache_value(key, v)
+                if decoded is None:
+                    continue
+                out.append(decoded)
+            return out
         except Exception as e:
             raise e
 
@@ -424,7 +482,11 @@ class RedisClient:
             values = await self.async_connection.lrange(key, 0, -1)
             removed = 0
             for stored in values:
-                if decode_redis_value(key, stored) == value:
+                decoded = _decode_cache_value(key, stored)
+                if decoded is None:
+                    removed += await self.async_connection.lrem(key, 0, stored)
+                    continue
+                if decoded == value:
                     removed += await self.async_connection.lrem(key, 0, stored)
             return removed
         except Exception as e:
