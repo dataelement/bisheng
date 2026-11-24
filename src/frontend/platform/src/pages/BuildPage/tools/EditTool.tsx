@@ -82,10 +82,12 @@ export const TestDialog = forwardRef<{
             return toast.show({ type: 'warning', message: t('test.enterKeyForChangedConfiguration') })
         }
         setLoading(true)
-        const requestParams = formRef.current.values
-        const request = usesSavedKey ? testSavedToolApi(tool.id, apiData.id, Object.fromEntries(
-            Object.entries(requestParams).filter(([, value]) => value !== '')
-        )) : testToolApi({
+        // Leave unfilled parameters out of the request so the API applies its own defaults;
+        // sending "" breaks typed fields (e.g. an integer `count`) and length-checked strings.
+        const requestParams = Object.fromEntries(
+            Object.entries(formRef.current.values).filter(([, value]) => value !== '')
+        )
+        const request = usesSavedKey ? testSavedToolApi(tool.id, apiData.id, requestParams) : testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
             auth_method: authMethod === 'apikey' ? 1 : 0,

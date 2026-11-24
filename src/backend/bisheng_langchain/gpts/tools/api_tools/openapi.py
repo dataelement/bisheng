@@ -3,7 +3,11 @@ from typing import Any, Optional
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng_langchain.utils.openapi import convert_openapi_field_value
+from bisheng_langchain.utils.openapi import (
+    convert_openapi_field_value,
+    has_null_member,
+    resolve_openapi_type,
+)
 from .base import APIToolBase, MultArgsSchemaTool
 
 
@@ -21,6 +25,21 @@ class OpenApiTools(APIToolBase):
     def get_request_method(self):
         return self.params['method'].lower()
 
+    @staticmethod
+    def _is_blank_optional_value(param_define: dict, value: Any) -> bool:
+        if value != '' or param_define.get('required') or param_define.get('in') == 'path':
+            return False
+        field_type = resolve_openapi_type(param_define.get('schema'))
+        # Untyped values may be strings, so "" is only dropped when the type is known.
+        return field_type is not None and field_type != 'string'
+
+    @staticmethod
+    def _convert_value(param_define: dict, value: Any) -> Any:
+        schema = param_define.get('schema')
+        if value is None and has_null_member(schema):
+            return None
+        return convert_openapi_field_value(value, resolve_openapi_type(schema))
+
     def get_params_json(self, **kwargs):
         params_define = {}
         for one in self.params['parameters']:
@@ -31,14 +50,16 @@ class OpenApiTools(APIToolBase):
         json_data = {}
         for k, v in kwargs.items():
             if params_define.get(k):
+                if self._is_blank_optional_value(params_define[k], v):
+                    # A blank optional non-string value means "not provided": omit it so the
+                    # upstream applies its own default instead of rejecting "" (e.g. integer count).
+                    continue
                 if params_define[k]['in'] == 'query':
-                    field_type = params_define[k]['schema']['type']
-                    params[k] = convert_openapi_field_value(v, field_type)
+                    params[k] = self._convert_value(params_define[k], v)
                 elif params_define[k]['in'] == 'path':
                     path_params[k] = v
                 else:
-                    field_type = params_define[k]['schema']['type']
-                    json_data[k] = convert_openapi_field_value(v, field_type)
+                    json_data[k] = self._convert_value(params_define[k], v)
             else:
                 params[k] = v
         # if ('api_location' in self.params and self.params['api_location'] == "query") or \
@@ -56,6 +77,20 @@ class OpenApiTools(APIToolBase):
                 params.update({parameter_name: self.api_key})
         return params, json_data, path_params
 
+    @staticmethod
+    def _field_info(schema: Any, field_type: str | None, description: str) -> dict:
+        """JSON schema for one argument. Untyped (any) values carry no "type" key."""
+        field_info = {"description": description}
+        if field_type is not None:
+            field_info["type"] = field_type
+        if has_null_member(schema):
+            field_info["nullable"] = True
+        return field_info
+
+    @staticmethod
+    def _items_type(schema: dict) -> str:
+        return resolve_openapi_type(schema.get('items')) or 'string'
+
     def parse_args_schema(self):
         args_schema = {
             "type": "object",
@@ -66,42 +101,26 @@ class OpenApiTools(APIToolBase):
         for one in params:
             if one.get('required'):
                 args_schema['required'].append(one['name'])
-            field_type = one['schema']['type']
-            if field_type in ['number', 'integer', 'string', 'boolean']:
-                field_info = {
-                    "type": field_type,
-                    "description": one['description']
-                }
+            schema = one.get('schema') or {}
+            field_type = resolve_openapi_type(schema)
+            if field_type is None or field_type in ['number', 'integer', 'string', 'boolean']:
+                # None: anyOf/oneOf or a type array without a single concrete type -> any value.
+                field_info = self._field_info(schema, field_type, one['description'])
             elif field_type == 'array':
-                field_info = {
-                    "type": field_type,
-                    "items": one['schema'].get('items', {}).get('type', 'string'),
-                    "description": one['description']
-                }
+                field_info = self._field_info(schema, field_type, one['description'])
+                field_info["items"] = self._items_type(schema)
             elif field_type in {'object', 'dict'}:
-                field_info = {
-                    "type": "object",
-                    "description": one['description'],
-                    "properties": {}
-                }
-                for param in one['schema']['properties'].keys():
-                    field_type = one['schema']['properties'][param]['type']
-                    if field_type in ['number', 'integer', 'string', 'boolean']:
-                        object_field_info = {
-                            "type": field_type,
-                            "description": one['description']
-                        }
-                    elif field_type == 'array':
-                        object_field_info = {
-                            "type": field_type,
-                            "items": one['schema'].get('items', {}).get('type', 'string'),
-                            "description": one['description']
-                        }
-                    else:
-                        object_field_info = {
-                            "type": field_type,
-                            "description": one['description']
-                        }
+                field_info = self._field_info(schema, "object", one['description'])
+                properties = schema.get('properties') or {}
+                field_info["properties"] = {}
+                if 'properties' not in schema:
+                    # An object without declared properties accepts any keys.
+                    field_info["additionalProperties"] = True
+                for param, param_schema in properties.items():
+                    field_type = resolve_openapi_type(param_schema)
+                    object_field_info = self._field_info(param_schema, field_type, one['description'])
+                    if field_type == 'array':
+                        object_field_info["items"] = self._items_type(schema)
                     field_info["properties"][param] = object_field_info
             else:
                 raise Exception(f'schema type is not support: {field_type}')
