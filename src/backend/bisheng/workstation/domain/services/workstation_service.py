@@ -722,13 +722,30 @@ class WorkStationService(BaseService):
         if not identified:
             return []
 
-        action_map = await batch_check_business_actions(
-            login_user,
-            resource_type="knowledge_library",
-            resource_ids=[item["id"] for item in identified],
-            actions=("visible",),
+        from bisheng.knowledge.domain.repositories.knowledge_compatibility_repository import (
+            KnowledgeCompatibilityRepository,
         )
-        return [item for item in identified if "visible" in action_map.get(str(item["id"]), frozenset())]
+
+        # Since the 3.1 knowledge merge an admin configures knowledge spaces here.
+        # A space is checked as ``knowledge_space``; checked as ``knowledge_library``
+        # it resolves to nothing and every non-admin lost it. Group the ids by their
+        # actual type, as the HTTP permission endpoints do. Unknown ids drop out.
+        ids = [int(item["id"]) for item in identified if str(item["id"]).isdecimal()]
+        actual_types = await KnowledgeCompatibilityRepository().aresource_types(ids)
+        by_type: dict[str, list[int]] = {}
+        for resource_id in ids:
+            if resource_id in actual_types:
+                by_type.setdefault(actual_types[resource_id], []).append(resource_id)
+        visible: set[str] = set()
+        for resource_type, resource_ids in by_type.items():
+            action_map = await batch_check_business_actions(
+                login_user,
+                resource_type=resource_type,
+                resource_ids=resource_ids,
+                actions=("visible",),
+            )
+            visible.update(key for key, actions in action_map.items() if "visible" in actions)
+        return [item for item in identified if str(item["id"]) in visible]
 
     @classmethod
     async def _aproject_daily_config_for_current_tenant(
@@ -769,6 +786,23 @@ class WorkStationService(BaseService):
         config: KnowledgeSpaceConfig | None,
     ) -> KnowledgeSpaceConfig | None:
         return config
+
+    @staticmethod
+    def _upgrade_legacy_org_kbs(org_kbs: Any) -> Any:
+        """Read a pre-F005-revision ``orgKbs`` list in the new shape (design decision 9).
+
+        Before the revision an item carried ``default_checked``; now every configured
+        knowledge base is preselected and ``show_in_composer`` decides only its tag.
+        Every save since then writes the key on each item, so a list where no item has
+        it was saved before the upgrade: keep only the items that were default-checked,
+        and show them in the composer.
+        """
+        if not isinstance(org_kbs, list):
+            return org_kbs
+        items = [item for item in org_kbs if isinstance(item, dict)]
+        if any("show_in_composer" in item for item in items):
+            return org_kbs
+        return [{**item, "show_in_composer": True} for item in items if item.get("default_checked") is True]
 
     @classmethod
     def parse_config(cls, config: Any) -> WorkstationConfig | None:
@@ -817,6 +851,7 @@ class WorkStationService(BaseService):
                 # Best-effort; fall through and let Pydantic drop unknown keys.
                 pass
 
+        raw["orgKbs"] = cls._upgrade_legacy_org_kbs(raw.get("orgKbs"))
         ret = WorkstationConfig(**raw)
 
         # Platform default: the built-in web_search tool must always appear in

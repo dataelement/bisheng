@@ -30,6 +30,7 @@ import { taskModeSkillsState } from "~/store/linsight";
 import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAttachmentUtils";
 import { useDesktopConversationActivity, useDesktopConversationRenamed } from "~/components/Chat/desktopConversationBridge";
 import { runningConversationIds } from "~/components/Chat/runningConversations";
+import { configuredKnowledgeDefaults } from "~/components/Chat/Input/composerKnowledge";
 import { bindProjectChatCreation, captureProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 import { useUnifiedRun } from "~/hooks/useUnifiedRun";
 import type { SentComposerReference } from "~/components/Chat/Input/composerReferences";
@@ -210,9 +211,8 @@ export default function useAiChat(
         sender: chatModel.name || "AI",
     });
     const { user } = useAuthContext();
-    const knowledgeDefaults = useMemo<SelectedOrgKb[]>(() => bsConfig?.knowledgeBase?.enabled === false
-        ? [] : (bsConfig?.orgKbs ?? []).filter((kb) => kb.default_checked)
-            .map((kb) => ({ id: String(kb.id), name: kb.name, type: 'org' })), [bsConfig]);
+    // F005: every configured knowledge base starts selected; show_in_composer only decides its tag.
+    const knowledgeDefaults = useMemo<SelectedOrgKb[]>(() => configuredKnowledgeDefaults(bsConfig), [bsConfig]);
     const { selectedOrgKbs: savedKnowledge, setSelectedOrgKbs, promoteSelection } = useConversationKnowledge(
         user?.id == null ? undefined : String(user.id), conversationId, knowledgeDefaults,
         bsConfig?.knowledgeBase?.enabled !== false,
