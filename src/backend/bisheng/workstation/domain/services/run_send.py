@@ -88,11 +88,12 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from bisheng.api.v1.schemas import resp_200
+from bisheng.chat_session.domain.schemas.user_message import serialize_user_question
+from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.errcode.workstation import (
     ConversationBusyError,
     ConversationNotFoundError,
@@ -392,7 +393,9 @@ async def _open_conversation(
     return conversation, is_new
 
 
-def _question_row(data: Any, login_user: Any, conversation_id: str, extra: dict | None = None) -> ChatMessage:
+def _question_row(
+    data: APIChatCompletion, login_user: UserPayload, conversation_id: str, extra: dict | None = None
+) -> ChatMessage:
     """The question row of one sent message; ``extra`` is empty for a normal turn."""
     return ChatMessage(
         user_id=login_user.user_id,
@@ -403,7 +406,7 @@ def _question_row(data: Any, login_user: Any, conversation_id: str, extra: dict 
         sender="User",
         files=json.dumps(data.files) if data.files else None,
         extra=json.dumps(extra, ensure_ascii=False) if extra else "{}",
-        message=json.dumps({"query": data.text or "", "files": data.files or []}, ensure_ascii=False),
+        message=serialize_user_question(data.text, data.files, data.composer_references),
         category="question",
         source=0,
         sensitive_status=SensitiveStatus.PASS.value,

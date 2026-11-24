@@ -7,6 +7,7 @@ enqueue policies.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -220,6 +221,24 @@ async def test_relay_turn_writes_no_second_question_row(io, monkeypatch):
 
     await task_submit_service.submit_task_turn(_request(), _user())
     user_turn.assert_awaited_once()
+
+
+async def test_task_submit_persists_composer_references_on_the_question(io, monkeypatch):
+    insert = AsyncMock(side_effect=lambda _cls, message: message)
+    monkeypatch.setattr(ChatMessageDao, "ainsert_one", classmethod(insert))
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+    monkeypatch.setattr(linsight_execute_utils, "enqueue_session_for_execution", AsyncMock())
+    references = [{"kind": "skill", "label": "网页报告", "offset": 2}]
+    request = APIChatCompletion(
+        clientTimestamp="t", model="7", text="📊生成报告", task_mode=True, composer_references=references
+    )
+
+    _, version = await task_submit_service.submit_task_turn(request, _user())
+
+    question = insert.await_args.args[1]
+    assert question.category == "question"
+    assert json.loads(question.message) == {"query": version.question, "files": [], "composer_references": references}
+    assert version.question == "📊生成报告"
 
 
 async def test_reserved_run_enqueue_failure_fails_the_version_and_raises(io, monkeypatch):

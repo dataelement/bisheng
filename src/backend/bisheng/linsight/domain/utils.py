@@ -8,6 +8,7 @@ from typing import Any
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
+from bisheng.chat_session.domain.schemas.user_message import ComposerReference, serialize_user_question
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -1064,8 +1065,9 @@ async def persist_task_user_turn(
     chat_id: str,
     user_id: int,
     question: str,
-    files: list | None = None,
+    files: list[dict] | None = None,
     session_version_id: str | None = None,
+    composer_references: list[ComposerReference] | None = None,
 ) -> ChatMessage:
     """F035 Track J (TJ-3): persist the task user turn into the unified conversation.
 
@@ -1087,7 +1089,7 @@ async def persist_task_user_turn(
             is_bot=False,
             sender="User",
             category="question",
-            message=json.dumps({"query": question or "", "files": files or []}, ensure_ascii=False),
+            message=serialize_user_question(question, files, composer_references),
             files=json.dumps(files) if files else None,
             extra=json.dumps({"linsight_session_version_id": session_version_id}) if session_version_id else "{}",
             source=0,

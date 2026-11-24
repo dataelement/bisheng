@@ -25,12 +25,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.responses import ORJSONResponse
+from pydantic import ValidationError
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.linsight.domain.services.run_event_stream import EventWriter, RunEventStream
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.workstation.api.endpoints import chat as chat_endpoint
+from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 from bisheng.workstation.domain.services import chat_service, run_message_persist, run_send
 from bisheng.workstation.domain.services.run_dispatch import RunDispatchService
 from bisheng.workstation.domain.services.run_lease import RunLeaseService
@@ -213,11 +215,21 @@ async def test_steer_accepted_event(world: _World, client: httpx.AsyncClient):
 
 
 async def test_history_reflects_read_state(world: _World, client: httpx.AsyncClient):
-    await _send(client, "第一条")
-    second = await _send(client, "补充一句")
+    first_references = [{"kind": "skill", "label": "网页报告", "offset": 0}]
+    await _send(client, "第一条", composer_references=first_references)
+    steer_references = [
+        {"kind": "tool", "label": "图像生成", "offset": 0},
+        {"kind": "space", "label": "产品知识空间", "offset": 2},
+        {"kind": "space", "label": "#入门", "offset": 2, "is_tag": True},
+    ]
+    files = [{"filepath": "a/b.txt", "file_name": "b.txt", "relative_path": "reports/b.txt"}]
+    second = await _send(client, "补充一句", composer_references=steer_references, files=files)
 
-    row = (await _history(client))[-1]
+    first_row, row = await _history(client)
+    assert first_row["message"] == {"query": "第一条", "files": [], "composer_references": first_references}
     assert row["category"] == "question" and row["message"]["query"] == "补充一句"
+    assert row["message"]["composer_references"] == steer_references
+    assert row["files"] == files
     assert row["extra"]["queued"] is True
     assert row["extra"]["steer_message_id"] == second["message_id"]
 
@@ -229,18 +241,44 @@ async def test_history_reflects_read_state(world: _World, client: httpx.AsyncCli
     row = next(r for r in await _history(client) if r["message_id"] == row["message_id"])
     assert "queued" not in row["extra"]
     assert row["extra"]["steer_message_id"] == second["message_id"]
+    assert row["message"]["composer_references"] == steer_references
     # One UPDATE of one column, no read of the row.
     assert [(mid, set(fields)) for mid, fields in world.table.updates] == [(row["message_id"], {"extra"})]
+
+
+def test_only_space_references_can_be_tags():
+    with pytest.raises(ValidationError, match="Tag references must use the space kind"):
+        APIChatCompletion(
+            clientTimestamp="t",
+            model="m1",
+            composer_references=[{"kind": "skill", "label": "网页报告", "offset": 0, "is_tag": True}],
+        )
 
 
 # ------------------------------------------------------------ neighbours
 
 
-async def test_normal_turn_row_has_no_mark_and_no_steer_event(world: _World, client: httpx.AsyncClient):
-    await _send(client, "第一条")
+async def test_normal_turn_keeps_saved_references_after_answer(world: _World, client: httpx.AsyncClient):
+    text = "📊生成报告"
+    references = [
+        {"kind": "skill", "label": "网页报告", "offset": 0},
+        {"kind": "tool", "label": "联网搜索", "offset": 2},
+        {"kind": "space", "label": "报告资料", "offset": 2},
+        {"kind": "space", "label": "#示例", "offset": 2},
+    ]
+    await _send(client, text, composer_references=references)
+    (question,) = await _history(client)
+    assert question["message"] == {"query": text, "files": [], "composer_references": references}
+
+    world.script = [{"type": "text", "data": {"text": "报告已生成"}}]
     world.gate.set()
     await asyncio.gather(*world.tasks)
 
+    sent_question, answer = await _history(client)
+    assert answer["is_bot"] is True
+    assert answer["message"]["msg"] == "报告已生成"
+    assert sent_question["message_id"] == question["message_id"]
+    assert sent_question["message"] == question["message"]
     assert [world.table.extra(r) for r in world.table.questions()] == [{}]
     assert not [e for e in await world.events() if e["type"].startswith("steer_")]
 
@@ -251,7 +289,7 @@ async def test_read_before_the_row_is_written_leaves_no_mark(world: _World):
 
     row = await world.table.ainsert_one(
         run_send._question_row(
-            SimpleNamespace(text="补充", files=None),
+            APIChatCompletion(clientTimestamp="t", model="m1", text="补充"),
             world.user,
             CID,
             run_message_persist.steer_extra("run-1", "m-early", queued=True),
