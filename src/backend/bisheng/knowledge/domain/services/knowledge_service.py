@@ -495,7 +495,7 @@ class KnowledgeService(KnowledgeUtils):
             they can see (``list_visible_objects``), then run the historical
             keyset scan under an ``id IN (:visible_ids)`` filter. ``visible``
             is the superset of every concrete action, so the pre-filter is
-            sufficient for legacy ``action="use"``, normalized to visible.
+            sufficient for the ``visible`` admission check.
             Other requested actions still use the per-page BatchCheck.
           * ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset
             cursor with key ``[sort_value, id]``; ``sort_by="name"`` still
@@ -505,8 +505,6 @@ class KnowledgeService(KnowledgeUtils):
         """
         if knowledge_type == KnowledgeTypeEnum.PRIVATE:
             raise KnowledgeTypeNotSupportedError()
-        # Retain the old HTTP action as an alias, never as a business action.
-        action = "visible" if action == "use" else action
         total_start = perf_counter()
 
         # ---- 1. Decode cursor (branch on sort_by) ----

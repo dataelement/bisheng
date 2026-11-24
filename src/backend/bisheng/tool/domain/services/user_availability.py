@@ -1,4 +1,4 @@
-"""Account availability is enforced alongside resource use permission."""
+"""Account availability is enforced alongside resource visibility permission."""
 
 from bisheng.tool.domain.repositories.user_availability import UserToolAvailabilityRepository
 

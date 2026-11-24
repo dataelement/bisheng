@@ -118,7 +118,7 @@ async def test_builder_upload_uses_edit_if_not_runtime_user(upload_permissions, 
     check, require = upload_permissions
     check.return_value = False
     await endpoints.create_upload_file(upload(), "flow-1", UserPayload.model_construct(user_id=8, tenant_id=7))
-    assert check.await_args.kwargs["action"] == "use"
+    assert check.await_args.kwargs["action"] == "visible"
     assert require.await_args.kwargs == {"resource_type": "workflow", "resource_id": "flow-1", "action": "edit"}
 
 

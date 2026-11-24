@@ -588,7 +588,7 @@ class WorkStationService(BaseService):
         identified = [group for group in tools if group.get("id") is not None]
         if len(identified) != len(tools):
             logger.warning(
-                "[workstation.tools] dropped {} tool group(s) without an id while filtering by use permission",
+                "[workstation.tools] dropped {} tool group(s) without an id while filtering by visibility permission",
                 len(tools) - len(identified),
             )
         if not identified:
@@ -598,9 +598,9 @@ class WorkStationService(BaseService):
             login_user,
             resource_type="tool",
             resource_ids=[group["id"] for group in identified],
-            actions=("use",),
+            actions=("visible",),
         )
-        return [group for group in identified if "use" in action_map.get(str(group["id"]), frozenset())]
+        return [group for group in identified if "visible" in action_map.get(str(group["id"]), frozenset())]
 
     # -- F005: auto-enabled tools -------------------------------------------
     @staticmethod
@@ -1392,7 +1392,7 @@ class WorkStationService(BaseService):
                 permitted_org_ids = await KnowledgePermissionService().filter_knowledge_ids_by_action_async(
                     login_user,
                     org_kb_ids,
-                    "use",
+                    "visible",
                 )
                 denied_org_ids = [kb_id for kb_id in org_kb_ids if kb_id not in set(permitted_org_ids)]
                 for kb_id in denied_org_ids:

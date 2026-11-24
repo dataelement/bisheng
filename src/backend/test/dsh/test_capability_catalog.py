@@ -309,7 +309,7 @@ async def test_daily_picker_only_exposes_curated_children_and_preserves_defaults
     from bisheng.permission.application import business_authorization
     from bisheng.tool.domain.services.tool import ToolServices
 
-    permission = AsyncMock(return_value={"12": frozenset({"use"})})
+    permission = AsyncMock(return_value={"12": frozenset({"visible"})})
     monkeypatch.setattr(business_authorization, "batch_check_business_actions", permission)
     monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value={1}))
     result = await app.picker_tools(

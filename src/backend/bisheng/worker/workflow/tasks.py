@@ -171,7 +171,7 @@ def _authorize_workflow_use(snapshot, user_id: int, workflow_id: str, chat_id: s
             UserPayload(user_id=user_id, user_role=[], tenant_id=snapshot.tenant_id),
             resource_type="workflow",
             resource_id=workflow_id,
-            action="use",
+            action="visible",
             actor=get_current_permission_actor(),
         )
     )

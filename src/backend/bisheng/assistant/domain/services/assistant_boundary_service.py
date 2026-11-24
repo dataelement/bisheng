@@ -14,7 +14,9 @@ class AssistantBoundaryService:
         if not ids:
             return
         tenant_id = get_current_tenant_id()
-        if tenant_id is None or any(type(item) is not int or item <= 0 for item in ids):  # noqa: E721  # exact type, bool must not pass as int
+        if tenant_id is None or any(
+            type(item) is not int or item <= 0 for item in ids
+        ):  # exact type, bool must not pass as int
             raise NotFoundError.http_exception()
         rows = await AssistantBoundaryRepository.knowledge(ids)
         by_id = {row.id: row for row in rows}
@@ -29,7 +31,7 @@ class AssistantBoundaryService:
                 user,
                 resource_type="knowledge_space" if row.type == 3 else "knowledge_library",
                 resource_id=item,
-                action="visible" if row.type == 3 else "use",
+                action="visible",
             )
 
     @classmethod
@@ -46,7 +48,7 @@ class AssistantBoundaryService:
             if row is None or row.flow_type != 10 or row.is_delete or not cls._visible_resource(row, tenant_id):
                 raise NotFoundError.http_exception()
         for item in ids:
-            await require_business_action(user, resource_type="workflow", resource_id=item, action="use")
+            await require_business_action(user, resource_type="workflow", resource_id=item, action="visible")
 
     @classmethod
     async def flow_views(cls, user, flow_ids):
@@ -97,7 +99,7 @@ class AssistantBoundaryService:
         assistant = await AssistantBoundaryRepository.assistant(assistant_id)
         if assistant is None or assistant.is_delete or not cls._visible_resource(assistant, tenant_id):
             raise NotFoundError.http_exception()
-        await require_business_action(user, resource_type="assistant", resource_id=assistant_id, action="use")
+        await require_business_action(user, resource_type="assistant", resource_id=assistant_id, action="visible")
         if chat_id and assistant.status != 2:
             raise NotFoundError.http_exception()
         if not chat_id:

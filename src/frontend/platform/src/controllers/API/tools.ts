@@ -45,7 +45,7 @@ export const hidePlatformHiddenTools = <T>(groups: T): T => {
 
 export const getToolsApi = async (
     type: 'all' | 'default' | 'custom' | 'mcp',
-    options: { action?: 'visible' | 'use' } = {}
+    options: { action?: 'visible' } = {}
 ): Promise<any> => {
     const params = new URLSearchParams();
     const preset = {

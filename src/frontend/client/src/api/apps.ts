@@ -469,7 +469,7 @@ export const getChatOnlineApi = async (
     keyword: string,
     tag_id: number,
     pageSize = 8,
-    action: 'visible' | 'use' = 'visible'
+    action: 'visible' = 'visible'
 ) => {
     const params: Record<string, unknown> = {
         cursor: cursor || undefined,

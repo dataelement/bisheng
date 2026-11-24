@@ -34,7 +34,7 @@ class CapabilityCatalogService:
     async def list(self):
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
@@ -147,7 +147,7 @@ class CapabilityCatalogService:
             ]
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
@@ -193,7 +193,7 @@ class CapabilityCatalogService:
             raise HTTPException(404, "Account availability is unavailable for this tool")
         try:
             allowed = await check_business_action(
-                self.user, resource_type="tool", resource_id=category.id, action="use"
+                self.user, resource_type="tool", resource_id=category.id, action="visible"
             )
         except (InvalidCatalogActionError, PermissionInvalidResourceError, PermissionPublishNotReadyError) as exc:
             raise HTTPException(404, "Account availability is unavailable for this tool") from exc
@@ -214,7 +214,7 @@ class CapabilityCatalogService:
             raise HTTPException(409, "Tool has no stable invocation name")
         started = monotonic()
         try:
-            # The ordinary Work path rechecks tenant, use permission, schema and audit.
+            # The ordinary Work path rechecks tenant, visibility permission, schema and audit.
             result = await self.work.call_tool(name, arguments)
         except jsonschema.ValidationError:
             raise HTTPException(422, "Demo arguments do not match the tool schema") from None

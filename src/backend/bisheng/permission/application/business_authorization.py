@@ -24,7 +24,7 @@ from bisheng.permission.application.identity import (
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
-from bisheng.permission.domain.services.permission_action_service import PermissionActor, normalize_legacy_action
+from bisheng.permission.domain.services.permission_action_service import PermissionActor, validate_permission_action
 
 _MAX_BATCH_CHECKS = 100
 
@@ -137,10 +137,10 @@ async def check_business_action(
 ) -> bool:
     """Check one business-verified resource through the sole F048 facade."""
 
+    action = validate_permission_action(action)
     await _require_management_target(resource_type, [resource_id])
     await _require_creation_ready(resource_type, [resource_id])
     actor = actor or await resolve_permission_actor(login_user)
-    action = normalize_legacy_action(action)
     if action == "visible" and resource_type in {"workflow", "assistant"}:
         from bisheng.public_endpoints.domain.services.guest_policy import (
             ensure_guest_link_enabled,
@@ -226,7 +226,7 @@ async def batch_check_business_actions(
     """Resolve a bounded candidate batch, then BatchCheck exact actions."""
 
     normalized_ids = tuple(dict.fromkeys(str(value) for value in resource_ids))
-    normalized_actions = tuple(dict.fromkeys(action.strip() for action in actions))
+    normalized_actions = tuple(dict.fromkeys(validate_permission_action(action) for action in actions))
     if not normalized_ids or not normalized_actions:
         return {}
 
@@ -250,8 +250,7 @@ async def batch_check_business_actions(
 
     registry = await get_f048_resource_registry()
     runtime = await get_f048_runtime()
-    for requested_action in normalized_actions:
-        action = normalize_legacy_action(requested_action)
+    for action in normalized_actions:
         resolved = await asyncio.gather(
             *(
                 registry.resolve(
@@ -283,7 +282,7 @@ async def batch_check_business_actions(
             if isinstance(resolution, BaseException):
                 raise resolution
             if _tenant_admin_business_visibility(actor, resolution, action):
-                result[resource_id].add(requested_action)
+                result[resource_id].add(action)
                 continue
             targets.append(resolution)
             target_ids.append(resource_id)
@@ -313,7 +312,7 @@ async def batch_check_business_actions(
                 strict=True,
             ):
                 if is_allowed:
-                    result[resource_id].add(requested_action)
+                    result[resource_id].add(action)
     return {resource_id: frozenset(action_codes) for resource_id, action_codes in result.items()}
 
 

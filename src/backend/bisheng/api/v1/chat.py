@@ -27,7 +27,7 @@ async def get_online_chat(
     search_description: bool | None = False,
     action: str = Query(
         default="visible",
-        pattern="^(visible|use)$",
+        pattern="^visible$",
         description="Concrete action required for each app",
     ),
     user: UserPayload = Depends(UserPayload.get_login_user),
@@ -47,7 +47,6 @@ async def get_online_chat(
         - True: keyword matches name OR description.
     """
     total_start = perf_counter()
-    action = "visible" if action == "use" else action
     page_size = limit or 10
     with strict_tenant_filter():
         if sort_by == "update_time":
