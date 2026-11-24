@@ -170,3 +170,7 @@ export const testToolApi = async (data: {
         data
     })
 };
+
+export const testSavedToolApi = async (toolTypeId: number, operationId: number, requestParams: Record<string, string>) => {
+    return await axios.post(`/api/v1/tool/${toolTypeId}/operations/${operationId}/test`, { request_params: requestParams });
+};

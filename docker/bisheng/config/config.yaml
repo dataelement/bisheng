@@ -251,6 +251,7 @@ logger_conf:
 #   pat_admin_ttl_days: 7               # 管理员持有的个人访问令牌有效期上限（天），取租户默认有效期与本值的较小者
 #   # 平台对浏览器的地址，会写进下载的技能包与安装提示；留空则按反代的 X-Forwarded-Proto / X-Forwarded-Host 推导。
 #   # 后端在商业网关之后、带路径前缀、或反代不转发这两个头时需要显式配置。
+#   # OnlyOffice 保存回调优先使用此地址，留空时使用 bs_client.platform_public_url。
 #   public_base_url: ""  # 代码默认空；例如 https://kb.example.com
 
 # ── 工场运行时层（F054）─────────────────────────────────────────────────
