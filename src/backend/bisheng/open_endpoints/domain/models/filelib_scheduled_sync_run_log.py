@@ -6,6 +6,7 @@ from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, String, tex
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.dialect_helpers import LargeText
 
 AUTOMOTIVE_SHEET_INTRO_JOB_CODE = "automotive_sheet_intro"
 
@@ -31,7 +32,7 @@ class FilelibScheduledSyncRunLog(SQLModelSerializable, table=True):
     file_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
     knowledge_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
     file_name: str | None = Field(default=None, sa_column=Column(String(200), nullable=True))
-    error_message: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    error_message: str | None = Field(default=None, sa_column=Column(LargeText(), nullable=True))
     start_time: datetime = Field(sa_column=Column(DateTime, nullable=False))
     end_time: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     duration_ms: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
@@ -40,4 +41,7 @@ class FilelibScheduledSyncRunLog(SQLModelSerializable, table=True):
         sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     )
 
-    __table_args__ = (Index("ix_fssrl_tenant_job_id", "tenant_id", "job_code", "id"),)
+    __table_args__ = (
+        Index("ix_fssrl_tenant_job_id", "tenant_id", "job_code", "id"),
+        Index("ix_fssrl_token_id", "developer_token_id", "id"),
+    )

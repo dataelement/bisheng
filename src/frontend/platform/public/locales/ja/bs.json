@@ -368,6 +368,7 @@
         "invalidError": "自動車板紹介同期設定の「{{field}}」が無効または未入力です。",
         "recentRuns": "最近の実行（全 {{total}} 件）",
         "noRuns": "実行履歴はありません",
+        "runsMovedHint": "実行履歴は、関連 Token 行の「同期記録」から確認できます。",
         "errorFields": {
           "enabled": "有効化スイッチ",
           "apiUrl": "API URL",
@@ -394,6 +395,42 @@
           "startTime": "開始時刻",
           "duration": "所要時間",
           "error": "エラー"
+        }
+      },
+      "syncRecords": {
+        "action": "同期記録",
+        "title": "同期記録 — {{name}}",
+        "hint": "この Token のファイル同期・検査規格同期・自動車板紹介同期の実行記録を表示します。",
+        "loading": "同期記録を読み込み中…",
+        "empty": "同期記録はありません",
+        "loadFailed": "同期記録の読み込みに失敗しました。再試行してください。",
+        "viewError": "エラーを表示",
+        "errorDetailTitle": "エラー詳細",
+        "truncatedHint": "エラー内容は切り詰められています（最大約 16KB）。",
+        "copy": "コピー",
+        "copied": "クリップボードにコピーしました",
+        "copyFailed": "コピーに失敗しました。テキストを手動で選択してください。",
+        "close": "閉じる",
+        "columns": {
+          "id": "ID",
+          "interface": "インターフェース",
+          "trigger": "トリガー",
+          "status": "状態",
+          "fileName": "ファイル名",
+          "startTime": "開始時刻",
+          "duration": "所要時間",
+          "error": "エラー"
+        },
+        "triggerTypes": {
+          "manual": "手動",
+          "scheduled": "定期",
+          "api": "API"
+        },
+        "statuses": {
+          "running": "実行中",
+          "success": "成功",
+          "failed": "失敗",
+          "skipped": "スキップ"
         }
       },
       "saveConfig": "設定を保存",

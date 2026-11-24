@@ -284,3 +284,17 @@ class DeveloperTokenSecretResponse(BaseModel):
     id: int
     token_prefix: str
     plaintext_token: str
+
+
+class DeveloperTokenSyncRecord(BaseModel):
+    id: int
+    interface: str
+    job_code: str
+    trigger_type: str
+    status: str
+    file_name: str | None = None
+    start_time: datetime
+    end_time: datetime | None = None
+    duration_ms: int | None = None
+    error_message: str | None = None
+    error_truncated: bool = False

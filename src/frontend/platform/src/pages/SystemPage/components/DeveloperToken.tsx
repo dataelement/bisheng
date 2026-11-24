@@ -39,7 +39,7 @@ import {
   fileSyncRuleForSave,
 } from "./developerTokenFileSyncRuleValidation"
 import DeveloperTokenGlobalSettings from "./DeveloperTokenGlobalSettings"
-import { DeveloperTokenAutomotiveSheetSync } from "./DeveloperTokenAutomotiveSheetSync"
+import DeveloperTokenSyncRecordsDialog from "./DeveloperTokenSyncRecordsDialog"
 import DeveloperTokenTable from "./DeveloperTokenTable"
 import useDeveloperTokenFileSyncOptions from "./useDeveloperTokenFileSyncOptions"
 import { resolveDepartmentUserTenantId } from "./developerTokenBinding"
@@ -134,6 +134,7 @@ export default function DeveloperToken() {
   const [saving, setSaving] = useState(false)
   const [secretOpen, setSecretOpen] = useState(false)
   const [secret, setSecret] = useState("")
+  const [syncRecordsToken, setSyncRecordsToken] = useState<DeveloperTokenRecord | null>(null)
   const boundUserId = form.user[0]?.value ?? null
   const {
     options: fileSyncOptions,
@@ -371,7 +372,6 @@ export default function DeveloperToken() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4">
       {isSuperAdmin && <DeveloperTokenGlobalSettings />}
-      <DeveloperTokenAutomotiveSheetSync />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-72 items-center gap-2">
@@ -402,8 +402,17 @@ export default function DeveloperToken() {
         loading={loading}
         fileSyncSummaryLabels={fileSyncSummaryLabels}
         onEdit={handleOpenEdit}
+        onSyncRecords={setSyncRecordsToken}
         onViewSecret={handleViewSecret}
         onDelete={handleDelete}
+      />
+
+      <DeveloperTokenSyncRecordsDialog
+        token={syncRecordsToken}
+        open={Boolean(syncRecordsToken)}
+        onOpenChange={(open) => {
+          if (!open) setSyncRecordsToken(null)
+        }}
       />
 
       {total > 0 && (

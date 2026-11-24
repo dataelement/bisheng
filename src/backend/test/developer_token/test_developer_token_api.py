@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
@@ -13,6 +14,7 @@ from bisheng.developer_token.domain.schemas import (
     DeveloperTokenGlobalConfig,
     DeveloperTokenRead,
     DeveloperTokenSecretResponse,
+    DeveloperTokenSyncRecord,
 )
 
 ENDPOINT_MOD = "bisheng.developer_token.api.endpoints.developer_token"
@@ -237,3 +239,35 @@ def test_global_config_routes():
         )
     assert resp.status_code == 200
     assert resp.json()["data"]["rate_limit_per_minute"] == 1
+
+
+def test_list_sync_records_returns_interface_and_error_fields():
+    app = _app(_user())
+    client = TestClient(app)
+    record = DeveloperTokenSyncRecord(
+        id=9,
+        interface="POST /api/v2/filelib/file/sync",
+        job_code="filelib_file_sync",
+        trigger_type="api",
+        status="failed",
+        file_name="a.pdf",
+        start_time=datetime(2026, 11, 24, tzinfo=timezone.utc).replace(tzinfo=None),
+        end_time=None,
+        duration_ms=12,
+        error_message="boom",
+        error_truncated=False,
+    )
+    with patch(
+        f"{ENDPOINT_MOD}.DeveloperTokenService.list_sync_records",
+        new=AsyncMock(return_value=PageData(data=[record], total=1)),
+    ) as mocked:
+        resp = client.get("/api/v1/admin/developer-tokens/7/sync-records?page=1&limit=5")
+
+    assert resp.status_code == 200
+    payload = resp.json()["data"]
+    assert payload["total"] == 1
+    assert payload["data"][0]["interface"] == "POST /api/v2/filelib/file/sync"
+    assert payload["data"][0]["error_message"] == "boom"
+    mocked.assert_awaited_once()
+    assert mocked.await_args.kwargs["page"] == 1
+    assert mocked.await_args.kwargs["limit"] == 5

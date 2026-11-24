@@ -93,3 +93,31 @@ class FilelibScheduledSyncRunLogRepositoryImpl(FilelibScheduledSyncRunLogReposit
                 .limit(limit)
             )
         return list(result.all()), total
+
+    async def list_by_developer_token(
+        self,
+        tenant_id: int,
+        *,
+        developer_token_id: int,
+        page: int,
+        limit: int,
+    ) -> tuple[list[FilelibScheduledSyncRunLog], int]:
+        filters = (
+            FilelibScheduledSyncRunLog.tenant_id == tenant_id,
+            FilelibScheduledSyncRunLog.developer_token_id == developer_token_id,
+        )
+        with strict_tenant_filter():
+            total_result = await self.session.exec(
+                select(func.count()).select_from(FilelibScheduledSyncRunLog).where(*filters)
+            )
+            total = int(total_result.one())
+            result = await self.session.exec(
+                select(FilelibScheduledSyncRunLog)
+                .where(*filters)
+                .order_by(
+                    col(FilelibScheduledSyncRunLog.id).desc(),
+                )
+                .offset((page - 1) * limit)
+                .limit(limit)
+            )
+        return list(result.all()), total

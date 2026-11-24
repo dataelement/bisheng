@@ -369,6 +369,7 @@
         "invalidError": "The \"{{field}}\" field in the automotive sheet intro sync config is invalid or missing.",
         "recentRuns": "Recent runs ({{total}} total)",
         "noRuns": "No run history yet",
+        "runsMovedHint": "Run history moved to the Sync records action on the bound token row.",
         "errorFields": {
           "enabled": "Enable switch",
           "apiUrl": "API URL",
@@ -395,6 +396,42 @@
           "startTime": "Start time",
           "duration": "Duration",
           "error": "Error"
+        }
+      },
+      "syncRecords": {
+        "action": "Sync records",
+        "title": "Sync records — {{name}}",
+        "hint": "Shows file sync, inspection-standard sync, and automotive sheet intro sync runs for this token.",
+        "loading": "Loading sync records…",
+        "empty": "No sync records yet",
+        "loadFailed": "Failed to load sync records. Please retry.",
+        "viewError": "View error",
+        "errorDetailTitle": "Error detail",
+        "truncatedHint": "Error text was truncated (up to about 16KB).",
+        "copy": "Copy",
+        "copied": "Copied to clipboard",
+        "copyFailed": "Copy failed. Please select the text manually.",
+        "close": "Close",
+        "columns": {
+          "id": "ID",
+          "interface": "Interface",
+          "trigger": "Trigger",
+          "status": "Status",
+          "fileName": "File name",
+          "startTime": "Start time",
+          "duration": "Duration",
+          "error": "Error"
+        },
+        "triggerTypes": {
+          "manual": "Manual",
+          "scheduled": "Scheduled",
+          "api": "API"
+        },
+        "statuses": {
+          "running": "Running",
+          "success": "Success",
+          "failed": "Failed",
+          "skipped": "Skipped"
         }
       },
       "saveConfig": "Save config",

@@ -12,7 +12,6 @@ from typing import Literal
 from loguru import logger
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.developer_token import DeveloperTokenDisabledError, DeveloperTokenMissingError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -42,6 +41,10 @@ from bisheng.open_endpoints.domain.services.automotive_sheet_intro_sync_config_s
     build_file_sync_rule_from_token,
 )
 from bisheng.open_endpoints.domain.services.filelib_sync_factory import build_filelib_sync_service_for_scheduled_sync
+from bisheng.open_endpoints.domain.services.filelib_sync_run_recorder import (
+    format_sync_exception_message,
+    prepare_sync_error_message,
+)
 
 AUTOMOTIVE_SHEET_INTRO_SYNC_LOCK_PREFIX = "bisheng:lock:automotive_sheet_intro_sync:"
 AUTOMOTIVE_SHEET_INTRO_SYNC_LOCK_TTL_SECONDS = 1800
@@ -341,10 +344,9 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _truncate_error_message(exc: Exception, *, limit: int = 500) -> str:
-    if isinstance(exc, BaseErrorCode):
-        return str(exc.message)[:limit]
-    return str(exc)[:limit]
+def _truncate_error_message(exc: Exception) -> str:
+    stored, _truncated = prepare_sync_error_message(format_sync_exception_message(exc))
+    return stored or ""
 
 
 def _config_repository(session: AsyncSession):

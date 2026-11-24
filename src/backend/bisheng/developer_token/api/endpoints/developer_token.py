@@ -174,3 +174,19 @@ async def view_developer_token_secret(
         **_request_context(request),
     )
     return resp_200(data=data)
+
+
+@router.get("/{token_id}/sync-records")
+async def list_developer_token_sync_records(
+    token_id: int,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    data = await DeveloperTokenService.list_sync_records(
+        token_id,
+        login_user,
+        page=page,
+        limit=limit,
+    )
+    return resp_200(data=data)

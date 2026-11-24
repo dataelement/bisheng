@@ -21,6 +21,7 @@ interface DeveloperTokenTableProps {
   loading: boolean
   fileSyncSummaryLabels: FileSyncRuleSummaryLabels
   onEdit: (row: DeveloperTokenRecord) => void
+  onSyncRecords: (row: DeveloperTokenRecord) => void
   onViewSecret: (row: DeveloperTokenRecord) => void
   onDelete: (row: DeveloperTokenRecord) => void
 }
@@ -30,6 +31,7 @@ export default function DeveloperTokenTable({
   loading,
   fileSyncSummaryLabels,
   onEdit,
+  onSyncRecords,
   onViewSecret,
   onDelete,
 }: DeveloperTokenTableProps) {
@@ -105,6 +107,9 @@ export default function DeveloperTokenTable({
                 <TableCell className="space-x-2 text-right">
                   <Button size="sm" variant="outline" onClick={() => onEdit(row)}>
                     {t("system.developerToken.edit")}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => onSyncRecords(row)}>
+                    {t("system.developerToken.syncRecords.action")}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => onViewSecret(row)}>
                     {t("system.developerToken.viewSecret")}
