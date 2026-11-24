@@ -812,5 +812,9 @@
   "WORKBENCH_ARCHIVE_INVALID": "工作台压缩包损坏或格式无效",
   "WORKBENCH_VALIDATION_FAILED": "工作台包内容校验失败",
   "workbenchUploadTooLarge": "服务器拒绝了超出大小限制的上传（HTTP 413），请选择更小的压缩包。",
-  "15033": "图片生成配置无效，请检查 API 地址、API Key 和模型；不支持 Azure。"
+  "15033": "图片生成配置无效，请检查 API 地址、API Key 和模型；不支持 Azure。",
+  "workflow_reference_model": "节点“{{nodeName}}”引用的模型（ID：{{targetId}}）不存在或当前租户不可用，请重新选择模型。",
+  "workflow_reference_rerank_model": "节点“{{nodeName}}”引用的重排模型（ID：{{targetId}}）不存在或当前租户不可用，请在高级检索设置中重新选择重排模型。",
+  "workflow_reference_knowledge_space": "节点“{{nodeName}}”引用的知识空间/知识库（ID：{{targetId}}）不存在或当前租户不可用，请重新选择检索范围。",
+  "workflow_reference_qa_knowledge": "节点“{{nodeName}}”引用的 QA 知识库（ID：{{targetId}}）不存在或当前租户不可用，请重新选择 QA 知识库。"
 }
