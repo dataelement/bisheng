@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from bisheng.common.errcode.llm import ModelDiscoveryError
 from bisheng.core.ai.asr.capabilities import ALI_MODELS, BAIDU_MODELS, TENCENT_MODELS
 
+from .model_discovery_presets import PRESETS
 from .model_discovery_providers import (
     GENERATION_NAME,
     build_plan,
@@ -344,6 +345,20 @@ def _publish_speech_types(models, provider: str) -> None:
         assign_speech_type(model, provider)
 
 
+def _preset_models(provider: str) -> list[dict]:
+    payload, _docs = preset_catalog(provider)
+    models = normalize_catalog(payload, provider)
+    _publish_speech_types(models, provider)
+    return models
+
+
+def _with_preset(result: dict, provider: str) -> dict:
+    """A partial live list plus the preset models it omits; the live row wins for a shared name."""
+    models = {model["model_name"]: model for model in _preset_models(provider)}
+    models.update((model["model_name"], model) for model in result["models"])
+    return {**result, "models": sorted(models.values(), key=lambda model: model["model_name"].lower())}
+
+
 async def read_catalog(client: httpx.AsyncClient, method: str, url: str, **kwargs) -> dict:
     try:
         async with client.stream(method, url, **kwargs) as response:
@@ -419,11 +434,13 @@ class ModelDiscoveryService:
     async def _discover(cls, provider: str, config: dict, source: str, options: dict) -> dict:
         if source == "auto" and prefer_connection_catalog(provider, config, options):
             try:
-                return await cls._fetch_catalog(provider, config, "live", options)
+                result = await cls._fetch_catalog(provider, config, "live", options)
             except ModelDiscoveryError as error:
                 if error.kwargs.get("reason") != "unsupported":
                     raise
                 # An unsupported list route selects the provider's native discovery contract.
+            else:
+                return _with_preset(result, provider) if PRESETS.get(provider, {}).get("supplements_live") else result
         return await cls._fetch_catalog(provider, config, source, options)
 
     @classmethod
@@ -431,11 +448,9 @@ class ModelDiscoveryService:
         options = catalog_options(provider, config, options)
         plan = build_plan(provider, config, source, options)
         if plan.protocol == "preset":
-            payload, docs = preset_catalog(provider)
-            models = normalize_catalog(payload, provider)
-            _publish_speech_types(models, provider)
+            _payload, docs = preset_catalog(provider)
             return {
-                "models": models,
+                "models": _preset_models(provider),
                 "source": "preset",
                 "scope": "catalog",
                 "catalog_date": "2026-10-21",

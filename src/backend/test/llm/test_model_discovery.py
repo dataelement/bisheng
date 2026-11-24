@@ -294,6 +294,7 @@ def saved_connection_service():
         "JsonFieldMasker": JsonFieldMasker,
         "LLMDao": SimpleNamespace(aget_server_by_id=AsyncMock()),
         "ModelDiscoveryService": SimpleNamespace(discover=AsyncMock(return_value={"models": []})),
+        "discovered_model_prices": lambda provider, result: {**result, "priced_for": provider},
     }
     exec(compile(ast.fix_missing_locations(module), "saved-connection-coordinator", "exec"), namespace)
     coordinator = namespace["Coordinator"]
@@ -348,6 +349,14 @@ async def test_new_connection_uses_input_without_reading_saved_secrets():
     namespace["ModelDiscoveryService"].discover.assert_awaited_once_with(
         "openai", {"openai_api_key": "fixture"}, source="auto", options={}
     )
+
+
+async def test_listed_models_are_priced_for_the_requested_provider():
+    coordinator, _namespace = saved_connection_service()
+    result = await coordinator.discover_models(
+        catalog.ModelDiscoveryRequest(provider="openai_compatible", config={"openai_api_key": "fixture"}), object()
+    )
+    assert result == {"models": [], "priced_for": "openai_compatible"}
 
 
 def test_anthropic_key_is_masked_and_preserved_on_unchanged_edit():

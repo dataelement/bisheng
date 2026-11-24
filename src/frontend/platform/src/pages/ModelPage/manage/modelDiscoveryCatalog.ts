@@ -1,8 +1,11 @@
 import type { DiscoveredModel } from "@/controllers/API/modelDiscovery";
 import { getPriceCatalog } from "@/controllers/API/modelPricing";
 
-/** Provider types with no vendor model list of their own: "选择模型" lists the price catalog instead. */
-export const PRICE_CATALOG_ONLY = new Set(["openai_compatible"]);
+/**
+ * Provider types that are not one vendor (gateways): until the connection is filled in,
+ * "选择模型" lists the price catalog instead of asking for it.
+ */
+export const PRICE_CATALOG_WITHOUT_CONNECTION = new Set(["openai_compatible"]);
 
 /**
  * F016: price-catalog models for a provider type, grouped by vendor. A platform that resells

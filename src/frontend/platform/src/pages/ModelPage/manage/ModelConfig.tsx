@@ -437,14 +437,15 @@ export default function ModelConfig({
                   existing={formData.models.map((model) =>
                     model.model_name.trim(),
                   )}
-                  getConnection={() => {
+                  getConnection={(quiet) => {
                     const [config] = formRef.current.getData();
                     const missing = formRef.current.getCatalogError();
                     if (missing) {
-                      toast.show({
-                        type: "warning",
-                        message: `${missing} ${t("model.notBeEmpty")}`,
-                      });
+                      if (!quiet)
+                        toast.show({
+                          type: "warning",
+                          message: `${missing} ${t("model.notBeEmpty")}`,
+                        });
                       return null;
                     }
                     return {

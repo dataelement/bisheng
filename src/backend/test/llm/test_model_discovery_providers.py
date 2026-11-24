@@ -71,11 +71,49 @@ async def test_zhipu_preset_speech_row_is_unsupported():
     assert "_transports" not in rows["glm-asr-2512"]
 
 
-async def test_zhipu_official_auto_uses_the_preset_catalog(monkeypatch):
-    transport(monkeypatch, lambda request: pytest.fail("official Zhipu auto must not call the partial list"))
+async def test_zhipu_official_auto_merges_the_partial_live_list_with_the_preset(monkeypatch):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"id": "glm-5.3"}, {"id": "glm-6-preview"}]})
+
+    transport(monkeypatch, handler)
     result = await ModelDiscoveryService.discover("zhipu", {"api_key": "fixture"})
-    assert result["source"] == "preset"
-    assert any(model["model_name"] == "glm-5.3" for model in result["models"])
+    rows = {model["model_name"]: model for model in result["models"]}
+    assert str(requests[0].url) == "https://open.bigmodel.cn/api/paas/v4/models"
+    assert requests[0].headers["authorization"] == "Bearer fixture"
+    # Newer official names come from the live list; the preset adds what the live list omits.
+    assert {"glm-6-preview", "glm-5.3", "embedding-3"} <= set(rows)
+    assert rows["glm-6-preview"]["model_type"] == "llm"
+    assert rows["embedding-3"]["model_type"] == "embedding"
+    assert rows["glm-tts"]["type_source"] == "unsupported"
+    assert [model["model_name"] for model in result["models"]] == sorted(rows, key=str.lower)
+    assert result["source"] == "live"
+    assert len(requests) == 1
+
+
+async def test_openai_compatible_lists_the_gateway_catalog_with_its_key(monkeypatch):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"id": "openai/gpt-4.1"}, {"id": "private-model"}]})
+
+    transport(monkeypatch, handler)
+    result = await ModelDiscoveryService.discover(
+        "openai_compatible", {"openai_api_base": "https://gateway.example/v1", "openai_api_key": "fixture"}
+    )
+    assert str(requests[0].url) == "https://gateway.example/v1/models"
+    assert requests[0].headers["authorization"] == "Bearer fixture"
+    assert [model["model_name"] for model in result["models"]] == ["openai/gpt-4.1", "private-model"]
+    assert result["source"] == "live"
+
+
+async def test_openai_compatible_needs_the_gateway_address():
+    with pytest.raises(ModelDiscoveryError) as error:
+        await ModelDiscoveryService.discover("openai_compatible", {"openai_api_key": "fixture"})
+    assert error.value.kwargs["reason"] == "address"
 
 
 async def test_tencent_catalog_requires_management_credentials(monkeypatch):
@@ -474,7 +512,7 @@ async def test_requests_extra_information_only_after_unsupported_list(monkeypatc
     assert len(requests) == 1
 
 
-@pytest.mark.parametrize("provider", ["qwen", "volcengine"])
+@pytest.mark.parametrize("provider", ["qwen", "volcengine", "zhipu"])
 @pytest.mark.parametrize("status,reason", [(401, "auth"), (403, "auth"), (429, "rate_limit"), (500, "failure")])
 async def test_auto_preserves_operational_errors(monkeypatch, provider, status, reason):
     transport(monkeypatch, lambda request: httpx.Response(status))

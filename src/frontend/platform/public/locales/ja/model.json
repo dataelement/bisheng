@@ -297,6 +297,7 @@
     "filterVendor": "ベンダーで絞り込む",
     "allVendors": "すべてのベンダー",
     "catalogPrice": "{{label}} · 100 万トークンあたり 入力 {{input}} / 出力 {{output}}",
+    "catalogPriceMissing": "価格表に未登録のため、追加後は 0（無料）になります",
     "restoreInheritance": "継承に戻す",
     "restoreInheritanceConfirm": "この項目のローカル設定を Root の現在の設定に置き換えます。未共有または利用不可のモデルは引き続き利用できません。",
     "settingsReadFailed": "設定の状態を取得できません。再試行してください。",

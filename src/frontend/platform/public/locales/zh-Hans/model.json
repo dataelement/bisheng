@@ -297,6 +297,7 @@
     "filterVendor": "筛选厂商",
     "allVendors": "全部厂商",
     "catalogPrice": "{{label}} · 每百万 token 输入 {{input}} / 输出 {{output}}",
+    "catalogPriceMissing": "价格表暂无，添加后按 0（免费）",
     "restoreInheritance": "恢复继承",
     "restoreInheritanceConfirm": "恢复后，本栏目的本地配置将被 Root 当前配置替代。未共享或不可用的模型仍不能使用。",
     "settingsReadFailed": "配置状态读取失败，请重试。",

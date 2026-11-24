@@ -299,6 +299,7 @@
     "filterVendor": "Filter vendor",
     "allVendors": "All vendors",
     "catalogPrice": "{{label}} · per 1M tokens: {{input}} in / {{output}} out",
+    "catalogPriceMissing": "Not in the price catalog; added at 0 (free)",
     "restoreInheritance": "Restore inheritance",
     "restoreInheritanceConfirm": "Replace this section’s local configuration with the current Root configuration? Unshared or unavailable models will remain unusable.",
     "settingsReadFailed": "Unable to read configuration status. Please retry.",

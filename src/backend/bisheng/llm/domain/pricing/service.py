@@ -159,3 +159,24 @@ def match_view(server_type: str, model_name: str) -> dict:
         "catalog_version": load_catalog().version,
         "entry": found.entry.model_dump() if found else None,
     }
+
+
+def discovered_model_prices(server_type: str, result: dict) -> dict:
+    """Vendor-listed models with the catalog price adding them would prefill; unmatched rows stay unpriced (0).
+
+    An Azure model catalog is skipped: adding stores the deployment name the admin types, not this name.
+    """
+    if result.get("scope") == "azure_models":
+        return result
+    for model in result.get("models") or []:
+        found = match(server_type, model["model_name"])
+        if found is not None:
+            entry = found.entry
+            model["catalog"] = {
+                "vendor": entry.vendor,
+                "label": entry.label,
+                "currency": entry.currency,
+                "input": entry.input,
+                "output": entry.output,
+            }
+    return result

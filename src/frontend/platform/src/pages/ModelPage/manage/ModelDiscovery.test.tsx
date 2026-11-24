@@ -551,14 +551,14 @@ describe("F016 price-catalog model list", () => {
       ],
     });
   });
-  it("lists the price catalog for an OpenAI-compatible gateway without asking the vendor", async () => {
+  it("lists the price catalog for an OpenAI-compatible gateway with no address yet", async () => {
     const input = { ...props(), provider: "openai_compatible", existing: [], getConnection: vi.fn(() => null) };
     render(<ModelDiscovery {...input} />);
     fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
     await screen.findByText("qwen-max");
     expect(screen.getByText("model.discoveryScope_price_catalog")).toBeInTheDocument();
     expect(discoverModels).not.toHaveBeenCalled();
-    expect(input.getConnection).not.toHaveBeenCalled();
+    expect(input.getConnection).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByRole("checkbox", { name: "qwen-max" }));
     fireEvent.click(screen.getByRole("button", { name: "model.addSelectedModels" }));
     expect(input.onImport).toHaveBeenCalledWith([

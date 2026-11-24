@@ -51,7 +51,7 @@ from bisheng.llm.application.model_default import ModelDefaultApplication, curre
 from bisheng.llm.application.model_default_read import get_model_default_read_runtime
 from bisheng.llm.domain.const import LLMModelStatus, LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
-from bisheng.llm.domain.pricing.service import apply_pricing_on_save
+from bisheng.llm.domain.pricing.service import apply_pricing_on_save, discovered_model_prices
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.schemas import (
     AssistantLLMConfig,
@@ -544,9 +544,10 @@ class LLMService:
             if stored is None:
                 raise NotFoundError.http_exception()
             config = JsonFieldMasker().update_json_with_masked(stored.config or {}, config)
-        return await ModelDiscoveryService.discover(
+        result = await ModelDiscoveryService.discover(
             data.provider, cls.strip_config_whitespace(config), source=data.source, options=data.options
         )
+        return discovered_model_prices(data.provider, result)
 
     @classmethod
     async def get_one_llm(
