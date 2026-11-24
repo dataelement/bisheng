@@ -10,6 +10,7 @@ export const ContextResourceCard = ({
     onRemove,
     onClick,
     thumbnail = false,
+    expanded,
 }: {
     icon: React.ReactNode;
     label: string;
@@ -18,6 +19,7 @@ export const ContextResourceCard = ({
     onRemove?: () => void;
     onClick?: () => void;
     thumbnail?: boolean;
+    expanded?: boolean;
 }) => (
     <div
         className={cn(
@@ -28,6 +30,7 @@ export const ContextResourceCard = ({
         data-composer-resource={onRemove ? "" : undefined}
         onClick={(event) => { if (onRemove) event.currentTarget.focus(); onClick?.(); }}
         role={onClick ? "button" : undefined}
+        aria-expanded={expanded}
         tabIndex={onRemove || onClick ? 0 : undefined}
         onKeyDown={onClick ? (event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onClick(); } } : undefined}
     >

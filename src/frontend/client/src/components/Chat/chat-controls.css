@@ -92,8 +92,8 @@ body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"]:not(.dsh-command-skil
 }
 .dsh-composer-chip:hover .dsh-resource-remove,
 .dsh-resource-remove:focus-visible { opacity:1; }
-.dsh-composer-chip:hover .dsh-resource-name,
-.dsh-composer-chip:focus-within .dsh-resource-name { padding-right:18px; }
+.dsh-composer-chip[data-composer-resource]:hover .dsh-resource-name,
+.dsh-composer-chip[data-composer-resource]:focus-within .dsh-resource-name { padding-right:18px; }
 .dsh-composer-thumbnail { width:64px; height:64px; border-radius:20px; padding:0; cursor:zoom-in; overflow:hidden; }
 .dsh-composer-thumbnail .dsh-resource-icon { width:100%; height:100%; }
 .dsh-composer-thumbnail img { width:100%; height:100%; object-fit:cover; display:block; }

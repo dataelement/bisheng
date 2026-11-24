@@ -61,6 +61,7 @@ jest.mock("~/utils", () => ({ cn: (...parts: unknown[]) => parts.filter((p) => t
 jest.mock("~/components/Chat/MessageCopyButton", () => ({ CopyButton: () => null }));
 jest.mock("~/components/Chat/attachments/MediaAttachmentChip", () => ({ MediaAttachmentChip: () => null, isMediaChipFile: () => false }));
 jest.mock("~/components/Chat/attachments/ChatHistoryFileRow", () => ({ ChatHistoryFileRow: () => null }));
+jest.mock("~/components/Chat/attachments/MessageAttachments", () => ({ MessageAttachments: () => null }));
 jest.mock("~/components/Chat/attachments/GeneratedFileLink", () => ({ renderGeneratedFileLink: () => () => null }));
 jest.mock("~/components/ui/icon/File/FileIcon", () => ({ isImageFileName: () => false }));
 jest.mock("~/components/Chat/Messages/Content/MessageImage", () => ({ MessageImage: () => null }));
