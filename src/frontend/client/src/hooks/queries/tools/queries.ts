@@ -79,7 +79,7 @@ export const useGetOrgToolList = (
     preferred_ids?: string;
     action?: 'visible' | 'use';
   },
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; staleTime?: number; refetchOnMount?: boolean },
 ) => {
   return useQuery({
     // preferred_ids participates in the key so switching configured set (or
@@ -98,6 +98,8 @@ export const useGetOrgToolList = (
       return data?.data.data;
     },
     enabled: options?.enabled ?? true,
+    ...(options?.staleTime !== undefined ? { staleTime: options.staleTime } : {}),
+    ...(options?.refetchOnMount !== undefined ? { refetchOnMount: options.refetchOnMount } : {}),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
