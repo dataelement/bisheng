@@ -133,7 +133,6 @@ OPERATIONS = [
     ("search_version_sources", (10, "", 100)),
     ("get_similar_candidates_for_file", (100,)),
     ("get_version_recommendations", (100,)),
-    ("list_pending_similar_files", (10,)),
     ("dismiss_similar", (100,)),
     ("link_file_to_document", (100, 21)),
     ("merge_source_document_into_current", (100, 21)),
@@ -220,7 +219,10 @@ async def test_granted_actor_uses_actual_resource_action(version_case, method, a
         "delete_version",
     }
     if method in writes:
-        assert all(call == {"resource_type": "knowledge_space", "resource_id": 10, "action": "edit"} for call in calls)
+        assert all(
+            call["resource_type"] == "knowledge_file" and call["resource_id"] in {100, 101} and call["action"] == "edit"
+            for call in calls
+        )
     else:
         assert all(call["action"] == "visible" for call in calls)
         assert all(call["resource_id"] in {10, 100, 101} for call in calls)
@@ -271,14 +273,14 @@ async def test_self_chain_mutations_rejected(version_case, method, args):
     case.svc.version_repo.save.assert_not_awaited()
 
 
-@pytest.mark.parametrize("knowledge_type,resource_type", [(3, "knowledge_space"), (0, "knowledge_library")])
-async def test_write_action_is_routed_by_loaded_knowledge_type(version_case, knowledge_type, resource_type):
+@pytest.mark.parametrize("knowledge_type", [3, 0])
+async def test_write_action_uses_file_edit_for_each_knowledge_type(version_case, knowledge_type):
     case = version_case
     case.knowledge.type = knowledge_type
     case.permission.side_effect = None
     await case.svc.dismiss_similar(100)
     case.permission.assert_awaited_once_with(
-        case.svc.login_user, resource_type=resource_type, resource_id=10, action="edit"
+        case.svc.login_user, resource_type="knowledge_file", resource_id=100, action="edit"
     )
 
 
@@ -346,3 +348,21 @@ async def test_foreign_tenant_is_rejected_even_for_admin(version_case):
     assert exc.value.status_code == 404
     case.permission.assert_not_awaited()
     case.svc.version_repo.delete.assert_not_awaited()
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_pending_similar_authorization_is_owned_by_read_service(version_case, allowed):
+    case = version_case
+    read = AsyncMock(return_value=[])
+    if not allowed:
+        read.side_effect = HTTPException(status_code=403, detail="denied")
+    case.svc._version_read_service.list_pending_similar = read
+    if allowed:
+        assert await case.svc.list_pending_similar_files(10) == []
+    else:
+        with pytest.raises(HTTPException) as error:
+            await case.svc.list_pending_similar_files(10)
+        assert error.value.status_code == 403
+    read.assert_awaited_once()
+    assert read.await_args.args == (10,)
+    case.permission.assert_not_awaited()

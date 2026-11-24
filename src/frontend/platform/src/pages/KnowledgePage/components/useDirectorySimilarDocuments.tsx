@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { useContext, useEffect, useMemo, useState } from "react";
 import type { KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
@@ -23,28 +23,36 @@ export function useDirectorySimilarDocuments({ epoch, scope, spaceId, selectedRo
   );
   const hasPending = selectedFiles.some(row => row.has_similar === true && row.is_multi_version !== true && row.status === 2);
   const selection = enabled && opening?.epoch === versionEpoch ? opening : null;
-  const permission = useQuery({
-    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "detail-actions"],
-    queryFn: () => getMyResourcePermissionsApi("knowledge_space", String(spaceId), { showError: false }),
-    enabled: enabled && (hasPending || Boolean(selection)),
-    retry: false,
-    cacheTime: 0,
+  const fileIds = [...new Set(selection?.fileIds ?? selectedFiles.map(row => row.id))];
+  const permissions = useQueries({
+    queries: fileIds.map(id => ({
+      queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-file-actions", id],
+      queryFn: ({ signal }: { signal?: AbortSignal }) => getMyResourcePermissionsApi("knowledge_file", String(id), { showError: false, signal }),
+      enabled: enabled && (hasPending || Boolean(selection)),
+      retry: false,
+      cacheTime: 0,
+    })),
   });
-  const canEdit = permission.isSuccess && permission.data.actions.includes("edit");
-  const active = canEdit ? selection : null;
+  const grantedIds = fileIds.filter((_, index) => {
+    const permission = permissions[index];
+    return permission?.isSuccess && permission.data.actions.includes("edit");
+  });
+  const editableIds = grantedIds.filter(id => !permissions[fileIds.indexOf(id)]?.isFetching);
+  const hasEditablePending = selectedFiles.some(row => editableIds.includes(row.id) && row.has_similar === true && row.is_multi_version !== true && row.status === 2);
+  const active = grantedIds.length > 0 ? selection : null;
   useEffect(() => {
     if (opening && !active) setOpening(current => current === opening ? null : current);
   }, [opening, active]);
 
   return {
-    onProcessSimilar: enabled && canEdit && hasPending
-      ? () => setOpening({ epoch: versionEpoch, fileIds: selectedFiles.map(row => row.id) })
+    onProcessSimilar: enabled && hasEditablePending
+      ? () => setOpening({ epoch: versionEpoch, fileIds: editableIds })
       : undefined,
     overlay: active && (
       <SpaceSimilarDocumentDialog
         scope={scope}
         spaceId={spaceId}
-        restrictToFileIds={active.fileIds}
+        restrictToFileIds={active.fileIds.filter(id => grantedIds.includes(id))}
         onOpenChange={open => { if (!open) setOpening(current => current === active ? null : current); }}
       />
     ),

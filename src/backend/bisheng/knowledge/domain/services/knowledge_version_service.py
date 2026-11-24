@@ -91,13 +91,13 @@ class KnowledgeVersionService:
             raise HTTPException(status_code=404, detail="file not found")
         if knowledge_id is not None and kf.knowledge_id != knowledge_id:
             raise HTTPException(status_code=409, detail="file belongs to a different knowledge")
-        await self._require_knowledge(kf.knowledge_id, "edit" if action == "edit" else None, allow_failed=allow_failed)
-        if action == "visible":
+        await self._require_knowledge(kf.knowledge_id, allow_failed=allow_failed)
+        if action is not None:
             await require_business_action(
                 self.login_user,
                 resource_type="knowledge_file",
                 resource_id=kf.id,
-                action="visible",
+                action=action,
             )
         return kf
 
