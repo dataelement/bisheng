@@ -160,6 +160,30 @@ describe("planKnowledgeRows", () => {
         expect(rows.get(2)).toEqual({ ordinal: 2 });
     });
 
+    it("keeps the row when one KB failed but another returned chunks, even if the backend flags the call", () => {
+        // The backend sets error/failure_info on the whole call for a per-KB failure.
+        const partial = asEvent(
+            call("c2", "q", ["1", "2"], [chunk("1", "KB", "A.docx", "rag_c2:0"), failedKb("2", "KB2", "timeout")], {
+                error: "Tool execution failed.",
+                failure_info: { code: "x" } as unknown as AgentToolCall["failure_info"],
+            }),
+        );
+        const { rows } = planKnowledgeRows([partial]);
+        expect(rows.get(0)).toEqual({ ordinal: 1 });
+    });
+
+    it("keeps the row when every KB failed with a tagged retrieval error", () => {
+        const allFailed = asEvent(
+            call("c2", "q", ["2"], [failedKb("2", "KB2", "timeout")], { error: "Tool execution failed." }),
+        );
+        expect(planKnowledgeRows([allFailed]).rows.get(0)).toEqual({ ordinal: 1 });
+    });
+
+    it("still leaves out a call that failed as a whole and returned no KB results", () => {
+        const failed = asEvent(call("c2", "q", ["2"], [], { error: "Tool execution failed." }));
+        expect(planKnowledgeRows([failed]).rows.has(0)).toBe(false);
+    });
+
     it("collects KB names from every result so an inflight row can show its KB", () => {
         const inflight = asEvent(call("c2", "q2", ["1"], [], { inflight: true }));
         const { rows, kbNameById } = planKnowledgeRows([search("c1", ["1"], "A.docx", "商情项目汇总"), inflight]);

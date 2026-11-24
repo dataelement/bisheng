@@ -86,8 +86,7 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         // that search, not merged into the block above it. Mirrors task mode's
         // DeepStepGroup.buildSegments.
         // Knowledge searches are never merged: each one stays a row at its real
-        // position. They only get a shortened "continue" prefix when the previous
-        // search targeted the same knowledge bases (see knowledgeRow.ts).
+        // position (see knowledgeRow.ts).
         const knowledgePlan = useMemo(() => planKnowledgeRows(events), [events]);
 
         const segments = useMemo(() => {
@@ -116,7 +115,8 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                 } else if (ev.type === "tool_call") {
                     out.push({
                         kind: "tool",
-                        key: ev.tool_call_id || `tc-${i}`,
+                        // tool_call_id can repeat or be synthesised; the index keeps the key unique.
+                        key: `${ev.tool_call_id || "tc"}-${i}`,
                         toolCall: ev,
                         knowledge: knowledgePlan.rows.get(i),
                     });

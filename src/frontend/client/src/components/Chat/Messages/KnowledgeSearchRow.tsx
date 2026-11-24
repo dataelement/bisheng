@@ -86,7 +86,10 @@ const KnowledgeSearchRow: FC<KnowledgeSearchRowProps> = memo(
         const docs = showAllDocs ? info.docs : info.docs.slice(0, MAX_VISIBLE_DOC_CHIPS);
         const hiddenDocCount = info.docs.length - docs.length;
         const hasDetails = !running;
-        const hoverText = [`${label}${keyword}`, suffix, kbLabel].filter(Boolean).join(" · ");
+        // The hover text carries the model's raw query, which the row hides when it is unreadable.
+        const hoverText = [`${label}${running ? `${info.query}...` : info.query || keyword}`, suffix, kbLabel]
+            .filter(Boolean)
+            .join(" · ");
 
         const railIcon = running ? (
             <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />

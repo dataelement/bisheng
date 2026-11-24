@@ -65,6 +65,8 @@ const UNREADABLE_QUERY_PATTERNS: RegExp[] = [
 export function isReadableKnowledgeQuery(query: string): boolean {
     const text = (query ?? "").trim();
     if (!text) return false;
+    // Keep this length guard before the patterns: the bracket pattern backtracks
+    // quadratically on long unmatched input.
     if (text.length > MAX_READABLE_QUERY_LENGTH) return false;
     return !UNREADABLE_QUERY_PATTERNS.some((pattern) => pattern.test(text));
 }
@@ -194,7 +196,10 @@ export function planKnowledgeRows(events: AgentEvent[]): KnowledgeRowPlan {
     let ordinal = 0;
     events.forEach((ev, index) => {
         if (ev.type !== "tool_call" || !isKnowledgeToolCall(ev)) return;
-        if (ev.error || ev.failure_info) return;
+        // The backend also sets error/failure_info on the call for a single failed
+        // knowledge base, so those flags alone do not mean the whole call failed.
+        // Only a call that produced no knowledge base result goes to the generic display.
+        if ((ev.error || ev.failure_info) && parseHits(ev).size === 0) return;
         ordinal += 1;
         rows.set(index, { ordinal });
     });
