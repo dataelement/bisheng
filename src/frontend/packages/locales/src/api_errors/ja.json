@@ -812,5 +812,9 @@
   "WORKBENCH_ARCHIVE_INVALID": "ワークベンチの圧縮ファイルが破損しているか無効です",
   "WORKBENCH_VALIDATION_FAILED": "ワークベンチのパッケージ内容が無効です",
   "workbenchUploadTooLarge": "アップロードがサーバーのサイズ制限を超えたため拒否されました（HTTP 413）。小さいファイルを選択してください。",
-  "15033": "画像生成の設定が無効です。API アドレス、API キー、モデルを確認してください。Azure はサポートしていません。"
+  "15033": "画像生成の設定が無効です。API アドレス、API キー、モデルを確認してください。Azure はサポートしていません。",
+  "workflow_reference_model": "ノード「{{nodeName}}」が参照するモデル（ID: {{targetId}}）は存在しないか、このテナントでは利用できません。モデルを選び直してください。",
+  "workflow_reference_rerank_model": "ノード「{{nodeName}}」が参照するリランクモデル（ID: {{targetId}}）は存在しないか、このテナントでは利用できません。高度な検索設定で選び直してください。",
+  "workflow_reference_knowledge_space": "ノード「{{nodeName}}」が参照するナレッジスペース/ライブラリ（ID: {{targetId}}）は存在しないか、このテナントでは利用できません。検索範囲を選び直してください。",
+  "workflow_reference_qa_knowledge": "ノード「{{nodeName}}」が参照する QA ナレッジライブラリ（ID: {{targetId}}）は存在しないか、このテナントでは利用できません。QA ナレッジライブラリを選び直してください。"
 }

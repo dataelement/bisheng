@@ -812,5 +812,9 @@
   "WORKBENCH_ARCHIVE_LIMIT": "Workbench archive exceeds the allowed limits",
   "WORKBENCH_ARCHIVE_INVALID": "Workbench archive is corrupt or invalid",
   "WORKBENCH_VALIDATION_FAILED": "Workbench package content is invalid",
-  "workbenchUploadTooLarge": "The server rejected the upload because it exceeds its size limit (HTTP 413). Choose a smaller archive."
+  "workbenchUploadTooLarge": "The server rejected the upload because it exceeds its size limit (HTTP 413). Choose a smaller archive.",
+  "workflow_reference_model": "Node “{{nodeName}}” references a model (ID: {{targetId}}) that does not exist or is unavailable to this tenant. Select another model.",
+  "workflow_reference_rerank_model": "Node “{{nodeName}}” references a rerank model (ID: {{targetId}}) that does not exist or is unavailable to this tenant. Select another rerank model in advanced retrieval settings.",
+  "workflow_reference_knowledge_space": "Node “{{nodeName}}” references a knowledge space/library (ID: {{targetId}}) that does not exist or is unavailable to this tenant. Select another retrieval scope.",
+  "workflow_reference_qa_knowledge": "Node “{{nodeName}}” references a QA knowledge library (ID: {{targetId}}) that does not exist or is unavailable to this tenant. Select another QA knowledge library."
 }

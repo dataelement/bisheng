@@ -42,5 +42,9 @@ def read_models_sync(session, ids):
 async def require_new_models(session, references, old=()):
     keys = {ref.target for ref in set(references) - set(old) if ref.target.target_type == TargetType.MODEL}
     rows = await read_models(session, tuple(key.target_id for key in keys))
-    if keys - rows.keys():
-        raise ResourceReferenceInvalidError(reason="model_selection_unavailable")
+    missing = keys - rows.keys()
+    if missing:
+        raise ResourceReferenceInvalidError(
+            reason="model_selection_unavailable",
+            unavailable_target_ids=sorted((key.target_id for key in missing), key=int),
+        )
