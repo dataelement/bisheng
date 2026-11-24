@@ -19,6 +19,7 @@ import { Outlined } from "bisheng-icons";
 import {
     memo,
     useCallback,
+    useContext,
     useEffect,
     useMemo,
     useRef,
@@ -29,6 +30,10 @@ import {
 import type { AgentEvent } from "~/api/chatApi";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import KnowledgeSearchRow from "./KnowledgeSearchRow";
+import KnownKnowledgeBaseNamesContext from "./KnownKnowledgeBaseNamesContext";
+import { planKnowledgeRows, unnamedKnowledgeBaseIds, type KnowledgeRowContext } from "./knowledgeRow";
+import { useKnowledgeBaseNames } from "./useKnowledgeBaseNames";
 import ThinkingContent from "./ThinkingContent";
 import ToolCallDisplay from "./ToolCallDisplay";
 
@@ -83,10 +88,36 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         // regroup them: reasoning that happened after a search belongs below
         // that search, not merged into the block above it. Mirrors task mode's
         // DeepStepGroup.buildSegments.
+        // Knowledge searches are never merged: each one stays a row at its real
+        // position (see knowledgeRow.ts).
+        // Names of the knowledge bases the user selected label searches that
+        // returned nothing, whose names the results never carry.
+        // Searched ids that are still unnamed (no chunk returned, not in the
+        // selection) are looked up by id, so an old conversation names them too.
+        const { names: selectedKbNames, lookupEnabled } = useContext(KnownKnowledgeBaseNamesContext);
+        const unnamedKbIds = useMemo(
+            () => unnamedKnowledgeBaseIds(events, selectedKbNames),
+            [events, selectedKbNames],
+        );
+        const lookedUpKbNames = useKnowledgeBaseNames(unnamedKbIds, lookupEnabled);
+        const knownKbNames = useMemo(
+            () => ({ ...selectedKbNames, ...lookedUpKbNames }),
+            [selectedKbNames, lookedUpKbNames],
+        );
+        const knowledgePlan = useMemo(
+            () => planKnowledgeRows(events, knownKbNames),
+            [events, knownKbNames],
+        );
+
         const segments = useMemo(() => {
             type Segment =
                 | { kind: "thinking"; key: string; content: string }
-                | { kind: "tool"; key: string; toolCall: Extract<AgentEvent, { type: "tool_call" }> };
+                | {
+                      kind: "tool";
+                      key: string;
+                      toolCall: Extract<AgentEvent, { type: "tool_call" }>;
+                      knowledge?: KnowledgeRowContext;
+                  };
             const out: Segment[] = [];
             events.forEach((ev, i) => {
                 if (ev.type === "thinking") {
@@ -102,11 +133,17 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                         out.push({ kind: "thinking", key: `think-${i}`, content: ev.content });
                     }
                 } else if (ev.type === "tool_call") {
-                    out.push({ kind: "tool", key: ev.tool_call_id || `tc-${i}`, toolCall: ev });
+                    out.push({
+                        kind: "tool",
+                        // tool_call_id can repeat or be synthesised; the index keeps the key unique.
+                        key: `${ev.tool_call_id || "tc"}-${i}`,
+                        toolCall: ev,
+                        knowledge: knowledgePlan.rows.get(i),
+                    });
                 }
             });
             return out;
-        }, [events]);
+        }, [events, knowledgePlan]);
 
         return (
             <div className="flex w-full min-w-0 flex-col gap-3">
@@ -133,6 +170,14 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                                 <ThinkingContent
                                     key={seg.key}
                                     reasoning={seg.content}
+                                    showConnector={hasNext}
+                                />
+                            ) : seg.knowledge ? (
+                                <KnowledgeSearchRow
+                                    key={seg.key}
+                                    toolCall={seg.toolCall}
+                                    context={seg.knowledge}
+                                    kbNameById={knowledgePlan.kbNameById}
                                     showConnector={hasNext}
                                 />
                             ) : (
