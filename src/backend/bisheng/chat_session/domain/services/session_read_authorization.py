@@ -37,15 +37,22 @@ def token_matches_session(share_link, session) -> bool:
 
 
 async def require_session_read(session, login_user, share_link=None) -> None:
-    if session is None or session.is_delete:
+    """Same visibility question as the audit/annotation list that surfaced the row.
+
+    Personal ownership still goes through ``SessionSubject.matches`` (which
+    rejects soft-deleted rows). Audit and annotation adapters answer via
+    ``assert_session_in_audit_scope``, which uses the list's own scope — so a
+    deleted or cross-tenant row the list already showed is openable here.
+    Soft-delete and tenant mismatches are therefore not hard-stopped before that
+    adapter; share tokens keep rejecting deleted rows in ``token_matches_session``.
+    """
+    if session is None:
         raise UnAuthorizedError()
     if token_matches_session(share_link, session):
         return
     if login_user is None:
         raise UnAuthorizedError()
     tenant_id = get_current_tenant_id() or login_user.tenant_id
-    if session.tenant_id != tenant_id:
-        raise UnAuthorizedError()
     subject = SessionSubject.natural_person(tenant_id=tenant_id, user_id=login_user.user_id)
     if subject.matches(session):
         return

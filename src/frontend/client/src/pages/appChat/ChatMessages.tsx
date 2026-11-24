@@ -188,6 +188,7 @@ export default function ChatMessages({
                   message={message}
                   contentRef={contentRef}
                   readOnly={Boolean(readOnly)}
+                  hideFeedback={isGuestMode}
                   onOpenCitationPanel={onOpenCitationPanel}
                   activeCitationMessageId={activeCitationMessageId}
                   memoryEnabled={memoryEnabled}

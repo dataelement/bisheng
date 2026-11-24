@@ -75,22 +75,42 @@ class QaRecallService:
         source_tenants = get_visible_tenant_ids() or frozenset({tenant_id})
         id_to_file = {file.id: file for file in files if file.tenant_id in source_tenants}
         allowed = {}
-        # Authorize all resource content before exposing bbox, name, id, or links.
+        denied = set()
+        # Authorize before exposing bbox, name, id, or links. Denied files stay in
+        # the payload with right=False so the UI can show a permission tip instead
+        # of an empty source panel.
         for file_id, file in id_to_file.items():
             try:
                 await require_business_action(
                     user, resource_type="knowledge_file", resource_id=file_id, action="download"
                 )
             except UnAuthorizedError:
+                denied.add(file_id)
                 continue
             allowed[file_id] = file
         result = []
         keywords = keys.split(";") if keys else []
         signed = {}
         for chunk in chunks:
-            file = allowed.get(chunk.file_id)
             metadata = json.loads(chunk.meta_data) if chunk.meta_data else {}
-            if file is None or not metadata.get("right", True):
+            if not metadata.get("right", True):
+                continue
+            file = allowed.get(chunk.file_id)
+            if file is None:
+                if chunk.file_id not in denied and chunk.file_id not in id_to_file:
+                    continue
+                row = json.loads(metadata["bbox"]) if metadata.get("bbox") else {}
+                denied_name = getattr(id_to_file.get(chunk.file_id), "file_name", None) or "masked"
+                row.update(
+                    right=False,
+                    preview_url="",
+                    original_url="",
+                    source=denied_name,
+                    score=round(match_score(chunk.chunk, keywords), 2) if keywords else 0,
+                    file_id=chunk.file_id,
+                    parse_type=getattr(id_to_file.get(chunk.file_id), "parse_type", None),
+                )
+                result.append(row)
                 continue
             if file.id not in signed:
                 signed[file.id] = await run_in_threadpool(KnowledgeService.get_file_share_url, file=file)

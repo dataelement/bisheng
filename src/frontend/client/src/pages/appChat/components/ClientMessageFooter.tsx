@@ -17,6 +17,8 @@ interface ClientMessageFooterProps {
     message: ChatMessage;
     contentRef: RefObject<HTMLDivElement>;
     readOnly: boolean;
+    /** Guest/public links have no natural-person owner for /liked; hide thumbs only. */
+    hideFeedback?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
     /** F132: memory notice (what the answer remembered) — signed-in assistant chats only (never workflow). */
@@ -36,7 +38,7 @@ function AppMemoryNotice({ chatId, messageId, live }: { chatId: string; messageI
 }
 
 /** Resource and business operations remain in the client boundary. */
-export function ClientMessageFooter({ message, contentRef, readOnly, onOpenCitationPanel, activeCitationMessageId, memoryEnabled = false }: ClientMessageFooterProps) {
+export function ClientMessageFooter({ message, contentRef, readOnly, hideFeedback = false, onOpenCitationPanel, activeCitationMessageId, memoryEnabled = false }: ClientMessageFooterProps) {
     const localize = useLocalize();
     const raw = message.raw as unknown as ChatMessageType;
     const { conversationId = '' } = useParams();
@@ -51,7 +53,7 @@ export function ClientMessageFooter({ message, contentRef, readOnly, onOpenCitat
             onDesktopOpen={onOpenCitationPanel} buttonClassName="ml-4" />;
     const buttons = <>
         {(readOnly || message.kind !== 'answer' || !id) && <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"><CopyMessageAction label={localize('com_ui_copy')} copiedLabel={localize('com_ui_copied')} onCopy={() => copyText(contentRef.current ?? message.text)} /></div>}
-        {!readOnly && id && message.kind === 'answer' && <MessageButtons id={raw.id ?? id} data={raw.liked} text={message.text} onCopy={() => copyText(contentRef.current ?? message.text)}>
+        {!readOnly && id && message.kind === 'answer' && <MessageButtons id={raw.id ?? id} data={raw.liked} text={message.text} hideFeedback={hideFeedback} onCopy={() => copyText(contentRef.current ?? message.text)}>
             {raw.create_time && <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(raw.create_time, localize('shared:app_chat.timestamp_format'))}</span>}
             {conversationId && <ExportSelectionButton chatId={conversationId} messageId={id} />}
         </MessageButtons>}

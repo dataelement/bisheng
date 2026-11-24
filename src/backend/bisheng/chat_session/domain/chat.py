@@ -386,10 +386,12 @@ class ChatSessionService:
         flow_ids: list = []
         user_ids: list = []
 
+        from bisheng.utils.async_utils import run_async_safe
+
         if task_id:
             from bisheng.chat_session.domain.services.mark_read_authorization import require_mark_task_reader
 
-            task = require_mark_task_reader(task_id, login_user)
+            task = run_async_safe(require_mark_task_reader(task_id, login_user))
             group_flow_ids = [value.strip() for value in task.app_id.split(",") if value.strip()]
             if not group_flow_ids:
                 return PageList(list=[], total=0)
@@ -417,7 +419,6 @@ class ChatSessionService:
 
         res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids, include_delete=False)
         from bisheng.chat_session.domain.services.session_read_authorization import require_session_read
-        from bisheng.utils.async_utils import run_async_safe
 
         authorized = []
         for session in res:

@@ -81,3 +81,48 @@ async def test_typed_share_is_bound_to_actual_chat_and_tenant():
         with pytest.raises(UnAuthorizedError):
             await require_session_read(session, None, share)
         setattr(share, field, original)
+
+
+async def test_deleted_session_still_asks_the_list_scope(monkeypatch):
+    """Soft-deleted rows the audit list already showed must reach the same gate."""
+    from bisheng.chat_session.domain.services import session_read_authorization as policy
+
+    audit = AsyncMock()
+    user = actor()
+    monkeypatch.setattr(policy.AuditLogService, "assert_session_in_audit_scope", audit)
+    session = SimpleNamespace(
+        chat_id="chat", flow_id="app", tenant_id=7, user_id=22, api_subject_type=None, is_delete=True
+    )
+    await policy.require_session_read(session, user)
+    audit.assert_awaited_once_with(user, "chat", app_id="app")
+
+
+async def test_cross_tenant_session_still_asks_the_list_scope(monkeypatch):
+    """Global-super list rows must not die on a tenant hard-stop before the list gate."""
+    from bisheng.chat_session.domain.services import session_read_authorization as policy
+
+    audit = AsyncMock()
+    user = actor()
+    monkeypatch.setattr(policy.AuditLogService, "assert_session_in_audit_scope", audit)
+    monkeypatch.setattr(policy, "get_current_tenant_id", lambda: 1)
+    session = SimpleNamespace(
+        chat_id="chat", flow_id="app", tenant_id=2, user_id=22, api_subject_type=None, is_delete=False
+    )
+    await policy.require_session_read(session, user)
+    audit.assert_awaited_once_with(user, "chat", app_id="app")
+
+
+async def test_owner_still_cannot_read_own_deleted_session_without_audit(monkeypatch):
+    import pytest
+
+    from bisheng.chat_session.domain.services import session_read_authorization as policy
+
+    audit = AsyncMock(side_effect=UnAuthorizedError())
+    monkeypatch.setattr(policy.AuditLogService, "assert_session_in_audit_scope", audit)
+    monkeypatch.setattr(policy, "get_current_tenant_id", lambda: 7)
+    session = SimpleNamespace(
+        chat_id="chat", flow_id="app", tenant_id=7, user_id=11, api_subject_type=None, is_delete=True
+    )
+    with pytest.raises(UnAuthorizedError):
+        await policy.require_session_read(session, actor())
+    audit.assert_awaited_once()

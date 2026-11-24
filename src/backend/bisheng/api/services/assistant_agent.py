@@ -398,20 +398,18 @@ class AssistantAgent(AssistantUtils):
             }
             link_knowledge_ids = [item for item in link_knowledge_ids if item in type_by_id]
 
-            # OFF delegates the author's current entitlement, never an unchecked
-            # collection id. ON uses the runtime user's entitlement instead.
-            identity_user = await abuild_scoped_login_user(
-                self.invoke_user_id if self.assistant.knowledge_auth else self.assistant.user_id,
-                self.assistant.tenant_id,
-            )
-            allowed_kb_ids = await KnowledgeRag.afilter_usable_knowledge_ids(
-                identity_user,
-                [
-                    knowledge_id
-                    for knowledge_id in link_knowledge_ids
-                    if type_by_id.get(knowledge_id) != KnowledgeTypeEnum.SPACE.value
-                ],
-            )
+            # ON: filter by the runtime user's entitlement. OFF: no permission
+            # check — every tenant-visible binding is usable (product alignment).
+            ordinary_ids = [
+                knowledge_id
+                for knowledge_id in link_knowledge_ids
+                if type_by_id.get(knowledge_id) != KnowledgeTypeEnum.SPACE.value
+            ]
+            if self.assistant.knowledge_auth:
+                identity_user = await abuild_scoped_login_user(self.invoke_user_id, self.assistant.tenant_id)
+                allowed_kb_ids = await KnowledgeRag.afilter_usable_knowledge_ids(identity_user, ordinary_ids)
+            else:
+                allowed_kb_ids = set(ordinary_ids)
 
             for knowledge_id in link_knowledge_ids:
                 if type_by_id.get(knowledge_id) == KnowledgeTypeEnum.SPACE.value:
@@ -434,18 +432,17 @@ class AssistantAgent(AssistantUtils):
                     )
                     tools.append(knowledge_tool)
         if space_ids:
-            # One tool over all selected spaces; identity by the 用户知识库权限校验 toggle
-            # (runtime user ON / assistant creator OFF).
+            # One tool over all selected spaces. ON → runtime user file filter;
+            # OFF → no file permission filter (product alignment).
             from bisheng.knowledge.domain.services.space_flow_retrieval import build_space_knowledge_tool
 
-            identity_user_id = self.invoke_user_id if self.assistant.knowledge_auth else self.assistant.user_id
             tools.append(
                 build_space_knowledge_tool(
                     name="knowledge_space_retriever",
                     description="在知识空间中检索与查询相关的文档内容。",
                     llm=self.llm,
                     space_ids=space_ids,
-                    identity_user_id=identity_user_id,
+                    identity_user_id=self.invoke_user_id if self.assistant.knowledge_auth else None,
                     tenant_id=self.assistant.tenant_id,
                     max_content=self.knowledge_retriever.get("max_content", 15000),
                     access_scope="per_user" if self.assistant.knowledge_auth else "shared",

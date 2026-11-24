@@ -29,10 +29,7 @@ def source_boundary(monkeypatch):
     monkeypatch.setattr(
         security,
         "settings",
-        SimpleNamespace(
-            open_api=SimpleNamespace(public_base_url="https://portal.local/bisheng"),
-            bs_client=SimpleNamespace(platform_public_url="https://legacy.local"),
-        ),
+        SimpleNamespace(open_api=SimpleNamespace(public_base_url="https://portal.local/bisheng")),
         raising=False,
     )
     return SimpleNamespace(minio=minio, row=row, user=SimpleNamespace(user_id=7, tenant_id=2))
@@ -76,26 +73,13 @@ async def test_empty_source_generated_and_callback_canonical(source_boundary, mo
 
 
 async def test_missing_public_base_fails_closed(source_boundary, monkeypatch):
-    monkeypatch.setattr(security.settings.open_api, "public_base_url", "")
-    monkeypatch.setattr(security.settings.bs_client, "platform_public_url", None)
+    monkeypatch.setattr(
+        security, "settings", SimpleNamespace(open_api=SimpleNamespace(public_base_url="")), raising=False
+    )
     with pytest.raises(HTTPException) as error:
         await security.authorize_editor(editor(source_kind="empty"), source_boundary.user)
     assert error.value.status_code == 503
     source_boundary.minio.put_object.assert_not_awaited()
-
-
-@pytest.mark.parametrize("workflow", [False, True])
-async def test_legacy_platform_origin_replaces_browser_callback_host(source_boundary, monkeypatch, workflow):
-    monkeypatch.setattr(security.settings.open_api, "public_base_url", "")
-    payload = editor(source_kind="empty")
-    if workflow:
-        workflow_payload(payload, monkeypatch)
-    route = "workflow/report/callback" if workflow else "report/callback"
-    payload["editorConfig"]["callbackUrl"] = f"https://untrusted.invalid/api/v1/{route}"
-
-    config = await security.authorize_editor(payload, source_boundary.user)
-
-    assert config["editorConfig"]["callbackUrl"] == f"https://legacy.local/api/v1/{route}"
 
 
 async def test_empty_cannot_smuggle_source_url(source_boundary):

@@ -15,7 +15,7 @@ from bisheng.tool.domain.schemas import TestToolReq
 from bisheng.tool.domain.services.egress import map_tool_egress_error
 from bisheng.tool.domain.services.openapi import OpenApiSchema
 from bisheng.tool.domain.services.sandbox_conf_service import SandboxConfService
-from bisheng.tool.domain.services.test_openapi import TestOpenApiTools, run_saved_openapi_test
+from bisheng.tool.domain.services.test_openapi import TestOpenApiTools
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng.tool.domain.services.web_search import SettingsWrite
 from bisheng.utils import get_request_ip
@@ -180,19 +180,6 @@ async def tool_run(*, login_user: UserPayload = Depends(UserPayload.get_login_us
     except (DestinationDenied, RequestFailed, RequestTimeout, ResponseTooLarge) as exc:
         raise map_tool_egress_error(exc) from None
     return resp_200(data=resp)
-
-
-@router.post("/{tool_type_id}/operations/{operation_id}/test")
-async def saved_tool_run(
-    tool_type_id: int,
-    operation_id: int,
-    request_params: dict[str, Any] = Body(..., embed=True),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-):
-    if not login_user.is_global_super:
-        raise UnAuthorizedError()
-    result = await run_saved_openapi_test(login_user, tool_type_id, operation_id, request_params)
-    return resp_200(data=result)
 
 
 @router.post("/mcp/test")

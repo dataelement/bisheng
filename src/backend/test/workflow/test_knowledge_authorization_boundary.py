@@ -6,8 +6,13 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 
-@pytest.mark.parametrize("toggle,expected_user", [(True, 7), (False, 22)])
-def test_rag_filters_references_before_constructing_vector_clients(monkeypatch, toggle, expected_user):
+@pytest.mark.parametrize(
+    "toggle,expected_user,check_permission",
+    [(True, 7, True), (False, 22, False)],
+)
+def test_rag_filters_references_before_constructing_vector_clients(
+    monkeypatch, toggle, expected_user, check_permission
+):
     from bisheng.knowledge.domain.services import workflow_knowledge_authorization as auth
     from bisheng.workflow.common.knowledge import RagUtils
 
@@ -28,7 +33,12 @@ def test_rag_filters_references_before_constructing_vector_clients(monkeypatch, 
     vector = Mock(return_value={})
     monkeypatch.setattr("bisheng.workflow.common.knowledge.KnowledgeRag.get_multi_knowledge_vectorstore_sync", vector)
     node.init_knowledge_retriever()
-    allowed.assert_called_once_with(identity_user_id=expected_user, tenant_id=1, knowledge_ids=[11, 99])
+    allowed.assert_called_once_with(
+        identity_user_id=expected_user,
+        tenant_id=1,
+        knowledge_ids=[11, 99],
+        check_permission=check_permission,
+    )
     assert vector.call_args.kwargs["knowledge_ids"] == [11]
     node._knowledge_vector_list = {99: {"knowledge": object()}}
     allowed.return_value = []
@@ -78,6 +88,10 @@ async def test_authority_helper_never_returns_unpermitted_ids(monkeypatch, ident
     try:
         result = await auth.aauthorized_knowledge_ids(identity_user_id=7, tenant_id=1, knowledge_ids=[11, 99])
         assert result == ([] if identity is None else [11])
+        open_result = await auth.aauthorized_knowledge_ids(
+            identity_user_id=7, tenant_id=1, knowledge_ids=[11, 99], check_permission=False
+        )
+        assert open_result == [11, 99]
     finally:
         current_tenant_id.reset(token)
 
