@@ -41,7 +41,8 @@ _EDITOR_FIELDS = {
 
 
 def _public_base() -> str:
-    base = settings.open_api.public_base_url
+    # Older deployments may already declare the platform origin for BS Client.
+    base = settings.open_api.public_base_url or settings.bs_client.platform_public_url
     if not isinstance(base, str) or not base:
         raise HTTPException(503, "Configure open_api.public_base_url for the document server")
     parsed = urlsplit(base)
