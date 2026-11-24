@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from bisheng.common.errcode.sandbox import SandboxConfigurationError, SandboxUnreachableError
+from bisheng.common.errcode.sandbox import SandboxUnreachableError
 from bisheng.core.config.settings import SandboxConf
 from bisheng_langchain.gpts.tools.code_interpreter.factory import build_code_executor
 
@@ -66,6 +66,5 @@ def test_local_and_e2b_do_not_read_sandbox_conf(monkeypatch: pytest.MonkeyPatch)
         "bisheng_langchain.gpts.tools.code_interpreter.factory.load_sandbox_conf",
         boom,
     )
-    with pytest.raises(SandboxConfigurationError):
-        build_code_executor("local")
+    build_code_executor("local")
     build_code_executor("e2b", minio={}, api_key="k")
