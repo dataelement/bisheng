@@ -41,7 +41,8 @@ _EDITOR_FIELDS = {
 
 
 def _public_base() -> str:
-    base = settings.open_api.public_base_url
+    # Older deployments may already declare the platform origin for BS Client.
+    base = settings.open_api.public_base_url or settings.bs_client.platform_public_url
     if not isinstance(base, str) or not base:
         raise HTTPException(503, "Configure open_api.public_base_url for the document server")
     parsed = urlsplit(base)
@@ -103,7 +104,7 @@ def verify_callback(data: dict, secret: str, authorization: str | None = None) -
                 if json.dumps(signed_body, sort_keys=True) != canonical_body:
                     return None
         if (
-            type(body.get("status")) is not int  # noqa: E721  # exact type, bool must not pass as int
+            type(body.get("status")) is not int  # exact type, bool must not pass as int
             or not isinstance(body.get("key"), str)
             or not _KEY.fullmatch(body["key"])
         ):
@@ -220,7 +221,7 @@ async def _canonical_source(payload: dict, login_user, object_name: str | None) 
 async def authorize_editor(payload: dict, login_user) -> dict:
     key, url, callback_path = _validate_editor_shape(payload)
     tenant_id = login_user.tenant_id
-    if type(tenant_id) is not int or tenant_id <= 0:  # noqa: E721  # exact type, bool must not pass as int
+    if type(tenant_id) is not int or tenant_id <= 0:  # exact type, bool must not pass as int
         raise HTTPException(403, "Report editor access denied")
     with tenant_execution_scope(tenant_id):
         if callback_path == "/api/v1/report/callback":
@@ -266,7 +267,9 @@ async def resolve_callback_report(key: str):
     grant = await redis.aget(_grant_key(key))
     if not isinstance(grant, dict) or grant.get("key") != key:
         return None
-    if any(type(grant.get(field)) is not int or grant[field] <= 0 for field in ("tenant_id", "report_id", "user_id")):  # noqa: E721  # exact type, bool must not pass as int
+    if any(
+        type(grant.get(field)) is not int or grant[field] <= 0 for field in ("tenant_id", "report_id", "user_id")
+    ):  # exact type, bool must not pass as int
         return None
     with tenant_execution_scope(grant["tenant_id"]):
         row = ReportRepository.find_by_key(key)

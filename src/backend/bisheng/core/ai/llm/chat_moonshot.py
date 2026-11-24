@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from time import monotonic
 from typing import Any
 
 from langchain_core.callbacks import (
@@ -34,6 +36,20 @@ class ChatMoonshot(ChatOpenAICompatible):
     """
 
     enable_web_search: bool = Field(default=False)
+    max_tool_rounds: int = Field(default=8, ge=1, le=32)
+    tool_loop_timeout: float = Field(default=60, gt=0, le=300)
+
+    @staticmethod
+    def _needs_continuation(result: ChatResult) -> bool:
+        if not result.generations:
+            raise RuntimeError("Moonshot returned no generations")
+        generation = result.generations[0]
+        reason = (generation.generation_info or {}).get("finish_reason")
+        if reason in {"stop", "length", "content_filter"}:
+            return False
+        if reason != "tool_calls" or not generation.message.tool_calls:
+            raise RuntimeError("Moonshot returned a non-progressing or unknown finish state")
+        return True
 
     def _get_request_payload(
         self,
@@ -83,14 +99,22 @@ class ChatMoonshot(ChatOpenAICompatible):
         if not self.enable_web_search:
             return super()._generate(messages, stop, run_manager, **kwargs)
         messages = list(messages)
-        result = None
-        finish_reason = None
-        while finish_reason is None or finish_reason == "tool_calls":
-            result = super()._generate(messages, stop, run_manager, **kwargs)
-            finish_reason = result.generations[0].generation_info.get("finish_reason")
+        deadline = monotonic() + self.tool_loop_timeout
+        for _ in range(self.max_tool_rounds):
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Moonshot continuation deadline exceeded")
+            # Also cap SDK retries: they must not multiply the local call budget.
+            root_client = self.root_client.with_options(timeout=remaining, max_retries=0)
+            client = self.model_copy(update={"client": root_client.chat.completions, "root_client": root_client})
+            result = super(ChatMoonshot, client)._generate(messages, stop, run_manager, **kwargs)
+            if monotonic() >= deadline:
+                raise TimeoutError("Moonshot continuation deadline exceeded")
+            if not self._needs_continuation(result):
+                return result
             if not self._feed_web_search_results(messages, result):
-                break
-        return result
+                return result  # External tool calls remain the caller's responsibility.
+        raise RuntimeError("Moonshot continuation exceeded max_tool_rounds")
 
     async def _agenerate(
         self,
@@ -102,11 +126,21 @@ class ChatMoonshot(ChatOpenAICompatible):
         if not self.enable_web_search:
             return await super()._agenerate(messages, stop, run_manager, **kwargs)
         messages = list(messages)
-        result = None
-        finish_reason = None
-        while finish_reason is None or finish_reason == "tool_calls":
-            result = await super()._agenerate(messages, stop, run_manager, **kwargs)
-            finish_reason = result.generations[0].generation_info.get("finish_reason")
-            if not self._feed_web_search_results(messages, result):
-                break
-        return result
+        deadline = monotonic() + self.tool_loop_timeout
+        async with asyncio.timeout(self.tool_loop_timeout):
+            for _ in range(self.max_tool_rounds):
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Moonshot continuation deadline exceeded")
+                root_client = self.root_async_client.with_options(timeout=remaining, max_retries=0)
+                client = self.model_copy(
+                    update={"async_client": root_client.chat.completions, "root_async_client": root_client}
+                )
+                result = await super(ChatMoonshot, client)._agenerate(messages, stop, run_manager, **kwargs)
+                if monotonic() >= deadline:
+                    raise TimeoutError("Moonshot continuation deadline exceeded")
+                if not self._needs_continuation(result):
+                    return result
+                if not self._feed_web_search_results(messages, result):
+                    return result
+        raise RuntimeError("Moonshot continuation exceeded max_tool_rounds")

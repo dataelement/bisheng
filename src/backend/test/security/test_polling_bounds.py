@@ -1,4 +1,4 @@
-"""Offline resource bounds for CustomKV polling."""
+"""Offline resource bounds for CustomKV polling and Moonshot continuation."""
 
 from types import SimpleNamespace
 
@@ -30,24 +30,75 @@ def result(reason="tool_calls", tools=True):
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
-async def test_moonshot_async_and_sync_success_preserve_input(monkeypatch, asynchronous):
+async def test_moonshot_perpetual_tool_calls_stop_locally(monkeypatch, asynchronous):
     calls = []
 
-    def respond(*args, **kwargs):
+    def response(*args, **kwargs):
         calls.append(1)
-        return result() if len(calls) == 1 else result("stop", False)
+        if len(calls) > 10:
+            raise SafetyAbort()
+        return result()
 
-    async def arespond(*args, **kwargs):
-        return respond(*args, **kwargs)
+    async def aresponse(*args, **kwargs):
+        return response(*args, **kwargs)
 
-    monkeypatch.setattr(ChatOpenAI, "_generate", respond)
-    monkeypatch.setattr(ChatOpenAI, "_agenerate", arespond)
+    monkeypatch.setattr(ChatOpenAI, "_generate", response)
+    monkeypatch.setattr(ChatOpenAI, "_agenerate", aresponse)
+    model = ChatMoonshot(
+        model="synthetic", api_key="test", enable_web_search=True, max_tool_rounds=3, tool_loop_timeout=60
+    )
+    with pytest.raises((TimeoutError, RuntimeError)):
+        if asynchronous:
+            await model._agenerate([HumanMessage("synthetic")])
+        else:
+            model._generate([HumanMessage("synthetic")])
+    assert len(calls) <= 3
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("reason,tools", [(None, False), ("tool_calls", False), ("unknown", False)])
+async def test_moonshot_nonprogress_fails_without_retry(monkeypatch, asynchronous, reason, tools):
+    def response(*args, **kwargs):
+        return result(reason, tools)
+
+    async def aresponse(*args, **kwargs):
+        return response(*args, **kwargs)
+
+    monkeypatch.setattr(ChatOpenAI, "_generate", response)
+    monkeypatch.setattr(ChatOpenAI, "_agenerate", aresponse)
     model = ChatMoonshot(model="synthetic", api_key="test", enable_web_search=True)
-    messages = [HumanMessage("synthetic")]
-    final = await model._agenerate(messages) if asynchronous else model._generate(messages)
-    assert final.generations[0].generation_info["finish_reason"] == "stop"
-    assert len(messages) == 1
-    assert len(calls) == 2
+    with pytest.raises(RuntimeError, match="non-progressing"):
+        if asynchronous:
+            await model._agenerate([])
+        else:
+            model._generate([])
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_moonshot_total_deadline_not_reset_by_responses(monkeypatch, asynchronous):
+    from bisheng.core.ai.llm import chat_moonshot
+
+    clock = [0.0]
+    monkeypatch.setattr(chat_moonshot, "monotonic", lambda: clock[0])
+    calls = []
+
+    def response(*args, **kwargs):
+        calls.append(kwargs)
+        clock[0] += 5
+        return result()
+
+    async def aresponse(*args, **kwargs):
+        return response(*args, **kwargs)
+
+    monkeypatch.setattr(ChatOpenAI, "_generate", response)
+    monkeypatch.setattr(ChatOpenAI, "_agenerate", aresponse)
+    model = ChatMoonshot(model="synthetic", api_key="test", enable_web_search=True, tool_loop_timeout=4)
+    with pytest.raises(TimeoutError):
+        if asynchronous:
+            await model._agenerate([])
+        else:
+            model._generate([])
+    assert len(calls) == 1
 
 
 async def test_moonshot_cancellation_propagates(monkeypatch):
@@ -163,3 +214,32 @@ def test_customkv_rejects_unbounded_configuration(tmp_path, kwargs):
         custom_kv.CustomKVLoader(
             str(tmp_path / "unused"), "https://example.invalid", "test", "field", "s", "logic-job", **kwargs
         )
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_moonshot_async_and_sync_success_preserve_input(monkeypatch, asynchronous):
+    calls = []
+
+    def respond(*args, **kwargs):
+        calls.append(1)
+        return result() if len(calls) == 1 else result("stop", False)
+
+    async def arespond(*args, **kwargs):
+        return respond(*args, **kwargs)
+
+    monkeypatch.setattr(ChatOpenAI, "_generate", respond)
+    monkeypatch.setattr(ChatOpenAI, "_agenerate", arespond)
+    model = ChatMoonshot(model="synthetic", api_key="test", enable_web_search=True)
+    messages = [HumanMessage("synthetic")]
+    final = await model._agenerate(messages) if asynchronous else model._generate(messages)
+    assert final.generations[0].generation_info["finish_reason"] == "stop"
+    assert len(messages) == 1
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"max_tool_rounds": 0}, {"max_tool_rounds": 33}, {"tool_loop_timeout": 0}, {"tool_loop_timeout": 301}]
+)
+def test_moonshot_rejects_unbounded_configuration(kwargs):
+    with pytest.raises(ValueError):
+        ChatMoonshot(model="synthetic", api_key="test", **kwargs)
