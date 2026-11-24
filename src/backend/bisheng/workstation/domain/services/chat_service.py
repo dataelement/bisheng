@@ -18,6 +18,7 @@ from pydantic import field_validator as PydanticFieldValidator
 
 from bisheng.api.services import knowledge_imp
 from bisheng.chat_session.domain.chat import ChatSessionService
+from bisheng.chat_session.domain.schemas.user_message import serialize_user_question
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_handle_service import drop_web_citation_keys
@@ -86,7 +87,6 @@ from .daily_memory import (
     register_session,
 )
 from .workstation_service import WorkStationService
-
 
 # --------------------------------------------------------------------------- #
 # v2.5 Agent Mode Helper Functions
@@ -1173,7 +1173,7 @@ async def _agent_initialize_chat(
     memory_register: MemoryRegister | None = None,
 ):
     """Agent-mode init: creates/fetches the conversation and inserts the user's
-    question row in the NEW JSON format (`{"query": str, "files": [...]}`)
+    question row with its query, attachments and optional composer references
     under category='question', type='over'.
 
     Differences vs legacy initialize_chat:
@@ -1259,10 +1259,7 @@ async def _agent_initialize_chat(
             sender="User",
             files=json.dumps(data.files) if data.files else None,
             extra="{}",
-            message=json.dumps(
-                {"query": data.text or "", "files": data.files or []},
-                ensure_ascii=False,
-            ),
+            message=serialize_user_question(data.text, data.files, data.composer_references),
             category="question",
             source=0,
             sensitive_status=SensitiveStatus.VIOLATIONS.value if skip_llm else SensitiveStatus.PASS.value,

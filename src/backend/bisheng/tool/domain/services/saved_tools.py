@@ -41,7 +41,7 @@ class SavedToolService:
         if tool.is_preset != ToolPresetType.API.value:
             raise DshToolUnsupportedError()
         try:
-            # init_by_tool_id enforces the "use" permission before initialization.
+            # init_by_tool_id enforces the "visible" permission before initialization.
             executor = await ToolExecutor.init_by_tool_id(
                 tool=tool,
                 app_id=tool_key,

@@ -28,6 +28,7 @@ from bisheng.linsight import worker as linsight_worker
 from bisheng.linsight.domain import task_exec
 from bisheng.linsight.domain import utils as linsight_utils
 from bisheng.linsight.domain.services.run_event_stream import RunEventStream
+from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 from bisheng.workstation.domain.services import chat_service, direct_run, run_message_persist, run_send
 from bisheng.workstation.domain.services import run_lease as rl
 from bisheng.workstation.domain.services.direct_run import DirectRunner
@@ -138,7 +139,7 @@ class _Env:
         rows: list[Any] = []
 
         async def save(result, _message):
-            data = SimpleNamespace(text=text, files=None)
+            data = APIChatCompletion(clientTimestamp="t", model="m1", text=text)
             user = SimpleNamespace(user_id=USER)
             extra = run_message_persist.steer_extra(result.run_id, result.message_id, queued=True)
             row = await self.table.ainsert_one(run_send._question_row(data, user, CID, extra))

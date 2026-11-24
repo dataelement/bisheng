@@ -206,6 +206,7 @@ export function ChatSurfacePresentation({
                             isStreaming={isStreaming}
                             shareToken={shareToken}
                             knowledgeChatLayout
+                            showComposerAttachments
                             allowExport
                             stripCitationHandlesOnCopy
                             contentWidthClassName="dsh-chat-content"

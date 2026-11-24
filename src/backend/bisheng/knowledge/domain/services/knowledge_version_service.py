@@ -175,8 +175,9 @@ class KnowledgeVersionService:
         version = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
         if version is None:
             raise HTTPException(status_code=404, detail="version chain not found for this file")
-        doc, _ = await self._require_version(version, action="visible")
-        await self._require_chain(version.document_id, knowledge_id=doc.knowledge_id, action="visible")
+        # Authorize only the requested file. Hidden siblings stay in the chain but
+        # are omitted by KnowledgeVersionReadService (per-file visible filter).
+        await self._require_version(version, action="visible")
         try:
             return await self._reads().list_versions_for_file(knowledge_file_id)
         except SpaceFileNotFoundError as error:

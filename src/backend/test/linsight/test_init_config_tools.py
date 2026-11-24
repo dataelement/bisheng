@@ -130,9 +130,9 @@ async def test_init_linsight_tools_drops_legacy_local_file_tools():
     tools = await ToolServices.init_linsight_tools(root_path="/tmp/linsight-test")
     names = {t.name for t in tools}
 
-    assert not (
-        names & _LEGACY_LOCAL_FILE_TOOL_NAMES
-    ), f"legacy local_file tools must be removed, found: {names & _LEGACY_LOCAL_FILE_TOOL_NAMES}"
+    assert not (names & _LEGACY_LOCAL_FILE_TOOL_NAMES), (
+        f"legacy local_file tools must be removed, found: {names & _LEGACY_LOCAL_FILE_TOOL_NAMES}"
+    )
     # Knowledge retrieval is NOT provided by deepagents — it must stay.
     assert "search_knowledge_base" in names
 
@@ -314,8 +314,8 @@ async def test_initialization_failure_surfaces_before_model_execution(monkeypatc
 
 @pytest.mark.parametrize("executor_type", ["local", None, ""])
 @pytest.mark.parametrize("selected", [[], [CODE_TOOL_ID], [100, CODE_TOOL_ID]])
-async def test_local_executor_refused_before_model_execution(monkeypatch, tmp_path, executor_type, selected):
-    from bisheng.common.errcode.sandbox import SandboxConfigurationError
+async def test_local_executor_binds_task_workspace(monkeypatch, tmp_path, executor_type, selected):
+    from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
 
     extra = {"type": executor_type} if executor_type is not None else {}
     category = SimpleNamespace(id=6, tenant_id=7, extra=extra)
@@ -327,15 +327,21 @@ async def test_local_executor_refused_before_model_execution(monkeypatch, tmp_pa
     session = _session_with_tools()
     session.tools = [{"children": [{"id": tid} for tid in selected]}]
 
-    with pytest.raises(SandboxConfigurationError):
-        await LinsightWorkbenchImpl.init_linsight_config_tools(session, object(), True, str(tmp_path))
+    tools = await LinsightWorkbenchImpl.init_linsight_config_tools(session, object(), True, str(tmp_path))
 
     init_one.assert_awaited_once()
+    assert len(tools) == 1
+    assert isinstance(tools[0].executor, LocalExecutor)
+    assert tools[0].executor.local_sync_path == str(tmp_path)
+    assert tools[0].executor.workspace_prefix == "workspace/SV-1"
     assert init_one.await_args.kwargs["tool"].extra["config"] == {
         "local": {"local_sync_path": str(tmp_path), "workspace_prefix": "workspace/SV-1", "keep_run_dir": True}
     }
     assert category.extra == extra
-    init_many.assert_not_awaited()
+    if 100 in selected:
+        assert init_many.await_args.args[0] == [100]
+    else:
+        init_many.assert_not_awaited()
 
 
 async def test_local_workspace_binding_preserves_admin_options(monkeypatch, tmp_path):

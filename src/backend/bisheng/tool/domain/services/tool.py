@@ -35,7 +35,7 @@ from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     require_business_action,
 )
-from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.application.identity import is_current_tenant_administrator, resolve_permission_actor
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.linsight_knowledge import SearchKnowledgeBase
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, GptsToolsTypeRead
@@ -337,13 +337,18 @@ class ToolServices(BaseModel):
         return True
 
     async def update_tool_config(self, tool_type_id: int, extra: dict) -> bool:
-        if not self.login_user.is_global_super:
+        actor = await resolve_permission_actor(self.login_user)
+        tenant_id = get_current_tenant_id()
+        # Configuration is administrative; resource grants do not delegate it.
+        if not await is_current_tenant_administrator(self.login_user, actor=actor):
             raise UnAuthorizedError()
 
         # Get Tool Categories
         tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id)
         if not tool_type or tool_type.is_preset != ToolPresetType.PRESET.value:
             raise NotFoundError()
+        if tool_type.is_delete or tool_type.tenant_id != tenant_id:
+            raise UnAuthorizedError()
 
         if tool_type.extra is None:
             tool_type.extra = "{}"

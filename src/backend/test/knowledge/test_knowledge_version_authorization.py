@@ -298,18 +298,22 @@ async def test_visibility_does_not_authorize_write(version_case):
     case.svc.version_repo.update.assert_not_awaited()
 
 
-async def test_second_chain_file_is_independently_authorized(version_case):
+async def test_list_versions_authorizes_requested_file_not_hidden_siblings(version_case):
     case = version_case
     case.versions[31].document_id = 20
     case.docs[20].primary_version_id = 31
 
-    async def primary_only(user, *, resource_type, resource_id, action):
+    async def deny_file_100(user, *, resource_type, resource_id, action):
         if resource_type == "knowledge_file" and resource_id == 100:
             raise HTTPException(status_code=403)
 
-    case.permission.side_effect = primary_only
+    case.permission.side_effect = deny_file_100
+    # Visible current/sibling opens history; the read service filters hidden rows.
+    result = await case.svc.list_versions_for_file(101)
+    assert result.knowledge_id == 10
+    case.svc._version_read_service.list_versions_for_file.assert_awaited_once_with(101)
     with pytest.raises(HTTPException) as exc:
-        await case.svc.list_versions_for_file(101)
+        await case.svc.list_versions_for_file(100)
     assert exc.value.status_code == 403
 
 

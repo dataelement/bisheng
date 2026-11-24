@@ -1,8 +1,15 @@
 import { userContext } from "@/contexts/userContext"
-import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
+import {
+  getGrantablePermissionModelsApi,
+  getMyResourcePermissionsApi,
+  getResourcePermissionContextApi,
+  getResourcePermissionGrantsApi,
+  mutateResourceGrantsApi,
+} from "@/controllers/API/permission"
 import { getToolsApi } from "@/controllers/API/tools"
 import TabTools from "@/pages/BuildPage/tools"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import type { ReactNode } from "react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -12,7 +19,11 @@ vi.mock("@/controllers/API/tools", () => ({
 }))
 
 vi.mock("@/controllers/API/permission", () => ({
+  getGrantablePermissionModelsApi: vi.fn(),
   getMyResourcePermissionsApi: vi.fn(),
+  getResourcePermissionContextApi: vi.fn(),
+  getResourcePermissionGrantsApi: vi.fn(),
+  mutateResourceGrantsApi: vi.fn(),
 }))
 
 vi.mock("@/controllers/API/assistant", () => ({
@@ -59,10 +70,6 @@ vi.mock("@/components/bs-ui/accordion", () => ({
 
 
 
-vi.mock("@/components/bs-comp/permission/PermissionDialog", () => ({
-  PermissionDialog: () => <div data-testid="permission-dialog" />,
-}))
-
 vi.mock("@/pages/BuildPage/tools/EditTool", async () => {
   const React = await import("react")
   return {
@@ -84,11 +91,11 @@ vi.mock("@/pages/BuildPage/tools/ToolSet", async () => {
   }
 })
 
-function renderToolPage() {
+function renderToolPage(userId = 7) {
   return render(
     <MemoryRouter>
       <userContext.Provider value={{
-        user: { user_id: 7, role: "user", is_global_super: false },
+        user: { user_id: userId, role: "user", is_global_super: false },
         setUser: vi.fn(),
         savedComponents: [],
         addSavedComponent: vi.fn(),
@@ -142,5 +149,62 @@ describe("tool list lazy permissions", () => {
       expect(getMyResourcePermissionsApi).toHaveBeenCalledWith("tool", "10")
       expect(screen.getByLabelText("edit")).toBeInTheDocument()
     })
+  })
+
+  it("dismisses the grant dropdown on a blank click inside the tool permission dialog", async () => {
+    const viewer = { key: "viewer", name: "Viewer", level: 1 as const, active: true }
+    vi.mocked(getMyResourcePermissionsApi).mockResolvedValue({
+      mode: "CUSTOM", actions: ["manage_permission"], sources: [], roster_complete: false,
+    })
+    vi.mocked(getResourcePermissionContextApi).mockResolvedValue({
+      mode: "CUSTOM",
+      parent_type: null,
+      parent_id: null,
+      resource_version: 1,
+      catalog_release_id: 1,
+      projection_state: "READY",
+      can_manage_permission: true,
+    })
+    vi.mocked(getGrantablePermissionModelsApi).mockResolvedValue([
+      viewer, { key: "editor", name: "Editor", level: 2, active: true },
+    ])
+    vi.mocked(getResourcePermissionGrantsApi).mockResolvedValue({
+      data: [{
+        assignee_id: "42",
+        assignee_version: 1,
+        subject: { type: "user", id: "7", name: "Member" },
+        model: viewer,
+        source: { type: "DIRECT", include_children: false },
+        scope: "LOCAL",
+        inherited_from: null,
+        protected: false,
+        editable: true,
+      }],
+      page_size: 50,
+      has_more: false,
+      next_cursor: null,
+    })
+    const user = userEvent.setup()
+    renderToolPage(8)
+
+    await user.click(screen.getByText("tools.customTools"))
+    const toolName = await screen.findByText("API Tool")
+    await user.hover(toolName)
+    const permissionIcon = await waitFor(() => {
+      const icon = toolName.closest(".group")?.querySelector("svg.lucide-shield")
+      if (!icon) throw new Error("Tool permission action is not available")
+      return icon
+    })
+    await user.click(permissionIcon)
+    const dialog = await screen.findByRole("dialog", { name: "dialog.title - API Tool" })
+    const grant = await screen.findByRole("combobox", { name: "grant.model.42" })
+    await user.click(grant)
+    expect(grant).toHaveAttribute("aria-expanded", "true")
+
+    await user.click(dialog)
+
+    await waitFor(() => expect(grant).toHaveAttribute("aria-expanded", "false"))
+    expect(dialog).toBeInTheDocument()
+    expect(mutateResourceGrantsApi).not.toHaveBeenCalled()
   })
 })

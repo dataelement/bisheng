@@ -18,6 +18,14 @@ from bisheng.permission.domain.services.grant_source_service import (
 )
 
 
+@pytest.mark.parametrize("subject_id", ["None", "null", "UNDEFINED", " none "])
+def test_new_direct_user_sources_reject_serialized_missing_id(subject_id):
+    with pytest.raises(ValueError, match="real user"):
+        GrantSourceService().canonicalize_source(
+            source_id=1, subject_type="user", subject_id=subject_id, source_type="DIRECT"
+        )
+
+
 def _grant(
     grant_id: str,
     model_key: str,

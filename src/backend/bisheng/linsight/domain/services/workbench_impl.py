@@ -16,6 +16,7 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
+from bisheng.chat_session.domain.schemas.user_message import ComposerReference
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -276,6 +277,7 @@ class LinsightWorkbenchImpl:
         display_files: list[dict] | None = None,
         defer_ingest: bool = True,
         *,
+        display_references: list[ComposerReference] | None = None,
         session_subject: SessionSubject | None = None,
         api_meta: dict | None = None,
         telemetry_source: str = "platform",
@@ -294,6 +296,7 @@ class LinsightWorkbenchImpl:
                 ChatMessage so the uploaded attachments render after a refresh,
                 mirroring the daily-chat question envelope. ``None`` for the
                 legacy /linsight entry (it renders attachments its own way).
+            display_references: Resource references as displayed in the composer.
             defer_ingest: Park the raw file refs in ``pending_files`` and let the
                 worker ingest them (``ingest_pending_files``) instead of parsing
                 them here. Ingestion runs the full ETL — 12 PDFs measured at 19
@@ -443,6 +446,7 @@ class LinsightWorkbenchImpl:
                     **({"storage_partition": session_subject.storage_partition} if session_subject is not None else {}),
                 ),
                 session_version_id=svid,
+                composer_references=display_references,
             )
 
             return message_session, linsight_session_version

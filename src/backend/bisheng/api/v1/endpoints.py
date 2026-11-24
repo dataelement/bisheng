@@ -266,7 +266,7 @@ async def create_upload_file(
             raise HTTPException(status_code=422, detail="Invalid flow ID")
         # Runtime attachments require use; builder uploads may instead use edit.
         # The business adapter verifies the workflow's tenant and status first.
-        if not await check_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="use"):
+        if not await check_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="visible"):
             await require_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="edit")
         tenant_id = get_current_tenant_id()
         if tenant_id is None or tenant_id != login_user.tenant_id:

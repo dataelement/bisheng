@@ -133,7 +133,7 @@ def user():
 @pytest.fixture
 def allow_all(monkeypatch):
     async def _batch(user, *, resource_type, resource_ids, actions):
-        return {str(rid): frozenset({"use"}) for rid in resource_ids}
+        return {str(rid): frozenset({"visible"}) for rid in resource_ids}
 
     monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", _batch)
 

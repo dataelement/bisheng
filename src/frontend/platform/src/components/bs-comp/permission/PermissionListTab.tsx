@@ -19,6 +19,7 @@ import {
 import {
   LockKeyhole,
   Search,
+  ShieldCheck,
   Trash2,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -36,6 +37,7 @@ interface PermissionListTabProps {
   refreshKey?: number
   pageSize?: number
   fixedSubjectType?: SubjectType
+  systemPreset?: boolean
   onRosterChange?: (assignees: PermissionGrantAssignee[]) => void
   onMutationSuccess?: (result: MutateResourceGrantsResult) => void
 }
@@ -163,6 +165,7 @@ export function PermissionListTab({
   refreshKey = 0,
   pageSize = 50,
   fixedSubjectType = "user",
+  systemPreset = false,
   onRosterChange,
   onMutationSuccess,
 }: PermissionListTabProps) {
@@ -282,9 +285,17 @@ export function PermissionListTab({
     fixedSubjectType,
   ])
 
+  const isSystemPresetTool = systemPreset && resourceType === "tool"
   const visibleAssignees = useMemo(() => assignees.filter(
-    assignee => assignee.subject.type === fixedSubjectType,
-  ), [assignees, fixedSubjectType])
+    assignee => assignee.subject.type === fixedSubjectType && !(
+      isSystemPresetTool
+      && assignee.subject.type === "user"
+      && assignee.subject.id === "None"
+      && assignee.model.key === "owner"
+    ),
+  ), [assignees, fixedSubjectType, isSystemPresetTool])
+  const showSystemPreset = isSystemPresetTool && fixedSubjectType === "user"
+    && t("roster.systemPreset").toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase())
 
   const mutateAssignee = async (
     assignee: PermissionGrantAssignee,
@@ -383,6 +394,19 @@ export function PermissionListTab({
       )}
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+        {showSystemPreset && (
+          <article data-testid="permission-system-preset" className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3">
+            <ShieldCheck aria-hidden="true" className="size-8 shrink-0 text-[#86909C]" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm">{t("roster.systemPreset")}</p>
+              <p className="text-xs text-[#86909C]">{t("source.system")}</p>
+            </div>
+            <span className="inline-flex items-center gap-1 text-sm text-[#86909C]">
+              {t("roster.readOnly")}
+              <LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />
+            </span>
+          </article>
+        )}
         {visibleAssignees.map((assignee) => (
           <RosterRow
             key={assignee.assignee_id}
@@ -399,7 +423,7 @@ export function PermissionListTab({
             onRemove={handleRemove}
           />
         ))}
-        {visibleAssignees.length === 0 && (
+        {visibleAssignees.length === 0 && !showSystemPreset && (
           <p className="py-10 text-center text-sm text-muted-foreground">
             {searchQuery.trim()
               ? t("empty.searchResults")

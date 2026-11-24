@@ -85,13 +85,11 @@ async def test_actual_persisted_source_plan_job_and_item_ack_are_required(
                     step="copy_completed" if operation == "space_copy" and step == "move_source_cleaned" else step,
                 )
             )
-    if (
-        operation == "space_copy"
-        and count
-        and item_tenant == 101
-        and step in {"move_source_cleaned", "copy_input_ready"}
+    if operation == "space_copy" and (
+        state in {"succeeded", "failed", "partial_failed", "obsolete"}
+        or (count and item_tenant == 101 and step in {"move_source_cleaned", "copy_input_ready"})
     ):
-        allowed = True  # Independent copy input no longer needs the source index.
+        allowed = True  # Finished copies and independent inputs do not reserve the source.
     async with db.sessions() as session, session.begin():
         if allowed:
             await SourceMoveInputRepository().arequire_released(session, space_id=1)
@@ -119,3 +117,19 @@ async def test_deleted_failed_copy_target_releases_source_but_active_copy_still_
         await session.execute(sa.update(Job).where(Job.space_id == 2, Job.tenant_id == 101).values(state="running"))
         with pytest.raises(KnowledgeProcessingConflictError):
             await SourceMoveInputRepository().arequire_released(session, space_id=1)
+
+
+@pytest.mark.parametrize("state", ["succeeded", "failed", "partial_failed", "obsolete"])
+async def test_finished_copy_releases_source_and_destination_even_without_independent_inputs(db, state):
+    from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_repository import (
+        KnowledgeDeletionExecutionRepository,
+    )
+
+    await test_actual_persisted_source_plan_job_and_item_ack_are_required(
+        db, state, "failed", "pending", 101, 1, False, True, "space_copy"
+    )
+    async with db.sessions() as session, session.begin():
+        await SourceMoveInputRepository().arequire_released(session, space_id=1)
+        await session.run_sync(lambda sync: SourceMoveInputRepository().require_released(sync, space_id=1))
+        assert await SourceMoveInputRepository().ablocking_job_ids(session, space_id=1) == ()
+        await KnowledgeDeletionExecutionRepository().arequire_transfer_idle(session, space_id=2)

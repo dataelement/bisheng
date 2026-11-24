@@ -408,7 +408,7 @@ async def workflow_ws(
                 execution_user,
                 resource_type="workflow",
                 resource_id=workflow_id,
-                action="use",
+                action="visible",
             )
 
             async def _memory_register(session_chat_id: str) -> None:
@@ -613,8 +613,8 @@ async def read_flows(
         default=False, description="Whether to query the list of apps with administrative permissions"
     ),
     action: str = Query(
-        default="use",
-        pattern="^(visible|use)$",
+        default="visible",
+        pattern="^visible$",
         description="Concrete action required for non-managed app lists",
     ),
     cursor: str | None = Query(

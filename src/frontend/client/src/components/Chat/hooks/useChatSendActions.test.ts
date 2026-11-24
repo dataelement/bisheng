@@ -5,6 +5,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { useRunStore, type RunEvent } from '~/store/runStore';
 import { useChatSendActions, type UseChatSendActionsOptions } from './useChatSendActions';
+import type { SentComposerReference } from '../Input/composerReferences';
 
 const CID = 'c1';
 let entry = 0;
@@ -52,9 +53,10 @@ describe('handleSend and the invite quota (item 9)', () => {
 
     it('sends a new deep-research request the quota allows and clears the draft', async () => {
         const { result, sendMessage, allowInviteSend, setInputText } = setup();
-        await act(async () => { await result.current.handleSend('research this', [{ name: 'a.txt' }]); });
+        const composerReferences: SentComposerReference[] = [{ kind: 'skill', label: 'Report', offset: 0 }];
+        await act(async () => { await result.current.handleSend('research this', [{ name: 'a.txt' }], composerReferences); });
         expect(allowInviteSend).toHaveBeenCalledTimes(1);
-        expect(sendMessage).toHaveBeenCalledWith('research this', [{ name: 'a.txt' }], { taskMode: true });
+        expect(sendMessage).toHaveBeenCalledWith('research this', [{ name: 'a.txt' }], { taskMode: true, composerReferences });
         expect(setInputText).toHaveBeenCalledWith('');
     });
 

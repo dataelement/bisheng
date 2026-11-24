@@ -126,7 +126,7 @@ async def env(monkeypatch, tmp_path):
     from unittest.mock import AsyncMock
 
     async def permitted(_user, *, resource_ids, **kwargs):
-        return {str(skill_id): {"use", "visible"} for skill_id in resource_ids}
+        return {str(skill_id): {"visible"} for skill_id in resource_ids}
 
     monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", permitted)
     monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))

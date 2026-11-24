@@ -102,7 +102,7 @@ export default function FileViewPanne({ file }) {
     };
 
     return (
-        <div className="flex-1 bg-gray-100 rounded-md py-4 px-2 relative" onContextMenu={(e) => e.preventDefault()}>
+        <div className="min-w-0 flex-1 bg-gray-100 rounded-md py-4 px-2 relative" onContextMenu={(e) => e.preventDefault()}>
             <div className="h-full overflow-auto">{fileView()}</div>
             {/* chunk menu */}
             {showP && (

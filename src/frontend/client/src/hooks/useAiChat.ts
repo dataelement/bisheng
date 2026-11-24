@@ -32,6 +32,7 @@ import { useDesktopConversationActivity, useDesktopConversationRenamed } from "~
 import { runningConversationIds } from "~/components/Chat/runningConversations";
 import { bindProjectChatCreation, captureProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 import { useUnifiedRun } from "~/hooks/useUnifiedRun";
+import type { SentComposerReference } from "~/components/Chat/Input/composerReferences";
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
@@ -217,8 +218,12 @@ export default function useAiChat(
         bsConfig?.knowledgeBase?.enabled !== false,
     );
 
-    const { available: selectedOrgKbs, message: knowledgeAccessMessage, blocked: knowledgeAccessBlocked } =
-        useKnowledgeSpaceAccess(savedKnowledge, `chat:${conversationId}`, !shareToken);
+    const {
+        available: selectedOrgKbs,
+        message: knowledgeAccessMessage,
+        blocked: knowledgeAccessBlocked,
+        verifying: knowledgeAccessVerifying,
+    } = useKnowledgeSpaceAccess(savedKnowledge, `chat:${conversationId}`, !shareToken);
 
     const queryClient = useQueryClient();
 
@@ -427,7 +432,7 @@ export default function useAiChat(
     }, [setParsingMediaFor, setMessagesFor]);
 
     const sendMessage = useCallback(
-        async (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
+        async (text: string, files?: any[] | null, opts?: { taskMode?: boolean; composerReferences?: SentComposerReference[] }) => {
             // A share view only displays the conversation.
             if (shareToken || (!text.trim() && !(files?.length)) || isStreaming) return false;
             // The lease may take time. Keep this send's original project even if
@@ -435,7 +440,9 @@ export default function useAiChat(
             const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
             const turnMessages = messagesRef.current;
             if (knowledgeAccessBlocked) {
-                showToast({ message: knowledgeAccessMessage, status: "warning" });
+                if (!knowledgeAccessVerifying && knowledgeAccessMessage) {
+                    showToast({ message: knowledgeAccessMessage, status: "warning" });
+                }
                 return false;
             }
             if (opts?.taskMode && selectedOrgKbs.some(item => item.type === 'space' && item.tag)) {
@@ -515,6 +522,7 @@ export default function useAiChat(
 
             // Create user message
             const userMessageId = v4();
+            const composerReferences = opts?.composerReferences;
             const userMessage: ChatMessage = {
                 text: text.trim(),
                 sender: "User",
@@ -525,6 +533,7 @@ export default function useAiChat(
                 messageId: userMessageId,
                 error: false,
                 files: filesForDisplay,
+                ...(composerReferences?.length ? { composerReferences } : {}),
             };
 
             // Create placeholder response
@@ -560,8 +569,8 @@ export default function useAiChat(
                 .filter((kb) => kb.type === 'space')
                 .map((kb) => Number(kb.id));
             const payload = {
-                text: text.trim(),
-                clientTimestamp: new Date().toLocaleString("sv").replace(" ", "T"),
+                text: userMessage.text,
+                clientTimestamp: userMessage.clientTimestamp,
                 parentMessageId,
                 conversationId: currentConvoId,
                 messageId: userMessageId,
@@ -577,6 +586,7 @@ export default function useAiChat(
                 isContinued: false,
                 isTemporary: false,
                 files: cleanFiles,
+                ...(composerReferences?.length ? { composer_references: composerReferences } : {}),
                 // v2.5: present `tools` array → backend agent flow.
                 // Absent (null/undefined) → legacy flow. We always send the
                 // field when the user has toggled any tool on.
@@ -646,7 +656,7 @@ export default function useAiChat(
             }
             return true;
         },
-        [shareToken, knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, selectedAgentTools, dailyTaskSkills, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId, unified.isBusy, unified.send]
+        [shareToken, knowledgeAccessBlocked, knowledgeAccessMessage, knowledgeAccessVerifying, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, selectedAgentTools, dailyTaskSkills, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId, unified.isBusy, unified.send]
     );
 
     // --- Stop generating ---
@@ -719,6 +729,7 @@ export default function useAiChat(
 
         selectedOrgKbs,
         knowledgeAccessMessage,
+        knowledgeAccessVerifying,
         setSelectedOrgKbs,
 
         // Actions

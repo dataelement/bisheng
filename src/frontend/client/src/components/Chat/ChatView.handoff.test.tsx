@@ -1,5 +1,6 @@
 import React, { useCallback as mockUseCallback, useState as mockUseState } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { Toaster } from '@bisheng/ui';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import ChatView from './ChatView';
 import { parkChatAsk } from './chatAskHandoff';
@@ -10,11 +11,21 @@ const mockNoop = () => undefined;
 const mockConfig = { models: [{ id: '1', name: 'Alpha', displayName: 'Alpha' }] };
 let mockConfigReady = false;
 let mockStreaming = false;
+let mockKnowledgeAccessVerifying = false;
+const mockDeactivationCallbacks = new Set<() => void>();
 const mockLinsightMap = new Map();
 
 jest.mock('~/components/ApiRequestFailure', () => ({ ApiRequestFailure: () => null }));
 jest.mock('./attachments/collectChatAttachments', () => ({ collectChatAttachments: () => [] }));
-jest.mock('react-activation', () => ({ useActivate: () => undefined, useUnactivate: () => undefined }));
+jest.mock('react-activation', () => ({
+  useActivate: () => undefined,
+  useUnactivate: (callback: () => void) => {
+    jest.requireActual('react').useEffect(() => {
+      mockDeactivationCallbacks.add(callback);
+      return () => mockDeactivationCallbacks.delete(callback);
+    }, [callback]);
+  },
+}));
 jest.mock('recoil', () => ({
   useRecoilState: (key: string) => jest.requireActual('react').useState(
     key === 'task' ? false : key === 'model' ? { id: 1, name: 'Alpha' } : '',
@@ -58,6 +69,7 @@ jest.mock('~/hooks/useAiChat', () => ({
       return accepted;
     }, []);
     return { selectedOrgKbs, setSelectedOrgKbs, messages, sendMessage,
+      knowledgeAccessVerifying: mockKnowledgeAccessVerifying,
       conversationId: 'new', isStreaming: mockStreaming,
       isLoading: false, isClearing: false, stopGenerating: mockNoop };
   },
@@ -119,6 +131,28 @@ beforeEach(() => {
   localStorage.clear();
   mockConfigReady = false;
   mockStreaming = false;
+  mockKnowledgeAccessVerifying = false;
+});
+
+test('the permission loading toast closes after verification and when leaving the cached chat', async () => {
+  const label = 'knowledgeAccess.checking';
+  mockKnowledgeAccessVerifying = true;
+  const { container, rerender } = render(<><View /><Toaster /></>);
+  const notice = document.querySelector('[data-bisheng-notice]')!;
+  expect(notice.querySelector('svg')).toHaveClass('motion-safe:animate-spin');
+  expect(screen.getByRole('status')).toHaveTextContent(label);
+  expect(container).not.toHaveTextContent(label);
+
+  mockKnowledgeAccessVerifying = false;
+  rerender(<><View revision={1} /><Toaster /></>);
+  expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  await waitFor(() => expect(screen.queryByText(label)).not.toBeInTheDocument());
+
+  mockKnowledgeAccessVerifying = true;
+  rerender(<><View revision={2} /><Toaster /></>);
+  expect(screen.getByRole('status')).toHaveTextContent(label);
+  act(() => mockDeactivationCallbacks.forEach(callback => callback()));
+  await waitFor(() => expect(screen.queryByText(label)).not.toBeInTheDocument());
 });
 
 test('ordinary new chats still show the welcome page', () => {

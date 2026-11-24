@@ -3,7 +3,6 @@
 Callers keep their own result shape. This module only selects the backend.
 """
 
-from bisheng.common.errcode.sandbox import SandboxConfigurationError
 from bisheng.common.services.config_service import load_sandbox_conf
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import BaseExecutor
 from bisheng_langchain.gpts.tools.code_interpreter.container_executor import ContainerExecutor
@@ -37,13 +36,6 @@ def build_code_executor(kind: str, **kwargs) -> BaseExecutor:
     """kind: local | container | e2b. Unknown kinds raise and do not fall through."""
     if kind not in _KINDS:
         raise ValueError(f"Unknown code interpreter type: {kind!r}")
-    if kind == "local":
-        # UID-only processes still share the backend's mounts and network. A
-        # user-facing factory must not mistake them for an isolation sandbox.
-        # Direct LocalExecutor use is retained only for internal/test callers.
-        raise SandboxConfigurationError(
-            msg="Backend-host local execution is disabled. Configure an external container or e2b code interpreter."
-        )
     config = kwargs.pop("config", None) or {}
     backend = config.get(kind) if isinstance(config, dict) else None
     if isinstance(backend, dict):

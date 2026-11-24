@@ -89,6 +89,7 @@ async def submit_task_turn(
             submit_obj,
             login_user,
             display_files=data.files,
+            display_references=data.composer_references,
             session_subject=session_subject,
             api_meta=api_meta,
             telemetry_source=telemetry_source,

@@ -276,8 +276,6 @@ class KnowledgeDeletionApplication:
             if checksum != plan.source_revisions["root"]:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_root_changed")
             require_space_deletion_allowed(root, operation=plan.operation)
-            await self.execution.arequire_transfer_idle(active, space_id=plan.space_id)
-            await SourceMoveInputRepository().arequire_released(active, space_id=plan.space_id)
             facts_holder["facts"] = await self._collect(
                 active,
                 space_id=plan.space_id,
@@ -285,6 +283,13 @@ class KnowledgeDeletionApplication:
                 operation=plan.operation,
                 operation_id=operation_id,
             )
+            current_scope = facts_holder["facts"].scope
+            chosen = (
+                current_scope if manifest is not None else _selected(current_scope, tuple(values["valid_positions"]))
+            )
+            file_ids = tuple(row.id for row in chosen.resources) if plan.operation == "knowledge_file_delete" else None
+            await self.execution.arequire_transfer_idle(active, space_id=plan.space_id, file_ids=file_ids)
+            await SourceMoveInputRepository().arequire_released(active, space_id=plan.space_id, file_ids=file_ids)
             facts_holder["root"] = root
             return root
 

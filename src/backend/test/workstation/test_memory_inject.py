@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -50,6 +51,7 @@ def test_ac10_open_api_entry_passes_no_register():
 
 async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
     """AC-40/AC-10: registration runs after the conversation exists and before this turn's question row."""
+    from bisheng.workstation.domain.schemas.chat import APIChatCompletion
     from bisheng.workstation.domain.services import chat_service
 
     order = []
@@ -82,10 +84,12 @@ async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
     async def _register(chat_id):
         order.append(("register", chat_id))
 
-    data = SimpleNamespace(model="m1", conversationId=None, files=None, text="hi", project_id=None)
+    reference = {"kind": "skill", "label": "网页报告", "offset": 0}
+    data = APIChatCompletion(clientTimestamp="t", model="m1", text="hi", composer_references=[reference])
     out = await chat_service._agent_initialize_chat(data, login_user(), skip_llm=True, memory_register=_register)
     chat_id = out[1].chat_id
     assert order == [("register", chat_id), ("question", chat_id)]
+    assert json.loads(out[2].message) == {"query": "hi", "files": [], "composer_references": [reference]}
     # Without a register callable (open API, blocked input) nothing is registered.
     order.clear()
     await chat_service._agent_initialize_chat(data, login_user(), skip_llm=True)

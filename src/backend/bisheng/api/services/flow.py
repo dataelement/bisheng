@@ -277,12 +277,9 @@ class FlowService(BaseService):
 
                 await lock_root(session)
                 version = await WorkflowVersionRepository.aget_version(session, root, version_id, for_update=True)
-                await require_new_models(session, references)
-                for reference in references:
-                    if reference.target.target_type == TargetType.KNOWLEDGE_SPACE:
-                        await WorkflowVersionRepository.aget_knowledge_resource_type(
-                            session, int(reference.target.target_id)
-                        )
+                from bisheng.workflow.application.reference_validation import require_workflow_targets
+
+                await require_workflow_targets(session, references, version.data or {})
                 if validate_version is not None:
                     validate_version(root, version)
                 await WorkflowVersionRepository.aswitch_current(session, root, version_id)

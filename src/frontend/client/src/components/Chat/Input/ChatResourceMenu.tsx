@@ -132,7 +132,7 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
           {uploadLockReason && <span className="dsh-command-description">{uploadLockReason}</span>}
         </DropdownMenuItem>}
         {showKnowledgeSelection && <DropdownMenuItem aria-label={localize('dshChat.selectKnowledge')} onSelect={() => { setOpen(false); setSelecting(true); }} className="gap-2">
-          <Outlined.FolderClose size={16} /><span className="dsh-command-name">{localize('dshChat.selectKnowledge')}</span>
+          <Outlined.Book size={16} /><span className="dsh-command-name">{localize('dshChat.selectKnowledge')}</span>
           <span className="dsh-command-description">{localize('dshChat.knowledgeDescription')}</span>
         </DropdownMenuItem>}
         </>}

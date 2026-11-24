@@ -252,7 +252,7 @@ class _ContextRuntime(_Runtime):
         del resource_type
         # 'visible' is a base relation, not a registered action, so it never
         # appears in the effective action set.
-        return ("use", "edit", "delete", "manage_permission")
+        return ("edit", "delete", "manage_permission")
 
 
 class _OrdinaryContextRuntime(_ContextRuntime):
@@ -377,7 +377,7 @@ async def test_super_admin_my_permissions_returns_full_effective_actions() -> No
 
     # No grant rows exist for a super admin, so the grant-derived explanation
     # would be empty; the full effective action set is reported instead.
-    assert result["actions"] == ["use", "edit", "delete", "manage_permission"]
+    assert result["actions"] == ["edit", "delete", "manage_permission"]
     assert result["sources"] == []
     assert result["projection_degraded"] is False
     assert runtime.visible_checks == 0
@@ -411,7 +411,7 @@ async def test_super_admin_my_permissions_for_preset_tool_returns_full_actions()
         actor=actor,
     )
 
-    assert result["actions"] == ["use", "edit", "delete", "manage_permission"]
+    assert result["actions"] == ["edit", "delete", "manage_permission"]
     assert result["sources"] == []
     assert runtime.visible_checks == 0
 
@@ -457,7 +457,7 @@ class _DegradedPermissionRuntime(_ExplainRuntime):
         if action == "visible":
             self.visible_checks += 1
             return True
-        return action in {"use", "edit"}
+        return action == "edit"
 
     async def explain_permissions(self, **kwargs):
         del kwargs
@@ -483,7 +483,7 @@ async def test_degraded_my_permissions_uses_openfga_actions_without_staged_sourc
 
     assert result == {
         "mode": "CUSTOM",
-        "actions": ["use", "edit"],
+        "actions": ["edit"],
         "sources": [],
         "roster_complete": False,
         "projection_state": "FAILED_CLOSED",

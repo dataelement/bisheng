@@ -73,7 +73,7 @@ from bisheng.permission.domain.services.permission_action_service import (
     DATA_SCOPE_ALL,
     F048PermissionService,
     PermissionActor,
-    normalize_legacy_action,
+    validate_permission_action,
 )
 from bisheng.permission.domain.services.permission_explain_service import (
     PermissionExplainContext,
@@ -1611,11 +1611,11 @@ class F048PermissionRuntime:
         The owning business service must verify the target and reader first.
         This does not change the manage_permission gate on ordinary rosters.
         """
+        action = validate_permission_action(action)
         catalog = await self._runtime_catalog()
         models = self._models_for_target(catalog, target.resource_type)
         before = await self._state.source_read_stamp(target=target, models=models)
         mode = await self._require_current_target(target)
-        action = normalize_legacy_action(action)
         eligible = tuple(
             model
             for model in models

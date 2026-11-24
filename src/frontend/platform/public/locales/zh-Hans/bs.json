@@ -1133,7 +1133,6 @@
     "webSearch": {
       "reimportDeclarations": "请重新导入 OpenAPI 描述以查看和编辑完整参数声明。以下显示已保存的参数值。",
       "includeParameter": "包含参数",
-      "proofRequired": "请导入 OpenAPI 描述并选择接口后再保存或测试。",
       "requiredFields": "请填写接口、搜索词参数、必填映射和认证信息。",
       "custom": "自定义",
       "reload": "重新加载已保存配置",

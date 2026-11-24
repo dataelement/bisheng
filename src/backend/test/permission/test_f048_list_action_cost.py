@@ -52,6 +52,9 @@ def counted(monkeypatch):
 
     monkeypatch.setattr(business_authorization, "get_f048_resource_registry", get_registry)
     monkeypatch.setattr(business_authorization, "get_f048_runtime", get_runtime)
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(business_authorization, "_require_creation_ready", AsyncMock())
     return registry
 
 
@@ -72,10 +75,10 @@ async def test_cost_is_actions_times_candidates(monkeypatch, counted) -> None:
         object(),
         resource_type="knowledge_library",
         resource_ids=[str(index) for index in range(100)],
-        actions=("visible", "use", "edit", "delete", "manage_permission"),
+        actions=("visible", "edit", "delete", "manage_permission"),
     )
 
-    assert counted.resolutions == 500
+    assert counted.resolutions == 400
 
 
 async def test_filtering_on_one_action_costs_one_pass(monkeypatch, counted) -> None:
@@ -101,14 +104,14 @@ async def test_a_super_admin_resolves_nothing(monkeypatch, counted) -> None:
         object(),
         resource_type="knowledge_library",
         resource_ids=["1", "2", "3"],
-        actions=("visible", "use", "edit"),
+        actions=("visible", "edit"),
     )
 
     assert counted.resolutions == 0
     assert granted == {
-        "1": frozenset({"visible", "use", "edit"}),
-        "2": frozenset({"visible", "use", "edit"}),
-        "3": frozenset({"visible", "use", "edit"}),
+        "1": frozenset({"visible", "edit"}),
+        "2": frozenset({"visible", "edit"}),
+        "3": frozenset({"visible", "edit"}),
     }
 
 

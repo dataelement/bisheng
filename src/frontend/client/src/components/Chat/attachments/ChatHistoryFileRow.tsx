@@ -11,12 +11,14 @@ import {
     resolveChatAttachmentUrl,
 } from './chatAttachmentUtils';
 import { toChatArtifact } from './collectChatAttachments';
+import { FileAttachmentResourceCard } from './AttachmentResourceCards';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 
 interface ChatHistoryFileRowProps {
     onPreviewFile?: (file: ArtifactFile) => void;
     /** Lets a kept attachment open through a fresh link instead of its expiring upload link. */
     conversationId?: string;
+    variant?: 'resource';
     file: {
         file_id?: string;
         object_name?: string;
@@ -29,11 +31,12 @@ interface ChatHistoryFileRowProps {
         url?: string;
         path?: string;
         previewUrl?: string;
+        size?: number | string;
     };
 }
 
 /** Horizontal history attachment card with a shared workspace preview. */
-export function ChatHistoryFileRow({ file, conversationId, onPreviewFile }: ChatHistoryFileRowProps) {
+export function ChatHistoryFileRow({ file, conversationId, onPreviewFile, variant }: ChatHistoryFileRowProps) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const fileName = getChatAttachmentFileName(file);
     const fileType = getFileTypebyFileName(fileName);
@@ -63,14 +66,18 @@ export function ChatHistoryFileRow({ file, conversationId, onPreviewFile }: Chat
 
     return (
         <>
-            <button type="button" className="dsh-chat-attachment" onClick={handleClick} disabled={!isInteractive}
-                title={fileName}>
-                <span className="dsh-resource-icon"><TypeIcon size={28} /></span>
-                <span className="min-w-0 flex-1">
-                    <span className="dsh-resource-name block text-text-1">{fileName}</span>
-                    <span className="dsh-resource-meta block">{fileType.toUpperCase()}</span>
-                </span>
-            </button>
+            {variant === 'resource' ? (
+                <FileAttachmentResourceCard name={fileName} size={file.size} onClick={isInteractive ? handleClick : undefined} />
+            ) : (
+                <button type="button" className="dsh-chat-attachment" onClick={handleClick} disabled={!isInteractive}
+                    title={fileName}>
+                    <span className="dsh-resource-icon"><TypeIcon size={28} /></span>
+                    <span className="min-w-0 flex-1">
+                        <span className="dsh-resource-name block text-text-1">{fileName}</span>
+                        <span className="dsh-resource-meta block">{fileType.toUpperCase()}</span>
+                    </span>
+                </button>
+            )}
 
             {canPreview && previewUrl && (
                 <OGDialog open onOpenChange={(open) => !open && setPreviewUrl(null)}>

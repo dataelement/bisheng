@@ -38,7 +38,10 @@ import {
 import { cn } from "~/utils";
 import { CopyButton } from "~/components/Chat/MessageCopyButton";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
+import { UserMessageReferences } from "~/components/Chat/Messages/UserMessageReferences";
+import { InlineChatReference } from "~/components/Chat/InlineChatReference";
 import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
+import { MessageAttachments } from "~/components/Chat/attachments/MessageAttachments";
 import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
 import { renderGeneratedFileLink } from "~/components/Chat/attachments/GeneratedFileLink";
 import { isImageFileName } from "~/components/ui/icon/File/FileIcon";
@@ -103,6 +106,7 @@ interface AiMessageBubbleProps {
     setSiblingIdx?: (idx: number) => void;
     /** Knowledge space AI: gray user bubble, borderless assistant, 14px body, full width */
     knowledgeChatLayout?: boolean;
+    showComposerAttachments?: boolean;
     /** Show the export-session entry under assistant messages. Only the full
         homepage/task chat opts in; the lightweight knowledge/file/article docks
         and the share view leave it off. */
@@ -289,6 +293,7 @@ const AiMessageBubble = memo(
         siblingCount,
         setSiblingIdx,
         knowledgeChatLayout,
+        showComposerAttachments,
         allowExport,
         stripCitationHandlesOnCopy,
         allowFeedback = true,
@@ -306,6 +311,7 @@ const AiMessageBubble = memo(
                     siblingCount={siblingCount}
                     setSiblingIdx={setSiblingIdx}
                     knowledgeChatLayout={knowledgeChatLayout}
+                    showComposerAttachments={showComposerAttachments}
                     onPreviewFile={onPreviewFile}
                 />
             );
@@ -340,6 +346,7 @@ function UserBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    showComposerAttachments,
     onPreviewFile,
 }: {
     message: ChatMessage;
@@ -347,6 +354,7 @@ function UserBubble({
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    showComposerAttachments?: boolean;
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const { user } = useAuthContext();
@@ -362,10 +370,11 @@ function UserBubble({
         !!message.conversationId &&
         isActiveForChat(message.conversationId);
 
-    // Pull out the optional `:::tag {...}:::` chip prefix
+    const composerReferences = message.composerReferences;
+    // Knowledge chat history may still contain the older tag prefix.
     const { tag, bodyText } = useMemo(
-        () => parseUserMessageText(message.text || ""),
-        [message.text]
+        () => composerReferences?.length ? { tag: null, bodyText: message.text } : parseUserMessageText(message.text || ""),
+        [composerReferences, message.text]
     );
 
     return (
@@ -380,8 +389,9 @@ function UserBubble({
             {/* Mobile: cap the bubble so its left edge keeps a 40px gap from the
                 content area (long URLs were overflowing off the left edge). */}
             <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
-                {/* Uploaded files preserve order and open documents in the preview panel. */}
-                <UploadedFileList files={message.files || []} conversationId={message.conversationId} onPreviewFile={onPreviewFile} />
+                {showComposerAttachments
+                    ? <MessageAttachments files={message.files} conversationId={message.conversationId} onPreviewFile={onPreviewFile} />
+                    : <UploadedFileList files={message.files || []} conversationId={message.conversationId} onPreviewFile={onPreviewFile} />}
                 {/* min-w-0: without it this flex row's `min-width: auto` floors at
                     the URL's (unbreakable) min-content width, defeating the bubble's
                     max-width and letting long content overflow off the left edge. */}
@@ -411,23 +421,10 @@ function UserBubble({
                                     : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
                             )}
                         >
-                            {tag && (
-                                <span
-                                    className={cn(
-                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
-                                        knowledgeChatLayout
-                                            ? "text-[14px] font-normal leading-[22px]"
-                                            : "h-5 text-xs font-medium leading-none align-middle"
-                                    )}
-                                    style={{ backgroundColor: "rgb(var(--brand-500)/0.35)" }}
-                                    title={`#${tag.name}`}
-                                >
-                                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                                        #{tag.name}
-                                    </span>
-                                </span>
-                            )}
-                            {bodyText}
+                            {tag && <InlineChatReference kind="tag" label={`#${tag.name}`} />}
+                            {composerReferences?.length
+                                ? <UserMessageReferences text={bodyText} references={composerReferences} />
+                                : bodyText}
                         </div>
                     </div>
                 </div>

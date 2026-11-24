@@ -858,7 +858,6 @@
     "webSearch": {
       "reimportDeclarations": "Reimport the OpenAPI description to view and edit the full parameter declarations. Saved parameter values are shown below.",
       "includeParameter": "Include parameter",
-      "proofRequired": "Import the OpenAPI description and select the operation before saving or testing.",
       "requiredFields": "Complete the operation, query parameter, required mappings and authentication.",
       "custom": "Custom",
       "reload": "Reload saved settings",

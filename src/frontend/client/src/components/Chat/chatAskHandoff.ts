@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SelectedOrgKb } from '~/store/modeltype';
 import { useActivate } from 'react-activation';
+import type { SentComposerReference } from './Input/composerReferences';
 
 /**
  * Module page to main chat handoff. A question typed into a module's ask bar — a
@@ -52,7 +53,7 @@ interface UseChatAskHandoffParams {
   locationKey: string;
   selectedKbs: KbSelection[];
   setSelectedKbs: (next: KbSelection[]) => void;
-  sendMessage: (text: string) => boolean | Promise<boolean>;
+  sendMessage: (text: string, files?: null, options?: { composerReferences: SentComposerReference[] }) => boolean | Promise<boolean>;
   /** Daily mode, model catalog and the fresh chat state are ready. */
   ready: boolean;
   selectedModelId: number;
@@ -136,7 +137,17 @@ export function useChatAskHandoff({
       // Claimed before the (possibly async) send resolves so a re-run cannot send it
       // twice; a rejected send stays staged until the sender accepts it.
       submittedAskRef.current = ask;
-      void Promise.resolve(sendMessage(ask.text)).then((accepted) => {
+      let sent: boolean | Promise<boolean>;
+      if (ask.space) {
+        const composerReferences: SentComposerReference[] = [{ kind: 'space', label: ask.space.name || ask.space.id, offset: 0 }];
+        if (ask.space.tag) {
+          composerReferences.push({ kind: 'space', label: `#${ask.space.tag.name}`, offset: 0, is_tag: true });
+        }
+        sent = sendMessage(ask.text, null, { composerReferences });
+      } else {
+        sent = sendMessage(ask.text);
+      }
+      void Promise.resolve(sent).then((accepted) => {
         if (submittedAskRef.current !== ask) return;
         if (accepted) setMountedAsk(null);
         else submittedAskRef.current = null;

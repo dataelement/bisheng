@@ -227,7 +227,6 @@ class AssistantService(BaseService, AssistantUtils):
         """
         Get list of assistants
         """
-        action = "visible" if action == "use" else action
         assistant_ids = []
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
@@ -355,7 +354,6 @@ class AssistantService(BaseService, AssistantUtils):
         from bisheng.common.errcode.flow import AppInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
-        action = "visible" if action == "use" else action
         context = f"assistant|sort=update_time|action={action}"
         try:
             decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)

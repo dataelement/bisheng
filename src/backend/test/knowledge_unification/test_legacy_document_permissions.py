@@ -137,10 +137,12 @@ async def test_single_space_visible_and_rag_use_the_actual_adapter(real_targets)
     assert await KnowledgeRag.afilter_usable_knowledge_ids(c.user, [11, 12, 13]) == {11, 12, 13}
 
 
-async def test_legacy_use_output_key_is_retained_but_runtime_decision_is_visible(real_targets):
-    result = await KnowledgePermissionService.get_knowledge_action_map_async(real_targets.user, [13], ["use"])
-    assert result == {13: {"use"}}
-    assert all(item["relation"] != "use" for kind, items in real_targets.fga.calls if kind == "batch" for item in items)
+async def test_permission_output_and_runtime_decision_both_use_visibility(real_targets):
+    result = await KnowledgePermissionService.get_knowledge_action_map_async(real_targets.user, [13], ["visible"])
+    assert result == {13: {"visible"}}
+    assert all(
+        item["relation"] == "visible" for kind, items in real_targets.fga.calls if kind == "batch" for item in items
+    )
 
 
 async def test_actual_typed_actor_and_personal_scope_survive_type_partition(real_targets, monkeypatch):

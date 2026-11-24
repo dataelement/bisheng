@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
+    KnowledgeProcessingConflictError,
     ResourceReferenceInvalidError,
 )
 from bisheng.knowledge.application import knowledge_deletion as module
@@ -361,3 +362,92 @@ async def test_completed_delete_periodically_rechecks_outputs_without_reopening_
         assert job.attempts == 2 and job.lease_token is None
         assert await session.get(Knowledge, 2) is not None
     assert not await service.purge(plan.confirmation_id)
+
+
+@pytest.mark.parametrize("selection,expected", [(31, {31}), (20, {20, 30, 31})])
+async def test_delete_uses_expanded_physical_scope_at_precheck_and_execution_lock(
+    application, context, monkeypatch, selection, expected
+):
+    from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
+    from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
+
+    seen = {"source": [], "destination": []}
+    source_guard = SourceMoveInputRepository.arequire_released
+    destination_guard = application.execution.arequire_transfer_idle
+
+    async def source(self, session, **kwargs):
+        seen["source"].append(set(kwargs["file_ids"]))
+        return await source_guard(self, session, **kwargs)
+
+    async def destination(session, **kwargs):
+        seen["destination"].append(set(kwargs["file_ids"]))
+        return await destination_guard(session, **kwargs)
+
+    monkeypatch.setattr(SourceMoveInputRepository, "arequire_released", source)
+    monkeypatch.setattr(application.execution, "arequire_transfer_idle", destination)
+    review = await application.aprecheck(
+        identity=application.user,
+        space_id=1,
+        selections=(DeleteSelection("folder" if selection == 20 else "knowledge_file", selection),),
+    )
+    assert review.can_execute
+    async with context.db.sessions() as session, session.begin():
+        plan = await application.execution.apeek_plan(session, review.confirmation_id)
+        await application._locked(session, plan)
+    for calls in seen.values():
+        assert len(calls) >= 2
+        assert all(ids == expected for ids in calls)
+
+
+@pytest.mark.parametrize("side", ["source", "destination"])
+async def test_move_started_after_delete_precheck_is_rechecked_before_deletion(application, context, monkeypatch, side):
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
+
+    review = await application.aprecheck(
+        identity=application.user, space_id=1, selections=(DeleteSelection("knowledge_file", 31),)
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    async with context.db.sessions() as session, session.begin():
+        session.add(
+            KnowledgeOperationPlan(
+                id="late-move-plan",
+                tenant_id=101,
+                actor_user_id=7,
+                actor_reference={},
+                operation="move",
+                space_id=1 if side == "source" else 2,
+                operation_id="late-move-job",
+                consumed_at=now,
+                request_hash="a" * 64,
+                plan_digest="b" * 64,
+                expires_at=now + timedelta(minutes=5),
+            )
+        )
+        session.add(
+            KnowledgeProcessingJob(
+                id="late-move-job",
+                tenant_id=101,
+                space_id=2 if side == "source" else 1,
+                kind="move_index",
+                state="failed",
+                actor_user_id=7,
+                idempotency_key="late-move-job",
+                request_hash="a" * 64,
+                expected_model_config_revision=0,
+                total_count=0,
+            )
+        )
+    monkeypatch.setattr(application, "_targets", AsyncMock(return_value=[]))
+    with pytest.raises(KnowledgeProcessingConflictError):
+        await application.aconfirm(
+            identity=application.user,
+            space_id=1,
+            request=ProcessingCreateRequest(
+                confirmation_id=review.confirmation_id, plan_digest=review.plan_digest, idempotency_key="late-delete"
+            ),
+        )
+    application.permission_cleanup.assert_not_awaited()
+    application.purge_step.assert_not_awaited()
+    async with context.db.sessions() as session:
+        assert await session.get(KnowledgeFile, 31) is not None

@@ -15,7 +15,7 @@ async def redeem_desktop_ticket(ticket, slug, runtime):
     record = await sessions.resolve(token, slug)
     principal = DshPrincipal.model_validate(record["principal"])
     service = DesktopAppsService(runtime, DesktopAppRepository(), sessions)
-    await service.require(principal, record["app_id"], "use")
+    await service.require(principal, record["app_id"], "visible")
     return {"session": token, "max_age": 3600}
 
 

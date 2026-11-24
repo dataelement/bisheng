@@ -419,7 +419,7 @@ async def test_use_tool_list_checks_only_requested_action(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_only_global_super_can_update_preset_tool_config(monkeypatch) -> None:
+async def test_ordinary_resource_grants_do_not_delegate_preset_tool_config(monkeypatch) -> None:
     load_tool = AsyncMock()
     monkeypatch.setattr(
         "bisheng.tool.domain.services.tool.GptsToolsDao.aget_one_tool_type",
@@ -431,6 +431,50 @@ async def test_only_global_super_can_update_preset_tool_config(monkeypatch) -> N
         await ToolServices(login_user=login_user).update_tool_config(10, {})
 
     load_tool.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("super_admin", "admin_tenants", "scope", "tool_tenant", "allowed"),
+    [
+        (True, (), "all_visible", 5, True),
+        (False, (5,), "all_visible", 5, True),
+        (False, (6,), "all_visible", 5, False),
+        (False, (5,), "all_visible", 1, False),
+        (False, (), "all_visible", 5, False),
+        (True, (), "personal_only", 5, False),
+        (False, (5,), "personal_only", 5, False),
+    ],
+)
+async def test_preset_config_administration_is_tenant_bound(
+    monkeypatch, super_admin, admin_tenants, scope, tool_tenant, allowed
+):
+    actor = PermissionActor(
+        user_id=7,
+        current_tenant_id=5,
+        super_admin=super_admin,
+        tenant_admin_tenant_ids=frozenset(admin_tenants),
+        data_scope=scope,
+    )
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.resolve_permission_actor", AsyncMock(return_value=actor))
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.get_current_tenant_id", lambda: 5)
+    monkeypatch.setattr("bisheng.permission.application.identity.get_current_tenant_id", lambda: 5)
+    row = GptsToolsType(id=10, tenant_id=tool_tenant, name="Tianyancha", is_preset=1, extra="{}")
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_one_tool_type", AsyncMock(return_value=row)
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_preset_child_keys", AsyncMock(return_value={})
+    )
+    save = AsyncMock()
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.GptsToolsDao.update_tools_extra", save)
+    service = ToolServices(login_user=UserPayload(user_id=7, tenant_id=5, user_role=[]))
+    if allowed:
+        assert await service.update_tool_config(10, {"proxy": "https://proxy.example.test"})
+        save.assert_awaited_once()
+    else:
+        with pytest.raises(UnAuthorizedError):
+            await service.update_tool_config(10, {})
+        save.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -6,9 +6,10 @@ const code: AvailableToolGroup = { id: 2, name: 'Code', default_checked: true, c
 const time: AvailableToolGroup = { id: 3, name: 'Time', children: [{ id: 31, tool_key: 'time' }] };
 
 describe('applyToolDefaults', () => {
-    it('preselects every default as auto for a new account', () => {
+    it('preselects every default for a new account', () => {
         const { selection, applied } = applyToolDefaults(undefined, undefined, [web, code, time]);
-        expect(selection.map((g) => [g.id, g.auto])).toEqual([[1, true], [2, true]]);
+        expect(selection.map((g) => g.id)).toEqual([1, 2]);
+        expect(selection.every((g) => !('auto' in g))).toBe(true);
         expect(applied.sort()).toEqual([1, 2]);
     });
 
@@ -20,18 +21,18 @@ describe('applyToolDefaults', () => {
     it('adds a group that became a default after the last visit', () => {
         const restored = [{ id: 3, name: 'Time', children: [] }];
         const { selection } = applyToolDefaults(restored, [1], [web, code, time]);
-        expect(selection.map((g) => [g.id, g.auto])).toEqual([[3, undefined], [2, true]]);
+        expect(selection.map((g) => g.id)).toEqual([3, 2]);
     });
 
-    it('treats defaults in a legacy snapshot as preselected and keeps manual picks visible', () => {
+    it('keeps a legacy snapshot as is and adds the code executor', () => {
         const restored = [{ id: 1, name: 'Web', children: [] }, { id: 3, name: 'Time', children: [] }];
         const { selection } = applyToolDefaults(restored, undefined, [web, code, time]);
-        expect(selection.map((g) => [g.id, g.auto])).toEqual([[1, true], [3, undefined], [2, true]]);
+        expect(selection.map((g) => g.id)).toEqual([1, 3, 2]);
     });
 
     it('adds only the code executor to a legacy snapshot where the user turned web search off', () => {
         const { selection, applied } = applyToolDefaults([], undefined, [web, code, time]);
-        expect(selection.map((g) => [g.id, g.auto])).toEqual([[2, true]]);
+        expect(selection.map((g) => g.id)).toEqual([2]);
         expect(applied.sort()).toEqual([1, 2]);
     });
 

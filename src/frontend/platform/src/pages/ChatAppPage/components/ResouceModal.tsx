@@ -53,7 +53,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
 
     return (
         <div
-            className="bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 mb-4 overflow-y-auto"
+            className="min-w-0 bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 mb-4 overflow-y-auto [overflow-wrap:anywhere]"
             style={{ display: fullScreen ? "none" : "block" }}
         >
             <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: html }}></p>
@@ -144,7 +144,7 @@ const ResultPanne = ({
 
     return (
         <div
-            className="flex gap-4 relative"
+            className="flex min-w-0 gap-4 relative"
             style={{ height: fullScreen ? "100vh" : !isMobile ? "calc(100vh - 10rem)" : "calc(100vh - 4rem)" }}
         >
             {isMobile && (
@@ -184,7 +184,7 @@ const ResultPanne = ({
             )}
             {/* left */}
             {(!isMobile || !collapse) && (
-                <div className="sm:w-[300px] bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar w-[200px] max-h-[100%] sm:max-h-full absolute sm:static z-20 sm:z-auto">
+                <div className="sm:w-[300px] shrink-0 bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar w-[200px] max-h-[100%] sm:max-h-full absolute sm:static z-20 sm:z-auto">
                     {/* label */}
                     <div className="mb-4 text-sm font-bold space-x-1 hidden sm:block">
                         <div className="flex">
@@ -333,7 +333,7 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
     };
 
     return (
-        <div className="relative">
+        <div className="relative min-w-0">
             {loading && (
                 <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <LoadingIcon />

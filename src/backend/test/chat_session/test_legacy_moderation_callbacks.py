@@ -326,7 +326,7 @@ async def test_first_use_check_sees_resource_but_keeps_home_actor(setup):
     async def check(actor, **kwargs):
         assert actor.tenant_id == 1 and get_current_tenant_id() == 1
         assert 60 in get_visible_tenant_ids()
-        assert kwargs == {"resource_type": "workflow", "resource_id": "flow-b", "action": "use"}
+        assert kwargs == {"resource_type": "workflow", "resource_id": "flow-b", "action": "visible"}
 
     setup.permission.side_effect = check
     before = get_visible_tenant_ids()

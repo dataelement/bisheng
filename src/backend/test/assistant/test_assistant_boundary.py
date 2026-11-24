@@ -43,7 +43,7 @@ def boundary(monkeypatch):
 async def test_binding_requires_real_knowledge_use(boundary):
     h = boundary
     await h.service.authorize_knowledge_bindings(h.user, [11])
-    h.permission.assert_awaited_once_with(h.user, resource_type="knowledge_library", resource_id=11, action="use")
+    h.permission.assert_awaited_once_with(h.user, resource_type="knowledge_library", resource_id=11, action="visible")
 
 
 async def test_space_binding_requires_actual_space_visible_action(boundary):
@@ -84,7 +84,7 @@ async def test_binding_validates_entire_batch_before_authorization(boundary):
 async def test_chat_target_requires_use_before_agent_or_history(boundary):
     h = boundary
     await h.service.authorize_chat_target(h.user, "target", "fresh", None, original_assistant_id="old")
-    h.permission.assert_awaited_once_with(h.user, resource_type="assistant", resource_id="target", action="use")
+    h.permission.assert_awaited_once_with(h.user, resource_type="assistant", resource_id="target", action="visible")
 
 
 @pytest.mark.parametrize("kind", ["foreign", "other_user", "wrong_app", "deleted", "api_subject"])

@@ -971,7 +971,7 @@ async def build_list_env(tmp_path, monkeypatch):
     def enable_runtime_layer(enabled: bool = True):
         monkeypatch.setattr(settings.app_runtime, "enabled", enabled)
 
-    def only_allow(resource_ids, actions=("use", "edit", "share")):
+    def only_allow(resource_ids, actions=("visible", "edit", "share")):
         grant_all["value"] = False
         for resource_id in resource_ids:
             granted[str(resource_id)] = set(actions)
