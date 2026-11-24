@@ -91,11 +91,11 @@ vi.mock("@/pages/BuildPage/tools/ToolSet", async () => {
   }
 })
 
-function renderToolPage(userId = 7) {
+function renderToolPage(userId = 7, isGlobalSuper = false) {
   return render(
     <MemoryRouter>
       <userContext.Provider value={{
-        user: { user_id: userId, role: "user", is_global_super: false },
+        user: { user_id: userId, role: "user", is_global_super: isGlobalSuper },
         setUser: vi.fn(),
         savedComponents: [],
         addSavedComponent: vi.fn(),
@@ -149,6 +149,43 @@ describe("tool list lazy permissions", () => {
       expect(getMyResourcePermissionsApi).toHaveBeenCalledWith("tool", "10")
       expect(screen.getByLabelText("edit")).toBeInTheDocument()
     })
+  })
+
+  it.each([
+    { userId: 101, actions: ["visible", "edit", "manage_permission"], expected: true, superAdmin: false },
+    { userId: 102, actions: ["edit"], expected: true, superAdmin: false },
+    { userId: 103, actions: ["visible"], expected: false, superAdmin: false },
+    { userId: 104, actions: ["manage_permission"], expected: false, superAdmin: true },
+  ])("uses the preset's edit action for user $userId", async ({ userId, actions, expected, superAdmin }) => {
+    vi.mocked(getToolsApi).mockResolvedValue([{
+      id: 30, name: "Preset Image", is_preset: 1,
+      children: [{ id: 31, name: "Generate", tool_key: "image_generation" }],
+    }])
+    vi.mocked(getMyResourcePermissionsApi).mockResolvedValue({
+      mode: "CUSTOM", actions, sources: [], roster_complete: false,
+    })
+    renderToolPage(userId, superAdmin)
+    const name = await screen.findByText("categories.Preset Image.name")
+    expect(screen.queryByLabelText("edit")).toBeNull()
+    fireEvent.mouseEnter(name.closest(".group") as Element)
+    await waitFor(() => expect(getMyResourcePermissionsApi).toHaveBeenCalledWith("tool", "30"))
+    if (expected) {
+      expect(await screen.findByLabelText("edit")).toBeInTheDocument()
+    } else {
+      await waitFor(() => expect(screen.queryByLabelText("edit")).toBeNull())
+    }
+  })
+
+  it("keeps a custom tool with a preset name on its own editor", async () => {
+    vi.mocked(getToolsApi).mockImplementation(async (type) => type === "custom" ? [{
+      id: 40, name: "Firecrawl", is_preset: 0, children: [],
+    }] : [])
+    renderToolPage(105)
+    fireEvent.click(screen.getByText("tools.customTools"))
+    const name = await screen.findByText("Firecrawl")
+    fireEvent.mouseEnter(name.closest(".group") as Element)
+    await screen.findByLabelText("edit")
+    expect(screen.getAllByLabelText("edit")).toHaveLength(1)
   })
 
   it("dismisses the grant dropdown on a blank click inside the tool permission dialog", async () => {
