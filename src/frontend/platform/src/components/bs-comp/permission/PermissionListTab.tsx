@@ -289,7 +289,8 @@ export function PermissionListTab({
     assignee => assignee.subject.type === fixedSubjectType && !(
       isSystemPresetTool
       && assignee.subject.type === "user"
-      && ["", "none", "null", "undefined"].includes(assignee.subject.id.trim().toLowerCase())
+      && assignee.subject.id === "None"
+      && assignee.model.key === "owner"
     ),
   ), [assignees, fixedSubjectType, isSystemPresetTool])
 

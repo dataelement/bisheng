@@ -17,22 +17,15 @@ from bisheng.knowledge.domain.services.web_link_import_service import KnowledgeW
     "address",
     [
         "127.0.0.1",
-        "10.1.2.3",
-        "172.16.0.1",
-        "192.168.1.1",
         "169.254.169.254",
-        "100.100.100.200",
-        "240.0.0.1",
-        "fc00::1",
         "::ffff:127.0.0.1",
     ],
 )
-async def test_generic_download_rejects_nonpublic_before_network(monkeypatch, address):
+async def test_generic_download_rejects_loopback_link_local_before_network(monkeypatch, address):
     minio = SimpleNamespace(get_minio_share_host=lambda: "https://storage.example")
     monkeypatch.setattr(utils, "get_minio_storage_sync", lambda: minio)
     monkeypatch.setattr(utils, "get_minio_storage", AsyncMock(return_value=minio))
 
-    # Before the fix these sentinels prove that an unsafe transport is reached.
     def unsafe(*args, **kwargs):
         pytest.fail("unvalidated network request")
 
@@ -45,10 +38,13 @@ async def test_generic_download_rejects_nonpublic_before_network(monkeypatch, ad
         await utils.async_file_download(f"http://{host}/canary.txt")
 
 
-@pytest.mark.parametrize(
-    "address", ["10.0.0.1", "172.16.0.1", "192.168.0.1", "100.100.100.200", "240.0.0.1", "fc00::1", "::ffff:127.0.0.1"]
-)
-def test_web_link_blocks_nonpublic(address):
+@pytest.mark.parametrize("address", ["10.0.0.1", "172.16.0.1", "192.168.0.1", "100.100.100.200", "fc00::1"])
+def test_web_link_allows_intranet(address):
+    assert not KnowledgeWebLinkImportService._is_blocked_ip(ipaddress.ip_address(address))
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "169.254.169.254", "::1", "fe80::1"])
+def test_web_link_blocks_loopback_link_local(address):
     assert KnowledgeWebLinkImportService._is_blocked_ip(ipaddress.ip_address(address))
 
 

@@ -1,8 +1,10 @@
-"""Public-only HTTP downloads with DNS-pinned connections on every hop.
+"""HTTP downloads with DNS-pinned connections on every hop.
 
-No proxy environment, credentials, ambient cookies or automatic redirects. Keep
-Host/SNI on the original hostname while connecting to a validated numeric IP.
-Configured object storage is handled separately by its SDK, never an IP bypass.
+Intranet / RFC1918 destinations are permitted (product policy restored). Loopback
+and link-local remain denied by ``egress_policy``. No proxy environment,
+credentials, ambient cookies or automatic redirects. Keep Host/SNI on the
+original hostname while connecting to a validated numeric IP. Configured object
+storage is handled separately by its SDK, never an IP bypass.
 """
 
 import asyncio
@@ -19,6 +21,11 @@ MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 
 
 def is_public_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Return whether ``address`` is an allowed download peer (intranet OK).
+
+    Name retained for call-site stability; policy now matches pre-hardening
+    web-link rules (deny loopback/link-local/multicast/unspecified only).
+    """
     return _allowed(address)
 
 

@@ -124,12 +124,20 @@ def test_unknown_or_changed_peer_denied(boundary, peer):
             pytest.fail("peer escaped")
 
 
-def test_mixed_dns_rejected_before_connection(boundary):
-    boundary.dns.return_value.append((socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fc00::1", 443, 0, 0)))
+def test_mixed_dns_with_loopback_rejected_before_connection(boundary):
+    boundary.dns.return_value.append((socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443)))
     with pytest.raises(ValueError):
         with safe.public_stream("https://public.example/a"):
             pytest.fail("mixed DNS escaped")
     assert not boundary.calls
+
+
+def test_mixed_public_and_intranet_dns_allowed(boundary):
+    boundary.dns.return_value.append((socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 443)))
+    boundary.queue.append(_response("https://public.example/a", peer="8.8.8.8"))
+    with safe.public_stream("https://public.example/a") as response:
+        assert str(response.url) == "https://public.example/a"
+    assert boundary.calls
 
 
 @pytest.mark.parametrize(

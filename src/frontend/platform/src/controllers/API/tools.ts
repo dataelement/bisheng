@@ -92,7 +92,7 @@ export const updateToolApi = async (tool_id, extra) => {
 /**
  * 下载或解析tool schema的内容接口
  * POST请求
- * download_url string 
+ * download_url string
  * file_content string
  * @returns Promise<any> 下载或解析tool schema的结果
  */
@@ -132,7 +132,7 @@ export const testMcpApi = async (data: { file_content: string }) => {
 
 /**
  * 工具测试接口
- * @returns 
+ * @returns
  */
 export interface SandboxConfView {
     endpoints: string[]
@@ -169,8 +169,4 @@ export const testToolApi = async (data: {
         url: '/api/v1/tool/test',
         data
     })
-};
-
-export const testSavedToolApi = async (toolTypeId: number, operationId: number, requestParams: Record<string, string>) => {
-    return await axios.post(`/api/v1/tool/${toolTypeId}/operations/${operationId}/test`, { request_params: requestParams });
 };

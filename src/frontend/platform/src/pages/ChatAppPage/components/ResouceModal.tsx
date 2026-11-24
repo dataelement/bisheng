@@ -290,12 +290,10 @@ const ResultPanne = ({
                             ) : (
                                 <div
                                     key={_file.id}
-                                    className={`msk group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && "bg-gray-200"}`}
+                                    className="group rounded-xl bg-[#fff] dark:bg-[#303134] flex items-center gap-2 px-4 mb-2 relative min-h-16 text-gray-500"
                                 >
-                                    <p className="text-sm blur-sm">{t("publicPages.maskedFile")}</p>
-                                    <span className="absolute right-1 bottom-1 text-blue-400 text-sm">
-                                        {_file.score}
-                                    </span>
+                                    <Outlined.Info className="text-red-300 shrink-0" />
+                                    <p className="text-sm">{t("publicPages.maskedFile")}</p>
                                 </div>
                             ),
                         )}

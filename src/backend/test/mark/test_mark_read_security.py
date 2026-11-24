@@ -1,7 +1,7 @@
 """Annotation task identifiers are not read capabilities."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -22,6 +22,10 @@ async def test_unassigned_user_denied_before_mark_data(monkeypatch, name, args):
         endpoint.MarkTaskDao,
         "get_task_byid",
         lambda _: SimpleNamespace(id=1, tenant_id=7, create_id=22, process_users="22,33", app_id="app"),
+    )
+    monkeypatch.setattr(
+        "bisheng.chat_session.domain.services.mark_read_authorization.is_current_tenant_administrator",
+        AsyncMock(return_value=False),
     )
     effect = MagicMock()
     monkeypatch.setattr(endpoint.MarkRecordDao, "get_record", effect)
@@ -53,8 +57,8 @@ def test_anonymous_mark_reads_require_login(monkeypatch, path):
     effect.assert_not_called()
 
 
-@pytest.mark.parametrize("role", ["creator", "assignee", "admin"])
-def test_actual_task_readers_keep_access(monkeypatch, role):
+@pytest.mark.parametrize("role", ["creator", "assignee", "admin", "tenant_admin"])
+async def test_actual_task_readers_keep_access(monkeypatch, role):
     from bisheng.chat_session.domain.services import mark_read_authorization as policy
 
     monkeypatch.setattr(
@@ -68,16 +72,21 @@ def test_actual_task_readers_keep_access(monkeypatch, role):
             app_id="app",
         ),
     )
-    assert (
-        policy.require_mark_task_reader(
-            1, SimpleNamespace(user_id=11, tenant_id=7, is_admin=lambda: role == "admin")
-        ).id
-        == 1
+    monkeypatch.setattr(
+        policy,
+        "is_current_tenant_administrator",
+        AsyncMock(return_value=role == "tenant_admin"),
     )
+    monkeypatch.setattr(policy, "get_current_tenant_id", lambda: 7)
+    assert (
+        await policy.require_mark_task_reader(
+            1, SimpleNamespace(user_id=11, tenant_id=7, is_admin=lambda: role == "admin")
+        )
+    ).id == 1
 
 
 @pytest.mark.parametrize("tenant,flow", [(8, "app"), (7, "other")])
-def test_task_reader_cannot_select_unrelated_chat(monkeypatch, tenant, flow):
+async def test_task_reader_cannot_select_unrelated_chat(monkeypatch, tenant, flow):
     from bisheng.chat_session.domain.services import mark_read_authorization as policy
 
     monkeypatch.setattr(
@@ -88,5 +97,9 @@ def test_task_reader_cannot_select_unrelated_chat(monkeypatch, tenant, flow):
     monkeypatch.setattr(
         policy.MessageSessionDao, "get_one", lambda _: SimpleNamespace(tenant_id=tenant, flow_id=flow, is_delete=False)
     )
+    monkeypatch.setattr(policy, "is_current_tenant_administrator", AsyncMock(return_value=False))
+    monkeypatch.setattr(policy, "get_current_tenant_id", lambda: 7)
     with pytest.raises(UnAuthorizedError):
-        policy.require_mark_task_reader(1, SimpleNamespace(user_id=11, tenant_id=7, is_admin=lambda: False), "chat")
+        await policy.require_mark_task_reader(
+            1, SimpleNamespace(user_id=11, tenant_id=7, is_admin=lambda: False), "chat"
+        )

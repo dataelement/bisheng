@@ -49,7 +49,7 @@ async def workflow_ws(
                 execution_snapshot=snapshot.model_dump(mode="json"),
                 flow_lease_id=flow_lease_id,
                 workflow_execution_port=BoundWorkflowExecutionPort(
-                    normalized_id, execution.operator, allow_preview=False, published_only=True
+                    normalized_id, execution.operator, allow_preview=False
                 ),
             )
     except PublicAccessError as exc:

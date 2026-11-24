@@ -96,10 +96,10 @@ async def _run_init_tools(agent, *, usable_ids):
         finally:
             await agent.reference_session.close()
         independent_links.assert_not_awaited()
-        identity_builder.assert_awaited_once_with(
-            agent.invoke_user_id if agent.assistant.knowledge_auth else agent.assistant.user_id,
-            agent.assistant.tenant_id,
-        )
+        if agent.assistant.knowledge_auth:
+            identity_builder.assert_awaited_once_with(agent.invoke_user_id, agent.assistant.tenant_id)
+        else:
+            identity_builder.assert_not_awaited()
     for call in init_knowledge_tool.await_args_list:
         assert call.kwargs["reference_session"] is agent.reference_session
         assert call.kwargs["login_user"] is agent.login_user
@@ -129,13 +129,12 @@ async def test_toggle_on_asks_about_ordinary_knowledge_bases_only():
     assert _SPACE not in asked_for
 
 
-async def test_toggle_off_still_requires_author_current_use_permission():
+async def test_toggle_off_skips_permission_filter_and_keeps_all_bindings():
     agent = _agent(knowledge_auth=False)
     built_for, usable_filter = await _run_init_tools(agent, usable_ids=set())
 
-    assert built_for == []
-    usable_filter.assert_awaited_once()
-    assert usable_filter.await_args.args[0].user_id == agent.assistant.user_id
+    assert sorted(built_for) == sorted([_ALLOWED_KB, _FORBIDDEN_KB])
+    usable_filter.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

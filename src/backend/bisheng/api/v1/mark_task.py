@@ -89,7 +89,7 @@ async def list(
 
 @router.get("/get_status")
 async def get_status(task_id: int, chat_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    require_mark_task_reader(task_id, login_user, chat_id)
+    await require_mark_task_reader(task_id, login_user, chat_id)
     record = MarkRecordDao.get_record(task_id, chat_id)
     if not record:
         return resp_200(data={"status": ""})
@@ -129,7 +129,7 @@ async def get_user(task_id: int, login_user: UserPayload = Depends(UserPayload.g
     """
 
     # accordingtype Query different sessions
-    task = require_mark_task_reader(task_id, login_user)
+    task = await require_mark_task_reader(task_id, login_user)
     user_list = []
 
     for user_id in _parse_process_user_ids(task.process_users, task.id):
@@ -203,7 +203,7 @@ async def mark(data: MarkData, login_user: UserPayload = Depends(UserPayload.get
 
 @router.get("/get_record")
 async def get_record(chat_id: str, task_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    require_mark_task_reader(task_id, login_user, chat_id)
+    await require_mark_task_reader(task_id, login_user, chat_id)
     record = MarkRecordDao.get_record(task_id, chat_id)
     return resp_200(data=record)
 
@@ -216,7 +216,7 @@ async def pre_or_next(
     prev or next
     """
 
-    task = require_mark_task_reader(task_id, login_user, chat_id)
+    task = await require_mark_task_reader(task_id, login_user, chat_id)
     if action not in ["prev", "next"]:
         return resp_500(data="actionParameter salah")
 
@@ -238,7 +238,7 @@ async def pre_or_next(
             if len(top_queue) == 0 and len(bottom_queue) == 0:
                 return resp_200()
             record = bottom_queue.popleft() if len(bottom_queue) else top_queue.popleft()
-            require_mark_task_reader(task_id, login_user, record.session_id)
+            await require_mark_task_reader(task_id, login_user, record.session_id)
             chat = MessageSessionDao.get_one(record.session_id)
             result["chat_id"] = chat.chat_id
             result["flow_type"] = chat.flow_type

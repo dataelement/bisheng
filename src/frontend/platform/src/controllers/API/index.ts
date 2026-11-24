@@ -1328,9 +1328,10 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
           }));
         const score = chunks[0].score;
 
-        // 兼容后端历史逻辑
+        // 兼容后端历史逻辑；无权限条目可能没有可解析的扩展名
         let fileUrl = "";
-        let suffix = fileName.split(".").pop().toLowerCase();
+        const rawName = fileName || "";
+        let suffix = (rawName.split(".").pop() || "").toLowerCase();
         let isNew = false;
         if (["uns", "local"].includes(other.parse_type)) {
           fileUrl = other.chunk_bboxes ? previewUrl : originUrl;

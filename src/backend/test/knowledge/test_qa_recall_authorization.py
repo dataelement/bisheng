@@ -124,10 +124,15 @@ async def test_api_subject_does_not_inherit_operator_ownership(harness, allowed)
     h.audit.assert_awaited_once_with(h.user, "own", session_owner_id=None, app_id="app")
 
 
-async def test_source_permission_denial_hides_entire_source(harness):
+async def test_source_permission_denial_returns_right_false_tip(harness):
     h = harness
     h.permission.side_effect = UnAuthorizedError()
-    assert await h.service.original_files(h.user, 42, "") == []
+    result = await h.service.original_files(h.user, 42, "")
+    assert len(result) == 1
+    assert result[0]["right"] is False
+    assert result[0]["original_url"] == ""
+    assert result[0]["preview_url"] == ""
+    assert result[0]["source"] == "private.pdf"
     h.sign.assert_not_called()
 
 
