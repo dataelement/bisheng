@@ -117,7 +117,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const { loading: btnLoading, refresh } = useMcpRefrensh(t)
 
     return (
-        <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
+        <div className="flex h-full relative">
             <div className="relative flex h-full w-full overflow-hidden bg-background-main-content">
                 <div className="flex w-[17rem] shrink-0 flex-col overflow-y-auto border-r border-border-base p-6">
                     {type !== 'skill' && <SearchInput
