@@ -52,7 +52,7 @@ def test_resolve_openapi_type(schema, expected_type, nullable):
 
 def test_type_array_with_null_maps_to_nullable_concrete_type():
     tool = build([body_param("count", {"type": ["integer", "null"]})])
-    assert tool.parse_args_schema()["count"] == {"description": "count", "type": "integer", "nullable": True}
+    assert tool.parse_args_schema()["properties"]["count"] == {"description": "count", "type": ["integer", "null"]}
     assert tool.get_params_json(count="5") == ({}, {"count": 5}, {})
     assert tool.get_params_json(count=None) == ({}, {"count": None}, {})
 
@@ -60,7 +60,7 @@ def test_type_array_with_null_maps_to_nullable_concrete_type():
 @pytest.mark.parametrize("union", ["anyOf", "oneOf"])
 def test_union_with_single_concrete_branch_maps_to_that_type(union):
     tool = build([body_param("count", {union: [{"type": "integer"}, {"type": "null"}]})])
-    assert tool.parse_args_schema()["count"] == {"description": "count", "type": "integer", "nullable": True}
+    assert tool.parse_args_schema()["properties"]["count"] == {"description": "count", "type": ["integer", "null"]}
     assert tool.get_params_json(count="7") == ({}, {"count": 7}, {})
 
 
@@ -68,7 +68,7 @@ def test_union_with_different_types_is_untyped_and_not_coerced():
     # e.g. a `stop` field that accepts a string or a list of strings.
     schema = {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}
     tool = build([body_param("stop", schema)])
-    assert tool.parse_args_schema()["stop"] == {"description": "stop"}
+    assert tool.parse_args_schema()["properties"]["stop"] == {"description": "stop"}
     assert tool.get_params_json(stop=["a", "b"]) == ({}, {"stop": ["a", "b"]}, {})
     assert tool.get_params_json(stop="a") == ({}, {"stop": "a"}, {})
     # An untyped value may be a string, so a blank value is kept.
@@ -77,7 +77,7 @@ def test_union_with_different_types_is_untyped_and_not_coerced():
 
 def test_object_without_properties_accepts_any_dict():
     tool = build([body_param("filters", {"type": "object"})])
-    assert tool.parse_args_schema()["filters"] == {
+    assert tool.parse_args_schema()["properties"]["filters"] == {
         "description": "filters",
         "type": "object",
         "properties": {},
@@ -90,13 +90,11 @@ def test_object_without_properties_accepts_any_dict():
 def test_object_property_with_union_type_builds():
     schema = {"type": "object", "properties": {"limit": {"anyOf": [{"type": "integer"}, {"type": "null"}]}}}
     tool = build([body_param("options", schema)])
-    assert tool.parse_args_schema()["options"]["properties"] == {
-        "limit": {"description": "options", "type": "integer", "nullable": True}
-    }
+    assert tool.parse_args_schema()["properties"]["options"]["properties"] == {"limit": {"type": ["integer", "null"]}}
 
 
-def test_existing_schema_forms_keep_the_previous_argument_schema():
-    """Snapshot of the output before the fix for forms that already worked."""
+def test_args_schema_is_standard_json_schema():
+    """Arguments sit under "properties"; items, nested fields and nullable use standard JSON Schema."""
     parameters = [
         body_param("query", {"type": "string"}, required=True),
         body_param("count", {"type": "integer", "nullable": True}),
@@ -107,36 +105,73 @@ def test_existing_schema_forms_keep_the_previous_argument_schema():
             {
                 "type": "object",
                 "items": {"type": "number"},
-                "properties": {"a": {"type": "string"}, "b": {"type": "array"}, "c": {"type": "object"}},
+                "required": ["a", "missing"],
+                "properties": {
+                    "a": {"type": "string", "description": "field a"},
+                    "b": {"type": "array", "items": {"type": "number"}},
+                    "c": {"type": "object"},
+                    "d": {"type": "file"},
+                },
             },
         ),
         body_param("legacy", {"type": "dict", "properties": {}}),
+        body_param(
+            "rows",
+            {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {
+                        "id": {"type": "integer", "description": "row id"},
+                        "labels": {"type": "array", "items": {"type": "string", "nullable": True}},
+                    },
+                },
+            },
+        ),
     ]
     assert build(parameters).parse_args_schema() == {
         "type": "object",
-        "properties": {},
         "required": ["query"],
-        "query": {"type": "string", "description": "query"},
-        "count": {"type": "integer", "description": "count"},
-        "tags": {"type": "array", "items": "integer", "description": "tags"},
-        "raw": {"type": "array", "items": "string", "description": "raw"},
-        "opts": {
-            "type": "object",
-            "description": "opts",
-            "properties": {
-                "a": {"type": "string", "description": "opts"},
-                "b": {"type": "array", "items": "number", "description": "opts"},
-                "c": {"type": "object", "description": "opts"},
+        "properties": {
+            "query": {"type": "string", "description": "query"},
+            "count": {"type": ["integer", "null"], "description": "count"},
+            "tags": {"type": "array", "items": {"type": "integer"}, "description": "tags"},
+            "raw": {"type": "array", "items": {"type": "string"}, "description": "raw"},
+            "opts": {
+                "type": "object",
+                "description": "opts",
+                "required": ["a"],
+                "properties": {
+                    "a": {"type": "string", "description": "field a"},
+                    "b": {"type": "array", "items": {"type": "number"}},
+                    "c": {"type": "object", "properties": {}, "additionalProperties": True},
+                    "d": {},
+                },
+            },
+            "legacy": {"type": "object", "description": "legacy", "properties": {}},
+            "rows": {
+                "type": "array",
+                "description": "rows",
+                "items": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {
+                        "id": {"type": "integer", "description": "row id"},
+                        "labels": {"type": "array", "items": {"type": ["string", "null"]}},
+                    },
+                },
             },
         },
-        "legacy": {"type": "object", "description": "legacy", "properties": {}},
     }
 
 
-def test_existing_nullable_keyword_keeps_previous_coercion():
-    # OpenAPI 3.0 `nullable` is not reinterpreted: None for a boolean still maps to False.
+def test_nullable_keyword_passes_null_through():
+    # The model is told that null is allowed, so null is sent as null (not coerced to False).
     tool = build([body_param("flag", {"type": "boolean", "nullable": True})])
-    assert tool.get_params_json(flag=None) == ({}, {"flag": False}, {})
+    assert tool.parse_args_schema()["properties"]["flag"]["type"] == ["boolean", "null"]
+    assert tool.get_params_json(flag=None) == ({}, {"flag": None}, {})
+    assert tool.get_params_json(flag="true") == ({}, {"flag": True}, {})
 
 
 def test_unknown_scalar_type_is_still_rejected():
@@ -208,13 +243,15 @@ async def test_platform_31_example_style_schema_imports_builds_and_runs():
     # The same factory that ToolExecutor uses for saved API tools.
     api_tool = OpenApiTools.get_api_tool("Search", async_client=client, **tool_params)
 
-    args = api_tool.args_schema
-    assert args["required"] == ["query"]
-    assert args["page"] == {"description": "Page number", "type": "integer", "nullable": True}
-    assert args["count"] == {"description": "Result count", "type": "integer", "nullable": True}
+    assert api_tool.args_schema["required"] == ["query"]
+    args = api_tool.args_schema["properties"]
+    assert args["page"] == {"description": "Page number", "type": ["integer", "null"]}
+    assert args["count"] == {"description": "Result count", "type": ["integer", "null"]}
     assert args["stop"] == {"description": ""}
     assert args["filters"]["additionalProperties"] is True
-    convert_to_openai_tool(api_tool)  # model binding must not fail either
+    parameters = convert_to_openai_tool(api_tool)["function"]["parameters"]
+    assert parameters["properties"] == args
+    assert set(parameters) == {"type", "properties", "required"}
 
     supplied = {"query": "bisheng", "page": "2", "count": "", "stop": ["\n"], "filters": '{"lang": "zh"}'}
     assert await api_tool.arun(supplied) == "ok"
