@@ -3,7 +3,7 @@ fullnameOverride: ''
 nameOverride: code-runner
 image:
   repository: dataelement/bisheng-sandbox
-  tag: v3.1.0-beta1
+  tag: v3.1.0-beta2
   pullPolicy: IfNotPresent
   digest: ''
 imagePullSecrets: []
