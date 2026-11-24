@@ -1,9 +1,11 @@
-import { resolveErrorMessageTemplate } from '@bisheng/api-client';
+import { referenceErrorMessage, resolveErrorMessageTemplate } from '@bisheng/api-client';
 import i18next from "i18next";
 
 const ASR_ERROR_CODES = new Set([10014, 10015, 10016, 10017, 10018, 10019]);
 
 function translateApiError(statusCode: number, data?: Record<string, unknown>): string | undefined {
+  const referenceMessage = referenceErrorMessage({ status_code: statusCode, data }, (key, values) => String(i18next.t(`api_errors.${key}` as `api_errors.${keyof typeof import('../locales/en/api_errors.gen.json')}`, { ...values, defaultValue: "" })));
+  if (referenceMessage) return referenceMessage;
   const key = `api_errors.${statusCode}` as `api_errors.${keyof typeof import('../locales/en/api_errors.gen.json')}`;
   if (!i18next.exists(key)) return undefined;
   return resolveErrorMessageTemplate(String(i18next.t(key)), data, String(i18next.t('api_errors.fallback')));

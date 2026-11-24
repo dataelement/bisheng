@@ -60,9 +60,10 @@ it('keeps generic copy for older servers and malformed or unrelated diagnostics'
     const older = { status_code: 10996, data: { reason: 'reference_target_invalid', exception: 'PRIVATE' } };
     const unknown = failure('model');
     unknown.data.reason = 'internal_error';
-    for (const envelope of [older, unknown, failure('unknown'), failure('model', { target_id: '/private/path' }),
+    expect(showApiError(older).message).toBe(en.reference_reason_reference_target_invalid);
+    for (const envelope of [unknown, failure('unknown'), failure('model', { target_id: '/private/path' }),
         failure('model', { node_name: {} }), failure('model', { node_name: 'x'.repeat(101) })]) {
-        expect(showApiError(envelope).message).toBe(en['10996']);
+        expect(showApiError(envelope).message).toBe(envelope === unknown ? en['10996'] : (envelope.data.reason === 'model_selection_unavailable' ? en.reference_reason_model_unavailable : en.reference_reason_knowledge_unavailable));
     }
 });
 

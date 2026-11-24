@@ -16,6 +16,7 @@
  * localized `api_errors` sentence. Callers therefore always receive a plain
  * message string, the same shape a non-silent call rejects with.
  */
+import { workflowReferenceErrorMessage } from "@/controllers/workflowReferenceErrors"
 import axios from "@/controllers/request"
 import i18next from "i18next"
 import { APPS_BASE } from "./hostedApp"
@@ -59,6 +60,8 @@ interface RejectedEnvelope {
  * `status_message` is the backend's Chinese sentence and is only a fallback.
  */
 function toPreviewErrorMessage(error: unknown): string {
+  const referenceMessage = workflowReferenceErrorMessage(error)
+  if (referenceMessage) return referenceMessage
   if (typeof error === "string") return error
   if (error && typeof error === "object") {
     const { status_code: code, status_message: message } =

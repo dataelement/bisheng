@@ -110,7 +110,7 @@ class AssistantService(BaseService, AssistantUtils):
                 return extract_assistant_references(model_name="", knowledge_ids=knowledge_ids)
             return extract_assistant_references(model_name=model_name, knowledge_ids=knowledge_ids)
         except (TypeError, ValueError) as exc:
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid") from exc
+            raise ResourceReferenceInvalidError(reason="reference_selection_invalid") from exc
 
     @classmethod
     async def _persist_assistant_changes(
