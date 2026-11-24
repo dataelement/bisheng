@@ -60,20 +60,6 @@ const KnowledgeSearchRow: FC<KnowledgeSearchRowProps> = memo(
         const [showAllDocs, setShowAllDocs] = useState(false);
 
         const { shown, total } = summariseKnowledgeBaseNames(info.kbNames);
-        // Hovering a knowledge base chip shows that knowledge base's own count
-        // ("0 条" for one that returned nothing), so a chip with no documents
-        // below it reads as a result, not a bug. Nothing is shown while running.
-        const kbCountText = (name: string) => {
-            const detail = info.kbDetails.find((d) => d.name === name);
-            if (running || !detail) return "";
-            return detail.failed
-                ? localize("com_tools.knowledge_query_failed")
-                : localize("com_tools.knowledge_chunk_count", { 0: detail.chunkCount });
-        };
-        const chipTitle = (name: string) => [name, kbCountText(name)].filter(Boolean).join(" · ");
-        const allKbTitle = info.kbNames
-            .map((name) => [name, kbCountText(name)].filter(Boolean).join(" "))
-            .join(localize("com_tools.knowledge_kb_sep"));
         const kbLabel =
             total === 0
                 ? ""
@@ -137,13 +123,13 @@ const KnowledgeSearchRow: FC<KnowledgeSearchRowProps> = memo(
                         <span className="min-w-0 truncate text-text-1">{keyword}</span>
                         {suffix && <span className="shrink-0 whitespace-nowrap">{`· ${suffix}`}</span>}
                         {shown.map((name) => (
-                            <span key={name} className={kbChipClass(allFailed)} title={chipTitle(name)}>
+                            <span key={name} className={kbChipClass(allFailed)} title={name}>
                                 <Outlined.BookOpenText size={14} className="shrink-0 text-[#6B7785]" />
                                 <span className="max-w-[140px] truncate">{name}</span>
                             </span>
                         ))}
                         {total > 2 && (
-                            <span className={kbChipClass(allFailed)} title={allKbTitle}>
+                            <span className={kbChipClass(allFailed)} title={kbLabel}>
                                 {localize("com_tools.knowledge_doc_more", { 0: total - 1 })}
                             </span>
                         )}

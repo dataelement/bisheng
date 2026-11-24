@@ -9,21 +9,11 @@
  */
 import type { AgentEvent, AgentToolCall } from "~/api/chatApi";
 
-export interface KnowledgeBaseDetail {
-    name: string;
-    /** Chunks this knowledge base returned in this call. */
-    chunkCount: number;
-    /** True when this knowledge base returned a retrieval error. */
-    failed: boolean;
-}
-
 export interface KnowledgeCallInfo {
     /** Knowledge bases searched, order-insensitive identity (ids, or names when ids are missing). */
     kbKeys: string[];
     /** Display names for those knowledge bases; empty when none is known yet. */
     kbNames: string[];
-    /** Per knowledge base outcome, in the same order as `kbNames`. */
-    kbDetails: KnowledgeBaseDetail[];
     /** Trimmed query text as sent by the model. */
     query: string;
     /** Query with repeated words removed, as shown in the row. */
@@ -181,24 +171,11 @@ export function describeKnowledgeCall(
     const argIds = searchedKnowledgeBaseIds(tc);
     const kbKeys = argIds.length > 0 ? argIds : [...hits.keys()];
 
-    // One entry per distinct name, with that knowledge base's own outcome, so a
-    // knowledge base that returned nothing can say so instead of looking idle.
-    const kbDetails: KnowledgeBaseDetail[] = [];
+    const kbNames: string[] = [];
     for (const key of kbKeys) {
         const name = kbNameById[key] || hits.get(key)?.kbName || "";
-        if (!name) continue;
-        const hit = hits.get(key);
-        const chunkCount = hit?.chunks.length ?? 0;
-        const failed = !!hit?.error;
-        const existing = kbDetails.find((d) => d.name === name);
-        if (existing) {
-            existing.chunkCount += chunkCount;
-            existing.failed = existing.failed || failed;
-        } else {
-            kbDetails.push({ name, chunkCount, failed });
-        }
+        if (name && !kbNames.includes(name)) kbNames.push(name);
     }
-    const kbNames = kbDetails.map((d) => d.name);
 
     const docs: string[] = [];
     let chunkCount = 0;
@@ -212,7 +189,7 @@ export function describeKnowledgeCall(
     });
 
     const query = String(tc.args?.query ?? "").trim();
-    return { kbKeys, kbNames, kbDetails, query, displayQuery: compactKnowledgeQuery(query), queryReadable: isReadableKnowledgeQuery(query), chunkCount, docs, hasError };
+    return { kbKeys, kbNames, query, displayQuery: compactKnowledgeQuery(query), queryReadable: isReadableKnowledgeQuery(query), chunkCount, docs, hasError };
 }
 
 /**
