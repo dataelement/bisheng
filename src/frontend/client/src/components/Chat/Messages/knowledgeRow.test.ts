@@ -11,6 +11,7 @@ import {
     planKnowledgeRows,
     summariseKnowledgeBaseNames,
     compactKnowledgeQuery,
+    unnamedKnowledgeBaseIds,
 } from "./knowledgeRow";
 
 /** Mirrors the backend chunk string (KnowledgeUtils.format_retrieved_chunk). */
@@ -219,6 +220,25 @@ describe("describeKnowledgeCall per knowledge base", () => {
         expect(describeKnowledgeCall(tc, { "2": "同名" }).kbDetails).toEqual([
             { name: "同名", chunkCount: 1, failed: false },
         ]);
+    });
+});
+
+describe("unnamedKnowledgeBaseIds", () => {
+    it("lists searched ids that neither the selection nor any result names", () => {
+        const ev = asEvent(call("c1", "q", ["1", "2", "3"], [chunk("1", "KB1", "A.docx", "rag_c1:0")]));
+        expect(unnamedKnowledgeBaseIds([ev], { "2": "空空间" })).toEqual(["3"]);
+    });
+
+    it("collects across searches, once each, in first-seen order", () => {
+        const a = asEvent(call("c1", "q", ["9", "8"], []));
+        const b = asEvent(call("c2", "q", ["8", "7"], []));
+        expect(unnamedKnowledgeBaseIds([a, think("x"), b], {})).toEqual(["9", "8", "7"]);
+    });
+
+    it("ignores calls without ids and non-knowledge tools", () => {
+        const noIds = asEvent(call("c1", "q", undefined, []));
+        const web = { type: "tool_call", tool_call_id: "w", tool_name: "web_search", tool_type: "web", args: { knowledge_base_ids: ["5"] }, results: [] } as AgentEvent;
+        expect(unnamedKnowledgeBaseIds([noIds, web], {})).toEqual([]);
     });
 });
 

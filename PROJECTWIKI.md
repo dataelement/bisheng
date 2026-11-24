@@ -41,7 +41,8 @@ flowchart LR
 ### ADR-2 只用后端已有字段
 
 - 使用 `tool_call_id`、`args.query`、`args.knowledge_base_ids` 和结果里的标签串（`<knowledge_base_id>`、`<knowledge_base_name>`、`<file_title>`、`<retrieval_error>`）。
-- 检索中的行没有知识库名：先用聊天输入框已选知识库的 id 到名称映射补全，再用同一次深度思考里已出现的结果覆盖。文档知识库与知识空间的 id 属于同一个 id 空间，一份映射通用。
+- 知识库名称的来源，优先级从低到高：按 id 查询（`useKnowledgeBaseNames`：文档知识库查 `/api/v1/knowledge` 组织列表，知识空间查 `/knowledge/space/{id}/info`，均由 react-query 缓存）、聊天输入框已选知识库、检索结果里的名称。文档知识库与知识空间的 id 属于同一个 id 空间。
+- 分享页（`shareToken`）不发起 id 查询，`KnownKnowledgeBaseNamesContext.lookupEnabled` 为 false。
 
 ### ADR-3 整次调用失败与部分失败的判定
 
@@ -80,7 +81,7 @@ flowchart LR
 | 缺组件测试 | 只有纯函数测试，没有 `KnowledgeSearchRow` 的组件测试 | 中 |
 | 知识库标签来源 | id 取自模型传入的 `knowledge_base_ids`，模型传错 id 时可能显示未检索的库 | 低 |
 | 标签数大于有命中文档的知识库数 | 展开态只显示文档，不按知识库分组；用悬停标签显示各自条数（`describeKnowledgeCall` 的 `kbDetails`）说明，不另加界面元素 | 低 |
-| 历史回看的知识库名称 | 没返回内容的知识库，名称取自当前聊天页已选知识库（`KnownKnowledgeBaseNamesContext`），重新打开旧对话时若当前选择不同，这些库的标签会缺失 | 低 |
+| 无法解析名称的知识库 | 无权限或已删除的知识库按 id 查不到名称，其标签不显示 | 低 |
 | 无障碍 | 收起的面板中文档标签仍可聚焦 | 低 |
 | 文档标签不可点击 | 需后端补文档标识 | 待产品确认 |
 

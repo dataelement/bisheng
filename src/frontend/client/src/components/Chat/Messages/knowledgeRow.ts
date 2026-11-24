@@ -216,6 +216,26 @@ export function describeKnowledgeCall(
 }
 
 /**
+ * Knowledge base ids the model searched in this run that no name is known for,
+ * neither from `knownNames` nor from the result strings. These are looked up by
+ * id (see useKnowledgeBaseNames). Each id once, in first-seen order.
+ */
+export function unnamedKnowledgeBaseIds(
+    events: AgentEvent[],
+    knownNames: Record<string, string> = {},
+): string[] {
+    const named = planKnowledgeRows(events, knownNames).kbNameById;
+    const ids: string[] = [];
+    for (const ev of events) {
+        if (ev.type !== "tool_call" || !isKnowledgeToolCall(ev)) continue;
+        for (const id of searchedKnowledgeBaseIds(ev)) {
+            if (!named[id] && !ids.includes(id)) ids.push(id);
+        }
+    }
+    return ids;
+}
+
+/**
  * Number every knowledge search of one deep-thinking run (1-based) and collect
  * the knowledge base names seen in the results, so a search that is still
  * running can already show its knowledge base. Rows are never merged or

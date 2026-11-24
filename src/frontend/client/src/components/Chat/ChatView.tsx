@@ -99,7 +99,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   );
   const selectedOrgKbIdsKey = selectedOrgKbIds.join(',');
   // Lets deep-thinking knowledge rows name a searched knowledge base that returned nothing.
-  const selectedKbNames = useMemo(() => knownKnowledgeBaseNames(selectedOrgKbs), [selectedOrgKbs]);
+  const knownKbNamesContext = useMemo(
+    () => ({ names: knownKnowledgeBaseNames(selectedOrgKbs), lookupEnabled: !shareToken }),
+    [selectedOrgKbs, shareToken],
+  );
   const { data: visibleSelectedOrgKbs = [], isSuccess: selectedOrgKbVisibilityReady } = useGetOrgToolList(
     {
       page: 1,
@@ -750,7 +753,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {/* Left: Chat Main (Messages + Input). */}
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
                       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-                        <KnownKnowledgeBaseNamesContext.Provider value={selectedKbNames}>
+                        <KnownKnowledgeBaseNamesContext.Provider value={knownKbNamesContext}>
                         <AiChatMessages
                           messages={messages}
                           conversationId={activeConvoId}

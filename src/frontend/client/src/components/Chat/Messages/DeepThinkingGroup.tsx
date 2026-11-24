@@ -32,7 +32,8 @@ import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import KnowledgeSearchRow from "./KnowledgeSearchRow";
 import KnownKnowledgeBaseNamesContext from "./KnownKnowledgeBaseNamesContext";
-import { planKnowledgeRows, type KnowledgeRowContext } from "./knowledgeRow";
+import { planKnowledgeRows, unnamedKnowledgeBaseIds, type KnowledgeRowContext } from "./knowledgeRow";
+import { useKnowledgeBaseNames } from "./useKnowledgeBaseNames";
 import ThinkingContent from "./ThinkingContent";
 import ToolCallDisplay from "./ToolCallDisplay";
 
@@ -91,10 +92,21 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         // position (see knowledgeRow.ts).
         // Names of the knowledge bases the user selected label searches that
         // returned nothing, whose names the results never carry.
-        const selectedKbNames = useContext(KnownKnowledgeBaseNamesContext);
-        const knowledgePlan = useMemo(
-            () => planKnowledgeRows(events, selectedKbNames),
+        // Searched ids that are still unnamed (no chunk returned, not in the
+        // selection) are looked up by id, so an old conversation names them too.
+        const { names: selectedKbNames, lookupEnabled } = useContext(KnownKnowledgeBaseNamesContext);
+        const unnamedKbIds = useMemo(
+            () => unnamedKnowledgeBaseIds(events, selectedKbNames),
             [events, selectedKbNames],
+        );
+        const lookedUpKbNames = useKnowledgeBaseNames(unnamedKbIds, lookupEnabled);
+        const knownKbNames = useMemo(
+            () => ({ ...selectedKbNames, ...lookedUpKbNames }),
+            [selectedKbNames, lookedUpKbNames],
+        );
+        const knowledgePlan = useMemo(
+            () => planKnowledgeRows(events, knownKbNames),
+            [events, knownKbNames],
         );
 
         const segments = useMemo(() => {
