@@ -1535,6 +1535,7 @@
     "value": "値",
     "result": "テスト結果",
     "outResultPlaceholder": "ボタンをクリックしてテスト結果を出力",
+    "enterKeyForChangedConfiguration": "変更した設定をテストするには、API キーを再入力してください。",
     "addVersion": "バージョン追加",
     "selectVersion": "バージョン選択",
     "component": "コンポーネント",

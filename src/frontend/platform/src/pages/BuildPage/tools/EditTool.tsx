@@ -7,7 +7,7 @@ import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-u
 import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
-import { createTool,deleteTool,downloadToolSchema,testToolApi,updateTool } from "@/controllers/API/tools";
+import { createTool,deleteTool,downloadToolSchema,testSavedToolApi,testToolApi,updateTool } from "@/controllers/API/tools";
 import { showApiError } from "@/controllers/request";
 import { OpenApiAuthentication } from "./OpenApiAuthentication";
 import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
@@ -15,6 +15,9 @@ import { useTranslation } from "react-i18next";
 import { formData } from "./toolSchemaExamples";
 import { OpenApiSchemaInput } from "./OpenApiSchemaInput";
 import type { OpenApiSchemaSource } from "@/controllers/API/tools";
+
+const MASKED_API_KEY = '********';
+
 interface TestDialogProps {
     tool: any;
     formState: any;
@@ -66,19 +69,35 @@ export const TestDialog = forwardRef<{
         if (errors.length > 0) {
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
+        const tool = toolRef.current
+        const { server_host, children, parameter_name } = tool
+        const { apiKey, apiLocation, authMethod, authType, parameter, schemaContent } = formRef.current.state
+        const usesSavedKey = authMethod === 'apikey' && apiKey === MASKED_API_KEY
+        if (usesSavedKey && (
+            !tool.id || !apiData.id || schemaContent !== tool.openapi_schema || tool.auth_method !== 1
+            || authType !== tool.auth_type
+            || (apiLocation || 'query') !== (tool.api_location || 'query')
+            || (parameter || '') !== (parameter_name || '')
+        )) {
+            return toast.show({ type: 'warning', message: t('test.enterKeyForChangedConfiguration') })
+        }
         setLoading(true)
-        const { server_host, children, parameter_name } = toolRef.current
-        const { apiKey, apiLocation, authMethod, authType, parameter } = formRef.current.state
-        await testToolApi({
+        // Leave unfilled parameters out of the request so the API applies its own defaults;
+        // sending "" breaks typed fields (e.g. an integer `count`) and length-checked strings.
+        const requestParams = Object.fromEntries(
+            Object.entries(formRef.current.values).filter(([, value]) => value !== '')
+        )
+        const request = usesSavedKey ? testSavedToolApi(tool.id, apiData.id, requestParams) : testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
             auth_method: authMethod === 'apikey' ? 1 : 0,
             auth_type: authType,
-            api_key: apiKey,
-            request_params: formRef.current.values,
+            api_key: authMethod === 'apikey' ? apiKey : '',
+            request_params: requestParams,
             api_location: apiLocation || 'query',
             parameter_name: parameter || parameter_name
-        }).then(setResult).catch(showApiError).finally(() => setLoading(false))
+        })
+        await request.then(setResult).catch(showApiError).finally(() => setLoading(false))
     }
     return <Dialog open={testShow} onOpenChange={setTestShow}>
         <DialogContent className="sm:max-w-[625px]">
@@ -142,6 +161,7 @@ const EditTool = forwardRef((props: any, ref) => {
     const [canDelete, setCanDelete] = useState(false)
     useImperativeHandle(ref, () => ({
         open: () => {
+            fromDataRef.current = {}
             setEditShow(true)
             setDelShow(false)
         }, edit: (tool) => {

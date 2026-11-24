@@ -1535,6 +1535,7 @@
     "value": "值",
     "result": "测试结果",
     "outResultPlaceholder": "点击按钮，输出测试结果",
+    "enterKeyForChangedConfiguration": "测试修改后的接口配置前，请重新输入 API Key。",
     "addVersion": "添加版本",
     "selectVersion": "选择版本",
     "component": "组件",
