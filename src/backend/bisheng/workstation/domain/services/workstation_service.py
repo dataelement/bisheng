@@ -722,13 +722,30 @@ class WorkStationService(BaseService):
         if not identified:
             return []
 
-        action_map = await batch_check_business_actions(
-            login_user,
-            resource_type="knowledge_library",
-            resource_ids=[item["id"] for item in identified],
-            actions=("visible",),
+        from bisheng.knowledge.domain.repositories.knowledge_compatibility_repository import (
+            KnowledgeCompatibilityRepository,
         )
-        return [item for item in identified if "visible" in action_map.get(str(item["id"]), frozenset())]
+
+        # Since the 3.1 knowledge merge an admin configures knowledge spaces here.
+        # A space is checked as ``knowledge_space``; checked as ``knowledge_library``
+        # it resolves to nothing and every non-admin lost it. Group the ids by their
+        # actual type, as the HTTP permission endpoints do. Unknown ids drop out.
+        ids = [int(item["id"]) for item in identified if str(item["id"]).isdecimal()]
+        actual_types = await KnowledgeCompatibilityRepository().aresource_types(ids)
+        by_type: dict[str, list[int]] = {}
+        for resource_id in ids:
+            if resource_id in actual_types:
+                by_type.setdefault(actual_types[resource_id], []).append(resource_id)
+        visible: set[str] = set()
+        for resource_type, resource_ids in by_type.items():
+            action_map = await batch_check_business_actions(
+                login_user,
+                resource_type=resource_type,
+                resource_ids=resource_ids,
+                actions=("visible",),
+            )
+            visible.update(key for key, actions in action_map.items() if "visible" in actions)
+        return [item for item in identified if str(item["id"]) in visible]
 
     @classmethod
     async def _aproject_daily_config_for_current_tenant(

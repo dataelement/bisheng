@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from bisheng.api.v1.schemas import OrgKbConfig, WorkstationConfig
 from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
 from bisheng.llm.domain.services.llm import LLMService
@@ -20,6 +22,20 @@ async def test_daily_config_can_skip_models_that_the_endpoint_replaces(monkeypat
     config = await WorkStationService.get_daily_chat_config(for_picker=True, include_models=False)
     assert config.models is None
     picker.assert_not_awaited()
+
+
+@pytest.fixture(autouse=True)
+def _org_kbs_are_document_libraries(monkeypatch):
+    """These tests predate knowledge spaces in orgKbs; type every id as a library."""
+
+    async def resource_types(self, ids):
+        return dict.fromkeys(ids, "knowledge_library")
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.repositories.knowledge_compatibility_repository."
+        "KnowledgeCompatibilityRepository.aresource_types",
+        resource_types,
+    )
 
 
 async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):

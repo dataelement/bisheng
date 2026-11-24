@@ -94,7 +94,20 @@ async def test_the_child_tenant_projection_keeps_the_field(monkeypatch):
     assert [(item["id"], item["show_in_composer"]) for item in kept] == [(7, False)]
 
 
+def _stub_types(monkeypatch, types: dict[int, str]) -> None:
+    async def resource_types(self, ids):
+        return {resource_id: types[resource_id] for resource_id in ids if resource_id in types}
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.repositories.knowledge_compatibility_repository."
+        "KnowledgeCompatibilityRepository.aresource_types",
+        resource_types,
+    )
+
+
 async def test_the_visible_filter_keeps_the_field(monkeypatch):
+    _stub_types(monkeypatch, {8: "knowledge_space"})
+
     async def fake_batch(user, *, resource_type, resource_ids, actions):
         return {str(i): frozenset({"visible"}) for i in resource_ids}
 
@@ -107,3 +120,39 @@ async def test_the_visible_filter_keeps_the_field(monkeypatch):
     kept = await WorkStationService.afilter_org_kbs_by_visible_permission(items, SimpleNamespace(user_id=1))
 
     assert kept == items
+
+
+async def test_the_visible_filter_checks_each_id_as_its_actual_resource_type(monkeypatch):
+    # AC-29/AC-34: configured knowledge spaces were checked as knowledge_library and
+    # resolved to nothing, so no non-admin ever got one.
+    _stub_types(monkeypatch, {1: "knowledge_space", 2: "knowledge_library", 3: "knowledge_space"})
+    calls = []
+
+    async def fake_batch(user, *, resource_type, resource_ids, actions):
+        calls.append((resource_type, list(resource_ids)))
+        allowed = {"knowledge_space": {"1"}, "knowledge_library": {"2"}}[resource_type]
+        return {str(i): frozenset({"visible"}) if str(i) in allowed else frozenset() for i in resource_ids}
+
+    monkeypatch.setattr(
+        "bisheng.permission.application.business_authorization.batch_check_business_actions",
+        fake_batch,
+    )
+    items = [{"id": i, "name": f"kb {i}"} for i in (1, 2, 3, 4)]
+
+    kept = await WorkStationService.afilter_org_kbs_by_visible_permission(items, SimpleNamespace(user_id=1))
+
+    assert [item["id"] for item in kept] == [1, 2]
+    assert sorted(calls) == [("knowledge_library", [2]), ("knowledge_space", [1, 3])]
+
+
+async def test_the_open_api_daily_config_lists_no_knowledge_bases(monkeypatch):
+    # AC-36: configured knowledge bases are a workbench default only; open API callers pass their own.
+    from unittest.mock import AsyncMock
+
+    config = WorkstationConfig(tools=[], orgKbs=[OrgKbConfig(id=1, name="kb", show_in_composer=False)])
+    monkeypatch.setattr(WorkStationService, "get_daily_chat_config", AsyncMock(return_value=config))
+    monkeypatch.setattr("bisheng.dsh.domain.services.model_catalog.user_workbench_models", AsyncMock(return_value=[]))
+
+    result = await WorkStationService.get_open_api_daily_config(SimpleNamespace(user_id=1))
+
+    assert set(result) == {"models", "tools"}
