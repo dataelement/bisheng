@@ -1127,7 +1127,6 @@
     "webSearch": {
       "reimportDeclarations": "完全なパラメーター定義の表示・編集には OpenAPI 記述を再インポートしてください。保存済みの値を以下に表示します。",
       "includeParameter": "パラメーターを含める",
-      "proofRequired": "保存またはテストする前に OpenAPI 記述をインポートし、操作を選択してください。",
       "requiredFields": "操作、検索語パラメーター、必須マッピングと認証情報を入力してください。",
       "custom": "カスタム",
       "reload": "保存済み設定を再読み込み",

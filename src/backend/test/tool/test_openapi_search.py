@@ -44,13 +44,83 @@ def draft(doc):
             "response_mode": "raw",
         },
         "mapping": {},
-        "proof": {"key_id": "", "ciphertext": ""},
     }
 
 
 def response(value, status=201, media="application/json"):
     payload = json.dumps(value).encode() if media.endswith("json") else value.encode()
     return json.dumps({"status": status, "content_type": media, "body": base64.b64encode(payload).decode()}).encode()
+
+
+@pytest.mark.parametrize("auth", [{"location": "none", "name": ""}, {"location": "header", "name": "Other-Key"}])
+def test_authentication_still_matches_declaration_without_proof(auth):
+    config = draft(document())
+    config["operation"]["declaration"]["security"] = {"location": "header", "name": "X-Key"}
+    config["operation"]["auth"] = auth
+    with pytest.raises(HTTPException, match="authentication settings"):
+        service._custom(config)
+
+
+@pytest.mark.parametrize("old_proof", [None, {"key_id": "root-key", "ciphertext": "expired-root-proof"}, "invalid"])
+@pytest.mark.usefixtures("store")
+async def test_copied_settings_preview_save_and_executor_ignore_old_proof(monkeypatch, old_proof):
+    """Copied declarations work in their target tenant without re-importing a schema."""
+    from unittest.mock import Mock
+
+    from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsType
+    from bisheng.tool.domain.services import executor
+
+    config = draft(document())
+    if old_proof is not None:
+        config["proof"] = old_proof
+    raw = json.dumps({"enabled": True, "type": "custom", "config": {"custom": config}})
+    category = GptsToolsType(id=17, name="copied search", tenant_id=2, is_preset=1, extra=raw)
+    tool = GptsTools(id=39, name="search", type=17, tool_key="web_search", tenant_id=2, is_preset=1)
+    async with service.get_async_db_session() as db:
+        db.add(category)
+        db.add(tool)
+        await db.commit()
+
+    monkeypatch.setattr(service, "get_current_tenant_id", lambda: 2)
+    monkeypatch.setattr(executor, "get_current_tenant_id", lambda: 2)
+    view = await service.get_settings(17)
+    expected = {key: config[key] for key in ("operation", "mapping")}
+    assert view["providers"]["custom"] == expected
+
+    upstream = Mock(return_value=response({"answer": "found"}))
+    monkeypatch.setattr(service, "execute_request", upstream)
+    preview = await service.search_preview(17, {"draft": config, "query": "query", "secret": {"action": "keep"}})
+    assert preview["results"] == {"answer": "found"}
+    upstream.assert_called_once()
+
+    loaded = object()
+    loader = Mock(return_value=[loaded])
+    monkeypatch.setattr(executor, "load_tools", loader)
+    assert executor.ToolExecutor._init_preset_tool(tool, category) is loaded
+    assert loader.call_args.kwargs["tool_params"]["web_search"]["config"]["custom"] == expected
+    assert category.extra == raw
+
+    saved = await service.put_settings(
+        17,
+        service.SettingsWrite(
+            revision=view["revision"],
+            enabled=True,
+            type="custom",
+            prompt="",
+            providers={"custom": config},
+            custom_secret={"action": "keep"},
+        ),
+        42,
+    )
+    assert saved["providers"]["custom"] == expected
+    async with service.get_async_db_session() as db:
+        persisted = await db.get(GptsToolsType, 17)
+        assert json.loads(persisted.extra)["config"]["custom"] == expected
+
+    monkeypatch.setattr(service, "get_current_tenant_id", lambda: 1)
+    with pytest.raises(HTTPException) as exc:
+        await service.get_settings(17)
+    assert exc.value.status_code == 404
 
 
 @pytest.mark.usefixtures("store")
@@ -108,7 +178,8 @@ paths:
     imported = (await service.schema_preview(16, {"content": content}))["operations"][0]
     op = draft(yaml.safe_load(content))["operation"]
     op["request"]["body"].update(model="fixture-model", input="{{query}}")
-    service.verify_operation(op, imported["proof"], tenant_id=1, category_id=16)
+    assert "proof" not in imported
+    service._custom({"operation": op, "mapping": {}})
     request = build_request(op, 'search "quoted" text', "Bearer fixture-token")
     assert request["url"] == "https://search.example/modelapi/v1/responses"
     assert request["headers"]["Authorization"] == "Bearer fixture-token"
@@ -254,14 +325,14 @@ def test_response_schema_status_and_redaction():
 
 
 @pytest.mark.usefixtures("store")
-async def test_real_save_read_preview_runtime_and_tamper_protection(monkeypatch):
+async def test_real_save_read_preview_runtime_without_proof(monkeypatch):
     """AC-14/15/17/18/21/22/24/26/27/28: actual management and tool with isolated upstream."""
     doc = nested_document()
     doc["components"] = {"securitySchemes": {"key": {"type": "apiKey", "in": "header"}}}
     doc["security"] = [{"key": []}]
     item = (await service.schema_preview(16, {"content": json.dumps(doc)}))["operations"][0]
     config = draft(doc)
-    config["proof"] = item["proof"]
+    assert "proof" not in item
     config["operation"]["request"]["body"] = {
         "id": "{{uuid}}",
         "model": "configured-model",
@@ -304,10 +375,10 @@ async def test_real_save_read_preview_runtime_and_tamper_protection(monkeypatch)
     assert json.loads(runtime.invoke("actual query")) == value
     bodies = [json.loads(base64.b64decode(req["body_base64"])) for req in calls]
     assert bodies[0]["commands"]["search_query"][0]["q"] == "actual query" and bodies[0]["id"] != bodies[1]["id"]
-    tampered = copy.deepcopy(config)
-    tampered["operation"]["declaration"]["responses"] = {}
-    with pytest.raises(HTTPException, match="does not match"):
-        service.verify_operation(tampered["operation"], tampered["proof"], tenant_id=1, category_id=16)
+    invalid = copy.deepcopy(config)
+    invalid["operation"]["request"]["body"]["commands"]["search_query"] = "wrong-type"
+    with pytest.raises(HTTPException, match="does not match schema"):
+        service._custom(invalid)
 
 
 @pytest.mark.parametrize("response_delay", [0, 6])

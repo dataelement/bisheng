@@ -58,8 +58,6 @@ def test_system_cipher_uses_platform_encrypt_token_without_keyring():
     with pytest.raises(search_service.SecretUnavailable):
         cipher.decrypt(key_id, token, tenant_id=2, category_id=16)
     with pytest.raises(search_service.SecretUnavailable):
-        search_service.OperationCipher.configured().decrypt(key_id, token, tenant_id=1, category_id=16)
-    with pytest.raises(search_service.SecretUnavailable):
         cipher.decrypt("old", token, tenant_id=1, category_id=16)
 
 
@@ -86,23 +84,6 @@ async def store(monkeypatch):
 
 
 def draft(revision, action):
-    from bisheng.tool.domain.services.web_search import issue_proof
-
-    proof = issue_proof(
-        {
-            "server": "https://example.com",
-            "method": "GET",
-            "path": "/search",
-            "security": None,
-            "parameters": [
-                {"location": "query", "name": "q", "type": "string", "required": True},
-                {"location": "query", "name": "key", "type": "string", "required": False},
-                {"location": "query", "name": "credential", "type": "string", "required": False},
-            ],
-        },
-        tenant_id=1,
-        category_id=16,
-    )
     return search_service.SettingsWrite(
         revision=revision,
         enabled=True,
@@ -110,7 +91,6 @@ def draft(revision, action):
         prompt="",
         providers={
             "custom": {
-                "proof": proof,
                 "operation": {
                     "server": "https://example.com",
                     "method": "GET",
@@ -215,10 +195,10 @@ async def test_roundtrip_replace_keep_clear_and_stale_revision(store):
     with pytest.raises(HTTPException) as exc:
         await search_service.put_settings(16, draft(first["revision"], {"action": "keep"}), 42)
     assert exc.value.status_code == 409
-    tampered = draft(saved["revision"], {"action": "keep"})
-    tampered.providers["custom"]["operation"]["path"] = "/other"
+    invalid = draft(saved["revision"], {"action": "keep"})
+    invalid.providers["custom"]["operation"]["path"] = "invalid-path"
     with pytest.raises(HTTPException) as exc:
-        await search_service.put_settings(16, tampered, 42)
+        await search_service.put_settings(16, invalid, 42)
     assert exc.value.status_code == 422
     kept = await search_service.put_settings(16, draft(saved["revision"], {"action": "keep"}), 42)
     assert kept["custom_secret_configured"]
@@ -409,6 +389,66 @@ async def test_management_requires_confirmed_global_super(
         check.assert_not_awaited()
 
 
+async def test_api_import_save_read_and_preview_without_proof(app, store, monkeypatch):
+    """AC-02/06/07/08: exercise actual management handlers and isolated persistence."""
+    from test.e2e.helpers.api import assert_resp_200
+
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(user_id=42, is_global_super=True)
+    monkeypatch.setattr(http_middleware, "_check_is_global_super", AsyncMock(return_value=True))
+    content = json.dumps(
+        {
+            "openapi": "3.0.3",
+            "info": {"title": "Search", "version": "1"},
+            "servers": [{"url": "https://example.com"}],
+            "paths": {"/search": {"get": {"responses": {"200": {"content": {"application/json": {}}}}}}},
+        }
+    )
+    upstream = Mock(return_value=b'{"status":200,"content_type":"application/json","body":"e30="}')
+    monkeypatch.setattr(search_service, "execute_request", upstream)
+    base = "/api/v1/tool/16/web-search"
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        imported = assert_resp_200(await client.post(f"{base}/schema", json={"content": content}))["operations"][0]
+        assert "proof" not in imported
+        config = {
+            "operation": {
+                key: imported[key]
+                for key in ("version", "server", "method", "path", "declaration", "media_type", "request")
+            },
+            "mapping": {},
+        }
+        config["operation"].update(auth={"location": "none", "name": ""}, response_mode="raw")
+        current = assert_resp_200(await client.get(f"{base}/settings"))
+        saved = assert_resp_200(
+            await client.put(
+                f"{base}/settings",
+                json={
+                    "revision": current["revision"],
+                    "enabled": True,
+                    "type": "custom",
+                    "prompt": "",
+                    "providers": {"custom": config},
+                    "custom_secret": {"action": "keep"},
+                },
+            )
+        )
+        assert "proof" not in saved["providers"]["custom"]
+        restored = assert_resp_200(await client.get(f"{base}/settings"))
+        assert restored["providers"]["custom"] == config
+        config["proof"] = {"key_id": "root", "ciphertext": "copied-from-root"}
+        preview = assert_resp_200(
+            await client.post(
+                f"{base}/test",
+                json={
+                    "draft": config,
+                    "query": "query",
+                    "secret": {"action": "keep"},
+                },
+            )
+        )
+        assert preview == {"status": "success", "preview": {}, "results": {}}
+        upstream.assert_called_once()
+
+
 @pytest.mark.parametrize("provider,child_override", [("bing", False), ("searXNG", True)])
 def test_legacy_provider_initialization_does_not_use_custom_secrets(monkeypatch, provider, child_override):
     monkeypatch.delenv("BISHENG_WEB_SEARCH_SECRET_KEYRING", raising=False)
@@ -536,7 +576,7 @@ async def test_import_save_executor_http(tmp_path, monkeypatch):
         assert (imported["server"], imported["path"], imported["method"]) == (origin, "/search", "GET")
         current = await search_service.get_settings(16)
         request = draft(current["revision"], {"action": "replace", "value": "test-secret"})
-        request.providers["custom"]["proof"] = imported["proof"]
+        assert "proof" not in imported
         request.providers["custom"]["operation"] = {
             "version": 2,
             "server": origin,

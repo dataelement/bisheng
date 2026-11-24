@@ -3,7 +3,6 @@
 import asyncio
 import hashlib
 import json
-import math
 import re
 import uuid
 from datetime import UTC, datetime
@@ -82,79 +81,6 @@ class WebSearchCipher:
             raise SecretUnavailable("Custom search secret unavailable") from None
 
 
-class OperationCipher(WebSearchCipher):
-    _domain = "bisheng-custom-web-search-operation-v1"
-
-
-def issue_proof(declaration, *, tenant_id: int, category_id: int):
-    payload = json.dumps(declaration, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    key_id, ciphertext = OperationCipher.configured().encrypt(payload, tenant_id=tenant_id, category_id=category_id)
-    return {"key_id": key_id, "ciphertext": ciphertext}
-
-
-def verify_operation(operation, proof, *, tenant_id: int, category_id: int):
-    try:
-        if not isinstance(proof, dict) or set(proof) != {"key_id", "ciphertext"}:
-            raise ValueError
-        decoded = OperationCipher.configured().decrypt(
-            proof["key_id"], proof["ciphertext"], tenant_id=tenant_id, category_id=category_id
-        )
-        declaration = json.loads(decoded)
-        if any(operation[k] != declaration[k] for k in ("server", "method", "path")):
-            raise ValueError
-        if operation.get("version") == 2:
-            if declaration.get("version") != 2 or operation["declaration"] != declaration["declaration"]:
-                raise ValueError
-            required_auth = declaration["security"]
-            auth = operation["auth"]
-            if required_auth is not None and any(
-                required_auth.get(key) and auth[key] != required_auth[key] for key in ("location", "name")
-            ):
-                raise ValueError
-            if required_auth is not None and auth["location"] == "none":
-                raise ValueError
-            return
-        if declaration.get("version", 1) != 1:
-            raise ValueError
-        allowed = {(p["location"], p["name"]): p for p in declaration["parameters"]}
-        query = operation["query_parameter"]
-        query_key = (query["location"], query["name"])
-        if query_key not in allowed or allowed[query_key]["type"] != "string":
-            raise ValueError
-        used = {query_key}
-        for param in operation["fixed_params"]:
-            key = (param["location"], param["name"])
-            if key in used or key not in allowed:
-                raise ValueError
-            value = param["value"]
-            kind = allowed[key]["type"]
-            if not (
-                (kind == "string" and type(value) is str)
-                or (kind == "integer" and type(value) is int)
-                or (kind == "number" and type(value) in (int, float) and math.isfinite(value))
-                or (kind == "boolean" and type(value) is bool)
-            ):
-                raise ValueError
-            used.add(key)
-        auth = operation["auth"]
-        required_auth = declaration["security"]
-        if required_auth is not None and auth != required_auth:
-            raise ValueError
-        # A query apiKey may also be described as a parameter.
-        if auth["location"] == "query":
-            key = ("query", auth["name"])
-            if key in used:
-                raise ValueError
-            if key in allowed:
-                if allowed[key]["type"] != "string":
-                    raise ValueError
-                used.add(key)
-        if any(p["required"] and key not in used for key, p in allowed.items()):
-            raise ValueError
-    except (KeyError, TypeError, ValueError, SecretUnavailable, OverflowError):
-        raise HTTPException(422, "Search operation does not match imported schema") from None
-
-
 class SecretChange(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["keep", "replace", "clear"]
@@ -190,16 +116,11 @@ def _revision(category, children, secret):
 
 
 def _custom(value):
-    if not isinstance(value, dict) or set(value) != {"operation", "mapping", "proof"}:
+    if not isinstance(value, dict) or set(value) not in ({"operation", "mapping"}, {"operation", "mapping", "proof"}):
         raise HTTPException(422, "Invalid custom search configuration")
+    # Accept persisted settings and older clients, but discard their obsolete proof.
+    value = {key: value[key] for key in ("operation", "mapping")}
     op, mapping = value["operation"], value["mapping"]
-    proof = value["proof"]
-    if (
-        not isinstance(proof, dict)
-        or set(proof) != {"key_id", "ciphertext"}
-        or any(not isinstance(item, str) for item in proof.values())
-    ):
-        raise HTTPException(422, "Invalid custom search proof")
     if isinstance(op, dict) and op.get("version") == 2:
         if set(op) != {
             "version",
@@ -220,6 +141,16 @@ def _custom(value):
             or auth["location"] not in {"none", "header", "query", "cookie"}
             or not isinstance(auth["name"], str)
             or (auth["location"] != "none" and not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", auth["name"]))
+        ):
+            raise HTTPException(422, "Complete the OpenAPI authentication settings")
+        declaration = op.get("declaration")
+        if not isinstance(declaration, dict):
+            raise HTTPException(422, "Invalid OpenAPI search declaration")
+        required_auth = declaration.get("security")
+        if required_auth is not None and (
+            not isinstance(required_auth, dict)
+            or auth["location"] == "none"
+            or any(required_auth.get(key) and auth[key] != required_auth[key] for key in ("location", "name"))
         ):
             raise HTTPException(422, "Complete the OpenAPI authentication settings")
         if op["response_mode"] not in {"raw", "mapped"}:
@@ -337,7 +268,7 @@ def _view(category, children, secret):
         providers["custom"] = visible["custom"]
     if "custom" in providers:
         try:
-            _custom(providers["custom"])
+            providers["custom"] = _custom(providers["custom"])
         except HTTPException:
             # Do not expose legacy or malformed custom settings; re-import is required.
             providers.pop("custom")
@@ -394,12 +325,6 @@ async def put_settings(category_id, req: SettingsWrite, user_id: int):
             if not custom:
                 raise HTTPException(422, "Custom search settings are required")
             merged["custom"] = _custom(custom)
-            verify_operation(
-                merged["custom"]["operation"],
-                merged["custom"]["proof"],
-                tenant_id=category.tenant_id,
-                category_id=category.id,
-            )
         action = req.custom_secret.action
         credentials = []
         if action == "replace":
@@ -560,8 +485,6 @@ async def schema_preview(category_id, data):
     try:
         schema, _ = await ToolServices.load_openapi_schema(data.get("url"), data.get("content"), download=download)
         operations = _search_operations(schema)
-        for operation in operations:
-            operation["proof"] = issue_proof(operation, tenant_id=get_current_tenant_id(), category_id=category_id)
         return {"operations": operations}
     except CustomSearchError as exc:
         raise HTTPException(422, str(exc)) from None
@@ -577,7 +500,6 @@ async def search_preview(category_id, data):
     if not isinstance(query, str) or not query or len(query) > 8192:
         raise HTTPException(422, "Invalid search test")
     secret = await _resolve(category_id, data["secret"])
-    verify_operation(draft["operation"], draft["proof"], tenant_id=get_current_tenant_id(), category_id=category_id)
     try:
         request = build_request(draft["operation"], query, secret)
         raw = await asyncio.to_thread(execute_request, request)

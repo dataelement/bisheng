@@ -28,8 +28,8 @@
 - [ ] **T015** 测试：在 `src/backend/test/tool/test_custom_web_search.py` 验证草稿测试不持久化、请求共用固定参数、预览与结果对已知密钥直接/嵌套及 URL/Base64 编码脱敏，错误和响应头不泄露；记录分片及未知变形风险。**覆盖 AC: AC-05, AC-06, AC-12, AC-13**。依赖：T004, T008, T010。
 - [ ] **T016** 实现：在 `src/backend/bisheng/tool/domain/services/web_search.py` 实现 T015 约定的测试和有限脱敏；运行 T015，不把有限脱敏表述成绝对保证。依赖：T015。
 
-- [ ] **T040** 测试：在 `src/backend/test/tool/test_custom_web_search.py` 覆盖 schema 返回的 `{key_id, ciphertext}` 操作 proof 与 tenant/category 绑定、篡改及跨租户拒绝、操作参数和类型验证、旧 key 轮换后的可解密性。**覆盖 AC: AC-02, AC-06, AC-08, AC-12, AC-13**。依赖：T006, T012。
-- [ ] **T041** 实现：在 `src/backend/bisheng/tool/domain/services/web_search.py` 核对并补齐 T040 所需校验；schema 返回 proof，custom DTO 携带 proof，测试、保存及执行校验；proof 密文不等同 API Key 存储密文。运行 T040。依赖：T040。
+- [x] **T040（beta2 替代）** 测试：覆盖无 proof 导入/保存/测试/执行，以及旧或失效 proof 的读取和目标租户兼容；继续验证越权拒绝和凭据范围。原 proof 绑定任务被 2026-11-24 用户决定替代。
+- [x] **T041（beta2 替代）** 实现：移除 proof 的签发及校验；custom DTO 为 `{operation, mapping}`，旧 proof 兼容忽略，继续执行请求结构、参数、认证和映射校验。决策见 design.md §3.4。
 
 ## Wave 2：后端 API 与执行
 
@@ -86,3 +86,5 @@
 - 按用户要求将 preview/proof/secret/settings 合并到 `web_search.py`，运行侧 worker 合并到 `custom.py`；继续保持 `bisheng` 管理服务与 `bisheng_langchain` 执行包边界，以及隔离子进程传输。
 
 - [x] P1：去除专用密钥环境变量依赖，平台 encrypt-token 密文迁移；保留旧 ID 的迁移及无环境变量回归。
+
+- 2026-11-24：用户明确要求 beta2 移除 proof，前后端契约、旧配置兼容和验证同步更新，见 design.md §3.4。
