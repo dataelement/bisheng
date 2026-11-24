@@ -502,20 +502,14 @@ const AiChatInput = memo(
 
         // Resource IDs share the native editor document while execution metadata stays in state.
         const mountedSkills = !isLingsi ? dailySkills : [];
-        // Default-checked (auto) tools stay selected but out of the editor text;
-        // the "+" menu shows them. Editor edits only replace the visible part.
         const showMountedTools = !!tools && agentMode && !isLingsi && !!onSelectedOrgKbsChange;
         const mountedTools = useMemo(
-            () => (showMountedTools ? selectedTools.filter((tool) => !tool.auto) : []),
+            () => (showMountedTools ? selectedTools : []),
             [showMountedTools, selectedTools],
-        );
-        const handleVisibleToolsChange = useCallback(
-            (items: typeof selectedTools) => setSelectedTools((prev) => [...prev.filter((tool) => tool.auto), ...items]),
-            [setSelectedTools],
         );
         const { references, onReferencesChange } = useComposerReferences(
             mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
-            mountedTools, handleVisibleToolsChange,
+            mountedTools, setSelectedTools,
             (tool) => labelForGroup(
                 (bsConfig?.tools as AvailableToolGroup[] | undefined)?.find(group => group.id === tool.id) ?? tool,
                 localize,
