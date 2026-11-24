@@ -179,14 +179,6 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 .dsh-command-skill-row[aria-checked=true] .dsh-command-name { color:rgb(var(--brand-500)); }
 .dsh-command-panel [role="menuitemcheckbox"]:not(.dsh-command-skill-row) > span:last-child { margin-left:auto; flex:none; }
 
-.dsh-knowledge-columns { display:flex; justify-content:space-between; margin-top:20px; padding:0 8px 10px; color:rgb(var(--text-3)); font-size:12px; border-bottom:1px solid rgb(var(--border-base)); }
-.dsh-knowledge-list { height: min(440px, 48vh); flex:none; margin-top:8px; }
-.dsh-knowledge-row { min-height:60px; border-bottom:1px solid rgb(var(--border-base)); }
-.dsh-knowledge-row[data-selected=true] { background:rgb(var(--fill-2)); }
-.dsh-knowledge-icon { display:grid; place-items:center; flex:none; width:32px; height:36px; border:1px solid rgb(var(--border-base)); border-radius:8px; color:rgb(var(--text-2)); background:rgb(var(--bg-page)); }
-.dsh-knowledge-modified { flex:none; font-size:12px; color:rgb(var(--text-3)); }
-@media (max-width:575px) { .dsh-knowledge-modified { max-width:80px; } }
-
 .dsh-command-skills .skill-menu-name { flex:0 0 auto; max-width:100%; }
 .dsh-command-skills .skill-menu-description { min-width:0; flex:1; }
 /* Harness uses a short surface overlay only while content extends below. */

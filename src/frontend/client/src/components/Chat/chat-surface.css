@@ -208,6 +208,5 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 /* The space picker is portaled outside the Chat root and owns its theme surface. */
 body[data-dsh-chat-theme] .dsh-knowledge-dialog { background:rgb(var(--bg-page)); color:rgb(var(--text-1)); border-color:rgb(var(--border-base)); }
 body[data-dsh-chat-theme] .dsh-knowledge-dialog input { background:transparent; color:rgb(var(--text-1)); border-color:rgb(var(--border-deep, var(--border-base))); }
-body[data-dsh-chat-theme] .dsh-knowledge-dialog .dsh-knowledge-cancel { color:rgb(var(--text-1)); background:rgb(var(--fill-2)); border-color:rgb(var(--border-base)); }
 
 .dsh-history-row:is(:hover,:focus-within) .dsh-history-label { text-overflow:clip; }
