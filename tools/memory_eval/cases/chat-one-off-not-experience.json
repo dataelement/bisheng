@@ -1,0 +1,28 @@
+{
+  "id": "chat-one-off-not-experience",
+  "acs": [
+    "AC-17",
+    "AC-50"
+  ],
+  "turns": [
+    {
+      "user": "这次的报价单按客户 A 的 85 折算，算完给我总价：单价 1200，数量 30",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我平时做报价单有什么固定的折扣做法吗？你记得的话直接说，不记得就说不记得",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "85 折",
+      "85折",
+      "八五折"
+    ]
+  },
+  "notes": "只适用于这一次的处理不应整理为经验",
+  "requires_consolidation": true
+}

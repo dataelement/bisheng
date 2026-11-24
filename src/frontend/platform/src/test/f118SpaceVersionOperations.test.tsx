@@ -158,7 +158,7 @@ it("checks delete on the historical physical file independently of space edit", 
   const ports = api();
   mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />);
   expect(await screen.findByRole("button", { name: "history.actions.primary" })).toBeVisible();
-  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions"), undefined));
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions"), { signal: expect.any(AbortSignal) }));
   expect(screen.queryByRole("button", { name: "history.actions.delete" })).not.toBeInTheDocument();
 });
 
