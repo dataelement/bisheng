@@ -120,7 +120,7 @@ class SourceMoveInputRepository:
         if type(get_current_tenant_id()) is not int or get_current_tenant_id() != tenant or is_tenant_filter_bypassed():
             raise KnowledgeProcessingConflictError(reason="source_space_move_context_changed")
 
-    async def _file_outside_move(self, session, tenant, space_id, row, file_id):
+    async def _files_outside_move(self, session, tenant, space_id, row, file_ids):
         """Only narrow an unsettled move using its frozen logical scope AND actual index items."""
         if row["job_id"] is None or row["kind"] != "move_index" or row["space_id"] == space_id:
             return False
@@ -165,7 +165,11 @@ class SourceMoveInputRepository:
             ):
                 return False
             ids = [entry.get("file_id") if isinstance(entry, dict) else None for entry in scope["files"]]
-            if any(type(i) is not int or i <= 0 for i in ids) or len(set(ids)) != len(ids) or file_id in ids:
+            if (
+                any(type(i) is not int or i <= 0 for i in ids)
+                or len(set(ids)) != len(ids)
+                or not file_ids.isdisjoint(ids)
+            ):
                 return False
             logical_ids = set(ids)
             if not isinstance(targets, list) or not isinstance(scope.get("leaves"), list):
@@ -206,10 +210,25 @@ class SourceMoveInputRepository:
             )
             return set(actual) == projected
 
-    async def arequire_released(self, session, *, space_id, include_copy=True, file_id=None):
+    @staticmethod
+    def _file_ids(file_ids):
+        if file_ids is None:
+            return None
+        if not isinstance(file_ids, (tuple, list, set, frozenset)) or any(
+            type(i) is not int or i <= 0 for i in file_ids
+        ):
+            raise ValueError("input protection requires concrete physical file IDs")
+        return frozenset(file_ids)
+
+    async def arequire_released(self, session, *, space_id, include_copy=True, file_id=None, file_ids=None):
         if file_id is not None and (include_copy or type(file_id) is not int or file_id <= 0):
             raise ValueError("file input protection requires a concrete move-only target")
+        if file_id is not None and file_ids is not None:
+            raise ValueError("use one physical scope")
+        selected = self._file_ids((file_id,) if file_id is not None else file_ids)
         tenant, transaction = self._context(session, space_id)
+        if selected == frozenset():
+            return
         after = None
         while True:
             with session.no_autoflush, strict_tenant_filter():
@@ -223,15 +242,79 @@ class SourceMoveInputRepository:
                 try:
                     self._check(row, space_id)
                 except KnowledgeProcessingConflictError:
-                    if file_id is None:
+                    if selected is None:
                         raise
-                    outside = await self._file_outside_move(session, tenant, space_id, row, file_id)
+                    outside = await self._files_outside_move(session, tenant, space_id, row, selected)
                     self._current(session, tenant, transaction)
                     if not outside:
                         raise KnowledgeProcessingConflictError(reason="source_file_move_input_required") from None
             if len(page) < 200:
                 return
             after = page[-1]["id"]
+
+    async def arequire_destination_released(self, session, *, space_id, file_ids):
+        """Narrow only from verified frozen move scope, never from job status alone."""
+        selected = self._file_ids(file_ids)
+        tenant, transaction = self._context(session, space_id)
+        if selected is None:
+            raise ValueError("destination narrowing requires an explicit physical scope")
+        if not selected:
+            return
+        plan, job, item = (
+            m.__table__ for m in (KnowledgeOperationPlan, KnowledgeProcessingJob, KnowledgeProcessingItem)
+        )
+        count = select(func.count()).where(item.c.job_id == job.c.id).correlate(job).scalar_subquery()
+        after = None
+        while True:
+            query = (
+                select(
+                    plan.c.id,
+                    plan.c.space_id.label("source_space_id"),
+                    job.c.id.label("job_id"),
+                    job.c.kind,
+                    job.c.space_id,
+                    job.c.total_count,
+                    count.label("item_count"),
+                )
+                .select_from(
+                    job.outerjoin(
+                        plan,
+                        and_(
+                            plan.c.operation_id == job.c.id,
+                            plan.c.tenant_id == tenant,
+                            plan.c.operation == "move",
+                            plan.c.consumed_at.is_not(None),
+                        ),
+                    )
+                )
+                .where(
+                    job.c.tenant_id == tenant,
+                    job.c.space_id == space_id,
+                    or_(
+                        and_(job.c.kind == "move_index", job.c.state != "succeeded"),
+                        and_(job.c.kind == "space_copy", job.c.state.in_(("accepted", "running"))),
+                    ),
+                )
+                .order_by(job.c.id)
+                .limit(200)
+            )
+            if after is not None:
+                query = query.where(job.c.id > after)
+            with session.no_autoflush, strict_tenant_filter():
+                page = (await session.execute(query)).mappings().all()
+            self._current(session, tenant, transaction)
+            for row in page:
+                source_id = row["source_space_id"]
+                if (
+                    type(source_id) is not int
+                    or source_id <= 0
+                    or not await self._files_outside_move(session, tenant, source_id, row, selected)
+                ):
+                    raise KnowledgeProcessingConflictError(reason="space_transfer_input_required")
+                self._current(session, tenant, transaction)
+            if len(page) < 200:
+                return
+            after = page[-1]["job_id"]
 
     async def ablocking_job_ids(self, session, *, space_id, include_copy=True):
         """Jobs whose source input this space must keep. Same rule as ``arequire_released``."""

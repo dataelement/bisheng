@@ -141,8 +141,9 @@ async def precheck_deletion(
         async with owner._session() as session:
             root, root_revision = await owner.execution.aroot(session, space_id, lock=True)
             require_space_deletion_allowed(root, operation=operation)
-            await owner.execution.arequire_transfer_idle(session, space_id=space_id)
-            await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
+            file_ids = None if whole else tuple(row.id for row in chosen.resources)
+            await owner.execution.arequire_transfer_idle(session, space_id=space_id, file_ids=file_ids)
+            await SourceMoveInputRepository().arequire_released(session, space_id=space_id, file_ids=file_ids)
             current = await owner._collect(session, space_id=space_id, selections=selections, operation=operation)
             if current.scope != facts.scope:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_precheck_changed")

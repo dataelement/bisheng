@@ -51,7 +51,15 @@ async def test_failed_worker_is_not_adopted_or_published(copy_db):
     assert CopyRepository.claim(2, 10, target.id, 7) is None
     with bypass_tenant_filter(), db.sync_sessions() as session:
         assert session.get(Knowledge, target.id).state == 4
-        assert session.get(Knowledge, 10).copy_target_id == target.id
+        assert session.get(Knowledge, 10).copy_target_id is None
+        assert session.get(Knowledge, 10).state == 1
+    second = await CopyRepository.reserve(source, Knowledge(name="retry as a new copy", tenant_id=2, user_id=7))
+    assert second.id != target.id
+    assert CopyRepository.claim(2, 10, target.id, 7) is None
+    with pytest.raises(KnowledgeCPError):
+        CopyRepository.finish(2, 10, target.id, succeeded=False)
+    with bypass_tenant_filter(), db.sync_sessions() as session:
+        assert session.get(Knowledge, 10).copy_target_id == second.id
 
 
 async def test_wrong_actor_or_foreign_t_cannot_claim(copy_db):
