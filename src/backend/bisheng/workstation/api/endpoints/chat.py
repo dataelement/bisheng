@@ -161,6 +161,30 @@ async def conversation_file_url(conversation_id: str, file_id: str, login_user=L
     return resp_200(data={"url": await run_files.resolve_run_file_url(conversation_id, file_id, login_user)})
 
 
+@router.post("/conversations/{conversation_id}/files/{file_id}/slides-preview")
+async def conversation_slides_preview(
+    conversation_id: str,
+    file_id: str,
+    login_user=LoginUserDep,
+    share_link: Union[ShareLink, None] = ShareLinkDep,
+):
+    """PDF preview of a ``.ppt``/``.pptx`` kept on the conversation.
+
+    For decks of a direct answer, which have no deep-research version to resolve
+    against. Readable by the owner and through a share link to this conversation.
+    Returns ``{status: "ready", file_path}`` or ``{status: "converting"}``; poll
+    while converting. ``file_id`` may also be the id the file had in its run's
+    live events.
+    """
+    from bisheng.chat_session.domain.chat import ChatSessionService
+    from bisheng.core.storage.chat_attachment import WORKSPACE_FILE_ID_KEY
+
+    result = await ChatSessionService.slides_preview(
+        conversation_id, file_id, login_user, share_link, alias_key=WORKSPACE_FILE_ID_KEY
+    )
+    return resp_200(data=result)
+
+
 @router.post("/conversations/{conversation_id}/stop")
 async def stop_conversation(conversation_id: str, login_user=LoginUserDep):
     """F004: stop the run that holds the conversation (AC-29). Owner only.

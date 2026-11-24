@@ -22,7 +22,7 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.schemas.telemetry.event_data_schema import DeleteMessageSessionEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, bypass_tenant_filter_if
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
@@ -36,6 +36,11 @@ from bisheng.workflow.domain.repositories.history_repository import WorkflowHist
 
 if TYPE_CHECKING:
     from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
+
+
+def slides_preview_key(object_name: str) -> str:
+    """Where the PDF preview of a kept slide deck is cached: next to the deck."""
+    return f"{object_name}.preview.pdf"
 
 
 class ChatSessionService:
@@ -205,6 +210,8 @@ class ChatSessionService:
             if not object_names:
                 return
             minio_client = await get_minio_storage()
+            # A deck may also hold the PDF its preview was converted to.
+            object_names |= {slides_preview_key(n) for n in object_names if n.lower().endswith((".ppt", ".pptx"))}
             for object_name in object_names:
                 try:
                     await minio_client.remove_object(object_name=object_name)
@@ -249,6 +256,17 @@ class ChatSessionService:
     async def _sign_attachment(
         chat_id: str, file_id: str, owner, *, only_source: str | None = None, alias_key: str | None = None
     ) -> str:
+        object_name = await ChatSessionService._attachment_object_name(
+            chat_id, file_id, owner, only_source=only_source, alias_key=alias_key
+        )
+        minio_client = await get_minio_storage()
+        return await minio_client.get_share_link(object_name)
+
+    @staticmethod
+    async def _attachment_object_name(
+        chat_id: str, file_id: str, owner, *, only_source: str | None = None, alias_key: str | None = None
+    ) -> str:
+        """Object name of one attachment, read from the conversation's own rows, or NotFound."""
         messages = await WorkflowFileRepository.attachment_messages(chat_id)
         attachments = ChatSessionService._attachment_objects(messages, owner)
         for attachment in attachments:
@@ -263,8 +281,7 @@ class ChatSessionService:
                 # Written before attachments were made permanent: the file is
                 # gone with the temp bucket. Say so rather than guess.
                 break
-            minio_client = await get_minio_storage()
-            return await minio_client.get_share_link(object_name)
+            return object_name
         else:
             if alias_key:
                 # No attachment has this id. Rows are in insertion order, so the
@@ -276,10 +293,40 @@ class ChatSessionService:
                         continue
                     if not attachment.get("object_name"):
                         continue
-                    minio_client = await get_minio_storage()
-                    return await minio_client.get_share_link(attachment["object_name"])
+                    return attachment["object_name"]
 
         raise NotFoundError.http_exception()
+
+    @staticmethod
+    async def slides_preview(
+        chat_id: str, file_id: str, login_user: UserPayload, share_link=None, *, alias_key: str | None = None
+    ) -> dict:
+        """PDF preview of a ``.ppt``/``.pptx`` kept on a conversation.
+
+        The reader is the conversation owner, or anyone holding a share link to
+        this conversation -- the same rule as reading its messages. The deck is
+        found on the conversation's own rows, never taken from the caller.
+        """
+        from bisheng.linsight.domain.services.artifact_preview_service import is_slide_key, preview_slides_as_pdf
+
+        shared = share_link is not None and share_link.resource_id == chat_id
+        if shared:
+            with bypass_tenant_filter():
+                owner = await MessageSessionDao.async_get_one(chat_id)
+            if owner is None or owner.is_delete:
+                raise NotFoundError.http_exception()
+        else:
+            owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        with bypass_tenant_filter_if(shared):
+            object_name = await ChatSessionService._attachment_object_name(chat_id, file_id, owner, alias_key=alias_key)
+        if not is_slide_key(object_name):
+            raise NotFoundError.http_exception()
+        return await preview_slides_as_pdf(
+            object_name,
+            preview_key=slides_preview_key(object_name),
+            lock_id=f"chat:{chat_id}:{file_id}",
+            log_tag=f"chat_id={chat_id} file_id={file_id}",
+        )
 
     @staticmethod
     async def delete_session(chat_id: str, login_user: UserPayload, request_ip: str) -> None:

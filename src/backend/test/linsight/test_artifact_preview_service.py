@@ -231,14 +231,14 @@ async def test_lock_held_elsewhere_reports_converting(env):
 
 
 async def test_lock_is_not_deleted_once_it_belongs_to_someone_else(env, monkeypatch):
-    real_convert = svc_mod.LinsightArtifactPreviewService._convert
+    real_convert = svc_mod._convert
 
-    async def convert_then_lose_lock(minio, key, svid, file_id):
-        data = await real_convert(minio, key, svid, file_id)
+    async def convert_then_lose_lock(minio, key, log_tag):
+        data = await real_convert(minio, key, log_tag)
         env.redis.async_connection.values[LOCK] = "next-owner"  # our TTL expired, another node took it
         return data
 
-    monkeypatch.setattr(svc_mod.LinsightArtifactPreviewService, "_convert", staticmethod(convert_then_lose_lock))
+    monkeypatch.setattr(svc_mod, "_convert", convert_then_lose_lock)
     await LinsightArtifactPreviewService.get_pptx_preview(env.version, FILE_KEY)
     assert env.redis.async_connection.values[LOCK] == "next-owner"
 
