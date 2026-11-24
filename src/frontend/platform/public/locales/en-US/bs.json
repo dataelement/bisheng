@@ -1425,7 +1425,8 @@
     "inputPlaceholder": "Enter your task goal and let $t(bisheng)$t(linsight) handle it",
     "availableTools": "Available Tools",
     "addTool": "Add Tool",
-    "defaultChecked": "Default",
+    "showInComposer": "Show in input box",
+    "showInComposerHint": "Configured knowledge bases are added to every new conversation. A knowledge base not shown in the input box is still used; only its tag is hidden.",
     "toolUsage": {
       "title": "Usage",
       "optional": "User picks",
@@ -4730,6 +4731,8 @@
     "partialRepair": "You can save partial repairs. All references must be valid before running or publishing.",
     "invalid_deleted": "Deleted",
     "invalid_legacy": "Missing historical reference",
+    "invalid_missing": "Referenced resource does not exist",
+    "invalid_scope": "Unavailable to the current tenant",
     "deleting": "Deletion in progress"
   },
   "accountIdentity": {

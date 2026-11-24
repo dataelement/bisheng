@@ -1,3 +1,5 @@
+import { referenceErrorMessage } from '@bisheng/api-client';
+
 type ChatErrorPayload = {
     status_code?: number | string;
     status_message?: string;
@@ -47,6 +49,12 @@ export function resolveChatErrorMessage(
     payload: ChatErrorPayload | null | undefined,
     translate: Translate,
 ): string {
+    const referenceMessage = referenceErrorMessage(
+        { ...payload, status_code: Number(payload?.status_code) },
+        (key, values) => String(translate(`api_errors:${key}`, values) ?? ''),
+    );
+    if (referenceMessage) return referenceMessage;
+    if (Number(payload?.status_code) === 10996) return String(translate('api_errors:10996') ?? '');
     const fallbackMessage = payload?.status_message || String(translate("api_errors:fallback") ?? "");
     const statusCode = payload?.status_code;
 

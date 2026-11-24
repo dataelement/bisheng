@@ -198,7 +198,7 @@ async def test_edit_denial_precedes_native_transaction_and_preserves_database(wi
     assert not wired.sessions
     assert await native_tests.snapshot(wired.database) == before
     wired.permission.assert_awaited_once_with(
-        wired.user, resource_type="knowledge_space", resource_id=9700, action="edit"
+        wired.user, resource_type="knowledge_file", resource_id=101 if operation == "link" else 201, action="edit"
     )
     wired.audit_link.assert_not_called()
     wired.audit_primary.assert_not_called()

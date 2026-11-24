@@ -477,12 +477,15 @@ class ToolConfig(BaseModel):
 
 # v2.5 Agent Mode: Configured Organizational Knowledge Base Items
 class OrgKbConfig(BaseModel):
-    """Organization knowledge-base item surfaced in the PlusMenu."""
+    """Configured organization knowledge base. Every one starts selected in a new session (F005)."""
 
     id: int = Field(description="Knowledge.id")
     name: str = Field(description="Knowledge-base display name")
     type: int | None = Field(default=None, description="Knowledge type: 0=doc, 1=qa")
-    default_checked: bool = Field(default=False, description="Initial checked state for new sessions")
+    show_in_composer: bool = Field(
+        default=True,
+        description="Show a tag for it in the composer; hidden ones are still selected and sent",
+    )
     sort_order: int = Field(default=0, description="Display order (ascending)")
 
 

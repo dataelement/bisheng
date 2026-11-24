@@ -131,7 +131,7 @@ export function KnowledgeSpaceHeader({
   const showSpaceSettingsButton = currentPath.length === 0 && getSpaceActionFlags(spaceActions).hasAny;
   const showAddMenu = canCreateFolder || canUploadFile;
   const showProcessSimilar = Boolean(
-    versionManagementEnabled && canEditSpace && hasSimilarSelected && onProcessSimilar,
+    versionManagementEnabled && hasSimilarSelected && onProcessSimilar,
   );
   const showBatchMove = Boolean(onBatchMove) && canBatchMove;
   const hasBatchMenu =

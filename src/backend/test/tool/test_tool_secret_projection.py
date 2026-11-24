@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsType, GptsToolsTypeRead
 from bisheng.tool.domain.services import tool
@@ -18,7 +19,8 @@ CANARY = "synthetic-api-key-DO-NOT-EXPOSE"
 
 @pytest.fixture(autouse=True)
 def preset_child_identity_boundary(monkeypatch):
-    # Mainline now resolves preset identity through this additional DAO boundary.
+    # These tests isolate config projection; action authorization is covered separately.
+    monkeypatch.setattr(tool, "require_business_action", AsyncMock())
     monkeypatch.setattr(tool.GptsToolsDao, "aget_preset_child_keys", AsyncMock(return_value={}))
 
 
@@ -180,7 +182,8 @@ async def test_partial_preset_secret_explicit_clear_preserves_omitted_fields(mon
     write = AsyncMock()
     monkeypatch.setattr(tool.GptsToolsDao, "update_tools_extra", write)
     service = tool.ToolServices(login_user=UserPayload(user_id=1, tenant_id=1, user_role=[], is_global_super=True))
-    await service.update_tool_config(11, {"config": {"api_key": ""}})
+    with tenant_execution_scope(1):
+        await service.update_tool_config(11, {"config": {"api_key": ""}})
     assert json.loads(write.call_args.args[1]) == {**old, "config": {**old["config"], "api_key": ""}}
     assert json.loads(saved.extra) == old
 

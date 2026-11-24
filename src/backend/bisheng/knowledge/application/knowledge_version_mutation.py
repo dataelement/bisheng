@@ -111,17 +111,20 @@ class KnowledgeVersionMutationApplication:
         await self.enabled()  # The original feature/config I/O precedes SQL locks.
         self._current(user, identity)
         async with self._transaction(read_only=True) as session:
-            space = await self.repository.aread_authorization_space(session, operation=operation, inputs=inputs)
+            authorization = await self.repository.aread_authorization_targets(
+                session, operation=operation, inputs=inputs
+            )
             self._current(user, identity)
         self._current(user, identity)
-        if space is None:
+        if authorization is None:
             if operation == "primary":
                 raise HTTPException(status_code=404, detail="version not found")
             raise VersionLinkSourceFileMissingError()
-        # The read transaction is closed before the unified permission runtime
-        # performs external I/O. No caller-supplied space ID grants admission.
-        await require_business_action(user, resource_type="knowledge_space", resource_id=space.id, action="edit")
-        self._current(user, identity)
+        space, files = authorization
+        # External permission I/O stays outside the short SQL write locks.
+        for file in files:
+            await require_business_action(user, resource_type="knowledge_file", resource_id=file.id, action="edit")
+            self._current(user, identity)
         async with self._transaction() as session:
             self._current(user, identity)
             if operation == "link":
@@ -136,6 +139,18 @@ class KnowledgeVersionMutationApplication:
             self._current(user, identity)
             if state.space is None or (state.space.id, state.space.tenant_id) != (space.id, space.tenant_id):
                 _blocked("authorized_space_changed")
+            locked_files = [state.anchor_file or state.incoming_file]
+            if operation == "link":
+                primary = next(
+                    row for row in state.target_versions if row.id == state.target_document.primary_version_id
+                )
+                locked_files.append(next(row for row in state.files if row.id == primary.knowledge_file_id))
+            elif operation == "merge":
+                locked_files.append(state.incoming_file)
+            if tuple((row.id, row.knowledge_id, row.tenant_id) for row in locked_files) != tuple(
+                (row.id, row.knowledge_id, row.tenant_id) for row in files
+            ):
+                _blocked("authorized_files_changed")
             require_space_processing_idle(
                 state.space,
                 operation={"link": "link_version", "merge": "merge_versions", "primary": "set_primary_version"}[

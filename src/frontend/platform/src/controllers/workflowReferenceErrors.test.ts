@@ -60,9 +60,10 @@ it('keeps generic copy for older servers and malformed or unrelated diagnostics'
     const older = { status_code: 10996, data: { reason: 'reference_target_invalid', exception: 'PRIVATE' } };
     const unknown = failure('model');
     unknown.data.reason = 'internal_error';
-    for (const envelope of [older, unknown, failure('unknown'), failure('model', { target_id: '/private/path' }),
+    expect(showApiError(older).message).toBe(en.reference_reason_reference_target_invalid);
+    for (const envelope of [unknown, failure('unknown'), failure('model', { target_id: '/private/path' }),
         failure('model', { node_name: {} }), failure('model', { node_name: 'x'.repeat(101) })]) {
-        expect(showApiError(envelope).message).toBe(en['10996']);
+        expect(showApiError(envelope).message).toBe(envelope === unknown ? en['10996'] : (envelope.data.reason === 'model_selection_unavailable' ? en.reference_reason_model_unavailable : en.reference_reason_knowledge_unavailable));
     }
 });
 
@@ -71,4 +72,19 @@ it('bounds and deduplicates the displayed locations', () => {
     const detail = envelope.data.workflow_reference_errors[0];
     envelope.data.workflow_reference_errors = Array.from({ length: 20 }, () => detail);
     expect(showApiError(envelope).message.split('\n')).toHaveLength(1);
+});
+
+
+it.each(['en', 'zh-Hans', 'ja'])('shows the exact missing saved knowledge on assistant save in %s', async language => {
+    await i18next.changeLanguage(language);
+    const envelope = { status_code: 10996, data: { reason: 'reference_target_invalid', reference_errors: [{
+        resource_type: 'knowledge_space', target_id: '4402', state: 'invalid_missing',
+    }] } };
+    request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: envelope });
+    const error = await request.put('/api/v1/assistant', { knowledge_list: [4387, 4402, 4409] }).catch(cause => cause);
+    expect(error.status_code).toBe(10996);
+    expect(error.data).toEqual(envelope.data);
+    expect(error.message).toBe(i18next.t('api_errors:reference_state_invalid_missing', {
+        location: '', resource: i18next.t('api_errors:reference_resource_knowledge_space'), targetId: '4402',
+    }));
 });

@@ -204,7 +204,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
             spaceId={spaceIdNum}
             fileId={versionHistoryFile ? Number(versionHistoryFile.id) : null}
             documentTitle={versionHistoryFile?.name}
-            canManage={canEditSpace}
+            canManage={versionManagementEnabled}
             onPreview={(versionFileId, fileName) =>
               handlePreviewFile(String(versionFileId), fileName)
             }

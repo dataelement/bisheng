@@ -25,18 +25,11 @@ from bisheng_langchain.utils.safe_http_errors import RequestFailed, RequestTimeo
 router = APIRouter(prefix="/tool", tags=["Tool"])
 
 
-async def _require_search_admin(user: UserPayload):
-    from bisheng.utils.http_middleware import _check_is_global_super
-
-    if not user.is_global_super or not await _check_is_global_super(user.user_id):
-        raise UnAuthorizedError()
-
-
 @router.get("/{tool_type_id}/web-search/settings")
 async def get_web_search_settings(tool_type_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     from bisheng.tool.domain.services.web_search import get_settings
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await get_settings(tool_type_id))
 
 
@@ -49,7 +42,7 @@ async def put_web_search_settings(
 
     from bisheng.tool.domain.services.web_search import put_settings
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     try:
         validated = SettingsWrite.model_validate(req)
     except ValidationError:
@@ -63,7 +56,7 @@ async def import_web_search_schema(
 ):
     from bisheng.tool.domain.services.web_search import schema_preview
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await schema_preview(tool_type_id, req))
 
 
@@ -73,7 +66,7 @@ async def test_web_search(
 ):
     from bisheng.tool.domain.services.web_search import search_preview
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await search_preview(tool_type_id, req))
 
 

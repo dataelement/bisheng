@@ -34,7 +34,7 @@
 ## Wave 2：后端 API 与执行
 
 - [ ] **T017** 测试：在 `src/backend/test/tool/test_custom_web_search.py` 覆盖匿名、普通用户、租户管理员、global super、错误 preset/tool_key/已删除及跨租户目标；settings GET/PUT、schema 和 test 均 fail closed，未知字段拒绝。**覆盖 AC: AC-02, AC-05, AC-07, AC-12**。依赖：T014, T016。
-- [ ] **T018** 实现：在 `src/backend/bisheng/tool/api/tool.py` 接入 `/{tool_type_id}/web-search/settings`、`/schema`、`/test`；服务端检查 global super 和真实目标，委派领域服务，运行 T017。依赖：T017。
+- [ ] **T018** 实现：在 `src/backend/bisheng/tool/api/tool.py` 接入 `/{tool_type_id}/web-search/settings`、`/schema`、`/test`；服务端复用当前租户管理身份校验（系统超管/当前租户管理员）并检查真实目标，委派领域服务，运行 T017。依赖：T017。
 - [ ] **T019** 测试：在 `src/backend/test/tool/test_custom_web_search.py` 验证旧列表/详情不泄密，旧写入无 revision 被拒或同等 CAS；跨租户子项不可批量清空，双管理员冲突不丢其他 provider。**覆盖 AC: AC-07, AC-11, AC-12**。依赖：T014。
 - [ ] **T020** 实现：在 `src/backend/bisheng/tool/domain/models/gpts_tools.py` 收紧旧写入口并保护其他工具原有行为；运行 T019。依赖：T019。
 - [ ] **T021** 测试：在 `src/backend/test/tool/test_custom_web_search.py` 验证搜索词和固定参数进入 GET/POST 请求，成功映射为现有 JSON 结果，空结果与失败区分，网页来源保留且无效 URL 不产生引用。**覆盖 AC: AC-04, AC-08, AC-09, AC-10, AC-13**。依赖：T008, T010。

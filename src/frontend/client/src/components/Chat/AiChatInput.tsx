@@ -25,6 +25,7 @@ import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 
 import { ComposerEditor, readSentComposerReferences } from "./Input/ComposerEditor";
 import type { SentComposerReference } from "./Input/composerReferences";
+import { splitComposerKnowledge } from './Input/composerKnowledge';
 import { useComposerReferences } from "./Input/useComposerReferences";
 import { labelForGroup, type AvailableToolGroup } from "./Input/AgentToolSelector";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
@@ -365,8 +366,18 @@ const AiChatInput = memo(
             () => (showMountedTools ? selectedTools : []),
             [showMountedTools, selectedTools],
         );
+        // F005: configured knowledge bases the admin hid from the composer stay selected
+        // without a tag. The editor rebuilds the list from its tags, so add them back.
+        const { visible: composerKbs, hidden: hiddenKbs } = useMemo(
+            () => splitComposerKnowledge(isLingsi ? [] : selectedOrgKbs, bsConfig?.orgKbs),
+            [isLingsi, selectedOrgKbs, bsConfig?.orgKbs],
+        );
+        const handleComposerKbsChange = useMemo(
+            () => onSelectedOrgKbsChange && ((items: typeof selectedOrgKbs) => onSelectedOrgKbsChange([...items, ...hiddenKbs])),
+            [onSelectedOrgKbsChange, hiddenKbs],
+        );
         const { references, onReferencesChange } = useComposerReferences(
-            mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
+            mountedSkills, composerKbs, setDailySkills, handleComposerKbsChange,
             mountedTools, setSelectedTools,
             (tool) => labelForGroup(
                 (bsConfig?.tools as AvailableToolGroup[] | undefined)?.find(group => group.id === tool.id) ?? tool,
@@ -517,7 +528,7 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0 || mountedTools.length > 0);
+        const hasMountedKbs = composerKbs.length > 0 || mountedSkills.length > 0 || mountedTools.length > 0;
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
 

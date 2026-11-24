@@ -16,12 +16,12 @@ from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.tenant import is_tenant_filter_bypassed
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.llm.application.model_default_validation import require_callable_default_models
 from bisheng.llm.application.model_selection import require_new_models
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.services.default_reference_extractor import (
     MODEL_DEFAULT_SCHEMAS,
     extract_model_default_references,
-    model_default_models_are_callable,
 )
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
@@ -153,8 +153,7 @@ class ModelDefaultApplication:
         )
         # Unchanged missing selections remain editable; new IDs were checked above.
         existing = tuple(reference for reference in references if int(reference.target.target_id) in states)
-        if not model_default_models_are_callable(key, existing, states):
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+        require_callable_default_models(key, existing, states)
         await cls._authorize(login_user, tenant)
         await repository.aput(session, key, canonical_payload_json(config.model_dump(mode="json")))
         return ModelDefaultSaveResult(config, embedding_changed)

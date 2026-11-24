@@ -3,43 +3,16 @@
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.llm.application.model_selection import require_new_models
 from bisheng.resource_reference.application.contracts import TargetType
+from bisheng.resource_reference.application.error_details import reference_error_details
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
 
 
 def _with_locations(error, references, graph):
-    # Never look up names of unavailable targets; only disclose the caller's
-    # saved selection and node label from the already authorized version.
-    nodes = {node["data"]["id"]: node["data"] for node in graph.get("nodes", []) if "id" in node.get("data", {})}
-    details = []
-    for reference in references:
-        for node_id, node in nodes.items():
-            prefix = f"node:{node_id}."
-            parameter = reference.slot_key.removeprefix(prefix)
-            if parameter not in {
-                "model_id",
-                "knowledge",
-                "knowledge_id",
-                "qa_knowledge_id",
-                "advanced_retrieval_switch.rerank_model",
-            }:
-                continue
-            resource_type = reference.target.target_type.value
-            if parameter == "qa_knowledge_id":
-                resource_type = "qa_knowledge"
-            elif parameter == "advanced_retrieval_switch.rerank_model":
-                resource_type = "rerank_model"
-            details.append(
-                {
-                    "node_id": node_id,
-                    "node_name": (str(node.get("name") or "").strip() or node_id)[:100],
-                    "resource_type": resource_type,
-                    "target_id": reference.target.target_id,
-                }
-            )
-            break
-        if len(details) == 5:
-            break
-    return ResourceReferenceInvalidError(**error.kwargs, workflow_reference_errors=details)
+    details = reference_error_details(references, {ref.target: "unavailable" for ref in references}, graph)
+    kwargs = {**error.kwargs, "reference_errors": details}
+    # Keep the existing publication response field for older clients.
+    kwargs["workflow_reference_errors"] = [{k: v for k, v in detail.items() if k != "state"} for detail in details]
+    return ResourceReferenceInvalidError(**kwargs)
 
 
 async def require_workflow_targets(session, references, graph):

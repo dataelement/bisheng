@@ -13,6 +13,7 @@ from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq, StreamData
 from bisheng.assistant.application.execution_admission import AssistantExecutionAdmission
+from bisheng.assistant.application.reference_validation import authorize_assistant_knowledge_bindings
 from bisheng.assistant.domain.repositories.assistant_repository import AssistantRepository
 from bisheng.assistant.domain.services.reference_extractor import (
     extract_assistant_references,
@@ -110,7 +111,7 @@ class AssistantService(BaseService, AssistantUtils):
                 return extract_assistant_references(model_name="", knowledge_ids=knowledge_ids)
             return extract_assistant_references(model_name=model_name, knowledge_ids=knowledge_ids)
         except (TypeError, ValueError) as exc:
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid") from exc
+            raise ResourceReferenceInvalidError(reason="reference_selection_invalid") from exc
 
     @classmethod
     async def _persist_assistant_changes(
@@ -144,7 +145,7 @@ class AssistantService(BaseService, AssistantUtils):
         from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
 
         if knowledge_ids is not None:
-            await AssistantBoundaryService.authorize_knowledge_bindings(user_payload, knowledge_ids)
+            await authorize_assistant_knowledge_bindings(user_payload, assistant_id, knowledge_ids)
         if flow_ids is not None:
             await AssistantBoundaryService.authorize_flow_bindings(user_payload, flow_ids)
         async with get_async_db_session() as session:

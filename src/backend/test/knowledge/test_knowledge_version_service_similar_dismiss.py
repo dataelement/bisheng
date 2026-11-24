@@ -202,7 +202,7 @@ async def test_dismiss_sets_status_to_2(enable_switch, async_db_session, monkeyp
     result = await svc.dismiss_similar(knowledge_file_id=100)
     assert result.similar_status == 2
     enable_switch.assert_awaited_once_with(
-        svc.login_user, resource_type="knowledge_space", resource_id=1, action="edit"
+        svc.login_user, resource_type="knowledge_file", resource_id=100, action="edit"
     )
     kf = await svc.knowledge_file_repo.find_by_id(100)
     assert kf.similar_status == 2
@@ -249,7 +249,7 @@ async def test_dismiss_returns_business_error_when_switch_off(async_db_session, 
 
 
 @pytest.mark.parametrize("similar_status", [1, 2])
-async def test_dismiss_denied_without_space_edit_before_write_or_audit(
+async def test_dismiss_denied_without_file_edit_before_write_or_audit(
     enable_switch, async_db_session, monkeypatch, similar_status
 ):
     async_db_session.add(Knowledge(id=7, name="s7", type=3, user_id=1))
@@ -270,7 +270,7 @@ async def test_dismiss_denied_without_space_edit_before_write_or_audit(
         await svc.dismiss_similar(100)
 
     enable_switch.assert_awaited_once_with(
-        svc.login_user, resource_type="knowledge_space", resource_id=7, action="edit"
+        svc.login_user, resource_type="knowledge_file", resource_id=100, action="edit"
     )
     update.assert_not_awaited()
     audit.assert_not_called()

@@ -56,10 +56,10 @@ it('preserves tool identities, children and default selection when sorting', asy
   expect(onChange).toHaveBeenCalledWith([tools[1], tools[0]]);
 });
 
-it('normalises knowledge base sort positions without changing default flags', async () => {
+it('normalises knowledge base sort positions without changing composer visibility', async () => {
   const orgKbs = [
-    { id: 1, name: 'Knowledge One', default_checked: true, sort_order: 0 },
-    { id: 2, name: 'Knowledge Two', default_checked: false, sort_order: 1 },
+    { id: 1, name: 'Knowledge One', show_in_composer: true, sort_order: 0 },
+    { id: 2, name: 'Knowledge Two', show_in_composer: false, sort_order: 1 },
   ];
   const onChange = vi.fn();
   render(<StrictMode><OrgKbConfig orgKbs={orgKbs} onChange={onChange} /></StrictMode>);

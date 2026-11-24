@@ -138,6 +138,14 @@ consumer, deletion_consumer = native.consumer, native.deletion_consumer
 @pytest.fixture
 async def deletion_case(deletion_consumer, enable_switch, monkeypatch):
     context, _space_service, _adapter = deletion_consumer
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+
+    async with context.engine.begin() as connection:
+        for model in (KnowledgeProcessingFence, KnowledgeProcessingArtifact):
+            await connection.run_sync(lambda sync, model=model: model.__table__.create(sync, checkfirst=True))
     case = SimpleNamespace(context=context, app=context.deletion, fail=None, io=[], primary_id=None)
     # The old repository constructors take a concrete native Session. Keep
     # it alive only for their public pre-read; it never owns deletion writes.
@@ -276,6 +284,9 @@ async def deletion_case(deletion_consumer, enable_switch, monkeypatch):
     # selected file IDs, so the current primary's index entries cannot disappear.
     from bisheng.core.storage.minio import minio_manager
     from bisheng.knowledge.domain import knowledge_rag
+    from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+
+    monkeypatch.setattr(KnowledgeUtils, "delete_violation_display_chunks", MagicMock(), raising=False)
 
     async def remove(*, bucket_name, object_name):
         case.io.append(("minio", object_name))
@@ -447,6 +458,33 @@ async def test_projection_failure_keeps_original_history_and_remains_fail_closed
     with pytest.raises(PermissionProjectionFailedError, match="fail closed"):
         await case.app.aconfirm(identity=case.context.user, space_id=5, request=command)
     async with case.context.sessions() as session:
+        assert await session.get(KnowledgeFile, row.file_id) is not None
+        assert await session.get(KnowledgeDocumentVersion, row.version_id) is not None
+    assert not case.io
+
+
+@pytest.mark.parametrize("edit,delete", [(False, True), (True, False)])
+async def test_historical_delete_requires_both_file_edit_and_delete(deletion_case, monkeypatch, edit, delete):
+    from bisheng.common.errcode.permission import PermissionDeniedError
+    from bisheng.knowledge.application import knowledge_deletion
+
+    case = deletion_case
+    row = await case.seed(file_id=15, version_id=47, document_id=12)
+
+    async def require_edit(identity, *, resource_type, resource_id, action):
+        assert resource_type == "knowledge_file" and resource_id == row.file_id and action == "edit"
+        if not edit:
+            raise PermissionDeniedError()
+
+    async def delete_actions(identity, *, resource_type, resource_ids, actions):
+        return {str(ident): set(actions) if delete else set() for ident in resource_ids}
+
+    monkeypatch.setattr(knowledge_deletion, "require_business_action", require_edit)
+    monkeypatch.setattr(knowledge_deletion, "batch_check_business_actions", delete_actions)
+    monkeypatch.setattr(knowledge_deletion.admission, "batch_check_business_actions", delete_actions)
+    with pytest.raises(PermissionDeniedError):
+        await case.service.delete_version(row.version_id)
+    async with AsyncSession(case.context.engine) as session:
         assert await session.get(KnowledgeFile, row.file_id) is not None
         assert await session.get(KnowledgeDocumentVersion, row.version_id) is not None
     assert not case.io

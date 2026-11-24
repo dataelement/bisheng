@@ -6,9 +6,10 @@ import { chatIdState, chatsState, currentRunningState, runningState, submitDataS
 import useChatHelpers from './useChatHelpers';
 import { closeAppChatWebSocket, useWebSocket } from './useWebsocket';
 
+const mockShowToast = jest.fn();
 jest.mock('~/hooks', () => ({
-    useLocalize: () => (key: string) => key,
-    useToast: () => ({ showToast: jest.fn() }),
+    useLocalize: () => (key: string, values: Record<string, string> = {}) => key + JSON.stringify(values),
+    useToast: () => ({ showToast: mockShowToast }),
 }));
 jest.mock('~/api/apps', () => ({ baseMsgItem: {} }));
 jest.mock('~/api/chat/data-service', () => ({ genTitle: jest.fn() }));
@@ -119,4 +120,23 @@ test('late offline-card events preserve their conversation while another chat is
     unmount();
     closeAppChatWebSocket(chatId);
     closeAppChatWebSocket(otherId);
+});
+
+
+test.each([false, true])('reference failure keeps structured details in object/string WS envelopes (%s)', asString => {
+    mockShowToast.mockClear();
+    const { socket, chatId, unmount } = openConversation();
+    const envelope = { status_code: 10996, status_message: 'PRIVATE', data: {
+        reason: 'reference_target_invalid', reference_errors: [{
+            node_id: 'llm_b1ef4', node_name: 'LLM', resource_type: 'model', target_id: '375', state: 'invalid_missing',
+        }],
+    } };
+    act(() => socket.receive({ category: 'error', type: 'end', message: asString ? JSON.stringify(envelope) : envelope }));
+    expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('reference_state_invalid_missing') }));
+    const message = mockShowToast.mock.calls.at(-1)?.[0].message;
+    expect(message).toContain('LLM');
+    expect(message).toContain('375');
+    expect(message).not.toContain('PRIVATE');
+    unmount();
+    closeAppChatWebSocket(chatId);
 });

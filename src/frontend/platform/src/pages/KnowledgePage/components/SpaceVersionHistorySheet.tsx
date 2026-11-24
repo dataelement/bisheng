@@ -84,15 +84,7 @@ function HistoryOpening({
     versions: query.data.versions.filter(version => !removedFileIds.current.has(version.knowledge_file_id)),
   } : undefined;
 
-  const permissions = useQuery({
-    queryKey: [...spaceKey, "version-actions", opening],
-    queryFn: () => getMyResourcePermissionsApi("knowledge_space", String(spaceId)),
-    enabled: enabled && appConfig.versionManagementEnabled === true,
-    retry: false,
-    cacheTime: 0,
-  });
-  const canManage = appConfig.versionManagementEnabled === true && Boolean(data) &&
-    permissions.isSuccess && !permissions.isFetching && permissions.data.actions?.includes("edit") === true;
+  const canManage = appConfig.versionManagementEnabled === true && Boolean(data);
   const historicalIds = [...new Set((data?.versions ?? [])
     .filter(version => !version.is_primary && validId(version.knowledge_file_id))
     .map(version => version.knowledge_file_id))];
@@ -105,13 +97,17 @@ function HistoryOpening({
       cacheTime: 0,
     })),
   });
-  const permissionError = permissions.error ?? deletePermissions.find(permission => permission.isError)?.error;
+  const permissionError = deletePermissions.find(permission => permission.isError)?.error;
   useEffect(() => {
     if (permissionError) showApiError(permissionError);
   }, [permissionError]);
+  const canEdit = (version: VersionHistoryEntry) => {
+    const permission = deletePermissions[historicalIds.indexOf(version.knowledge_file_id)];
+    return canManage && permission?.isSuccess === true && !permission.isFetching && permission.data.actions?.includes("edit") === true;
+  };
   const canDelete = (version: VersionHistoryEntry) => {
     const permission = deletePermissions[historicalIds.indexOf(version.knowledge_file_id)];
-    return canManage && permission?.isSuccess === true && !permission.isFetching && permission.data.actions?.includes("delete") === true;
+    return canEdit(version) && permission?.data?.actions?.includes("delete") === true;
   };
 
   const fileActions = useSpaceVersionFileActions({ scope, spaceId, parentId, versions: data?.versions ?? [] });
@@ -170,6 +166,7 @@ function HistoryOpening({
       onRetry={() => void query.refetch()}
       unavailable={unavailable ? <KnowledgeScopeUnavailable size="panel" role={enabled ? "alert" : "status"} /> : undefined}
       canManage={canManage}
+      canSetPrimary={canEdit}
       canDelete={canDelete}
       setPrimary={api.setSpacePrimaryVersion}
       deleteVersion={handleDeleteVersion}

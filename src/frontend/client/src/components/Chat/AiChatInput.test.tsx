@@ -469,3 +469,22 @@ test.each([
   fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   expect(input.onSend).not.toHaveBeenCalled();
 });
+
+test('a configured knowledge base hidden from the composer has no tag and survives tag edits', () => {
+  const shown = { id: '1', name: 'Shown KB', type: 'org' };
+  const hidden = { id: '2', name: 'Hidden KB', type: 'org' };
+  const input = {
+    ...props(),
+    bsConfig: { ...config, orgKbs: [{ id: 1, name: 'Shown KB' }, { id: 2, name: 'Hidden KB', show_in_composer: false }] },
+    selectedOrgKbs: [shown, hidden],
+  };
+  render(<AiChatInput {...input} />);
+
+  expect(screen.getByText('Shown KB')).toBeInTheDocument();
+  expect(screen.queryByText('Hidden KB')).not.toBeInTheDocument();
+
+  document.querySelector('[data-composer-reference="space:org:1"]')!.remove();
+  fireEvent.input(screen.getByRole('textbox'));
+
+  expect(input.onSelectedOrgKbsChange).toHaveBeenLastCalledWith([hidden]);
+});

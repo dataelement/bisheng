@@ -151,7 +151,7 @@ class KnowledgeProcessingOwner:
             raise KnowledgeOperationPlanConflictError(reason="processing_file_plan_changed")
         current = await self.aread_current(session, space_id, identity=identity)
         if not plan.executable or not current.executable or current.configuration != plan.configuration:
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+            raise ResourceReferenceInvalidError(reason="processing_configuration_unavailable")
         operator = await self._operator(identity)
         rules = {
             item.target.file_id: legacy_rule_from_snapshot(

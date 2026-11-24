@@ -1929,3 +1929,29 @@ Milvus 原生内部消息 Base64 凭据为用户确认的明确例外，部署�
 .venv/bin/python scripts/spike_unified_runtime/s3b_diff_todos_alignment.py
 .venv/bin/python scripts/spike_unified_runtime/s3c_steer_real_model.py --list
 ```
+
+## Repair permissions left by an audited tenant unmount
+
+`repair_unmounted_tenant_permissions.py` handles the historical case where an archived Child's
+business resources have already moved to Root but their F048 modes/Grants still belong to
+that Child. It is environment-independent: pass the source Child and current system-admin
+operator, and use the same `config` as the backend. Run from `src/backend/`.
+
+```bash
+python scripts/repair_unmounted_tenant_permissions.py --source-tenant <child-id> --operator-id <admin-id> --plan-file /var/tmp/tenant-repair/preview.json
+python scripts/repair_unmounted_tenant_permissions.py --source-tenant <child-id> --operator-id <admin-id> --plan-file /var/tmp/tenant-repair/preview.json --apply --confirm-checksum <preview-checksum>
+# After interruption: continue the original durable projection journals.
+python scripts/repair_unmounted_tenant_permissions.py --source-tenant <child-id> --operator-id <admin-id> --plan-file /var/tmp/tenant-repair/preview.json --resume --confirm-checksum <preview-checksum>
+```
+
+The default is a read-only SQL/FGA preview plus an exclusive private plan/backup file;
+it never overwrites an existing plan. Retain this file outside the container before apply.
+Only audited unmounts, actual Root ownership, CURRENT source mirrors and matching physical
+Grant graphs are admitted. Conflicting destination modes/Grants, pending operations, unknown
+physical sources or changed preview/Catalog fail closed. No direct UPDATE-only shortcut,
+broad FGA reset, model publication, owner reassignment or expansion to Root-wide audiences.
+The source Child's presets stay with that Child. Permission SQL and native journals commit
+in one transaction; FGA writes and recovery use those original journals. Apply/resume verifies
+all selected SQL provenance and physical objects, then exercises permission-version readback.
+This script does not support arbitrary cross-tenant ownership transfer or invent authorization
+for missing/ambiguous historical records.

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import * as api from '@/controllers/API/permission';
 import type { PermissionGrantAssignee, ResourcePermissionContext } from '@/controllers/API/permission';
@@ -31,13 +31,12 @@ beforeEach(() => {
     });
 });
 
-it('shows system provenance instead of a null-user owner and retains real-user controls', async () => {
+it('hides system provenance and historical null-user owners while retaining real-user controls', async () => {
     render(<PermissionListTab resourceType="tool" resourceId="7" context={context} systemPreset />);
-    const system = await screen.findByTestId('permission-system-preset');
-    expect(within(system).getByText('roster.systemPreset')).toBeInTheDocument();
-    expect(within(system).getByText('source.system')).toBeInTheDocument();
-    expect(within(system).queryByRole('button')).toBeNull();
-    expect(within(system).queryByRole('combobox')).toBeNull();
+    await screen.findByText('Alice');
+    expect(screen.queryByTestId('permission-system-preset')).toBeNull();
+    expect(screen.queryByText('roster.systemPreset')).toBeNull();
+    expect(screen.queryByText('source.system')).toBeNull();
     expect(screen.queryByText('user:None')).toBeNull();
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'grant.remove.71' })).toBeNull();
@@ -45,11 +44,12 @@ it('shows system provenance instead of a null-user owner and retains real-user c
     expect(api.mutateResourceGrantsApi).not.toHaveBeenCalled();
 });
 
-it('shows system provenance for fresh preset tools without any user-owner grant', async () => {
+it('shows an empty roster for fresh preset tools without explicit grants', async () => {
     vi.mocked(api.getResourcePermissionGrantsApi).mockResolvedValue({ data: [], page_size: 50, has_more: false, next_cursor: null });
     render(<PermissionListTab resourceType="tool" resourceId="8" context={context} systemPreset />);
-    await screen.findByText('roster.systemPreset');
-    expect(screen.queryByText('list.emptyForSubject')).toBeNull();
+    await screen.findByText('list.emptyForSubject');
+    expect(screen.queryByTestId('permission-system-preset')).toBeNull();
+    expect(screen.queryByText('roster.systemPreset')).toBeNull();
     expect(api.mutateResourceGrantsApi).not.toHaveBeenCalled();
 });
 
@@ -65,9 +65,9 @@ it('keeps system provenance out of department tabs', async () => {
     expect(screen.queryByText('roster.systemPreset')).toBeNull();
 });
 
-it('filters the system source by its displayed label', async () => {
+it('searches real users without synthesizing a system source', async () => {
     render(<PermissionListTab resourceType="tool" resourceId="7" context={context} systemPreset />);
-    await screen.findByText('roster.systemPreset');
+    await screen.findByText('Alice');
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Alice' } });
     expect(screen.queryByText('roster.systemPreset')).toBeNull();
     expect(screen.getByText('Alice')).toBeInTheDocument();
