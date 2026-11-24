@@ -63,6 +63,41 @@ def test_callback_signature_binds_exact_body(nested):
         assert security.verify_callback({**body, field: value, "token": token}, SECRET) is None
 
 
+@pytest.mark.parametrize("trimmed", [False, True])
+def test_callback_accepts_distinct_outbox_tokens(trimmed):
+    full_body = {**_body(), "history": {"changes": []}, "changesurl": "http://office.local/cache/changes"}
+    body = {**_body(), "history": {}} if trimmed else full_body
+    body_token = jwt.encode(full_body, SECRET, algorithm="HS256")
+    header_token = jwt.encode({"payload": body}, SECRET, algorithm="HS256")
+    assert security.verify_callback({**body, "token": body_token}, SECRET, f"Bearer {header_token}") == body
+
+
+@pytest.mark.parametrize("field,value", [
+    ("status", 6),
+    ("key", "another_key"),
+    ("url", "http://office.local/cache/b"),
+    ("history", {"changes": ["different"]}),
+    ("changesurl", "http://office.local/cache/other-changes"),
+])
+def test_callback_requires_both_tokens_to_bind_the_save(field, value):
+    body = {**_body(), "history": {"changes": []}, "changesurl": "http://office.local/cache/changes"}
+    body_token = jwt.encode(body, SECRET, algorithm="HS256")
+    altered = {**body, field: value}
+    header_token = jwt.encode({"payload": altered}, SECRET, algorithm="HS256")
+    assert security.verify_callback({**altered, "token": body_token}, SECRET, f"Bearer {header_token}") is None
+
+
+@pytest.mark.parametrize("invalid_position", ["body", "header"])
+def test_callback_rejects_either_invalid_signature(invalid_position):
+    body = _body()
+    wrong_secret = "a-different-test-signing-key-at-least-32-bytes"
+    body_token = jwt.encode(body, wrong_secret if invalid_position == "body" else SECRET, algorithm="HS256")
+    header_token = jwt.encode(
+        {"payload": body}, wrong_secret if invalid_position == "header" else SECRET, algorithm="HS256"
+    )
+    assert security.verify_callback({**body, "token": body_token}, SECRET, f"Bearer {header_token}") is None
+
+
 @pytest.mark.parametrize("kind", ["wrong", "expired", "editor", "none", "empty"])
 def test_callback_token_rejections(kind):
     body = _body()
