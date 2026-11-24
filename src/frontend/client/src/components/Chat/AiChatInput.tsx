@@ -204,10 +204,11 @@ const AiChatInput = memo(
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
         const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
-        // Keep selected task skills across sends, shared by the landing and conversation inputs.
+        // Selected skills stay across sends, shared by the landing and conversation inputs.
+        // Both daily chat and deep research mount them (F004 AC-45).
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
         const skillCatalog = useQuery({ queryKey: ['linsightSelectableSkills'], queryFn: getSelectableSkills,
-            enabled: taskMode && !isLingsi, refetchOnWindowFocus: true, staleTime: 0 });
+            enabled: !isLingsi, refetchOnWindowFocus: true, staleTime: 0 });
         useEffect(() => {
             if (!skillCatalog.data) return;
             const allowed = new Set(skillCatalog.data.map(skill => skill.name));
@@ -298,11 +299,10 @@ const AiChatInput = memo(
         ) ?? false;
         const supportsImageParsing = !!bsConfig?.enable_etl4lm;
 
-        // Ordinary chat clears task skills and keeps supported document attachments.
+        // Ordinary chat keeps the selected skills and the supported document attachments.
         // Fires only on a true→false transition, never on mount or re-entry.
         useEffect(() => {
             if (prevTaskModeRef.current && !taskMode) {
-                setDailySkills([]);
                 const dailyAccept = buildChatAccept({
                     enableMedia: !!envConfig?.enable_media_upload,
                     includeOfd: !isLingsi,
@@ -331,7 +331,7 @@ const AiChatInput = memo(
             // Environment configuration is read when the mode transition fires; leaving it
             // out keeps a config refetch from re-running the cleanup.
             // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [taskMode, setDailySkills]);
+        }, [taskMode]);
 
         // Voice input: check if ASR model is available
         const { data: modelData } = useGetWorkbenchModelsQuery();
@@ -348,9 +348,9 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
-        const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
-            && (taskMode || (taskModeEntry && !!onToggleTaskMode))
-            && showAddSkill;
+        // Skills work in daily chat and in deep research, so the picker does not
+        // depend on the task-mode entry.
+        const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange && showAddSkill;
         // Tools are sent with every request (see useAiChat), so an established
         // conversation keeps the picker: a tool removed from the composer can be
         // added back, and a later turn can use a tool the first one did not.
@@ -501,7 +501,7 @@ const AiChatInput = memo(
         }, []);
 
         // Resource IDs share the native editor document while execution metadata stays in state.
-        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
+        const mountedSkills = !isLingsi ? dailySkills : [];
         // Default-checked (auto) tools stay selected but out of the editor text;
         // the "+" menu shows them. Editor edits only replace the visible part.
         const showMountedTools = !!tools && agentMode && !isLingsi && !!onSelectedOrgKbsChange;
@@ -736,13 +736,10 @@ const AiChatInput = memo(
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                 >
-                                    {/* Selecting a skill activates task mode for this draft. */}
+                                    {/* Selecting a skill keeps the current mode. */}
                                     {showSkillPicker ? <ChatSkillSelector menu
                                             selected={dailySkills} disabled={!!disabled}
-                                            onChange={(skills) => {
-                                                setDailySkills(skills);
-                                                if (skills.length > 0 && !taskMode) onToggleTaskMode?.();
-                                            }} />
+                                            onChange={setDailySkills} />
                                         : null}
                                 </ChatResourceMenu>
                             )}

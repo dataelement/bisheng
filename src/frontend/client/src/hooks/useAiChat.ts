@@ -590,9 +590,9 @@ export default function useAiChat(
                 linsight: false,
                 // Deep research: the same entry starts the run with the task profile.
                 task_mode: taskMode,
-                // Ordinary turns carry an empty skill selection.
-                skills: taskMode ? dailyTaskSkills.map((s) => s.name) : [],
-                skill_ids: taskMode ? dailyTaskSkills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])) : [],
+                // Both daily chat and deep research mount the selected skills (F004 AC-45).
+                skills: dailyTaskSkills.map((s) => s.name),
+                skill_ids: dailyTaskSkills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])),
             };
 
             // F004: one JSON answer instead of a stream; the run's progress
