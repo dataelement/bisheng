@@ -4,7 +4,6 @@ from sqlalchemy import and_, func, or_, select
 
 from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed, strict_tenant_filter
-from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
@@ -64,14 +63,6 @@ class SourceMoveInputRepository:
                 job.c.move_logical_marker.is_not(None).label("logical_done"),
                 count.label("item_count"),
                 bad.label("bad_item"),
-                select(Knowledge.__table__.c.id)
-                .where(
-                    Knowledge.__table__.c.id == job.c.space_id,
-                    Knowledge.__table__.c.tenant_id == tenant,
-                )
-                .correlate(job)
-                .exists()
-                .label("destination_exists"),
             )
             .select_from(plan.outerjoin(job, and_(job.c.id == plan.c.operation_id, job.c.tenant_id == tenant)))
             .where(
@@ -89,12 +80,13 @@ class SourceMoveInputRepository:
     def _check(row, space_id):
         if (
             row["operation"] == "space_copy"
+            and row["job_id"] is not None
             and row["kind"] == "space_copy"
             and row["space_id"] != space_id
-            and row["state"] in {"failed", "partial_failed", "obsolete"}
-            and not row["destination_exists"]
+            and row["state"] in {"succeeded", "failed", "partial_failed", "obsolete"}
         ):
-            # A removed target cannot resume its failed copy or consume input.
+            # Finished copies never reserve source input. Explicit retries must
+            # revalidate surviving input; stale workers have no active job lease.
             return
         if (
             row["operation"] == "space_copy"
