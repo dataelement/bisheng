@@ -90,10 +90,9 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         // DeepStepGroup.buildSegments.
         // Knowledge searches are never merged: each one stays a row at its real
         // position (see knowledgeRow.ts).
-        // Names of the knowledge bases the user selected label searches that
-        // returned nothing, whose names the results never carry.
-        // Searched ids that are still unnamed (no chunk returned, not in the
-        // selection) are looked up by id, so an old conversation names them too.
+        // A searched knowledge base that returned nothing is never named in the
+        // results. Name it from the user's selection, and for ids still unnamed
+        // (an old conversation, another selection) from the picker's lists.
         const { names: selectedKbNames, lookupEnabled } = useContext(KnownKnowledgeBaseNamesContext);
         const unnamedKbIds = useMemo(
             () => unnamedKnowledgeBaseIds(events, selectedKbNames),

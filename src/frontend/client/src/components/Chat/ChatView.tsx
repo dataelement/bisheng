@@ -100,7 +100,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const selectedOrgKbIdsKey = selectedOrgKbIds.join(',');
   // Lets deep-thinking knowledge rows name a searched knowledge base that returned nothing.
   const knownKbNamesContext = useMemo(
-    () => ({ names: knownKnowledgeBaseNames(selectedOrgKbs), lookupEnabled: !shareToken }),
+    // The selection belongs to the viewer's input bar, not to a shared transcript.
+    () => ({ names: shareToken ? {} : knownKnowledgeBaseNames(selectedOrgKbs), lookupEnabled: !shareToken }),
     [selectedOrgKbs, shareToken],
   );
   const { data: visibleSelectedOrgKbs = [], isSuccess: selectedOrgKbVisibilityReady } = useGetOrgToolList(
