@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import * as api from '@/controllers/API/permission';
 import type { PermissionGrantAssignee, ResourcePermissionContext } from '@/controllers/API/permission';
@@ -44,6 +44,19 @@ it('hides system provenance and historical null-user owners while retaining real
     expect(api.mutateResourceGrantsApi).not.toHaveBeenCalled();
 });
 
+it.each(['test0528', 'editor'])('hides historical null-user records under model %s', async (modelKey) => {
+    vi.mocked(api.getResourcePermissionGrantsApi).mockResolvedValue({
+        data: [{ ...historical, model: { ...model, key: modelKey, name: modelKey } }],
+        page_size: 50, has_more: false, next_cursor: null,
+    });
+    render(<PermissionListTab resourceType="tool" resourceId="7" context={context} systemPreset />);
+    await screen.findByText('list.emptyForSubject');
+    expect(screen.queryByText('user:None')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'grant.remove.71' })).toBeNull();
+    expect(api.mutateResourceGrantsApi).not.toHaveBeenCalled();
+});
+
 it('shows an empty roster for fresh preset tools without explicit grants', async () => {
     vi.mocked(api.getResourcePermissionGrantsApi).mockResolvedValue({ data: [], page_size: 50, has_more: false, next_cursor: null });
     render(<PermissionListTab resourceType="tool" resourceId="8" context={context} systemPreset />);
@@ -71,4 +84,22 @@ it('searches real users without synthesizing a system source', async () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Alice' } });
     expect(screen.queryByText('roster.systemPreset')).toBeNull();
     expect(screen.getByText('Alice')).toBeInTheDocument();
+});
+
+it('locks the business owner source while a directly granted owner remains editable', async () => {
+    vi.mocked(api.getResourcePermissionGrantsApi).mockResolvedValue({
+        data: [
+            { ...historical, subject: { type: 'user', id: '7', name: 'Creator' },
+                source: { ...historical.source, type: 'CREATOR' }, protected: true, editable: false },
+            { ...historical, assignee_id: '72', subject: { type: 'user', id: '897', name: 'Alice' } },
+        ], page_size: 50, has_more: false, next_cursor: null,
+    });
+    render(<PermissionListTab resourceType="tool" resourceId="7" context={context} />);
+    const creator = await screen.findByTestId('permission-assignee-71');
+    expect(within(creator).getByLabelText('roster.protected')).toBeInTheDocument();
+    expect(within(creator).queryByRole('combobox')).toBeNull();
+    expect(within(creator).queryByRole('button')).toBeNull();
+    const direct = screen.getByTestId('permission-assignee-72');
+    expect(within(direct).getByRole('combobox')).toBeInTheDocument();
+    expect(within(direct).getByRole('button', { name: 'grant.remove.72' })).toBeInTheDocument();
 });
