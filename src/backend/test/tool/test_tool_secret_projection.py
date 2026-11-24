@@ -19,7 +19,8 @@ CANARY = "synthetic-api-key-DO-NOT-EXPOSE"
 
 @pytest.fixture(autouse=True)
 def preset_child_identity_boundary(monkeypatch):
-    # Mainline now resolves preset identity through this additional DAO boundary.
+    # These tests isolate config projection; action authorization is covered separately.
+    monkeypatch.setattr(tool, "require_business_action", AsyncMock())
     monkeypatch.setattr(tool.GptsToolsDao, "aget_preset_child_keys", AsyncMock(return_value={}))
 
 

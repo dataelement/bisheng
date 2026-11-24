@@ -102,14 +102,14 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         }).map((el) => ({
             ...el,
             write: isBuiltinTool
-                ? canConfigureBuiltinTool(user, el.tenant_id)
+                ? canConfigureBuiltinTool(actions[String(el.id)])
                 : hasResourceAction(actions, el.id, 'edit'),
             delete: !isBuiltinTool && hasResourceAction(actions, el.id, 'delete'),
         }));
-    }, [actions, allData, isBuiltinTool, keyword, type, user]);
+    }, [actions, allData, isBuiltinTool, keyword, type]);
 
     const hasSet = (el) => {
-        if (!canConfigureBuiltinTool(user, el.tenant_id)) return false
+        if (!isBuiltinTool || !el.write) return false
         return MANAGED_TOOLS.includes(el.name) || hasManagedToolKey(el.children)
     }
 

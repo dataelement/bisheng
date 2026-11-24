@@ -9,7 +9,6 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
-from bisheng.permission.application.identity import is_current_tenant_administrator
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.tool.domain.models.gpts_tools import GptsToolsTypeRead
 from bisheng.tool.domain.schemas import TestToolReq
@@ -26,17 +25,11 @@ from bisheng_langchain.utils.safe_http_errors import RequestFailed, RequestTimeo
 router = APIRouter(prefix="/tool", tags=["Tool"])
 
 
-async def _require_search_admin(user: UserPayload):
-    # Match preset /tool/config administration; ordinary resource grants do not delegate settings.
-    if not await is_current_tenant_administrator(user):
-        raise UnAuthorizedError()
-
-
 @router.get("/{tool_type_id}/web-search/settings")
 async def get_web_search_settings(tool_type_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     from bisheng.tool.domain.services.web_search import get_settings
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await get_settings(tool_type_id))
 
 
@@ -49,7 +42,7 @@ async def put_web_search_settings(
 
     from bisheng.tool.domain.services.web_search import put_settings
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     try:
         validated = SettingsWrite.model_validate(req)
     except ValidationError:
@@ -63,7 +56,7 @@ async def import_web_search_schema(
 ):
     from bisheng.tool.domain.services.web_search import schema_preview
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await schema_preview(tool_type_id, req))
 
 
@@ -73,7 +66,7 @@ async def test_web_search(
 ):
     from bisheng.tool.domain.services.web_search import search_preview
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await search_preview(tool_type_id, req))
 
 
