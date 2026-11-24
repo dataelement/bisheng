@@ -10,6 +10,7 @@ import {
   isErrorEnvelope,
   normalizeApiError,
   resolveErrorMessageTemplate,
+  referenceErrorMessage,
   type ErrorPresentation,
 } from "@bisheng/api-client";
 import { knowledgeProcessingConflictVariant } from "@bisheng/knowledge/processing-conflicts";
@@ -190,6 +191,8 @@ const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefi
   _post(endpoints.refreshToken(retry));
 
 export const translateApiErrorMessage = (data: any) => {
+  const referenceMessage = referenceErrorMessage(data, (key, values) => String(i18next.t(`api_errors.${key}`, values)));
+  if (referenceMessage) return referenceMessage;
   const variant = knowledgeProcessingConflictVariant(data);
   const conflictKey = variant ? `knowledgeProcessing.conflict.${variant}` : '';
   if (conflictKey && i18next.exists(conflictKey)) {

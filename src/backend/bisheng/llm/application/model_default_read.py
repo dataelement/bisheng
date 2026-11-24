@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.llm.application.model_default_read_identity import ModelDefaultReadIdentityPort
+from bisheng.llm.application.model_default_validation import require_callable_default_models
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.services.default_reference_extractor import (
     extract_model_default_references,
-    model_default_models_are_callable,
     project_model_default,
     validate_model_default_slots,
 )
@@ -102,8 +102,7 @@ class ModelDefaultReadRuntime:
 
     @staticmethod
     def _validate_model_states(key, references, states):
-        if not model_default_models_are_callable(key, references, states):
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+        require_callable_default_models(key, references, states)
 
     @staticmethod
     def _project(snapshot, key, slots):

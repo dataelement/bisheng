@@ -6,6 +6,7 @@ from bisheng.common.errcode.knowledge import (
     ResourceReferenceInvalidError,
 )
 from bisheng.resource_reference.application.contracts import SourceType
+from bisheng.resource_reference.application.error_details import snapshot_reference_errors
 from bisheng.resource_reference.application.source_contracts import (
     ModelDefaultSlotReadResult,
     SourceReferenceReadResult,
@@ -25,9 +26,11 @@ class ReferenceSourceReadRuntime:
         verifier._install_target_owners(target_owners)
 
     @staticmethod
-    def _require_valid(facts):
+    def _require_valid(facts, snapshot):
         if any(not fact.is_valid for fact in facts):
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+            raise ResourceReferenceInvalidError(
+                reason="reference_target_invalid", reference_errors=snapshot_reference_errors(snapshot, facts)
+            )
 
     async def _source(self, session, scope, identity, *, purpose, slots=None):
         snapshot = await self.verifier.aget_source_snapshot(session, scope, identity)
@@ -39,7 +42,7 @@ class ReferenceSourceReadRuntime:
             if snapshot.invalid_reason is not None:
                 raise ResourceReferenceInvalidError(reason=snapshot.invalid_reason)
             if snapshot.source_key.source_type != SourceType.HOSTED_APP_VERSION:
-                self._require_valid(facts)
+                self._require_valid(facts, snapshot)
         if slots is not None:
             return ModelDefaultSlotReadResult(snapshot, facts, slots)
         return SourceReferenceReadResult(snapshot, facts)
@@ -54,7 +57,7 @@ class ReferenceSourceReadRuntime:
         snapshot = await self.verifier.aget_transient_snapshot(session, scope, identity)
         facts = await self.verifier._ainspect_targets(session, scope, identity)
         await self.verifier.arevalidate_transient_scope(session, scope, identity)
-        self._require_valid(facts)
+        self._require_valid(facts, snapshot)
         return TransientReferenceReadResult(snapshot, facts)
 
     def _source_sync(self, session, scope, identity, *, purpose, slots=None):
@@ -67,7 +70,7 @@ class ReferenceSourceReadRuntime:
             if snapshot.invalid_reason is not None:
                 raise ResourceReferenceInvalidError(reason=snapshot.invalid_reason)
             if snapshot.source_key.source_type != SourceType.HOSTED_APP_VERSION:
-                self._require_valid(facts)
+                self._require_valid(facts, snapshot)
         if slots is not None:
             return ModelDefaultSlotReadResult(snapshot, facts, slots)
         return SourceReferenceReadResult(snapshot, facts)

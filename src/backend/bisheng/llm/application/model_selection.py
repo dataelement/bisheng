@@ -6,6 +6,7 @@ from bisheng.llm.domain.repositories.model_selection_repository import ModelSele
 from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 from bisheng.permission.application.relation_api import get_permission_relation_api_sync
 from bisheng.resource_reference.application.contracts import TargetType
+from bisheng.resource_reference.application.error_details import reference_error_details
 
 
 def _filter(rows, tenant, child, shared):
@@ -47,4 +48,5 @@ async def require_new_models(session, references, old=()):
         raise ResourceReferenceInvalidError(
             reason="model_selection_unavailable",
             unavailable_target_ids=sorted((key.target_id for key in missing), key=int),
+            reference_errors=reference_error_details(references, dict.fromkeys(missing, "unavailable")),
         )
