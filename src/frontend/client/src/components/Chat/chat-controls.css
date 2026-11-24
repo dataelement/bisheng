@@ -172,9 +172,17 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
   font-family:inherit; font-size:var(--dsh-command-name-size); font-weight:400; line-height:20px;
 }
 .dsh-command-panel .dsh-command-skill-row {
-  display:flex; align-items:center; gap:6px; padding:5px 7px; border-radius:8px;
+  display:flex; width:100%; align-items:center; gap:6px; padding:5px 7px; border-radius:8px;
   cursor:pointer; color:rgb(var(--text-1));
   font-family:inherit; font-size:var(--dsh-command-name-size); font-weight:400; line-height:20px;
+}
+.dsh-chat-menu.dsh-command-panel .dsh-command-skill-row[data-highlighted] {
+  background-color:rgb(var(--fill-3));
+}
+@media (hover:hover) and (pointer:fine) {
+  .dsh-chat-menu.dsh-command-panel .dsh-command-skill-row:hover {
+    background-color:rgb(var(--fill-3));
+  }
 }
 .dsh-command-skill-row[aria-checked=true] .dsh-command-name { color:rgb(var(--brand-500)); }
 .dsh-command-panel [role="menuitemcheckbox"]:not(.dsh-command-skill-row) > span:last-child { margin-left:auto; flex:none; }
