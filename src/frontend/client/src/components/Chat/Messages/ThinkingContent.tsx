@@ -9,6 +9,7 @@
 import { Outlined } from "bisheng-icons";
 import { memo, useCallback, useState, type FC, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
+import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import store from "~/store";
 
@@ -21,6 +22,7 @@ export interface ThinkingContentProps {
 }
 
 const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning, showConnector = false }) => {
+    const localize = useLocalize();
     const showThinkingDefault = useRecoilValue<boolean>(store.showThinking);
     const [isExpanded, setIsExpanded] = useState(showThinkingDefault);
 
@@ -47,7 +49,7 @@ const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning, showConnect
                     onClick={handleClick}
                     className="group flex w-fit max-w-full items-center gap-1 text-sm leading-[22px] text-text-3 transition-colors hover:text-text-1"
                 >
-                    <span>思考内容</span>
+                    <span>{localize("com_ui_thoughts")}</span>
                     <Outlined.Down
                         size={16}
                         className={cn(
