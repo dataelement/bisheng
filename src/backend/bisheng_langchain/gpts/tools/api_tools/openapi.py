@@ -21,6 +21,12 @@ class OpenApiTools(APIToolBase):
     def get_request_method(self):
         return self.params['method'].lower()
 
+    @staticmethod
+    def _is_blank_optional_value(param_define: dict, value: Any) -> bool:
+        if value != '' or param_define.get('required') or param_define.get('in') == 'path':
+            return False
+        return (param_define.get('schema') or {}).get('type') != 'string'
+
     def get_params_json(self, **kwargs):
         params_define = {}
         for one in self.params['parameters']:
@@ -31,6 +37,10 @@ class OpenApiTools(APIToolBase):
         json_data = {}
         for k, v in kwargs.items():
             if params_define.get(k):
+                if self._is_blank_optional_value(params_define[k], v):
+                    # A blank optional non-string value means "not provided": omit it so the
+                    # upstream applies its own default instead of rejecting "" (e.g. integer count).
+                    continue
                 if params_define[k]['in'] == 'query':
                     field_type = params_define[k]['schema']['type']
                     params[k] = convert_openapi_field_value(v, field_type)
