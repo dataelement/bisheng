@@ -18,6 +18,7 @@ import { memo, useEffect, useState, type FC } from "react";
 import type { AgentToolCall } from "~/api/chatApi";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { isKnowledgeToolCall } from "./knowledgeRow";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
@@ -30,11 +31,10 @@ export interface ToolCallDisplayProps {
 // --- helpers ---------------------------------------------------------------
 
 function classifyToolType(tc: AgentToolCall): "knowledge" | "web" | "tool" {
-    if (tc.tool_type === "knowledge") return "knowledge";
+    if (isKnowledgeToolCall(tc)) return "knowledge";
     if (tc.tool_type === "web") return "web";
     // Heuristics for legacy rows / server variants:
     const name = (tc.tool_name || "").toLowerCase();
-    if (name.includes("knowledge") || name.includes("kb")) return "knowledge";
     if (name === "web_search" || name.includes("search")) return "web";
     return "tool";
 }
