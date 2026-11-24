@@ -770,6 +770,23 @@ class WorkStationService(BaseService):
     ) -> KnowledgeSpaceConfig | None:
         return config
 
+    @staticmethod
+    def _upgrade_legacy_org_kbs(org_kbs: Any) -> Any:
+        """Read a pre-F005-revision ``orgKbs`` list in the new shape (design decision 9).
+
+        Before the revision an item carried ``default_checked``; now every configured
+        knowledge base is preselected and ``show_in_composer`` decides only its tag.
+        Every save since then writes the key on each item, so a list where no item has
+        it was saved before the upgrade: keep only the items that were default-checked,
+        and show them in the composer.
+        """
+        if not isinstance(org_kbs, list):
+            return org_kbs
+        items = [item for item in org_kbs if isinstance(item, dict)]
+        if any("show_in_composer" in item for item in items):
+            return org_kbs
+        return [{**item, "show_in_composer": True} for item in items if item.get("default_checked") is True]
+
     @classmethod
     def parse_config(cls, config: Any) -> WorkstationConfig | None:
         if not config:
@@ -817,6 +834,7 @@ class WorkStationService(BaseService):
                 # Best-effort; fall through and let Pydantic drop unknown keys.
                 pass
 
+        raw["orgKbs"] = cls._upgrade_legacy_org_kbs(raw.get("orgKbs"))
         ret = WorkstationConfig(**raw)
 
         # Platform default: the built-in web_search tool must always appear in

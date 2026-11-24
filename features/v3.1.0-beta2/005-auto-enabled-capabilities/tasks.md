@@ -1,4 +1,4 @@
-# Tasks: 工作台工具与技能「自动启用」
+# Tasks: 工作台工具、技能与知识库的使用方式
 
 **关联规格**: [spec.md](./spec.md)
 **版本**: v3.1.0-beta2
@@ -9,8 +9,8 @@
 
 | 步骤 | 状态 | 备注 |
 |------|------|------|
-| spec.md | ✅ 已评审 | 2026-11-20 用户确认（含 AC-23、AC-24 补充） |
-| design.md | ✅ 已评审 | 2026-11-20 用户确认；决策 5 的细化（复制而非硬链接）记在修订历史 |
+| spec.md | ✅ 已评审 | 2026-11-20 用户确认（含 AC-23、AC-24 补充）；2026-11-24 知识库修订（AC-25 至 AC-36）用户确认 |
+| design.md | ✅ 已评审 | 2026-11-20 用户确认；决策 5 的细化（复制而非硬链接）记在修订历史；2026-11-24 知识库修订（决策 8–11）用户确认 |
 | tasks.md | ✅ 已拆解 | |
 | 实现 | ✅ 完成 | 12 / 12；/e2e-test 7/7 通过；/sdd-code-review 第 2 轮 PASS_WITH_WARNINGS（2026-11-20） |
 
@@ -107,6 +107,44 @@
   **逻辑**: 推到 114 部署；用非管理员账号执行 TC-AE-003/004/005/006/011/012/013；重跑挂载耗时测量，记入 design §7.1；`/e2e-test`；`/sdd-code-review --base feat/3.1.0-beta2`。
   **依赖**: T001–T011
 
+### Wave 5：知识库「展示在输入框」（2026-11-24 修订，design 决策 8–11）
+
+- [x] **T013**: 后端：`show_in_composer` 字段与读时升级映射
+  **文件**: `backend/bisheng/api/v1/schemas.py`、`backend/bisheng/workstation/domain/services/workstation_service.py`、`backend/test/workstation/test_org_kb_composer_visibility.py`（新）、`backend/test/workstation/test_config_knowledge_permission.py`
+  **逻辑**: 见 design 决策 8、决策 9。`OrgKbConfig` 删除 `default_checked`，新增 `show_in_composer: bool = True`。`parse_config` 在构造 `WorkstationConfig` 之前映射 raw `orgKbs`：所有条目都没有 `show_in_composer` 键时，丢弃 `default_checked` 不为真的条目，其余写入 `show_in_composer=True`。
+  **测试**: 旧 JSON 丢弃未勾选、勾选的设为展示；新 JSON 原样读取（含 `false`）；空列表与 `null`；保存后往返；`visible` 过滤保留新字段；继承投影保留新字段。
+  **覆盖 AC**: AC-25, AC-26, AC-27, AC-28, AC-34
+  **依赖**: 无
+
+- [x] **T014**: 平台：知识库配置改为「展示在输入框」
+  **文件**: `platform/src/pages/BuildPage/bench/OrgKbConfig.tsx`、其类型定义（核实后确定）、`platform/public/locales/{zh-Hans,en-US,ja}/bs.json`、`platform/src/test/listSorting.test.tsx`
+  **逻辑**: 见 design 决策 8 与坑 16。勾选框绑定 `show_in_composer`，新加入的条目为 `true`；列头用新 key `bench.showInComposer`，说明用 `bench.showInComposerHint`（「配置的知识库会自动带入新会话」）。不改 `bench.defaultChecked`。
+  **测试**: 新加入默认展示；切换后写回 `show_in_composer`。
+  **覆盖 AC**: AC-25, AC-26
+  **手动验证**: TC-AE-018
+  **依赖**: T013
+
+- [x] **T015**: 客户端：全部预先勾选、不展示的不出标签
+  **文件**: `client/src/types/chat/config.ts`、`client/src/hooks/useAiChat.ts`、`client/src/components/Chat/Input/composerKnowledge.ts`（新）、`client/src/components/Chat/AiChatInput.tsx`，测试同目录
+  **逻辑**: 见 design 决策 10 与坑 14。`knowledgeDefaults` 取全部 `orgKbs`；`splitComposerKnowledge(selected, orgKbs)` 按 `show_in_composer === false` 拆出 `hidden`（只匹配 `type === 'org'`）；`AiChatInput` 用 `visible` 生成标签和 `hasMountedKbs`，输入框回写时合并 `hidden`；「+」菜单仍收到完整列表。
+  **测试**: 拆分函数；删除可见标签后隐藏条目仍在；隐藏条目不出标签；默认值取全部配置。
+  **覆盖 AC**: AC-29, AC-30, AC-31, AC-32, AC-35
+  **手动验证**: TC-AE-019, TC-AE-020, TC-AE-021, TC-AE-022
+  **依赖**: T013
+
+- [x] **T016**: 客户端：「+」菜单删除置顶
+  **文件**: `client/src/components/Chat/Input/ChatKnowledge.tsx`
+  **逻辑**: 见 design 决策 11。删除 `preferredIds`、`sortedOrgKbs`，列表用接口顺序；不改 `preferred_ids` 参数与 `useVisibleKnowledgeSelections.ts`。
+  **覆盖 AC**: AC-33
+  **手动验证**: TC-AE-023
+  **依赖**: 无
+
+- [ ] **T017**: 验证与升级说明
+  **逻辑**: 本地跑后端与前端单测、lint、typecheck；`/e2e-test`（非管理员账号，先清新会话草稿，见坑 15）；在 F005 文档里写升级说明「升级后先刷新管理端页面再保存」（坑 13）；`/sdd-code-review --base feat/3.1.0-beta2`。
+  **覆盖 AC**: AC-36（现状不变，只验证）
+  **手动验证**: TC-AE-015, TC-AE-024, TC-AE-025, TC-AE-026
+  **依赖**: T013–T016
+
 ---
 
 ## 实际偏差记录
@@ -125,3 +163,8 @@
 | 2026-11-22 | T003 | rebase 到合入 F004 的 beta2 后发现：开放 API 日常对话已改走 DirectRunner，「总是挂载」会让开放 API 挂上调用方没传的技能（AC-21） | `_mount_skills` 对 `unattended` 且未传技能的运行不挂载；补测试 1 条 |
 | 2026-11-22 | T012 | rebase 到 beta2 后，114 上的代码执行器无法运行：beta2 禁止后端宿主机本地执行（`build_code_executor` 对 `local` 抛 `SandboxConfigurationError`），114 没有配置 container/e2b 执行器。E2E 的 AC-14 原断言把「初始化失败」事件也算作调用，出现误报 | 断言改为只认正常结束、非 `init_failed` 的调用；AC-14、TC-AE-016 的执行部分待 114 配好沙箱后补测（11-20 在 F004 基线上已实测通过） |
 | 2026-11-20 | T011 | 客户端已经按可用列表剪掉旧的工具选择（`useAgentToolSelection`）和技能选择（`AiChatInput`、`SkillSelector`），不需要改代码 | 只在 T012 手动验证 TC-AE-008 |
+| 2026-11-24 | T014 | design 坑 16 的前提已过时：F005 T009 把工具配置改成 `ToolUsageSelect` 以后，`bench.defaultChecked` 只剩知识库配置在用 | 新增 `bench.showInComposer`、`bench.showInComposerHint`，删除 `bench.defaultChecked`（三份 locale）；已回写 design 坑 16 |
+| 2026-11-24 | T015 | 默认选择的规则从 `useAiChat` 抽成纯函数 `configuredKnowledgeDefaults`，与 `splitComposerKnowledge` 同放 `composerKnowledge.ts`，以便直接单测；`useAiChat` 只调用它 | 已回写 design 决策 10 |
+| 2026-11-24 | T016 | 「+」菜单的知识库列表按名称排序（`sort_by: "name"`），不是按更新时间 | TC-AE-023 的预期改为按名称排序 |
+| 2026-11-24 | T016 | 删除置顶后 `ChatKnowledge.tsx` 少了 9 处 `as any`，`eslint-suppressions.json` 对该文件的计数从 10 改为 1 | 只对改动文件执行 `--prune-suppressions` |
+| 2026-11-24 | T017 | 新增 `upgrade.md`，写明「升级后先刷新管理端再保存」及原因（坑 13） | — |

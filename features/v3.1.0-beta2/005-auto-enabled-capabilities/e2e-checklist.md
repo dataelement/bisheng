@@ -1,4 +1,4 @@
-# E2E 验证清单：工作台工具与技能「自动启用」
+# E2E 验证清单：工作台工具、技能与知识库的使用方式
 
 **测试环境**：114，平台端 http://192.168.106.114:13000/ ，用户端 http://192.168.106.114:13000/workspace （13000 是 deploy.sh 重建的静态包；4001 的 vite 未运行）
 **账号**：ADM = admin；U1 = 根租户普通用户（114 上的 `f005_noperm`）；子租户用户 `shuiwu`（租户 36）。密码见 `.claude/docs/dev-environments.md` 和 `/opt/bisheng-ops/.env`。

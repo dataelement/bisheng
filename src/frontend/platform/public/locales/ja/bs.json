@@ -1408,7 +1408,8 @@
     "inputPlaceholder": "タスク目標を入力して、$t(bisheng)$t(linsight)に任せてください",
     "availableTools": "利用可能なツール",
     "addTool": "ツールを追加",
-    "defaultChecked": "デフォルト",
+    "showInComposer": "入力欄に表示",
+    "showInComposerHint": "設定したナレッジベースは新しい会話に自動で追加されます。「入力欄に表示」をオフにしても使用されます。入力欄にタグが表示されないだけです。",
     "toolUsage": {
       "title": "利用方法",
       "optional": "ユーザーが選択",

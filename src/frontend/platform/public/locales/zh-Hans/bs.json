@@ -1414,7 +1414,8 @@
     "inputPlaceholder": "请输入你的任务目标，然后交给$t(bisheng)$t(linsight)",
     "availableTools": "可用工具",
     "addTool": "添加工具",
-    "defaultChecked": "是否默认勾选",
+    "showInComposer": "展示在输入框",
+    "showInComposerHint": "配置的知识库会自动带入用户的新会话。不勾选「展示在输入框」的知识库仍会被使用，只是输入框里不显示它。",
     "toolUsage": {
       "title": "使用方式",
       "optional": "用户自选",
