@@ -15,6 +15,18 @@ export interface AbnormalUploadItem {
     update_time: string
 }
 
+export interface AbnormalFilePreviewDetail {
+    pdf_preview_url?: string
+    preview_url?: string
+    html_preview_url?: string
+    original_url?: string
+}
+
+export function getAbnormalFilePreview(knowledgeId: number, fileId: number, signal: AbortSignal): Promise<AbnormalFilePreviewDetail> {
+    const config = { signal, silent: true, timeout: 30_000 }
+    return axios.get<unknown, AbnormalFilePreviewDetail>(`/api/v1/knowledge/space/${knowledgeId}/files/${fileId}/preview`, config)
+}
+
 export interface AbnormalUploadPage {
     data: AbnormalUploadItem[]
     total: number
