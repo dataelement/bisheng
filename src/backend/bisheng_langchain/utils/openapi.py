@@ -61,8 +61,7 @@ def resolve_openapi_type(schema: Any) -> str | None:
 def has_null_member(schema: Any) -> bool:
     """True when a 3.1 type array or an anyOf/oneOf union lists null as an allowed type.
 
-    The OpenAPI 3.0 ``nullable`` keyword is deliberately not considered here, so
-    schemas that already worked keep their previous argument schema and coercion.
+    The OpenAPI 3.0 ``nullable`` keyword is not considered here; use ``is_nullable``.
     """
     if not isinstance(schema, dict):
         return False
@@ -73,3 +72,10 @@ def has_null_member(schema: Any) -> bool:
         isinstance(schema.get(key), list) and any(_is_null_schema(one) for one in schema[key])
         for key in ('anyOf', 'oneOf')
     )
+
+
+def is_nullable(schema: Any) -> bool:
+    """True when the schema allows null: OpenAPI 3.0 ``nullable: true`` or a null member."""
+    if isinstance(schema, dict) and schema.get('nullable') is True:
+        return True
+    return has_null_member(schema)

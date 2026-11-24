@@ -5,10 +5,12 @@ from loguru import logger
 
 from bisheng_langchain.utils.openapi import (
     convert_openapi_field_value,
-    has_null_member,
+    is_nullable,
     resolve_openapi_type,
 )
 from .base import APIToolBase, MultArgsSchemaTool
+
+_JSON_TYPES = {'number', 'integer', 'string', 'boolean', 'array', 'object'}
 
 
 class OpenApiTools(APIToolBase):
@@ -36,7 +38,7 @@ class OpenApiTools(APIToolBase):
     @staticmethod
     def _convert_value(param_define: dict, value: Any) -> Any:
         schema = param_define.get('schema')
-        if value is None and has_null_member(schema):
+        if value is None and is_nullable(schema):
             return None
         return convert_openapi_field_value(value, resolve_openapi_type(schema))
 
@@ -77,54 +79,65 @@ class OpenApiTools(APIToolBase):
                 params.update({parameter_name: self.api_key})
         return params, json_data, path_params
 
-    @staticmethod
-    def _field_info(schema: Any, field_type: str | None, description: str) -> dict:
-        """JSON schema for one argument. Untyped (any) values carry no "type" key."""
-        field_info = {"description": description}
-        if field_type is not None:
-            field_info["type"] = field_type
-        if has_null_member(schema):
-            field_info["nullable"] = True
-        return field_info
+    @classmethod
+    def _json_schema(cls, schema: Any, description: str | None = None) -> dict:
+        """Convert one OpenAPI schema to the standard JSON Schema that is sent to the model.
 
-    @staticmethod
-    def _items_type(schema: dict) -> str:
-        return resolve_openapi_type(schema.get('items')) or 'string'
+        Only standard JSON Schema keywords are written. A nullable value (OpenAPI 3.0
+        ``nullable: true``, a 3.1 type array with "null", or an anyOf/oneOf null branch)
+        becomes a type array such as ``["integer", "null"]``. An untyped value (no type,
+        or a union of different types) has no "type" key, so it accepts any value.
+        """
+        schema = schema if isinstance(schema, dict) else {}
+        field_type = resolve_openapi_type(schema)
+        if field_type == 'dict':
+            field_type = 'object'
+        json_schema = {}
+        if description is not None:
+            json_schema['description'] = description
+        if field_type not in _JSON_TYPES:
+            # Untyped, or a type that JSON Schema does not know: accept any value.
+            return json_schema
+        if field_type == 'array':
+            items = schema.get('items')
+            json_schema['items'] = cls._json_schema(items) if isinstance(items, dict) else {'type': 'string'}
+        elif field_type == 'object':
+            properties = schema.get('properties')
+            properties = properties if isinstance(properties, dict) else {}
+            json_schema['properties'] = {
+                name: cls._json_schema(prop, prop.get('description') if isinstance(prop, dict) else None)
+                for name, prop in properties.items()
+            }
+            required = schema.get('required')
+            if isinstance(required, list):
+                required = [name for name in required if name in properties]
+                if required:
+                    json_schema['required'] = required
+            if 'properties' not in schema:
+                # An object without declared properties accepts any keys.
+                json_schema['additionalProperties'] = True
+        json_schema['type'] = [field_type, 'null'] if is_nullable(schema) else field_type
+        return json_schema
 
     def parse_args_schema(self):
+        """JSON Schema of the tool arguments, in the standard form that langchain sends to the model.
+
+        The arguments must be under "properties": langchain reads ``args_schema["properties"]``
+        for the ReAct text and sends the dict unchanged as the function parameters.
+        """
         args_schema = {
             "type": "object",
             "properties": {},
             "required": []
         }
-        params = self.params['parameters']
-        for one in params:
+        for one in self.params['parameters']:
             if one.get('required'):
                 args_schema['required'].append(one['name'])
-            schema = one.get('schema') or {}
-            field_type = resolve_openapi_type(schema)
-            if field_type is None or field_type in ['number', 'integer', 'string', 'boolean']:
-                # None: anyOf/oneOf or a type array without a single concrete type -> any value.
-                field_info = self._field_info(schema, field_type, one['description'])
-            elif field_type == 'array':
-                field_info = self._field_info(schema, field_type, one['description'])
-                field_info["items"] = self._items_type(schema)
-            elif field_type in {'object', 'dict'}:
-                field_info = self._field_info(schema, "object", one['description'])
-                properties = schema.get('properties') or {}
-                field_info["properties"] = {}
-                if 'properties' not in schema:
-                    # An object without declared properties accepts any keys.
-                    field_info["additionalProperties"] = True
-                for param, param_schema in properties.items():
-                    field_type = resolve_openapi_type(param_schema)
-                    object_field_info = self._field_info(param_schema, field_type, one['description'])
-                    if field_type == 'array':
-                        object_field_info["items"] = self._items_type(schema)
-                    field_info["properties"][param] = object_field_info
-            else:
+            field_type = resolve_openapi_type(one.get('schema'))
+            if field_type is not None and field_type not in _JSON_TYPES and field_type != 'dict':
                 raise Exception(f'schema type is not support: {field_type}')
-            args_schema[one['name']] = field_info
+            args_schema['properties'][one['name']] = self._json_schema(one.get('schema'),
+                                                                       one.get('description', ''))
         return args_schema
 
     def run(self, **kwargs) -> str:
