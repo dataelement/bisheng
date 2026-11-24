@@ -162,25 +162,31 @@ test('media parsing keeps drafting available while blocking send until parsing c
 });
 
 
-test('selecting a skill in ordinary chat activates task mode and keeps the selected skill', () => {
+test('selecting a skill in ordinary chat keeps ordinary chat and mounts the skill', () => {
   const input = props();
   const onToggleTaskMode = jest.fn();
   render(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} onToggleTaskMode={onToggleTaskMode} />);
   fireEvent.click(screen.getByRole('button', { name: 'skills' }));
   expect(mockSetSkills).toHaveBeenCalledWith(mockSkills);
-  expect(onToggleTaskMode).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole('textbox')).not.toHaveTextContent('research');
-  expect(screen.getByRole('button', { name: 'research' })).toBeInTheDocument();
+  expect(onToggleTaskMode).not.toHaveBeenCalled();
+  expect(screen.getByRole('textbox')).toHaveTextContent('research');
 });
 
-test('returning to ordinary chat clears selected task skills', () => {
+test('returning to ordinary chat keeps the selected skills', () => {
   const input = props();
   const view = render(<AiChatInput {...input} />);
   expect(screen.getByRole('textbox')).toHaveTextContent('research');
   view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
-  expect(mockSetSkills).toHaveBeenCalledWith([]);
-  expect(screen.getByRole('textbox')).not.toHaveTextContent('research');
+  expect(mockSetSkills).not.toHaveBeenCalled();
+  expect(screen.getByRole('textbox')).toHaveTextContent('research');
   expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
+});
+
+test('the skill picker does not depend on the task-mode entry', () => {
+  const input = props();
+  render(<AiChatInput {...input} features={{ taskModeEntry: false, taskMode: false }} onToggleTaskMode={undefined} />);
+  expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'research' })).toBeNull();
 });
 
 
@@ -221,16 +227,6 @@ test('task mode skill selection keeps the mode active', () => {
   expect(mockSetSkills).toHaveBeenCalledWith(mockSkills);
   expect(onToggleTaskMode).not.toHaveBeenCalled();
 });
-
-test('ordinary chat exposes skill selection to users with task mode access', () => {
-  const input = props();
-  const onToggleTaskMode = jest.fn();
-  const view = render(<AiChatInput {...input} features={{ taskModeEntry: false, taskMode: false }} onToggleTaskMode={onToggleTaskMode} />);
-  expect(screen.queryByRole('button', { name: 'skills' })).toBeNull();
-  view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} onToggleTaskMode={onToggleTaskMode} />);
-  expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
-});
-
 
 test('account availability removes a selected skill while the picker stays closed', () => {
   const input = props();

@@ -329,15 +329,15 @@ describe("history failure recovery", () => {
     expect(result.current.messages[0]?.text).toBe("current-history history");
   });
 });
-describe("task mode owns skill execution", () => {
-  it.each([false, true])("sends the mode-scoped skill selection when taskMode=%s", async (taskMode) => {
+describe("both modes mount the selected skills", () => {
+  it.each([false, true])("sends the skill selection when taskMode=%s", async (taskMode) => {
     mockSelectedSkills = [{ name: "writing" }];
     const { result } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
     await act(async () => { await result.current.sendMessage("Use this skill", null, { taskMode }); });
     expect(lastPayload()).toMatchObject({
       task_mode: taskMode,
-      skills: taskMode ? ["writing"] : [],
+      skills: ["writing"],
     });
   });
 });

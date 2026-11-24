@@ -428,7 +428,7 @@
     "treeDepartmentSelectEmpty": "No departments yet. Create the org tree under Organization & Members first.",
     "menuPermissionSection": "Menu permissions",
     "menuPermissionHint": "Turning off Admin Console hides its entry in the workspace and disables its child menus; turning off Workspace blocks the workspace entry.",
-    "workbenchTaskModeHint": "Sub-capability of Home. When off, the workspace home hides skills and the deep research switch, and the top-left \"New Task\" entry is hidden too.",
+    "workbenchTaskModeHint": "Sub-capability of Home. When off, the workspace home hides the deep research switch, and the top-left \"New Task\" entry is hidden too.",
     "menuApprovalMode": "Show unauthorized menus (supports requests)",
     "menuApprovalModeHint": "When on, unauthorized menu entries stay visible and users may request permission; when off, all menus without access are hidden automatically.",
     "menuApprovalModeWorkbenchHint": "When on, unauthorized workbench menu entries stay visible and users may request permission; when off, all workbench menus without access are hidden automatically.",
