@@ -247,6 +247,8 @@
 15. **新会话的未发送草稿优先于配置默认值**。`useConversationKnowledge.ts:37` 先读 `bs-conversation:<uid>:knowledge:new:<scope>`，没有记录时才用默认值；这条记录在第一次发送后才被删除。所以用户在新会话里改过选择但没发送，下次进入新会话时看到的是草稿，不是配置。这是修订前的行为（spec §3 已写明），验证 AC-29 时要先清掉这条记录或换一个账号。
 16. **`bench.defaultChecked` 的文案是「是否默认勾选」**。设计时以为工具配置也在用这个 key；实现时核实，F005 T009 把工具改为 `ToolUsageSelect` 后，只剩知识库配置在用。处理：知识库改用新 key（`bench.showInComposer`、`bench.showInComposerHint`），删除 `bench.defaultChecked`。
 
+17. **已配置知识库要按实际类型查可见权限**。3.1 知识库合并后，管理员在这里配置的是知识空间（`knowledge.type=3`，权限资源类型 `knowledge_space`）。`afilter_org_kbs_by_visible_permission` 原来一律按 `knowledge_library` 检查，知识空间查不到，非管理员的已配置知识库全部被过滤；超管跳过检查，所以没有暴露（beta1、release 同样存在）。如果不知道：AC-29 在非管理员账号上整体失效，而管理员验证一切正常。处理位置：用 `KnowledgeCompatibilityRepository.aresource_types` 按 id 取实际类型，分组调用 `batch_check_business_actions`；测试 `test_the_visible_filter_checks_each_id_as_its_actual_resource_type`。114 实测：修复前 E2E 2/3 失败，修复后 3/3 通过。
+
 ## 6. 对外契约与依赖
 
 ### 6.1 我提供给别人的（Outgoing）
