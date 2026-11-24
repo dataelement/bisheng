@@ -82,7 +82,7 @@ def make_client(monkeypatch, callback, *, has_history=True, online=True):
     client.send_response = send_response
     client.send_json = send_json
 
-    monkeypatch.setattr(workflow_client_module, "RedisCallback", lambda *_args: callback)
+    monkeypatch.setattr(workflow_client_module, "RedisCallback", lambda *_args, **_kwargs: callback)
     monkeypatch.setattr(
         workflow_client_module.FlowDao,
         "get_flow_by_id",

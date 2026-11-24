@@ -399,15 +399,13 @@ class RedisCallback(BaseCallback):
 
     def _own_message(self, message_db: ChatMessage | None, verify_input: bool) -> ChatMessage | None:
         """When verifying caller input, a message of another session counts as not found."""
-        if getattr(self, "source", None) == "platform" and (
+        if (getattr(self, "source", None) == "platform" or verify_input) and (
             message_db is None
             or message_db.chat_id != self.chat_id
             or message_db.flow_id != self.workflow_id
             or message_db.user_id != self.user_id
         ):
             raise WorkFlowInvalidUserInputError(msg="message_id does not belong to this conversation")
-        if verify_input and message_db is not None and message_db.chat_id != self.chat_id:
-            return None
         return message_db
 
     @staticmethod

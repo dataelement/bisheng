@@ -99,6 +99,22 @@ test('normal completion settles running and keeps manual rerun available', () =>
     closeAppChatWebSocket(chatId);
 });
 
+test.each([403, 404, 10543, 10541])('input failure %s shows its reason and settles waiting without auto rerun', code => {
+    const { result, socket, chatId, unmount } = openConversation();
+    const sends = socket.send.mock.calls.length;
+    act(() => {
+        socket.receive({ category: 'error', type: 'end', message: { status_code: code } });
+        socket.receive({ category: 'processing', type: 'close', message: '' });
+    });
+    expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.stringContaining(`api_errors.${code}`), severity: 'warning',
+    }));
+    expect(result.current.state).toMatchObject({ running: false, showStop: false });
+    expect(socket.send).toHaveBeenCalledTimes(sends);
+    unmount();
+    closeAppChatWebSocket(chatId);
+});
+
 test('late offline-card events preserve their conversation while another chat is open', () => {
     const { result, socket, chatId, unmount } = openConversation();
     act(() => socket.receive({ category: 'error', type: 'end', message: { status_code: 13010 } }));
