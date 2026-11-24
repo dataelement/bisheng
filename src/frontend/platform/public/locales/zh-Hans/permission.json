@@ -198,6 +198,7 @@
     "expired": "模式影响分析已过期"
   },
   "roster": {
+    "systemPreset": "系统预置",
     "inactive_existing_grant": "该权限已停用，已有授权仍有效。",
     "empty": "暂无授权对象",
     "loading": "正在加载权限…",

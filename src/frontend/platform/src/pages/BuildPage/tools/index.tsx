@@ -24,6 +24,7 @@ import ToolItem from "./ToolItem";
 import ToolSet from "./ToolSet";
 import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
+import { canConfigureBuiltinTool } from './builtinConfigPolicy';
 
 const MANAGED_TOOLS = [
     'Bing web搜索', '天眼查',
@@ -57,7 +58,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
-    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string; systemPreset: boolean } | null>(null);
     const isBuiltinTool = type === "";
     const { actions, load: loadToolActions } = useLazyResourceActions('tool', ['edit', 'delete', 'manage_permission']);
     const canManageTool = (id: string | number) =>
@@ -101,14 +102,14 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         }).map((el) => ({
             ...el,
             write: isBuiltinTool
-                ? Boolean(user?.is_global_super)
+                ? canConfigureBuiltinTool(user, el.tenant_id)
                 : hasResourceAction(actions, el.id, 'edit'),
             delete: !isBuiltinTool && hasResourceAction(actions, el.id, 'delete'),
         }));
-    }, [actions, allData, isBuiltinTool, keyword, type, user?.is_global_super]);
+    }, [actions, allData, isBuiltinTool, keyword, type, user]);
 
     const hasSet = (el) => {
-        if (!user?.is_global_super) return false
+        if (!canConfigureBuiltinTool(user, el.tenant_id)) return false
         return MANAGED_TOOLS.includes(el.name) || hasManagedToolKey(el.children)
     }
 
@@ -199,7 +200,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                                 editRef.current.edit(el)
                                         }}
                                         onPermission={canManageTool(el.id)
-                                            ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
+                                            ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name, systemPreset: tool.is_preset === 1 }); setPermDialogOpen(true); }
                                             : null}
                                         onHoverPermissions={handleHoverToolPermissions}
                                     ></ToolItem>
@@ -237,7 +238,8 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                 <PermissionDialog
                     open={permDialogOpen}
                     onOpenChange={setPermDialogOpen}
-                    allowAllMembers={isBuiltinTool}
+                    allowAllMembers={permTarget.systemPreset}
+                    systemPreset={permTarget.systemPreset}
                     resourceType="tool"
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}

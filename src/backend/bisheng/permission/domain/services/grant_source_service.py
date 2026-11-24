@@ -215,6 +215,8 @@ class GrantSourceService:
         normalized_source_type = source_type.strip().upper()
         if not normalized_subject_id:
             raise ValueError("subject_id must not be empty")
+        if normalized_subject_type == "user" and normalized_subject_id.casefold() in {"none", "null", "undefined"}:
+            raise ValueError("user subject_id must identify a real user")
         if normalized_source_type not in SOURCE_TYPES:
             raise ValueError(f"unsupported source_type: {source_type}")
 
