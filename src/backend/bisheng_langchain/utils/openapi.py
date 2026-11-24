@@ -25,3 +25,51 @@ def convert_openapi_field_value(v: Any, field_type: str) -> Any:
     elif field_type in ['object', 'dict'] and v_type != dict:
         return convert_data_type_no_error(v, json.loads)
     return v
+
+
+def _is_null_schema(schema: Any) -> bool:
+    if not isinstance(schema, dict):
+        return False
+    field_type = schema.get('type')
+    return field_type == 'null' or field_type == ['null']
+
+
+def resolve_openapi_type(schema: Any) -> str | None:
+    """Return the single concrete JSON type of an OpenAPI schema.
+
+    Handles OpenAPI 3.1 type arrays (``["integer", "null"]``) and ``anyOf``/``oneOf``
+    unions. ``null`` members are ignored. Returns None when the schema has no type
+    or when its non-null members disagree (e.g. string | array): the caller must
+    then treat the value as untyped and must not coerce it.
+    """
+    if not isinstance(schema, dict):
+        return None
+    field_type = schema.get('type')
+    if isinstance(field_type, str):
+        return field_type
+    if isinstance(field_type, list):
+        concrete = {one for one in field_type if one != 'null'}
+        return concrete.pop() if len(concrete) == 1 else None
+    for key in ('anyOf', 'oneOf'):
+        branches = schema.get(key)
+        if isinstance(branches, list):
+            concrete = {resolve_openapi_type(one) for one in branches if not _is_null_schema(one)}
+            return concrete.pop() if len(concrete) == 1 else None
+    return None
+
+
+def has_null_member(schema: Any) -> bool:
+    """True when a 3.1 type array or an anyOf/oneOf union lists null as an allowed type.
+
+    The OpenAPI 3.0 ``nullable`` keyword is deliberately not considered here, so
+    schemas that already worked keep their previous argument schema and coercion.
+    """
+    if not isinstance(schema, dict):
+        return False
+    field_type = schema.get('type')
+    if isinstance(field_type, list) and 'null' in field_type:
+        return True
+    return any(
+        isinstance(schema.get(key), list) and any(_is_null_schema(one) for one in schema[key])
+        for key in ('anyOf', 'oneOf')
+    )
