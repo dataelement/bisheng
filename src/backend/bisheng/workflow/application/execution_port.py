@@ -5,10 +5,11 @@ from bisheng.workflow.application.execution_admission import prepare_initial
 
 
 class BoundWorkflowExecutionPort:
-    def __init__(self, workflow_id: str, identity, *, allow_preview: bool = True):
+    def __init__(self, workflow_id: str, identity, *, allow_preview: bool = True, published_only: bool = False):
         self._workflow_id = str(workflow_id)
         self._identity = identity
         self._allow_preview = allow_preview
+        self._published_only = published_only
 
     async def prepare_initial(self, *, claimed_flow_id, graph, chat_id, execution_mode=None, version_hint=None) -> dict:
         if claimed_flow_id is None or str(claimed_flow_id) != self._workflow_id:
@@ -21,5 +22,6 @@ class BoundWorkflowExecutionPort:
             execution_mode=execution_mode,
             version_hint=version_hint,
             allow_preview=self._allow_preview,
+            published_only=self._published_only,
         )
         return prepared.graph
