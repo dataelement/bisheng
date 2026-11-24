@@ -93,6 +93,7 @@ export default function Word({ data, workflow = false }: WordProps) {
         let disposed = false;
         let editor: { destroyEditor: () => void } | undefined;
         let script: HTMLScriptElement | undefined;
+        let sdkLoaded = false;
         const initEditor = async () => {
             try {
                 const res = await getOfficeTokenApi(editorConfig);
@@ -119,7 +120,10 @@ export default function Word({ data, workflow = false }: WordProps) {
             }
             script = document.createElement("script");
             script.src = wordUrl + "/web-apps/apps/api/documents/api.js";
-            script.onload = () => { void initEditor(); };
+            script.onload = () => {
+                sdkLoaded = true;
+                void initEditor();
+            };
             document.head.appendChild(script);
             script.onerror = () => {
                 if (!disposed) notification.open({ type: "error", title: String(t("wordEditorLoadFailed") ?? ''), description: String(t("checkOfficeServiceConfig") ?? '') });
@@ -130,7 +134,8 @@ export default function Word({ data, workflow = false }: WordProps) {
             if (script) {
                 script.onload = null;
                 script.onerror = null;
-                script.remove();
+                // Even after loading, the SDK reads this tag to locate each new editor iframe.
+                if (!sdkLoaded) script.remove();
             }
             editor?.destroyEditor();
             if (window.editor === editor) window.editor = undefined;

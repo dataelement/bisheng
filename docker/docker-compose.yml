@@ -236,6 +236,14 @@ services:
       BS_CREDENTIAL_REVISION: ${BISHENG_CREDENTIAL_REVISION:?set checked revision}
       BISHENG_PRO: ${BISHENG_PRO:-false}
       BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
+      # Topology !env left in the prepared config.yaml (compose --env-file does not
+      # inject host .env into the container unless listed here).
+      BS_MILVUS_IS_PARTITION: ${BS_MILVUS_IS_PARTITION:-true}
+      BS_MILVUS_PARTITION_SUFFIX: ${BS_MILVUS_PARTITION_SUFFIX:-1}
+      BS_MINIO_SCHEMA: ${BS_MINIO_SCHEMA:-false}
+      BS_MINIO_CERT_CHECK: ${BS_MINIO_CERT_CHECK:-false}
+      BS_MINIO_ENDPOINT: ${BS_MINIO_ENDPOINT:-minio:9000}
+      BS_MINIO_SHAREPOINT: ${BS_MINIO_SHAREPOINT:-minio:9000}
       # Shared with code-runner-*; editor "run once" executes in this process.
       BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       # One URL per replica. Adding code-runner-3 means appending its URL here.
@@ -285,6 +293,13 @@ services:
       BS_CREDENTIAL_REVISION: ${BISHENG_CREDENTIAL_REVISION:?set checked revision}
       BISHENG_PRO: ${BISHENG_PRO:-false}
       BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
+      # Same topology !env injection as backend (prepared config.yaml keeps these live).
+      BS_MILVUS_IS_PARTITION: ${BS_MILVUS_IS_PARTITION:-true}
+      BS_MILVUS_PARTITION_SUFFIX: ${BS_MILVUS_PARTITION_SUFFIX:-1}
+      BS_MINIO_SCHEMA: ${BS_MINIO_SCHEMA:-false}
+      BS_MINIO_CERT_CHECK: ${BS_MINIO_CERT_CHECK:-false}
+      BS_MINIO_ENDPOINT: ${BS_MINIO_ENDPOINT:-minio:9000}
+      BS_MINIO_SHAREPOINT: ${BS_MINIO_SHAREPOINT:-minio:9000}
       # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
       BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       # One URL per replica. Adding code-runner-3 means appending its URL here.
@@ -633,17 +648,13 @@ services:
       SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
       SANDBOX_ENABLE_UID_ISOLATION: "true"
       SANDBOX_LEASE_TTL_S: "900"
-    # Public IPv4 is retained; IPv6 is deliberately unavailable to tasks.
-    sysctls:
-      net.ipv6.conf.all.disable_ipv6: "1"
-      net.ipv6.conf.default.disable_ipv6: "1"
-    dns:
-      - 223.5.5.5
+    # Product alignment: unrestricted runner egress (intranet allowed). Host
+    # helper still provisions the dedicated bridge; firewall is accept-all.
     networks:
       sandbox_net:
         ipv4_address: 172.30.166.11
-    # Host policy must be verified before every start; no reboot auto-start bypass.
-    restart: "no"
+    # Process crash self-heal only. Host reboot does not auto-start runners.
+    restart: on-failure
 
   code-runner-2:
     <<: *code_runner
@@ -694,8 +705,7 @@ networks:
     driver: bridge
     internal: true
   # Provisioned ONLY by root host policy helper, never silently by Compose.
-  # backend/controller interfaces join it; runner NEW private/host flows are denied.
-  # See runner-egress.md; public IPv4 remains available, task IPv6 is disabled.
+  # See runner-egress.md; runner egress is unrestricted (intranet allowed).
   sandbox_net:
     name: bisheng-runner
     external: true

@@ -105,17 +105,22 @@ def client(raw):
     return c
 
 
-async def test_all_adapter_readers_reject_unsigned_before_loads(monkeypatch):
+async def test_all_adapter_readers_drop_unsigned_as_cache_miss(monkeypatch):
+    """Managed mode must not unpickle raw values; treat them as a miss and delete."""
     c = client(pickle.dumps("safe marker"))
+    c.connection.delete = Mock(return_value=1)
+    c.async_connection.delete = AsyncMock(return_value=1)
     loads = Mock(side_effect=AssertionError("raw reducer would run"))
     monkeypatch.setattr(codec.pickle, "loads", loads)
-    for call in (lambda: c.get("a"), lambda: c.mget(["a"])):
-        with pytest.raises(codec.RedisSerializationError):
-            call()
-    for fn, args in ((c.aget, ("a",)), (c.amget, (["a"],)), (c.ablpop, ("a",)), (c.alrange, ("a",))):
-        with pytest.raises(codec.RedisSerializationError):
-            await fn(*args)
+    assert c.get("a") is None
+    assert c.mget(["a"]) == []
+    assert await c.aget("a") is None
+    assert await c.amget(["a"]) == []
+    assert await c.ablpop("a") is None
+    assert await c.alrange("a") == []
     loads.assert_not_called()
+    assert c.connection.delete.call_count >= 1
+    assert c.async_connection.delete.await_count >= 1
 
 
 async def test_owned_redis_adapter_roundtrip_when_enabled():

@@ -65,31 +65,44 @@ def _grant_key(key: str) -> str:
     return "report:editor:grant:" + hashlib.sha256(key.encode()).hexdigest()
 
 
-def verify_callback(data: dict, secret: str, authorization: str | None = None) -> dict | None:
-    """OnlyOffice outbox token must sign this exact body, not an editor config.
-
-    Support the documented body token and Authorization Bearer token with a
-    nested payload. JWT timestamps are metadata; every callback field is bound.
-    """
-    if not isinstance(secret, str) or not secret or not isinstance(data, dict):
-        return None
-    token = data.get("token")
-    if authorization:
-        scheme, _, header_token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not header_token or (token and token != header_token):
-            return None
-        token = header_token
+def _decode_callback_payload(token: str, secret: str) -> dict | None:
     if not isinstance(token, str) or len(token) > 65536:
         return None
+    claims = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
+    payload = claims.get("payload", claims)
+    if not isinstance(payload, dict) or "document" in payload or "editorConfig" in payload:
+        return None
+    return {key: value for key, value in payload.items() if key not in {"iat", "exp", "nbf"}}
+
+
+def verify_callback(data: dict, secret: str, authorization: str | None = None) -> dict | None:
+    """Verify each supplied OnlyOffice outbox token against the callback."""
+    if not isinstance(secret, str) or not secret or not isinstance(data, dict):
+        return None
+    if not authorization and "token" not in data:
+        return None
     try:
-        claims = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
-        payload = claims.get("payload", claims)
-        if not isinstance(payload, dict) or "document" in payload or "editorConfig" in payload:
-            return None
         body = {key: value for key, value in data.items() if key != "token"}
-        signed_body = {key: value for key, value in payload.items() if key not in {"iat", "exp", "nbf"}}
-        if json.dumps(body, sort_keys=True) != json.dumps(signed_body, sort_keys=True):
-            return None
+        canonical_body = json.dumps(body, sort_keys=True)
+        if authorization:
+            scheme, _, header_token = authorization.partition(" ")
+            if scheme.lower() != "bearer" or not header_token:
+                return None
+            signed_header = _decode_callback_payload(header_token, secret)
+            if json.dumps(signed_header, sort_keys=True) != canonical_body:
+                return None
+        if "token" in data:
+            signed_body = _decode_callback_payload(data["token"], secret)
+            if signed_body is None:
+                return None
+            if json.dumps(signed_body, sort_keys=True) != canonical_body:
+                if not authorization:
+                    return None
+                # OnlyOffice can trim history from the body before re-signing the header.
+                signed_body.pop("changesurl", None)
+                signed_body["history"] = {}
+                if json.dumps(signed_body, sort_keys=True) != canonical_body:
+                    return None
         if (
             type(body.get("status")) is not int  # noqa: E721  # exact type, bool must not pass as int
             or not isinstance(body.get("key"), str)

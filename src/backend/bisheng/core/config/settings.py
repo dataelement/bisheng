@@ -18,7 +18,13 @@ from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.open_platform import OpenApiConf, OpenMcpConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
-from bisheng.core.config.secret_crypto import CredentialConfigurationError, decrypt_token, encrypt_token  # noqa: F401
+from bisheng.core.config.secret_crypto import (  # noqa: F401
+    CredentialConfigurationError,
+    CredentialDecryptionError,
+    decrypt_token,
+    encrypt_token,
+    is_legacy_secret_mode,
+)
 from bisheng.core.config.sso_sync import SSOSyncConf
 from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
 
@@ -28,6 +34,11 @@ class _ResolvedSecret(str):
 
 
 def _credential(value, field: str):
+    """Resolve encrypt(...) or, in legacy mode only, accept plaintext.
+
+    Managed mode (BS_SECRET_KEYS_FILE set) still requires encrypt(...). Legacy
+    mode matches feat/3.1.0-beta1 MinIO/ES/Milvus env and config plaintext.
+    """
     if value is None or isinstance(value, _ResolvedSecret):
         return value
     if not isinstance(value, str):
@@ -35,10 +46,22 @@ def _credential(value, field: str):
     if not value:
         return _ResolvedSecret("")
     if not value.startswith("encrypt(") or not value.endswith(")"):
+        if is_legacy_secret_mode():
+            return _ResolvedSecret(value)
         raise CredentialConfigurationError(f"{field}: encrypted credential required")
     try:
         return _ResolvedSecret(decrypt_token(value[8:-1]))
     except ValueError:
+        raise CredentialConfigurationError(f"{field}: credential cannot be decrypted") from None
+
+
+def _plain_or_decrypt_url_password(password: str, field: str) -> str:
+    """Decrypt Fernet URL passwords; legacy also accepts already-plaintext passwords."""
+    try:
+        return decrypt_token(password)
+    except (CredentialDecryptionError, ValueError):
+        if is_legacy_secret_mode():
+            return password
         raise CredentialConfigurationError(f"{field}: credential cannot be decrypted") from None
 
 
@@ -76,7 +99,7 @@ def decrypt_redis_url(value: str) -> str:
         raise CredentialConfigurationError("redis: invalid connection URL") from None
     if not password:
         return _ResolvedSecret(value)
-    plain_password = decrypt_token(password)
+    plain_password = _plain_or_decrypt_url_password(password, "redis.url")
     userinfo, separator, hostport = parsed.netloc.rpartition("@")
     if not separator:
         return value
@@ -99,7 +122,7 @@ def decrypt_database_url(value: str) -> str:
         raise CredentialConfigurationError("database_url: invalid connection URL") from None
     if not parsed.password:
         return value
-    plain_password = decrypt_token(parsed.password)
+    plain_password = _plain_or_decrypt_url_password(parsed.password, "database_url")
     return _ResolvedSecret(parsed.set(password=plain_password).render_as_string(hide_password=False))
 
 
