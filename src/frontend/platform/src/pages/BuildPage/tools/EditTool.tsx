@@ -69,13 +69,18 @@ export const TestDialog = forwardRef<{
         setLoading(true)
         const { server_host, children, parameter_name } = toolRef.current
         const { apiKey, apiLocation, authMethod, authType, parameter } = formRef.current.state
+        // Leave unfilled parameters out of the request so the API applies its own defaults;
+        // sending "" breaks typed fields (e.g. an integer `count`) and length-checked strings.
+        const requestParams = Object.fromEntries(
+            Object.entries(formRef.current.values).filter(([, value]) => value !== '')
+        )
         await testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
             auth_method: authMethod === 'apikey' ? 1 : 0,
             auth_type: authType,
             api_key: apiKey,
-            request_params: formRef.current.values,
+            request_params: requestParams,
             api_location: apiLocation || 'query',
             parameter_name: parameter || parameter_name
         }).then(setResult).catch(showApiError).finally(() => setLoading(false))
