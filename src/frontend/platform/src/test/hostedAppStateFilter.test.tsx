@@ -25,6 +25,12 @@ vi.mock("@/contexts/locationContext", async () => ({
 }))
 vi.mock("@/components/bs-comp/permission/useResourceActions", () => ({
   useResourceActions: () => ({ actions: {} }),
+  useLazyResourceActions: () => ({
+    actions: {},
+    loading: {},
+    errors: {},
+    load: vi.fn().mockResolvedValue({ actions: [], hasError: false }),
+  }),
   hasResourceAction: () => false,
 }))
 vi.mock("@/pages/BuildPage/hook", () => ({
