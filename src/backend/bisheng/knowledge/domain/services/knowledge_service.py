@@ -1978,7 +1978,9 @@ class KnowledgeService(KnowledgeUtils):
         # Get file size inbytes）
         file_size = os.path.getsize(filepath)
 
-        original_file_name = cls.get_upload_file_original_name(file_name)
+        original_file_name = (
+            trusted_source.file_name if trusted_source is not None else cls.get_upload_file_original_name(file_name)
+        )
         actual_snapshot = None
         if processing_rule_request is not None:
             from bisheng.knowledge.application.file_processing_adapter import (
