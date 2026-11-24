@@ -322,7 +322,7 @@ async def test_v1_route_binds_natural_person_subject(monkeypatch):
     websocket = SimpleNamespace(state=SimpleNamespace(admitted_request=None))
     with pytest.raises(StopDispatch):
         await endpoint.workflow_ws(workflow_id="wf", websocket=websocket, login_user=user)
-    gate.assert_awaited_once_with(user, resource_type="workflow", resource_id="wf", action="use")
+    gate.assert_awaited_once_with(user, resource_type="workflow", resource_id="wf", action="visible")
     assert captured["session_subject"] == SessionSubject.natural_person(tenant_id=7, user_id=9)
     assert isinstance(captured["workflow_execution_port"], BoundWorkflowExecutionPort)
 

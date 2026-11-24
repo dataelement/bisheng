@@ -145,7 +145,7 @@ export interface OrgKnowledgeQuery {
     sort_by?: string;
     /** Comma-separated ids pinned to the top of the global sort (admin-configured orgKbs). */
     preferred_ids?: string;
-    action?: 'visible' | 'use';
+    action?: 'visible';
 }
 
 export interface OrgKnowledgePage {

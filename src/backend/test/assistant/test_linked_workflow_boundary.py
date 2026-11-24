@@ -39,7 +39,7 @@ async def test_binding_requires_source_use_not_assistant_edit(harness):
     h.permission.side_effect = UnAuthorizedError()
     with pytest.raises(UnAuthorizedError):
         await h.service.authorize_flow_bindings(h.user, ["private"])
-    h.permission.assert_awaited_once_with(h.user, resource_type="workflow", resource_id="private", action="use")
+    h.permission.assert_awaited_once_with(h.user, resource_type="workflow", resource_id="private", action="visible")
 
 
 @pytest.mark.parametrize("change", ["missing", "tenant", "type", "deleted"])

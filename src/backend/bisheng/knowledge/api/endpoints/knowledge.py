@@ -483,7 +483,7 @@ async def get_knowledge(
     *,
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    action: Literal["visible", "use"] = Query(default="use"),
+    action: Literal["visible"] = Query(default="visible"),
     name: str | None = None,
     knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias="type"),
     sort_by: Literal["create_time", "update_time", "name"] = Query(default="update_time"),

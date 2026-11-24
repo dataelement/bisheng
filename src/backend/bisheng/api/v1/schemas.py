@@ -464,7 +464,7 @@ class ToolConfig(BaseModel):
     description: str | None = Field(default=None)
     default_checked: bool = Field(default=False, description="Initial checked state for new sessions")
     # F005: hidden from every end-user picker and added to every workbench send
-    # (for users with use permission). Mutually exclusive with ``default_checked``.
+    # (for users with visibility permission). Mutually exclusive with ``default_checked``.
     auto_enabled: bool = Field(default=False, description="Auto-enabled: hidden from users, always on")
     children: list[dict] = Field(default_factory=list, description="Selected leaf tools: [{id, name, tool_key, desc}]")
 

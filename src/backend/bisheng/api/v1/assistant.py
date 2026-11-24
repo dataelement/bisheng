@@ -39,8 +39,8 @@ async def get_assistant(
     status: int | None = Query(default=None, description="Is online status"),
     action: str = Query(
         default="visible",
-        pattern="^(visible|use)$",
-        description="Visibility required for each assistant; legacy use is interpreted as visible",
+        pattern="^visible$",
+        description="Visibility required for each assistant; Use visibility to admit resource access",
     ),
     cursor: str | None = Query(
         default=None,
@@ -62,7 +62,7 @@ async def get_assistant(
         tag_id=tag_id,
         cursor=cursor,
         page_size=page_size,
-        action="visible" if action == "use" else action,
+        action=action,
     )
     return resp_200(data=result)
 
@@ -262,6 +262,7 @@ async def chat(
             resource_id=assistant_id,
             action="visible",
         )
+
         async def memory_register(session_chat_id: str) -> None:
             # F132 (decision 6, R2): only this logged-in endpoint registers sessions
             # for long-term memory; guest and open API endpoints pass nothing.

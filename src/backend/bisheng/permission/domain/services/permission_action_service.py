@@ -35,10 +35,12 @@ HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
 MAX_BATCH_CHECKS = 100
 
 
-def normalize_legacy_action(action: str) -> str:
-    """Interpret frozen legacy protocol labels without creating Catalog actions."""
+def validate_permission_action(action: str) -> str:
+    """Accept current actions and the visibility relation at every boundary."""
 
-    return "visible" if action in {"use", "use_kb"} else action
+    if action != action.strip() or (action != "visible" and action not in REGISTERED_ACTION_CODES):
+        raise InvalidCatalogActionError(msg=f"Unknown permission action: {action}")
+    return action
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -226,7 +228,7 @@ class F048PermissionService:
         action: str,
     ) -> bool:
         started = perf_counter()
-        action = self._normalize_action(action)
+        action = validate_permission_action(action)
         if action == "visible":
             return await self.check_visible(actor, target)
         # F066: the tenant data-scope narrowing is an export control and must
@@ -329,7 +331,7 @@ class F048PermissionService:
         targets: tuple[VerifiedPermissionTarget, ...],
         action: str,
     ) -> tuple[bool, ...]:
-        action = self._normalize_action(action)
+        action = validate_permission_action(action)
         if action == "visible":
             return await self.batch_check_visible(actor, targets)
         if len(targets) > MAX_BATCH_CHECKS:
@@ -671,7 +673,7 @@ class F048PermissionService:
         action: str,
         max_results: int,
     ) -> tuple[str, ...] | None:
-        action = self._normalize_action(action)
+        action = validate_permission_action(action)
         if action == "visible":
             result = await self.list_visible_objects(actor, resource_type=resource_type, max_results=max_results)
             return result.object_ids
@@ -715,9 +717,7 @@ class F048PermissionService:
         """
 
         await self._catalog.ensure_runtime_ready()
-        return tuple(
-            code for code in await self._catalog.effective_actions(resource_type) if code not in {"use", "use_kb"}
-        )
+        return tuple(validate_permission_action(code) for code in await self._catalog.effective_actions(resource_type))
 
     @staticmethod
     def _handle_stale_projection(
@@ -803,16 +803,6 @@ class F048PermissionService:
             )
             denied.update(index for index, rid in items if rid not in owned)
         return frozenset(denied)
-
-    @staticmethod
-    def _normalize_action(action: str) -> str:
-        normalized = action.strip()
-        if normalized != action:
-            raise InvalidCatalogActionError(msg=f"Unknown permission action: {action}")
-        normalized = normalize_legacy_action(normalized)
-        if normalized != "visible" and normalized not in REGISTERED_ACTION_CODES:
-            raise InvalidCatalogActionError(msg=f"Unknown permission action: {action}")
-        return normalized
 
     async def _identity_shortcut(
         self,

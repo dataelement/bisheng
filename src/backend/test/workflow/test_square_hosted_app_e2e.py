@@ -130,7 +130,7 @@ async def _entry_allows(client: httpx.AsyncClient, token: str, app_id: str) -> b
 
     ``POST /workstation/app/used/record`` delegates authorisation to exactly
     ``check_business_action(login_user, resource_type="app", resource_id=...,
-    action="use")`` and does nothing else that could fail — which makes it the
+    action="visible")`` and does nothing else that could fail — which makes it the
     only endpoint that answers the entry question without a second rule mixed
     in. A refusal rides inside a 200 envelope as business code 403.
 

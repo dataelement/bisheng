@@ -50,7 +50,7 @@ def chat_http(monkeypatch):
     return SimpleNamespace(app=app, user=user, page=page, ranked=ranked, updated=updated, share=share)
 
 
-@pytest.mark.parametrize("action", [None, "use", "visible"])
+@pytest.mark.parametrize("action", [None, "visible"])
 @pytest.mark.parametrize("sort_by", [None, "update_time"])
 async def test_actual_http_default_and_legacy_action_are_canonical_with_original_filters(chat_http, action, sort_by):
     params = {
@@ -98,14 +98,14 @@ async def test_actual_http_default_and_legacy_action_are_canonical_with_original
         chat_http.share.assert_not_awaited()
 
 
-async def test_openapi_advertises_visible_without_removing_the_legacy_query_alias(chat_http):
+async def test_openapi_advertises_visible_rejects_retired_query_actions(chat_http):
     operation = chat_http.app.openapi()["paths"]["/api/v1/chat/online"]["get"]
     action = next(parameter for parameter in operation["parameters"] if parameter["name"] == "action")
     assert action["schema"]["default"] == "visible"
-    assert action["schema"]["pattern"] == "^(visible|use)$"
+    assert action["schema"]["pattern"] == "^visible$"
 
 
-@pytest.mark.parametrize("action", ["use_kb", "edit", "publish", "delete", "unknown"])
+@pytest.mark.parametrize("action", ["use", "use_kb", "edit", "publish", "delete", "unknown"])
 async def test_other_http_actions_stay_invalid_before_list_or_share(chat_http, action):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=chat_http.app), base_url="http://asgi", trust_env=False
@@ -122,7 +122,7 @@ async def test_other_http_actions_stay_invalid_before_list_or_share(chat_http, a
 async def test_original_cursor_and_scope_failures_are_not_swallowed(chat_http, sort_by, error_type):
     error = error_type()
     (chat_http.updated if sort_by else chat_http.ranked).side_effect = error
-    params = {"action": "use", "cursor": "old-use-context"}
+    params = {"action": "visible", "cursor": "old-use-context"}
     if sort_by:
         params["sort_by"] = sort_by
     async with httpx.AsyncClient(
@@ -136,6 +136,7 @@ async def test_original_cursor_and_scope_failures_are_not_swallowed(chat_http, s
 
 @pytest.fixture
 def admission(monkeypatch):
+    monkeypatch.setattr(business, "_require_creation_ready", AsyncMock())
     runtime, fga = decision()
     runtime._catalog.effective_actions.return_value = ("visible",)
     runtime._catalog.is_action_effective.side_effect = lambda resource_type, action: action == "visible"

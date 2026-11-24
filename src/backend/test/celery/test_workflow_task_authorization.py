@@ -106,7 +106,7 @@ def test_use_gate_sees_the_restored_identity(harness, task, label) -> None:
     assert call["actor_kwarg"] is not None
     assert call["actor_kwarg"].super_admin is True
     assert call["resource_id"] == WORKFLOW_ID
-    assert call["action"] == "use"
+    assert call["action"] == "visible"
 
 
 def test_gate_carries_a_plain_operator_without_privilege(harness) -> None:
