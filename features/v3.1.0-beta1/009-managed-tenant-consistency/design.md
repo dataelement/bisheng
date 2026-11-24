@@ -387,3 +387,24 @@ RoleDefinitionRepository.update移除定义保存时的两段隐式绑定清理�
 完成后的源库可重新发起独立复制。`inspect` 允许读取原终态副本，`claim_copy` 校验原租户、源目标关系及目标操作者后对终态重复消息直接 no-op；活动消息仍按原权限入口验证。旧任务 `claim` 不能重新接管终态，旧 `finish` 必须匹配当前源目标双向配对及 COPYING 状态，不能释放新任务占用。没有新增对外接口、持久字段或依赖。这里恢复的是旧 QA/文档库源端状态，SPACE 的独立输入/异步文件语义仍由 F118 负责。
 
 已知坑：恢复源库后，旧任务重复消息的源 `copy_target_id` 已为空或指向新副本，不能再以双向活动配对拒绝所有终态查询，否则完成后的重复投递会报错；也不能无条件 finish，否则会覆盖新复制。真实 SQL 配对与 worker 失败回归覆盖这两条边界。若未来为旧 QA 增加独立任务身份，应再评估配对字段替代方案。
+
+### 2026-11-24 解除挂载后的资源权限迁回（既有一致性修复）
+
+F011 的解除挂载迁回 Root 合同保持，修复旧批量改业务 tenant_id 时遗漏 F048 的缺口。
+`TenantMountService._migrate_child_resources_to_root` 由原始已验证超管身份委派
+`ResourceTenantTransferApplication`：从原白名单展开业务资源（包括文件夹/文件，排除预置工具和退役/内部非权限行），
+同一原生 SQL 事务复核业务归属、CURRENT Catalog 和权限快照，保存原生权限投影操作/元组，迁移业务归属及
+mode/Grant/assignee/visible-source 的 tenant_id。此事务同时暂时停用源 Child；失败回滚不残留半迁移。
+提交后的目标模式为 PROJECTING，复用既有资源版本/operation fence、STAGE/COMMIT、高一致校验和 SQL finalizer；
+全部完成后才继续既有 Child 归档、成员重算和租户关系清理。HTTP 超时/进程中断后重试原解除挂载先续办原台账。
+没有新表、队列、后台任务状态机、前端进度页面或 API 合同。
+
+不能只改 SQL tenant_id：FGA Grant 节点键包含租户，迁移必须沿原账本改旧/新节点及资源绑定。
+模式、父级、所有者、授权来源/指纹及 visible/public/shared 谓词不改，旧 tenant:child#member 授权不自动扩大为 Root 全员。
+CURRENT 的完整 SQL 来源与实际物理图必须吻合；目标冲突、进行中投影、未知节点来源、Catalog/快照漂移均拒绝。
+迁移旧审计和旧 FINALIZED 台账不改写，只创建此次迁回的操作记录。若未来需要完整后台化，应另行设计全流程任务，
+本次只恢复原合同的一致性和按原请求续办能力。
+
+历史修复使用通用 `scripts/repair_unmounted_tenant_permissions.py`，按旧租户、操作者、私有计划文件和摘要执行
+preview/apply/resume；只处理有解除挂载审计、实际业务已在 Root、权限仍在归档 Child 的精确资源。
+完整备份、验证及现场结果见 [修复审查记录](../../../docs/reviews/tenant-unmount-permission-migration-20261124.md)。
