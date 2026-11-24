@@ -58,13 +58,13 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 | 配置 | `type: custom`，`config.custom` 保存所选 operation 的受限规范化描述、搜索词参数、固定参数、认证设置和结果映射，不保存完整 Schema；持久化前限制整个分类 extra 的 UTF-8 大小以适配 MySQL TEXT（上限 60 KiB），超限明确报错。密钥在专用表中通过平台加密封装加密持久化，extra 和前端只见状态。原有 provider 数据结构不迁移。 |
 | 运行输入 | `web_search` 的 `query: string`，保持现有调用方不变。 |
 | 运行输出 | JSON 数组，每项包含 `id`、`title`、`snippet`、`url`、`source`、`siteIcon`、`datePublished`；URL 无效的结果不作为网页引用，映射错误不能伪装为空数组。 |
-| 管理 API | 采用 §4.4 的专用 settings、schema 和 test 契约；原两入口提案及现状见 §4.1、§4.4。仅全局超管可管理，校验目标联网搜索预置工具及其归属，不复用仅验证登录的通用入口。 |
+| 管理 API | 采用 §4.4 的专用 settings、schema 和 test 契约；原两入口提案及现状见 §4.1、§4.4。系统超管及当前租户管理员可管理当前租户配置，校验目标联网搜索预置工具及其归属，不复用仅验证登录的通用入口。 |
 | 服务端适配器 | 负责受限 Schema 验证、请求构造、超时/大小限制、响应转换；不改变引用注册规则。 |
 | 管理端 | 沿用现有 OpenAPI 编辑的导入、认证与测试交互及现有组件；下拉增加自定义，展示选择、固定参数、映射和测试结果。遵循三语言及设计系统规范。 |
 
 ### 4.4 专用管理 API 和 DTO（提案，路径相对 /api/v1/tool）
 
-以下均需已登录且服务端重新检查 global super；不可仅依赖前端隐藏或通用 /schema、/test 的登录检查。服务端从可信租户上下文加载目标分类及子工具，校验 preset、未删除、真实子项 tool_key=web_search、分类归属和当前操作者权限；错误 ID、不匹配、越权 fail closed，不通过 ID 或异常泄露其他租户资源。设置类路径遵守现有 route 命名约束。请求和响应均有尺寸上限，未知字段拒绝；不接受客户端声明的 tenant_id、权限、密文或 key_id 作为可信依据。
+以下均需已登录且通过 permission application 的 `is_current_tenant_administrator`，与既有预置工具配置管理一致；不可仅依赖前端隐藏或通用 /schema、/test 的登录检查。服务端从可信租户上下文加载目标分类及子工具，校验 preset、未删除、真实子项 tool_key=web_search、分类归属和当前操作者权限；错误 ID、不匹配、越权 fail closed，不通过 ID 或异常泄露其他租户资源。设置类路径遵守现有 route 命名约束。请求和响应均有尺寸上限，未知字段拒绝；不接受客户端声明的 tenant_id、权限、密文或 key_id 作为可信依据。
 
 - `GET /{tool_type_id}/web-search/settings`：返回 `{revision, enabled, type, prompt, providers, custom_secret_configured}`；providers 是该用户可管理设置的白名单化配置 DTO，custom 内是规范化 operation、query 参数、固定参数、auth 位置/名称及 mapping，不含 API Key 明文、API Key 存储密文或 Schema 中的示例 secret；不再返回操作声明 proof。旧服务商字段维持原兼容语义，自定义密钥仅返回存在标志。revision 是服务端生成的 opaque 版本，非时间戳。
 - `PUT /{tool_type_id}/web-search/settings`：请求 `{revision, enabled, type, prompt, providers, custom_secret: {action: keep|replace|clear, value?: string}}`；仅 replace 必须提交非空 value，keep/clear 禁止提交 value；密钥存在标志不参与写入。服务端全量静态校验后原子保存，返回新 revision 和脱敏 DTO；不进行在线测试。原 provider 配置使用现有兼容字段合并规则，不能凭前端固定枚举删未知 provider；任何失败不得部分写入。无认证配置可以 clear；需要 key 而无有效密钥的配置不得保存。冲突返回稳定的冲突码/HTTP 409，提示重新加载，禁止静默覆盖。
@@ -127,13 +127,14 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 | `validate_destination` 只验证 URL 形式，并不证明目标地址公网安全。 | 导入、测试和正式调用都要应用一致的目标地址策略、重定向与 DNS 校验；需保留企业内网部署的可配置能力，不能简单假设该函数已防 SSRF。 |
 | `ToolSet.tsx` 是活跃入口，`bench/Subscribe.tsx` 的历史对话框目前无打开触发器。 | 不得将历史代码视为已实现的第二入口；原两入口提案和验证范围待评审及用户确认，见 §4.1。 |
 | 上游错误、原始响应或 Schema 中可能包含密钥。 | 对测试响应、错误和日志进行密钥脱敏；不记录认证头或完整带密钥 URL；固定参数不用于存储秘密。 |
+| 联网搜索有独立的四个管理端点，通用 `/tool/config` 放开租户管理员并不覆盖它们。 | 四个端点统一复用 `is_current_tenant_administrator`，目标由 `_target` 校验当前租户/preset/删除态/子工具标识，回归同时覆盖读、写、导入和测试，避免只能打开其他预置配置但搜索设置 403。 |
 | 现有调用方读取规范化的网页结果。 | 原样返回上游数据会破坏引用；测试及运行必须通过同一转换函数。 |
 
 ## 6. 对外契约与依赖
 
 - 提供：不改变 `web_search(query)` 及其结果数组契约；管理侧新增或扩展解析、测试和脱敏配置能力。
 - 依赖：上游服务遵守所选 OpenAPI 操作、返回可映射 JSON；配置存储需在 API、Celery 和 Linsight 进程均可读取；使用外部提供且各进程一致的专用加密密钥，缺失或解密失败时明确报错。后端 ToolExecutor 在调用独立 bisheng_langchain 包前解析密钥并注入内存，禁止反向 import 或持久化明文；不能依赖本地文件保存共享状态。
-- 权限和租户：当前预置工具配置保存仅允许全局超管；新增导入、测试和写入也仅允许全局超管，并校验目标确为联网搜索预置工具。执行保留 ToolExecutor 的 tool/use 授权，沿用现有子工具配置优先于分类配置的选择规则；不新增未经验证的跨租户配置读取。读写作用域须以实际预置工具数据模型及业务授权测试确认，批量写入不能依赖 SELECT 租户过滤。
+- 权限和租户：预置工具配置的读取、保存、导入和测试均允许系统超管或当前租户管理员，并校验目标确为当前租户的联网搜索预置工具；普通用户即便有工具 owner/manager/edit 授权也不获得配置管理能力。执行保留 ToolExecutor 的 tool/use 授权，沿用现有子工具配置优先于分类配置的选择规则；不新增未经验证的跨租户配置读取。读写作用域须以实际预置工具数据模型及业务授权测试确认，批量写入不能依赖 SELECT 租户过滤。
 - 网络：用户确认支持公网和企业内网；仅全局超管配置的明确服务地址可被访问，禁止自动重定向及代理环境变量，禁止访问环回、链路本地和云元数据地址。连接前校验全部解析地址，固定连接 IP 并保留原 Host/TLS SNI、校验对端地址；域名解析变化后重新校验。Schema 导入、测试和运行共用同一策略；测试覆盖 IPv4/IPv6、重绑定、混合 DNS 和敏感地址。出站采用有限超时和响应体大小，错误不回传 URL 查询串、上游正文或凭据。
 
 ## 7. 验证与可观测
@@ -157,3 +158,12 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 ### 2026-11-24 beta2 移除操作 proof
 
 用户要求去掉证明校验，按 §3.4 删除签发和各执行入口校验，兼容旧数据与旧请求。保留权限、独立 API Key 加密及现有请求验证。Root Schema 原文未持久化、前端输入框不回显的问题另行处理，本次不扩展 UI。
+
+
+### 2026-11-24 租户管理员搜索配置鉴权修复
+
+用户已要求租户管理员编辑本租户预置工具配置；116 的 `/api/v1/tool/1410/web-search/settings` 仍由专用 `_require_search_admin` 硬编码全局超管，遗漏通用配置入口的修复。四条专用路由统一复用 permission application 的管理身份协议：沿已认证身份解析 PermissionActor，并保留 data_scope 收窄、当前租户及管理身份约束；全局超管身份仍由登录依赖服务端验证，不信任请求中声明的角色。旧的“仅 global super”设计已被本轮用户确认的租户管理员规则替代。
+
+选择复用同一管理身份入口，而不是把工具 edit/owner 授权当作配置权限，避免擅自实现仍待确认的普通管理者配置能力。服务端 `_target` 保留分类及子项的当前租户/preset/删除态/web_search 校验，凭据按 tenant/category 加密、revision CAS、脱敏和出站策略均沿原合同；没有新接口字段、表、SQL 或网络能力。只有用户另行确认普通资源授权可委托配置时，才重评这个身份边界。
+
+本租户管理员和超管分别通过实际 ASGI 路由完成导入、读写、预览，外租户管理员、普通用户、收窄身份继续被拒绝；本租户管理员对 Root 分类的四个请求均在目标校验中拒绝，未写数据或访问上游。详见 [本轮验证与审查](../../../docs/reviews/web-search-tenant-admin-403-20261124.md)。116 仅核对源码，未部署或保存现场配置。

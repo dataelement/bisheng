@@ -22,6 +22,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.permission.application import identity
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.tool.api.tool import router
 from bisheng.tool.domain.models.gpts_tools import (
     GptsTools,
@@ -35,7 +37,6 @@ from bisheng.tool.domain.services import web_search as search_service
 from bisheng.tool.domain.services.executor import ToolExecutor, ToolInitializationError
 from bisheng.tool.domain.services.openapi import OpenApiSchema
 from bisheng.tool.domain.services.tool import ToolServices
-from bisheng.utils import http_middleware
 from bisheng_langchain.gpts.tools.web_search import custom
 from bisheng_langchain.gpts.tools.web_search.custom import (
     CustomSearchError,
@@ -62,7 +63,8 @@ def test_system_cipher_uses_platform_encrypt_token_without_keyring():
 
 
 @pytest.fixture
-async def store(monkeypatch):
+async def store(monkeypatch, request):
+    tenant_id = getattr(request, "param", 1)
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         for model in (GptsToolsType, GptsTools, WebSearchSecret):
@@ -74,10 +76,10 @@ async def store(monkeypatch):
             yield db
 
     monkeypatch.setattr(search_service, "get_async_db_session", session)
-    monkeypatch.setattr(search_service, "get_current_tenant_id", lambda: 1)
+    monkeypatch.setattr(search_service, "get_current_tenant_id", lambda: tenant_id)
     async with session() as db:
-        db.add(GptsToolsType(id=16, name="search", tenant_id=1, is_preset=1, extra="{}"))
-        db.add(GptsTools(id=38, name="search", type=16, tool_key="web_search", tenant_id=1, is_preset=1))
+        db.add(GptsToolsType(id=16, name="search", tenant_id=tenant_id, is_preset=1, extra="{}"))
+        db.add(GptsTools(id=38, name="search", type=16, tool_key="web_search", tenant_id=tenant_id, is_preset=1))
         await db.commit()
     yield session
     await engine.dispose()
@@ -354,21 +356,47 @@ def app():
     return app
 
 
+@pytest.mark.parametrize("method,path,body,module,service", ROUTES)
 @pytest.mark.parametrize(
-    "method,path,body,module,service,claim,confirmed,allowed",
+    "claim,super_admin,admin_tenants,actor_tenant,data_scope,allowed",
     [
-        (*route, claim, confirmed, allowed)
-        for route in ROUTES
-        for claim, confirmed, allowed in [(True, True, True), (False, True, False)]
-    ]
-    + [(*ROUTES[0], True, False, False)],
+        (True, True, (), 68, "all_visible", True),
+        (False, False, (68,), 68, "all_visible", True),
+        (False, False, (69,), 68, "all_visible", False),
+        (False, False, (68,), 69, "all_visible", False),
+        (False, False, (), 68, "all_visible", False),
+        (True, False, (), 68, "all_visible", False),
+        (True, True, (), 68, "personal_only", False),
+        (False, False, (68,), 68, "personal_only", False),
+    ],
 )
-async def test_management_requires_confirmed_global_super(
-    app, monkeypatch, method, path, body, module, service, claim, confirmed, allowed
+async def test_management_requires_current_tenant_administrator(
+    app,
+    monkeypatch,
+    method,
+    path,
+    body,
+    module,
+    service,
+    claim,
+    super_admin,
+    admin_tenants,
+    actor_tenant,
+    data_scope,
+    allowed,
 ):
-    app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(user_id=42, is_global_super=claim)
-    check = AsyncMock(return_value=confirmed)
-    monkeypatch.setattr(http_middleware, "_check_is_global_super", check)
+    user = SimpleNamespace(user_id=42, tenant_id=68, is_global_super=claim)
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: user
+    actor = PermissionActor(
+        user_id=42,
+        current_tenant_id=actor_tenant,
+        super_admin=super_admin,
+        tenant_admin_tenant_ids=frozenset(admin_tenants),
+        data_scope=data_scope,
+    )
+    resolve = AsyncMock(return_value=actor)
+    monkeypatch.setattr(identity, "resolve_permission_actor", resolve)
+    monkeypatch.setattr(identity, "get_current_tenant_id", lambda: 68)
     call = AsyncMock(return_value={"marker": "authorized"})
     monkeypatch.setattr(module, service, call)
 
@@ -376,6 +404,7 @@ async def test_management_requires_confirmed_global_super(
         response = await client.request(method, f"/api/v1/tool/16/web-search/{path}", json=body)
 
     assert response.status_code == 200
+    resolve.assert_awaited_once_with(user)
     if allowed:
         assert response.json()["data"] == {"marker": "authorized"}
         call.assert_awaited_once()
@@ -383,18 +412,30 @@ async def test_management_requires_confirmed_global_super(
     else:
         assert response.json()["status_code"] == 403
         call.assert_not_awaited()
-    if claim:
-        check.assert_awaited_once_with(42)
-    else:
-        check.assert_not_awaited()
 
 
-async def test_api_import_save_read_and_preview_without_proof(app, store, monkeypatch):
+@pytest.mark.parametrize("store", [68], indirect=True)
+@pytest.mark.parametrize("super_admin", [False, True])
+async def test_api_import_save_read_and_preview_without_proof(app, store, monkeypatch, super_admin):
     """AC-02/06/07/08: exercise actual management handlers and isolated persistence."""
     from test.e2e.helpers.api import assert_resp_200
 
-    app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(user_id=42, is_global_super=True)
-    monkeypatch.setattr(http_middleware, "_check_is_global_super", AsyncMock(return_value=True))
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(
+        user_id=42, tenant_id=68, is_global_super=super_admin
+    )
+    monkeypatch.setattr(identity, "get_current_tenant_id", lambda: 68)
+    monkeypatch.setattr(
+        identity,
+        "resolve_permission_actor",
+        AsyncMock(
+            return_value=PermissionActor(
+                user_id=42,
+                current_tenant_id=68,
+                super_admin=super_admin,
+                tenant_admin_tenant_ids=frozenset() if super_admin else frozenset({68}),
+            )
+        ),
+    )
     content = json.dumps(
         {
             "openapi": "3.0.3",
@@ -660,3 +701,41 @@ def test_post_search_mapping_and_invalid_response():
     assert map_response(b'{"items": []}', mapping, dict)[1] == []
     with pytest.raises(CustomSearchError):
         map_response(b"not json", mapping, dict)
+
+
+@pytest.mark.parametrize("method,path,body,module,service", ROUTES)
+async def test_tenant_admin_cannot_manage_root_search_settings(
+    app, store, monkeypatch, method, path, body, module, service
+):
+    """Exercise target loading too: shared Root visibility grants no configuration access."""
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(
+        user_id=42, tenant_id=68, is_global_super=False
+    )
+    monkeypatch.setattr(identity, "get_current_tenant_id", lambda: 68)
+    monkeypatch.setattr(
+        identity,
+        "resolve_permission_actor",
+        AsyncMock(
+            return_value=PermissionActor(
+                user_id=42,
+                current_tenant_id=68,
+                tenant_admin_tenant_ids=frozenset({68}),
+            )
+        ),
+    )
+    monkeypatch.setattr(search_service, "get_current_tenant_id", lambda: 68)
+    upstream = Mock(side_effect=AssertionError("foreign configuration must not reach network"))
+    monkeypatch.setattr(search_service, "execute_request", upstream)
+    if path == "test":
+        body = {
+            "draft": draft("rev", {"action": "keep"}).providers["custom"],
+            "query": "q",
+            "secret": {"action": "replace", "value": "temporary-test-value"},
+        }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.request(method, f"/api/v1/tool/16/web-search/{path}", json=body)
+    assert response.status_code == 404
+    upstream.assert_not_called()
+    async with store() as db:
+        assert (await db.exec(select(GptsToolsType))).one().extra == "{}"
+        assert not (await db.exec(select(WebSearchSecret))).all()

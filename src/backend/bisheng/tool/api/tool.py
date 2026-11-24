@@ -9,6 +9,7 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
+from bisheng.permission.application.identity import is_current_tenant_administrator
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.tool.domain.models.gpts_tools import GptsToolsTypeRead
 from bisheng.tool.domain.schemas import TestToolReq
@@ -26,9 +27,8 @@ router = APIRouter(prefix="/tool", tags=["Tool"])
 
 
 async def _require_search_admin(user: UserPayload):
-    from bisheng.utils.http_middleware import _check_is_global_super
-
-    if not user.is_global_super or not await _check_is_global_super(user.user_id):
+    # Match preset /tool/config administration; ordinary resource grants do not delegate settings.
+    if not await is_current_tenant_administrator(user):
         raise UnAuthorizedError()
 
 
