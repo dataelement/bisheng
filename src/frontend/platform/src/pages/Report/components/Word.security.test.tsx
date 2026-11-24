@@ -1,8 +1,9 @@
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import Word from './Word';
 
 const mocks = vi.hoisted(() => ({ sign: vi.fn(), editor: vi.fn(), report: vi.fn(), notice: vi.fn(), destroy: vi.fn() }));
+const officeSdkUrl = 'https://office.test/web-apps/apps/api/documents/api.js';
 vi.mock('@/controllers/API/flow', () => ({ getOfficeTokenApi: mocks.sign }));
 vi.mock('@/controllers/request', () => ({ showApiError: mocks.report }));
 vi.mock('@bisheng/ui', () => ({ notification: { open: mocks.notice } }));
@@ -16,7 +17,10 @@ beforeEach(() => {
     mocks.editor.mockImplementation(() => ({ destroyEditor: mocks.destroy }));
     Object.assign(window, { DocsAPI: { DocEditor: mocks.editor }, editor: undefined });
 });
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    document.querySelector(`script[src="${officeSdkUrl}"]`)?.remove();
+});
 
 it.each([false, true])('does not open an unsigned editor after issuer rejection (workflow=%s)', async workflow => {
     const error = new Error('synthetic authorization rejection');
@@ -80,4 +84,30 @@ it('boots only with the issued token and destroys the editor on unmount', async 
     });
     unmount();
     expect(mocks.destroy).toHaveBeenCalledTimes(1);
+});
+
+it('loads the second editor iframe from the document server after closing the first editor', async () => {
+    Object.assign(window, { DocsAPI: undefined });
+    const iframeUrls: string[] = [];
+    mocks.editor.mockImplementation(() => {
+        const script = document.querySelector<HTMLScriptElement>(`script[src="${officeSdkUrl}"]`);
+        const base = script?.src.replace('api/documents/api.js', '') || window.location.href;
+        iframeUrls.push(new URL('documenteditor/main/index.html', base).href);
+        return { destroyEditor: mocks.destroy };
+    });
+    mocks.sign.mockResolvedValue({ token: 'synthetic-issued-token', config: {
+        documentType: 'word', document: { key: 'server-key' }, editorConfig: {},
+    } });
+
+    const first = render(<Word data={{ key: 'first', path: '' }} workflow />);
+    const script = document.querySelector(`script[src="${officeSdkUrl}"]`)!;
+    Object.assign(window, { DocsAPI: { DocEditor: mocks.editor } });
+    fireEvent.load(script);
+    await waitFor(() => expect(mocks.editor).toHaveBeenCalledTimes(1));
+    first.unmount();
+
+    render(<Word data={{ key: 'second', path: '' }} workflow />);
+    await waitFor(() => expect(mocks.editor).toHaveBeenCalledTimes(2));
+    expect(iframeUrls).toEqual(Array(2).fill('https://office.test/web-apps/apps/documenteditor/main/index.html'));
+    expect(document.querySelectorAll(`script[src="${officeSdkUrl}"]`)).toHaveLength(1);
 });
