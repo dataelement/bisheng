@@ -88,6 +88,22 @@ export function compactKnowledgeQuery(query: string): string {
     return words.join(" ");
 }
 
+/**
+ * Id -> name of the knowledge bases the user selected in the input bar. Both
+ * kinds (document knowledge bases and knowledge spaces) share one id space in
+ * the `knowledge_base_ids` the model sends, so one map serves both.
+ */
+export function knownKnowledgeBaseNames(
+    selected: ReadonlyArray<{ id?: string | number; name?: string; type?: string }> | undefined,
+): Record<string, string> {
+    const names: Record<string, string> = {};
+    for (const item of selected ?? []) {
+        const id = String(item?.id ?? "");
+        if (id && item?.name) names[id] = item.name;
+    }
+    return names;
+}
+
 /** Names to show for a knowledge base list: up to two, otherwise the first plus a total. */
 export function summariseKnowledgeBaseNames(names: string[]): { shown: string[]; total: number } {
     const total = names.length;
@@ -183,8 +199,14 @@ export function describeKnowledgeCall(
  * shortened: search and thinking keep their real order. A call that failed as a
  * whole gets no row and is rendered by the generic tool-call display.
  */
-export function planKnowledgeRows(events: AgentEvent[]): KnowledgeRowPlan {
-    const kbNameById: Record<string, string> = {};
+export function planKnowledgeRows(
+    events: AgentEvent[],
+    knownNames: Record<string, string> = {},
+): KnowledgeRowPlan {
+    // Names from the user's selection come first, so a searched knowledge base
+    // that returned no chunk (and so is never named in the results) still gets
+    // a label. A name carried by a result overrides the selection below.
+    const kbNameById: Record<string, string> = { ...knownNames };
     for (const ev of events) {
         if (ev.type !== "tool_call" || !isKnowledgeToolCall(ev)) continue;
         parseHits(ev).forEach((hit) => {

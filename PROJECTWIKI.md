@@ -41,7 +41,7 @@ flowchart LR
 ### ADR-2 只用后端已有字段
 
 - 使用 `tool_call_id`、`args.query`、`args.knowledge_base_ids` 和结果里的标签串（`<knowledge_base_id>`、`<knowledge_base_name>`、`<file_title>`、`<retrieval_error>`）。
-- 检索中的行没有知识库名，用同一次深度思考里已出现的结果补全，第一次检索在结果返回前不显示知识库标签。
+- 检索中的行没有知识库名：先用聊天输入框已选知识库的 id 到名称映射补全，再用同一次深度思考里已出现的结果覆盖。文档知识库与知识空间的 id 属于同一个 id 空间，一份映射通用。
 
 ### ADR-3 整次调用失败与部分失败的判定
 
@@ -78,7 +78,8 @@ flowchart LR
 | 解析逻辑重复 | `knowledgeRow.ts` 与 `ToolCallDisplay.tsx` 各有一份标签解析，正则不同 | 中 |
 | 记忆化失效 | 事件每帧是新对象，`memo` 和 `useMemo` 基本不命中，每帧约多 0.9 ms 解析 | 低 |
 | 缺组件测试 | 只有纯函数测试，没有 `KnowledgeSearchRow` 的组件测试 | 中 |
-| 知识库标签来源 | 取自模型传入的 `knowledge_base_ids`，模型传错 id 时可能显示未检索的库 | 低 |
+| 知识库标签来源 | id 取自模型传入的 `knowledge_base_ids`，模型传错 id 时可能显示未检索的库 | 低 |
+| 历史回看的知识库名称 | 没返回内容的知识库，名称取自当前聊天页已选知识库（`KnownKnowledgeBaseNamesContext`），重新打开旧对话时若当前选择不同，这些库的标签会缺失 | 低 |
 | 无障碍 | 收起的面板中文档标签仍可聚焦 | 低 |
 | 文档标签不可点击 | 需后端补文档标识 | 待产品确认 |
 

@@ -9,6 +9,8 @@ import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appCha
 import AiChatInput from '~/components/Chat/AiChatInput';
 import { resolveTaskModeOnNavigation } from '~/components/Chat/resolveTaskMode';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
+import KnownKnowledgeBaseNamesContext from '~/components/Chat/Messages/KnownKnowledgeBaseNamesContext';
+import { knownKnowledgeBaseNames } from '~/components/Chat/Messages/knowledgeRow';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
 import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
 import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
@@ -96,6 +98,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     [selectedOrgKbs],
   );
   const selectedOrgKbIdsKey = selectedOrgKbIds.join(',');
+  // Lets deep-thinking knowledge rows name a searched knowledge base that returned nothing.
+  const selectedKbNames = useMemo(() => knownKnowledgeBaseNames(selectedOrgKbs), [selectedOrgKbs]);
   const { data: visibleSelectedOrgKbs = [], isSuccess: selectedOrgKbVisibilityReady } = useGetOrgToolList(
     {
       page: 1,
@@ -746,6 +750,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {/* Left: Chat Main (Messages + Input). */}
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
                       <div className="relative flex min-h-0 flex-1 overflow-hidden">
+                        <KnownKnowledgeBaseNamesContext.Provider value={selectedKbNames}>
                         <AiChatMessages
                           messages={messages}
                           conversationId={activeConvoId}
@@ -771,6 +776,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           hideEmptyState
                           flatMode
                         />
+                        </KnownKnowledgeBaseNamesContext.Provider>
                         {/* Soft translucent fade so the scrolling step flow
                             dissolves into the pinned task panel / input instead of
                             ending on a hard cut. */}

@@ -19,6 +19,7 @@ import { Outlined } from "bisheng-icons";
 import {
     memo,
     useCallback,
+    useContext,
     useEffect,
     useMemo,
     useRef,
@@ -30,6 +31,7 @@ import type { AgentEvent } from "~/api/chatApi";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import KnowledgeSearchRow from "./KnowledgeSearchRow";
+import KnownKnowledgeBaseNamesContext from "./KnownKnowledgeBaseNamesContext";
 import { planKnowledgeRows, type KnowledgeRowContext } from "./knowledgeRow";
 import ThinkingContent from "./ThinkingContent";
 import ToolCallDisplay from "./ToolCallDisplay";
@@ -87,7 +89,13 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         // DeepStepGroup.buildSegments.
         // Knowledge searches are never merged: each one stays a row at its real
         // position (see knowledgeRow.ts).
-        const knowledgePlan = useMemo(() => planKnowledgeRows(events), [events]);
+        // Names of the knowledge bases the user selected label searches that
+        // returned nothing, whose names the results never carry.
+        const selectedKbNames = useContext(KnownKnowledgeBaseNamesContext);
+        const knowledgePlan = useMemo(
+            () => planKnowledgeRows(events, selectedKbNames),
+            [events, selectedKbNames],
+        );
 
         const segments = useMemo(() => {
             type Segment =

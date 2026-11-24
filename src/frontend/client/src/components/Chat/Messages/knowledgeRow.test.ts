@@ -7,6 +7,7 @@ import {
     describeKnowledgeCall,
     isKnowledgeToolCall,
     isReadableKnowledgeQuery,
+    knownKnowledgeBaseNames,
     planKnowledgeRows,
     summariseKnowledgeBaseNames,
     compactKnowledgeQuery,
@@ -189,6 +190,42 @@ describe("planKnowledgeRows", () => {
         const { rows, kbNameById } = planKnowledgeRows([search("c1", ["1"], "A.docx", "商情项目汇总"), inflight]);
         expect(kbNameById).toEqual({ "1": "商情项目汇总" });
         expect(rows.get(1)).toEqual({ ordinal: 2 });
+    });
+});
+
+describe("knownKnowledgeBaseNames", () => {
+    it("maps the selected knowledge bases and spaces by id, org and space alike", () => {
+        expect(
+            knownKnowledgeBaseNames([
+                { id: "7", name: "文档知识库", type: "org" },
+                { id: 12, name: "空空间", type: "space" },
+            ]),
+        ).toEqual({ "7": "文档知识库", "12": "空空间" });
+    });
+
+    it("skips entries without an id or a name and tolerates a missing list", () => {
+        expect(knownKnowledgeBaseNames([{ id: "", name: "x" }, { id: "3", name: "" }])).toEqual({});
+        expect(knownKnowledgeBaseNames(undefined)).toEqual({});
+    });
+});
+
+describe("planKnowledgeRows with known names", () => {
+    it("names a searched knowledge base that returned nothing", () => {
+        // KB 2 was searched but has no chunk, so the result strings never name it.
+        const ev = asEvent(call("c1", "q", ["1", "2"], [chunk("1", "KB1", "A.docx", "rag_c1:0")]));
+        const { kbNameById } = planKnowledgeRows([ev], { "2": "空空间" });
+        expect(kbNameById).toEqual({ "1": "KB1", "2": "空空间" });
+        expect(describeKnowledgeCall(ev as unknown as AgentToolCall, kbNameById).kbNames).toEqual(["KB1", "空空间"]);
+    });
+
+    it("lets the name in a result win over the selection", () => {
+        const ev = asEvent(call("c1", "q", ["1"], [chunk("1", "新名称", "A.docx", "rag_c1:0")]));
+        expect(planKnowledgeRows([ev], { "1": "旧名称" }).kbNameById).toEqual({ "1": "新名称" });
+    });
+
+    it("names the knowledge base of a search that is still running", () => {
+        const running = asEvent(call("c1", "q", ["5"], [], { inflight: true }));
+        expect(planKnowledgeRows([running], { "5": "文档知识库" }).kbNameById).toEqual({ "5": "文档知识库" });
     });
 });
 
