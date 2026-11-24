@@ -11,7 +11,6 @@ import {
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useAuthContext, useVersionManagementEnabled } from "~/hooks";
 export function useKnowledgeSpaceHeader({
-  selectedFiles,
   space,
   currentFolderId,
   onDeleteFile,
@@ -63,8 +62,8 @@ export function useKnowledgeSpaceHeader({
   const [similarRestrictIds, setSimilarRestrictIds] = useState<string[]>([]);
 
   // Open the similar-document dialog scoped to the currently selected files.
-  const handleProcessSimilar = () => {
-    setSimilarRestrictIds(Array.from(selectedFiles));
+  const handleProcessSimilar = (fileIds: string[]) => {
+    setSimilarRestrictIds(fileIds);
     setSimilarDialogOpen(true);
   };
 

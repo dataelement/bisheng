@@ -36,6 +36,7 @@ export interface VersionHistoryDialogProps {
   onRetry?: () => void;
   unavailable?: ReactNode;
   canManage: boolean;
+  canSetPrimary?: (version: VersionHistoryEntry) => boolean;
   canDelete?: (version: VersionHistoryEntry) => boolean;
   canDownload?: (version: VersionHistoryEntry) => boolean;
   onPreview?: (fileId: number, name: string) => void;
@@ -55,7 +56,7 @@ export function VersionHistoryDialog(props: VersionHistoryDialogProps) {
 }
 
 function VersionHistorySession({ onOpenChange, documentTitle, data, loading, error, onRetry, unavailable,
-  canManage, canDelete, canDownload, onPreview, onDownload, setPrimary, deleteVersion,
+  canManage, canSetPrimary: canSetPrimaryVersion, canDelete, canDownload, onPreview, onDownload, setPrimary, deleteVersion,
   onChanged, onError, onSuccess }: VersionHistoryDialogProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.version' });
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -70,7 +71,7 @@ function VersionHistorySession({ onOpenChange, documentTitle, data, loading, err
     return () => controller.abort();
   }, []);
 
-  const canSetPrimary = (version: VersionHistoryEntry) => canManage && !version.is_primary && version.status === 2;
+  const canSetPrimary = (version: VersionHistoryEntry) => canManage && !version.is_primary && version.status === 2 && (canSetPrimaryVersion?.(version) ?? true);
   const canDeleteVersion = (version: VersionHistoryEntry) => canManage && !version.is_primary && (canDelete?.(version) ?? true);
   const versions = [...(data?.versions ?? [])].sort((a, b) => a.version_no - b.version_no);
   const target = versions.find(version => version.version_id === pending?.versionId);

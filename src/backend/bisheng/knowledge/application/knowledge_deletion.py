@@ -210,6 +210,9 @@ class KnowledgeDeletionApplication:
             row = await self.execution.aresolve_historical_version(session, version_id=version_id)
         if row is None or row["is_primary"]:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_non_primary_version_required")
+        await require_business_action(
+            identity, resource_type="knowledge_file", resource_id=row["file_id"], action="edit"
+        )
         await self.aordinary_delete(
             identity=identity,
             space_id=row["knowledge_id"],

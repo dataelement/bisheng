@@ -72,9 +72,9 @@ it("shows the desktop batch menu as soon as a file is selected and hides it afte
 
 it.each([
   [true, false, true, true],
-  [false, true, true, false],
+  [false, true, true, true],
   [true, true, false, false],
-])("gates batch similar documents by edit (edit=%s, manage=%s, enabled=%s)", async (edit, manage, enabled, shown) => {
+])("uses editable selected files without requiring space edit (space edit=%s, manage=%s, enabled=%s)", async (edit, manage, enabled, shown) => {
   const onProcessSimilar = jest.fn();
   render(
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
