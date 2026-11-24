@@ -2,8 +2,10 @@ import { useVisibleKnowledgeSelections } from "./hooks/useVisibleKnowledgeSelect
 import { useTaskModeNavigation } from "./hooks/useTaskModeNavigation";
 import { useChatModelSelection } from "./hooks/useChatModelSelection";
 import { isApiError } from "@bisheng/api-client";
+import { toast } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useActivate, useUnactivate } from "react-activation";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState } from "recoil";
 import { useTaskInviteQuota } from "~/components/Chat/TaskInviteQuota";
@@ -111,6 +113,7 @@ function useChatView(
   const {
     selectedOrgKbs,
     knowledgeAccessMessage,
+    knowledgeAccessVerifying,
     setSelectedOrgKbs,
     messages,
     conversationId: activeConvoId,
@@ -130,6 +133,16 @@ function useChatView(
     presence.ensureLeaseId,
     draftIdentity,
   );
+
+  const [chatActive, setChatActive] = useState(true);
+  useActivate(() => setChatActive(true));
+  useUnactivate(() => setChatActive(false));
+  const verifyingLabel = t("knowledgeAccess.checking");
+  useEffect(() => {
+    if (!chatActive || !knowledgeAccessVerifying) return;
+    const toastId = toast.loading(verifyingLabel);
+    return () => toast.dismiss(toastId);
+  }, [chatActive, knowledgeAccessVerifying, verifyingLabel]);
 
   useVisibleKnowledgeSelections({ user, selectedOrgKbs, setSelectedOrgKbs });
 

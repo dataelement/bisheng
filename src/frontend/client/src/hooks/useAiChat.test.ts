@@ -14,11 +14,14 @@ jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
 
 let mockBsConfig: { models?: { id: number; visual: boolean }[]; enable_etl4lm?: boolean } = {};
 let mockKnowledgeBlocked = false;
+let mockKnowledgeVerifying = false;
+const mockToast = jest.fn();
 jest.mock('./useKnowledgeSpaceAccess', () => ({
     useKnowledgeSpaceAccess: (selection) => ({
         available: mockKnowledgeBlocked ? [] : selection,
-        blocked: mockKnowledgeBlocked,
+        blocked: mockKnowledgeBlocked || mockKnowledgeVerifying,
         message: mockKnowledgeBlocked ? 'knowledgeAccess.revoked' : '',
+        verifying: mockKnowledgeVerifying,
     }),
 }));
 
@@ -63,7 +66,7 @@ jest.mock("~/store/linsight", () => ({
 jest.mock("~/hooks/AuthContext", () => ({ useAuthContext: () => ({ user: { id: "test-user" } }) }));
 
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
-jest.mock("~/Providers", () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
+jest.mock("~/Providers", () => ({ useToastContext: () => ({ showToast: mockToast }) }));
 jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ data: mockBsConfig }) }));
 jest.mock("~/utils/mediaAttachmentUtils", () => ({
   isMediaAttachmentFile: () => false,
@@ -172,6 +175,7 @@ beforeEach(() => {
   mockRunSequence = 0;
   eventEntry = 0;
   mockKnowledgeBlocked = false;
+  mockKnowledgeVerifying = false;
   localStorage.clear();
   mockBsConfig = { models: [{ id: 1, visual: true }] };
   mockSelectedSkills = [];
@@ -596,6 +600,14 @@ test('blocks image sends at the shared entry when neither vision nor image parsi
 });
 
 describe('revoked knowledge scope submission gate', () => {
+    it('blocks sending during verification without a second warning toast', async () => {
+        mockKnowledgeVerifying = true;
+        const { result } = renderChat('new');
+        await act(async () => { expect(await result.current.sendMessage('Keep this draft')).toBe(false); });
+        expect(mockSendRunMessage).not.toHaveBeenCalled();
+        expect(mockToast).not.toHaveBeenCalled();
+    });
+
     it('keeps the old conversation intact and blocks sending and regenerating', async () => {
         mockKnowledgeBlocked = true;
         const { result } = renderChat('retained');

@@ -218,8 +218,12 @@ export default function useAiChat(
         bsConfig?.knowledgeBase?.enabled !== false,
     );
 
-    const { available: selectedOrgKbs, message: knowledgeAccessMessage, blocked: knowledgeAccessBlocked } =
-        useKnowledgeSpaceAccess(savedKnowledge, `chat:${conversationId}`, !shareToken);
+    const {
+        available: selectedOrgKbs,
+        message: knowledgeAccessMessage,
+        blocked: knowledgeAccessBlocked,
+        verifying: knowledgeAccessVerifying,
+    } = useKnowledgeSpaceAccess(savedKnowledge, `chat:${conversationId}`, !shareToken);
 
     const queryClient = useQueryClient();
 
@@ -436,7 +440,9 @@ export default function useAiChat(
             const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
             const turnMessages = messagesRef.current;
             if (knowledgeAccessBlocked) {
-                showToast({ message: knowledgeAccessMessage, status: "warning" });
+                if (!knowledgeAccessVerifying && knowledgeAccessMessage) {
+                    showToast({ message: knowledgeAccessMessage, status: "warning" });
+                }
                 return false;
             }
             if (opts?.taskMode && selectedOrgKbs.some(item => item.type === 'space' && item.tag)) {
@@ -650,7 +656,7 @@ export default function useAiChat(
             }
             return true;
         },
-        [shareToken, knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, selectedAgentTools, dailyTaskSkills, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId, unified.isBusy, unified.send]
+        [shareToken, knowledgeAccessBlocked, knowledgeAccessMessage, knowledgeAccessVerifying, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, selectedAgentTools, dailyTaskSkills, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId, unified.isBusy, unified.send]
     );
 
     // --- Stop generating ---
@@ -723,6 +729,7 @@ export default function useAiChat(
 
         selectedOrgKbs,
         knowledgeAccessMessage,
+        knowledgeAccessVerifying,
         setSelectedOrgKbs,
 
         // Actions
