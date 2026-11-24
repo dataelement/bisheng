@@ -1552,6 +1552,7 @@
     "value": "Value",
     "result": "Test Result",
     "outResultPlaceholder": "Click the button to output the result",
+    "enterKeyForChangedConfiguration": "Re-enter the API key to test the changed configuration.",
     "addVersion": "Add Version",
     "selectVersion": "Select Version",
     "component": "Component",
