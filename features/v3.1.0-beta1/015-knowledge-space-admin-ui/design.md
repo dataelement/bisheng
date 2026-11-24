@@ -199,3 +199,24 @@ Client 的桌面/移动批量“处理相似文档”和列表/卡片相似标�
 ### 2026-11-19 标签候选与失败项名称纠正
 
 复核发现仅使用所选文件的标签作为候选会遗漏空间已有但这些文件尚未使用的标签，禁用新建输入框后用户无法追加它们；把操作动作拒绝等同于不可见，也会错误隐藏可读文件名称。以上两处按当前空间读取资格与文件可见资格分别纠正，不放宽标签写入权限。使用既有 GET 与批量授权入口，无新增接口、表或权限动作；以后仅在空间标签字典读取规则发生产品变更时重新考虑候选来源。实现和 92 项本地回归证据见 [补充审查](./tag-candidates-and-visible-names-review-20261119.md)。
+
+### 2026-11-25 beta2 补齐动作 Catalog 与存量升级
+
+版本链路已按文件 edit 鉴权，但旧 Catalog 没有 folder/knowledge_file 的 edit 适用范围，
+界面有效动作缺失且直接检查返回 25001。首次安装定义与已有 CURRENT 数据必须分别处理；
+启动时隐式改动当前 Catalog 会跳过发布台账和失败恢复，因此本次采用显式维护命令，复用
+原 Catalog 发布器、写入 fence、完整暂存校验、active 指针切换与 reconcile。只扩展两组
+动作适用范围，保留 active/level、自定义选择、同级授权和受控可见性来源，不改资源 Grant。
+仅在 Catalog 引入通用自动升级合同后重新考虑启动集成。
+
+新增职责：knowledge_edit_scope_upgrade.py 负责 plan/apply/resume/verify；脚本组合当前
+settings 的 DB/Redis/FGA 客户端并在同一 loop 释放。CatalogImpactRepository 分页扫描
+Grant 与成员，catalog-impact-v2 增量摘要包含范围变化影响的标准模型；旧未发布草稿需
+重新规划。无新接口、数据表或授权模型 schema，工具依赖已有完整 F048 Catalog。
+
+已知坑：镜像更新不能补齐持久化动作；仅更新静态常量仍会遗漏旧环境。PROJECTING 可能
+只暂存了部分 tuple，恢复时必须重新暂存校验，不能直接重试 active 切换。详见
+[升级与恢复指南](../../../docs/upgrades/v3.1.0-beta2-knowledge-edit.md)。
+
+修订历史：2026-11-25，按用户要求补全新装、存量、幂等及中断恢复，补真实 Catalog/HTTP
+与规模回归；此前“当前镜像即可完成权限修复”的判断由实环境 25001 证据纠正。

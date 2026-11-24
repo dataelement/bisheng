@@ -42,12 +42,12 @@ from bisheng.permission.domain.models import (
     PermissionCatalogProjectionTuple,
     PermissionCatalogRelease,
     PermissionGrant,
-    PermissionGrantAssignee,
     PermissionModel,
     PermissionModelAction,
     PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
 )
+from bisheng.permission.domain.repositories.catalog_impact_repository import CatalogImpactRepository
 from bisheng.permission.domain.schemas import (
     CatalogChangeRequest,
     CatalogChangeType,
@@ -297,6 +297,16 @@ class SqlCatalogState:
                 if row is None:
                     raise PermissionPublishNotReadyError(msg="Permission Catalog release is missing")
                 return row
+
+    async def release_for_idempotency(self, key: str) -> PermissionCatalogRelease | None:
+        """Read a maintenance publication without reserving or changing it."""
+        with bypass_tenant_filter():
+            async with self._session_factory() as session:
+                return (
+                    await session.exec(
+                        select(PermissionCatalogRelease).where(PermissionCatalogRelease.idempotency_key == key)
+                    )
+                ).one_or_none()
 
     async def current_release(self) -> PermissionCatalogRelease:
         with bypass_tenant_filter():
@@ -1026,93 +1036,60 @@ class SqlCatalogImpact:
     ) -> CatalogImpactSummary:
         candidate_keys = set(action_impact.affected_model_keys)
         candidate_keys.update(model_impact.changed_model_keys)
+        # Scope-only changes can affect standards whose action selection stays
+        # identical. Include their existing Grants in the impact checksum too.
+        changed_actions = set(action_impact.changed_action_codes)
+        candidate_keys.update(
+            model.model_key
+            for model in (*before_models.models, *after_models.models)
+            if changed_actions.intersection(model.action_codes)
+        )
         before_by_key = {model.model_key: model for model in before_models.models}
         after_by_key = {model.model_key: model for model in after_models.models}
-        with bypass_tenant_filter():
-            async with self._session_factory() as session:
-                grants = (
-                    list(
-                        (
-                            await session.execute(
-                                select(PermissionGrant)
-                                .where(
-                                    PermissionGrant.state != "INACTIVE",
-                                    col(PermissionGrant.model_key).in_(candidate_keys or {""}),
-                                )
-                                .order_by(
-                                    PermissionGrant.tenant_id,
-                                    PermissionGrant.resource_type,
-                                    PermissionGrant.resource_id,
-                                    PermissionGrant.model_key,
-                                    PermissionGrant.id,
-                                )
-                            )
-                        ).scalars()
-                    )
-                    if candidate_keys
-                    else []
-                )
-                grant_ids = [int(row.id) for row in grants if row.id is not None]
-                sources = (
-                    list(
-                        (
-                            await session.execute(
-                                select(PermissionGrantAssignee)
-                                .where(
-                                    col(PermissionGrantAssignee.grant_id).in_(grant_ids),
-                                    PermissionGrantAssignee.state == "ACTIVE",
-                                )
-                                .order_by(
-                                    PermissionGrantAssignee.grant_id,
-                                    PermissionGrantAssignee.id,
-                                )
-                            )
-                        ).scalars()
-                    )
-                    if grant_ids
-                    else []
-                )
-        sources_by_grant: dict[int, list[PermissionGrantAssignee]] = {}
-        for source in sources:
-            sources_by_grant.setdefault(source.grant_id, []).append(source)
-        affected: list[tuple[PermissionGrant, set[str], set[str]]] = []
-        for grant in grants:
-            before_model = before_by_key.get(grant.model_key)
-            after_model = after_by_key.get(grant.model_key)
-            before_effective = set(
-                effective_model_action_codes(
-                    before_model,
-                    before_actions,
-                    grant.resource_type,
-                )
-                if before_model is not None
-                else ()
-            )
-            after_effective = set(
-                effective_model_action_codes(
-                    after_model,
-                    after_actions,
-                    grant.resource_type,
-                )
-                if after_model is not None
-                else ()
-            )
-            if before_effective == after_effective:
-                continue
-            affected.append((grant, before_effective, after_effective))
-        resource_keys = {(row.tenant_id, row.resource_type, row.resource_id) for row, _, _ in affected}
-        assignee_count = sum(len(sources_by_grant.get(int(row.id), ())) for row, _, _ in affected)
-        expansion_count = sum(
-            len(after - before) * len(sources_by_grant.get(int(row.id), ())) for row, before, after in affected
-        )
-        revocation_count = sum(
-            len(before - after) * len(sources_by_grant.get(int(row.id), ())) for row, before, after in affected
-        )
+        repository = CatalogImpactRepository(session_factory=self._session_factory)
+        digest = sha256(repr(("catalog-impact-v2", action_impact.checksum, model_impact.checksum)).encode())
+        resource_count = grant_count = assignee_count = expansion_count = revocation_count = 0
+        previous_resource = None
         affected_assignees_by_model: dict[str, int] = {}
-        for row, _, _ in affected:
-            affected_assignees_by_model[row.model_key] = affected_assignees_by_model.get(row.model_key, 0) + len(
-                sources_by_grant.get(int(row.id), ())
-            )
+        # Cache the small Catalog applicability matrix, never user x resource
+        # combinations. Grant and source pages are both bounded at 200 rows.
+        matrix = {}
+        async for grants in repository.agrant_pages(candidate_keys):
+            affected = []
+            for grant in grants:
+                key = (grant.model_key, grant.resource_type)
+                if key not in matrix:
+                    sets = []
+                    for model, actions in (
+                        (before_by_key.get(grant.model_key), before_actions),
+                        (after_by_key.get(grant.model_key), after_actions),
+                    ):
+                        sets.append(
+                            frozenset(effective_model_action_codes(model, actions, grant.resource_type))
+                            if model is not None
+                            else frozenset()
+                        )
+                    matrix[key] = tuple(sets)
+                before, after = matrix[key]
+                if before != after:
+                    affected.append((grant, before, after))
+            sources = await repository.asource_summaries([int(row.id) for row, _, _ in affected])
+            for row, before, after in affected:
+                count, source_digest = sources[int(row.id)]
+                resource = (row.tenant_id, row.resource_type, row.resource_id)
+                resource_count += resource != previous_resource
+                previous_resource = resource
+                grant_count += 1
+                assignee_count += count
+                expansion_count += len(after - before) * count
+                revocation_count += len(before - after) * count
+                affected_assignees_by_model[row.model_key] = affected_assignees_by_model.get(row.model_key, 0) + count
+                digest.update(
+                    repr(
+                        (*resource, row.model_key, tuple(sorted(before)), tuple(sorted(after)), count, source_digest)
+                    ).encode()
+                    + b"\n"
+                )
         before_action_by_code = {action.code: action for action in before_actions.actions}
         after_action_by_code = {action.code: action for action in after_actions.actions}
         action_changes = tuple(
@@ -1155,37 +1132,10 @@ class SqlCatalogImpact:
             )
             for model_key in model_impact.changed_model_keys
         )
-        source_signatures = {
-            int(row.id): tuple(
-                (
-                    source.source_fingerprint,
-                    source.version,
-                    source.protected,
-                )
-                for source in sources_by_grant.get(int(row.id), ())
-            )
-            for row, _, _ in affected
-        }
-        payload = (
-            action_impact.checksum,
-            model_impact.checksum,
-            tuple(
-                (
-                    row.tenant_id,
-                    row.resource_type,
-                    row.resource_id,
-                    row.model_key,
-                    tuple(sorted(before)),
-                    tuple(sorted(after)),
-                    source_signatures[int(row.id)],
-                )
-                for row, before, after in affected
-            ),
-        )
         return CatalogImpactSummary(
-            checksum=sha256(repr(payload).encode()).hexdigest(),
-            resource_count=len(resource_keys),
-            grant_count=len(affected),
+            checksum=digest.hexdigest(),
+            resource_count=resource_count,
+            grant_count=grant_count,
             assignee_count=assignee_count,
             expansion_count=expansion_count,
             revocation_count=revocation_count,
@@ -1236,12 +1186,11 @@ class SqlCatalogImpact:
             draft.action_release,
             custom_model_actions=custom_actions,
         )
-        references = await self._state.grant_references()
-        model_impact = calculate_model_impact(
-            before.model_release,
-            draft.model_release,
-            grant_references=references,
-        )
+        model_impact = calculate_model_impact(before.model_release, draft.model_release, grant_references={})
+        if model_impact.changed_model_keys:
+            model_impact = calculate_model_impact(
+                before.model_release, draft.model_release, grant_references=await self._state.grant_references()
+            )
         return await self.analyze_draft(
             action_impact=action_impact,
             model_impact=model_impact,

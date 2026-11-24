@@ -54,6 +54,8 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
     "edit": frozenset(
         {
             "knowledge_space",
+            "folder",
+            "knowledge_file",
             "knowledge_library",
             "workflow",
             "assistant",

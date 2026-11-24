@@ -2,6 +2,16 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## File/folder edit Catalog upgrade (beta2)
+
+Run `python scripts/upgrade_knowledge_edit_scopes.py plan` with the live service
+`config`. The default is read-only. Apply the returned digest with
+`apply --plan-digest DIGEST --operator-id USER_ID --idempotency-key KEY`, then
+run `verify`. Use the same key/operator with `resume --draft-id ID` after an
+interruption. It publishes the missing edit scopes through the existing Catalog
+publisher, preserving custom selections and resource grants; no schema rebuild.
+See [upgrade and recovery guide](../../../docs/upgrades/v3.1.0-beta2-knowledge-edit.md).
+
 ## Restore omitted Root model sharing
 
 Run from `src/backend` using the live service `config`. This tool recognizes the
