@@ -5,7 +5,7 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { ResizableTableHead, TruncatedTableCell } from "@/components/bs-ui/table/TruncatedTableCell"
 import { useResizableColumns, type ResizableColumnDef } from "@/components/bs-ui/table/useResizableColumns"
-import { TooltipProvider } from "@/components/bs-ui/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/bs-ui/tooltip"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import {
     deleteAbnormalUpload,
@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { failureReason } from "./remark"
 import UpdateTimeRange from "./UpdateTimeRange"
+import AbnormalPreviewDialog from "./AbnormalPreviewDialog"
 
 const COLUMN_DEFS: ResizableColumnDef[] = [
     { defaultWidth: 48, minWidth: 40 },
@@ -75,6 +76,7 @@ export default function AbnormalFilesTab() {
     const [rows, setRows] = useState<AbnormalUploadItem[]>([])
     const [loading, setLoading] = useState(true)
     const [busy, setBusy] = useState(false)
+    const [preview, setPreview] = useState<{ row: AbnormalUploadItem; trigger: HTMLButtonElement } | null>(null)
     const [selected, setSelected] = useState<Set<number>>(new Set())
     const [options, setOptions] = useState(EMPTY_OPTIONS)
 
@@ -312,6 +314,7 @@ export default function AbnormalFilesTab() {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
+        {preview && <AbnormalPreviewDialog key={preview.row.file_id} row={preview.row} trigger={preview.trigger} onClose={() => setPreview(null)} />}
         <div className="audit-pane-filters">
             <p className="mb-3 text-sm text-muted-foreground">{t("log.abnormalNote")}</p>
             <div className="mb-4 flex flex-wrap items-center gap-4">
@@ -455,7 +458,14 @@ export default function AbnormalFilesTab() {
                                         aria-label={row.file_name}
                                     />
                                 </TableCell>
-                                <TruncatedTableCell tdProps={rc.getTdProps(1)} text={row.file_name} />
+                                <TableCell {...rc.getTdProps(1)} className="overflow-hidden">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button type="button" aria-haspopup="dialog" className="block max-w-full truncate text-left text-primary hover:underline" onClick={(event) => setPreview({ row, trigger: event.currentTarget })}>{row.file_name}</button>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-lg break-all">{row.file_name}</TooltipContent>
+                                    </Tooltip>
+                                </TableCell>
                                 <TruncatedTableCell tdProps={rc.getTdProps(2)} text={row.knowledge_name} />
                                 <TruncatedTableCell tdProps={rc.getTdProps(3)} text={levelLabel(row.space_level)} />
                                 <TruncatedTableCell tdProps={rc.getTdProps(4)} text={statusLabel(row.status)} />
