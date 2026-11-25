@@ -16,8 +16,12 @@ let lastReport: string | undefined;
 
 const onDesktop = () => getClientEnvironment().channel === "desktop";
 
+/** Desktop hosts and the mobile app both draw the conversation list outside this document. */
+const reportsRunning = () =>
+  onDesktop() || getClientEnvironment().capabilities.hasHostChatHeader;
+
 function flush(force = false): void {
-  if (!onDesktop()) return;
+  if (!reportsRunning()) return;
   const ids = [...new Set([...activityByOwner.values()].flat())].sort().slice(0, MAX_REPORTED);
   const key = ids.join(",");
   if (!force && key === (lastReport ?? "")) return;
