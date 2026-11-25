@@ -658,7 +658,7 @@ class ToolServices(BaseModel):
             actor=await resolve_permission_actor(self.login_user),
         )
 
-        await GptsToolsDao.delete_tool_type(tool_type_id)
+        await GptsToolsDao.delete_tool_type(tool_type_id, tenant_id=exist_tool_type.tenant_id)
         await adapter.cleanup_deleted(record=record, actor=await resolve_permission_actor(self.login_user))
         await self.delete_tool_hook(self.request, self.login_user, exist_tool_type)
         return True

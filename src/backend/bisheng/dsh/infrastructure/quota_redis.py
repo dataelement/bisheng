@@ -9,6 +9,7 @@ from loguru import logger
 from redis.asyncio import ConnectionPool, Redis
 from redis.exceptions import RedisError
 
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig, validate_model_configs
 from bisheng.dsh.domain.schemas.usage import ToolUsageEvent, UsageEvent
 from bisheng.dsh.infrastructure.quota_topology import QuotaTopology
@@ -483,6 +484,42 @@ class QuotaRedis:
             raise QuotaRejected(result[1])
         return int(result[1]), int(result[2])
 
+    async def stage_tool_usage(self, event: ToolUsageEvent) -> None:
+        if event.tenant_id != get_current_tenant_id():
+            raise ValueError("Tool settlement requires a matching tenant scope")
+        base = f"{self.prefix}:{{{event.tenant_id}:{event.user_id}}}"
+        async with self.topology.lock:
+            await self.topology.check()
+            result = await self.redis.eval(
+                with_usage_schedule(self.script("stage_tool_usage.lua"), stream_key=2),
+                3,
+                base + ":tool_settlements",
+                base + ":events",
+                self.prefix + ":projection_work",
+                event.request_id,
+                event.model_dump_json(),
+            )
+        if result[0] != "OK":
+            raise QuotaRejected(result[1])
+
+    async def replay_tool_settlements(self, tenant_id: int, user_id: int) -> None:
+        if tenant_id != get_current_tenant_id() or user_id < 1:
+            raise ValueError("Tool settlement replay requires a matching tenant scope")
+        pending = f"{self.prefix}:{{{tenant_id}:{user_id}}}:tool_settlements"
+        async with self.topology.lock:
+            await self.topology.check()
+            # 读取一个有界批次后释放锁。结算时重新检查账本状态。
+            batch = []
+            async for request_id, payload in self.redis.hscan_iter(pending, count=100):
+                batch.append((request_id, payload))
+                if len(batch) == 100:
+                    break
+        for request_id, payload in batch:
+            event = ToolUsageEvent.model_validate_json(payload)
+            if (event.tenant_id, event.user_id, event.request_id) != (tenant_id, user_id, request_id):
+                raise ValueError("Tool settlement does not belong to its queue partition")
+            await self.record_tool_usage(event)
+
     async def record_tool_usage(self, event: ToolUsageEvent) -> ToolUsageEvent:
         await self.prepare(event.tenant_id, event.user_id, event.usage_month)
         base = f"{self.prefix}:{{{event.tenant_id}:{event.user_id}}}"
@@ -498,15 +535,24 @@ class QuotaRedis:
                     base + ":tools:" + effective.usage_month,
                     base + ":request:" + effective.request_id,
                     base + ":events",
+                    base + ":tool_settlements",
                     self.prefix + ":projection_work",
                 ]
+                # 沿用原计费代次判断幂等。额度策略变更后仍可重放。
+                recorded_epoch = await self.redis.hget(keys[3], "epoch")
+                identity_event = (
+                    effective
+                    if recorded_epoch is None
+                    else effective.model_copy(update={"quota_epoch": int(recorded_epoch)})
+                )
                 args = [
                     str(epoch),
                     str(effective.tool_id),
                     str(effective.billed_tokens),
                     effective.model_dump_json(),
                     effective.usage_month,
-                    self._identity(effective),
+                    self._identity(identity_event),
+                    effective.request_id,
                 ]
                 result = await self.redis.eval(source, len(keys), *keys, *args)
             except QuotaRejected:

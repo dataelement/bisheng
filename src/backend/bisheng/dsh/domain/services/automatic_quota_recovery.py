@@ -11,7 +11,12 @@ from loguru import logger
 
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.dsh.domain.schemas.unified_policy import MAX_TOKEN_LIMIT
-from bisheng.dsh.domain.schemas.usage import ToolUsageEvent, UsageEvent, parse_stream_usage_event, parse_usage_event_json
+from bisheng.dsh.domain.schemas.usage import (
+    ToolUsageEvent,
+    UsageEvent,
+    parse_stream_usage_event,
+    parse_usage_event_json,
+)
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.usage_work import with_usage_schedule
 
@@ -126,6 +131,8 @@ class AutomaticQuotaRecovery:
                             raise ValueError("Conflicting event kind during recovery")
                         if event.request_id in sql_only:
                             previous = self.restore_sql_timestamp(previous, event)
+                            # SQL 工具明细没有保存 Redis 账本代次。
+                            previous = previous.model_copy(update={"quota_epoch": event.quota_epoch})
                             inventory[event.request_id] = previous
                             sql_only.remove(event.request_id)
                         if self.quota._identity(previous) != self.quota._identity(event):
@@ -303,11 +310,17 @@ class AutomaticQuotaRecovery:
                                     "id": event.request_id,
                                     "event": event.model_dump_json(),
                                     "event_kind": "tool" if isinstance(event, ToolUsageEvent) else "model",
-                                    "billed_tokens": str(event.billed_tokens) if isinstance(event, ToolUsageEvent) else None,
+                                    **(
+                                        {"billed_tokens": str(event.billed_tokens)}
+                                        if isinstance(event, ToolUsageEvent)
+                                        else {}
+                                    ),
                                     "version": str(event.event_version),
                                     "status": event.status,
                                     "month": event.usage_month,
-                                    "model": str(event.tool_id if isinstance(event, ToolUsageEvent) else event.model_id),
+                                    "model": str(
+                                        event.tool_id if isinstance(event, ToolUsageEvent) else event.model_id
+                                    ),
                                     "epoch": str(event.quota_epoch),
                                     "identity": self.quota._identity(event),
                                     "started": str(int(event.started_at.timestamp() * 1000)),

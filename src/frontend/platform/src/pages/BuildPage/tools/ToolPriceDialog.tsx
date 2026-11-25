@@ -1,16 +1,9 @@
-import { Button, Input, Segmented, toast } from '@bisheng/ui'
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/bs-ui/dialog'
+import { Button, Input, Modal, Segmented, toast } from '@bisheng/ui'
 import type { CreditSettings, PricingCurrency } from '@/controllers/API/modelPricing'
 import { saveToolPricingApi, type ToolPricingItem, type ToolPricingMode } from '@/controllers/API/toolPricing'
 import { isValidPrice, priceMicro } from '@/pages/ModelPage/manage/modelPricing'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
+import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -122,23 +115,19 @@ export function ToolPriceDialog({
     onSaved,
     onConflict,
 }: ToolPriceDialogProps) {
+    if (!tool) return null
+
     return (
-        <Dialog open={!!tool} onOpenChange={(open) => { if (!open) onClose() }}>
-            <DialogContent className="w-[calc(100vw-48px)] max-w-[520px] gap-4 p-5">
-                {tool && (
-                    <ToolPriceEditor
-                        key={`${tool.id}-${item?.version ?? 0}`}
-                        tool={tool}
-                        item={item}
-                        creditSetting={creditSetting}
-                        tenantId={tenantId}
-                        onClose={onClose}
-                        onSaved={onSaved}
-                        onConflict={onConflict}
-                    />
-                )}
-            </DialogContent>
-        </Dialog>
+        <ToolPriceEditor
+            key={tool.id}
+            tool={tool}
+            item={item}
+            creditSetting={creditSetting}
+            tenantId={tenantId}
+            onClose={onClose}
+            onSaved={onSaved}
+            onConflict={onConflict}
+        />
     )
 }
 
@@ -169,11 +158,14 @@ function ToolPriceEditor({
     const [priceInput, setPriceInput] = useState<string>(item?.price ?? '0')
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [expectedVersion, setExpectedVersion] = useState(item?.version ?? 0)
+    const [waitingForRefresh, setWaitingForRefresh] = useState(false)
 
     const normalizedPrice = normalizeToolPrice(priceInput)
     const priceValid = isValidPrice(normalizedPrice)
     const callCountValid = isValidCallCount(callCountInput)
-    const canSubmit = priceValid && callCountValid && !saving
+    const latestVersion = item?.version ?? 0
+    const canSubmit = priceValid && callCountValid && !saving && (!waitingForRefresh || latestVersion > expectedVersion)
 
     const estimate = estimateToolCharge({
         pricingMode,
@@ -185,8 +177,11 @@ function ToolPriceEditor({
 
     const handleSave = async () => {
         if (!canSubmit) return
+        const version = waitingForRefresh ? latestVersion : expectedVersion
         setSaving(true)
         setError(null)
+        setExpectedVersion(version)
+        setWaitingForRefresh(false)
         try {
             const saved = await saveToolPricingApi(
                 tool.id,
@@ -195,7 +190,7 @@ function ToolPriceEditor({
                     currency: pricingMode === 'MONEY' ? currency : null,
                     price: normalizedPrice,
                     call_count: Number(callCountInput.trim()),
-                    version: item?.version ?? 0,
+                    version,
                 },
                 tenantId,
             )
@@ -210,6 +205,7 @@ function ToolPriceEditor({
                 errObj?.status_code === 26130
             if (isConflict) {
                 setError(t('pricing.conflict'))
+                setWaitingForRefresh(true)
                 onConflict?.()
             } else {
                 setError(t('pricing.saveFailed'))
@@ -220,15 +216,28 @@ function ToolPriceEditor({
     }
 
     return (
-        <>
-            <DialogHeader>
-                <DialogTitle>{t('pricing.title')} · {tool.name}</DialogTitle>
-                <DialogDescription>{t('pricing.dialogDesc')}</DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4">
-                <div className="space-y-1.5">
-                    <span className="text-sm font-medium">{t('pricing.mode')}</span>
+        <Modal
+            open
+            onOpenChange={(open) => { if (!open) onClose() }}
+            size="medium"
+            title={`${t('pricing.title')} · ${tool.name}`}
+            description={t('pricing.dialogDesc')}
+            closeLabel={t('close', { ns: 'bs' })}
+            submitting={saving}
+            footer={
+                <>
+                    <Button variant="outlined" color="default" disabled={saving} onClick={onClose}>
+                        {t('pricing.cancel')}
+                    </Button>
+                    <Button loading={saving} disabled={!canSubmit} onClick={() => void handleSave()}>
+                        {t(saving ? 'pricing.saving' : 'pricing.save')}
+                    </Button>
+                </>
+            }
+        >
+            <div className="space-y-4 py-1">
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[84px_1fr] sm:items-center sm:gap-3">
+                    <span className="text-xs font-medium text-muted-foreground">{t('pricing.mode')}</span>
                     <div>
                         <Segmented
                             aria-label={t('pricing.mode')}
@@ -247,8 +256,8 @@ function ToolPriceEditor({
                 </div>
 
                 {pricingMode === 'MONEY' && (
-                    <div className="space-y-1.5">
-                        <span className="text-sm font-medium">{t('pricing.currency')}</span>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[84px_1fr] sm:items-center sm:gap-3">
+                        <span className="text-xs font-medium text-muted-foreground">{t('pricing.currency')}</span>
                         <div>
                             <Segmented
                                 aria-label={t('pricing.currency')}
@@ -267,14 +276,16 @@ function ToolPriceEditor({
                     </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
-                    <label className="space-y-1">
-                        <span className="text-sm font-medium">{t('pricing.callCount')}</span>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5">
+                        <span className="text-xs font-medium text-muted-foreground">{t('pricing.callCount')}</span>
                         <Input
                             aria-label={t('pricing.callCount')}
+                            status={callCountValid ? 'default' : 'error'}
                             value={callCountInput}
                             disabled={saving}
                             placeholder="1"
+                            suffix={<span className="text-xs text-muted-foreground">{t('pricing.timesUnit')}</span>}
                             onChange={(event) => {
                                 setCallCountInput(event.target.value)
                                 setError(null)
@@ -285,15 +296,23 @@ function ToolPriceEditor({
                         </p>
                     </label>
 
-                    <label className="space-y-1">
-                        <span className="text-sm font-medium">
+                    <label className="space-y-1.5">
+                        <span className="text-xs font-medium text-muted-foreground">
                             {t('pricing.price')} ({pricingMode === 'MONEY' ? currency : t('pricing.creditsUnit')})
                         </span>
                         <Input
                             aria-label={t('pricing.price')}
+                            status={priceValid ? 'default' : 'error'}
                             value={priceInput}
                             disabled={saving}
                             placeholder="0"
+                            suffix={
+                                <span className="text-xs text-muted-foreground">
+                                    {pricingMode === 'MONEY'
+                                        ? t(currency === 'USD' ? 'pricing.unitUSD' : 'pricing.unitCNY')
+                                        : t('pricing.creditsUnit')}
+                                </span>
+                            }
                             onChange={(event) => {
                                 setPriceInput(event.target.value)
                                 setError(null)
@@ -308,31 +327,36 @@ function ToolPriceEditor({
                 </div>
 
                 {priceValid && callCountValid && (
-                    <p className="text-sm text-muted-foreground">
-                        {pricingMode === 'MONEY'
-                            ? t('pricing.estimatedCredits', { credits: estimate.estimatedCredits })
-                            : t('pricing.estimatedCost', {
-                                cost: `${currencySymbol(estimate.effectiveCurrency)}${estimate.estimatedCost ?? '0'}`,
-                                credits: estimate.estimatedCredits,
-                            })}
-                    </p>
+                    <div className="rounded-lg bg-muted/60 px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground">
+                        {estimate.estimatedCredits === '0' ? (
+                            <span>{t('pricing.freeHint')}</span>
+                        ) : (
+                            <span className="font-medium text-foreground/90">
+                                {pricingMode === 'MONEY'
+                                    ? t('pricing.estimatedCredits', { credits: estimate.estimatedCredits })
+                                    : t('pricing.estimatedCost', {
+                                        cost: `${currencySymbol(estimate.effectiveCurrency)}${estimate.estimatedCost ?? '0'}`,
+                                        credits: estimate.estimatedCredits,
+                                    })}
+                            </span>
+                        )}
+                    </div>
                 )}
 
                 {error && (
-                    <p role="alert" className="text-sm text-destructive">
-                        {error}
-                    </p>
+                    <div
+                        role="alert"
+                        className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
+                    >
+                        <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                        <span>{error}</span>
+                    </div>
                 )}
             </div>
 
-            <DialogFooter>
-                <Button variant="outlined" color="default" disabled={saving} onClick={onClose}>
-                    {t('pricing.cancel')}
-                </Button>
-                <Button loading={saving} disabled={!canSubmit} onClick={() => void handleSave()}>
-                    {t(saving ? 'pricing.saving' : 'pricing.save')}
-                </Button>
-            </DialogFooter>
-        </>
+            <p className="mt-3 border-t pt-3 text-xs leading-relaxed text-muted-foreground">
+                {t('pricing.billingNote')}
+            </p>
+        </Modal>
     )
 }

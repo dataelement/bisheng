@@ -28,6 +28,7 @@ from bisheng.dsh.domain.repositories.usage import DshUsageRepository
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.infrastructure.quota_redis import QuotaRedis, QuotaRejected
 from bisheng.user.domain.models.user import User
+from test.dsh.test_quota_admission import quota as quota
 
 LUA_DIR = Path(__file__).resolve().parents[2] / "bisheng/dsh/infrastructure/lua"
 
@@ -272,6 +273,73 @@ async def test_quota_redis_tool_methods_and_ledger_key_wiring():
         await quota.check_tool_quota(tenant_id=2, user_id=20, usage_month="2026-11")
 
 
+async def test_real_redis_rebuilds_a_month_with_both_model_and_tool_usage(quota, ledger_db):
+    from bisheng.dsh.domain.services.automatic_quota_recovery import AutomaticQuotaRecovery
+
+    @contextmanager
+    def scope():
+        with Session(ledger_db) as session, session.begin():
+            yield DshUsageRepository(session)
+
+    model = _model_event(billed_tokens=300)
+    tool = _tool_event(billed_tokens=700)
+    with scope() as repository:
+        repository.project_batch([model, tool])
+
+    recovery = AutomaticQuotaRecovery(quota, scope, billing_timezone="Asia/Shanghai")
+    await recovery.ensure(2, 20, tool.usage_month)
+    base = f"{quota.prefix}:{{2:20}}"
+    assert await recovery.healthy(base, tool.usage_month)
+    assert await quota.redis.hget(base + f":month:{tool.usage_month}", "used") == "1000"
+    assert await quota.redis.hget(base + f":tools:{tool.usage_month}", str(tool.tool_id)) == "700"
+
+
+@pytest.mark.parametrize("stream_error", ["wrong_type", "append_failed"])
+async def test_real_redis_retries_failed_tool_settlement_without_double_charging(quota, ledger_db, stream_error):
+    from bisheng.dsh.domain.services.projection import DshProjectionService
+    from bisheng.dsh.domain.services.usage_dispatch import UsageDispatcher
+
+    @contextmanager
+    def scope():
+        with Session(ledger_db) as session, session.begin():
+            yield DshUsageRepository(session)
+
+    tool = _tool_event(usage_month="2026-09", billed_tokens=700)
+    base = f"{quota.prefix}:{{2:20}}"
+    events = base + ":events"
+    total = base + f":month:{tool.usage_month}"
+    if stream_error == "wrong_type":
+        await quota.redis.set(events, "not a stream")
+    else:
+        await quota.redis.xadd(events, {"event": "placeholder"}, id="18446744073709551615-18446744073709551615")
+    projection = DshProjectionService(quota, scope, consumer="tool-retry")
+    dispatcher = UsageDispatcher(projection)
+    await dispatcher.work.mark(events)
+    claim = await dispatcher.work.claim()
+    await quota.stage_tool_usage(tool)
+    await dispatcher.work.finish(claim)
+    assert await quota.redis.zscore(dispatcher.work.ready, events) is not None
+    reason = "bad_event_stream_type" if stream_error == "wrong_type" else "event_append_failed"
+    with pytest.raises(QuotaRejected, match=reason):
+        await quota.record_tool_usage(tool)
+    assert await quota.redis.hget(total, "used") == "900"
+    assert await quota.redis.hget(base + ":gate", "write_in_progress") != "1"
+    with scope() as repository:
+        assert repository.session.get(DshToolCall, tool.request_id) is None
+    await quota.redis.zadd(dispatcher.work.ready, {events: 0})
+    assert await dispatcher.dispatch(max_users=1) == 0
+    assert await quota.redis.zscore(dispatcher.work.ready, events) is not None
+    await quota.redis.delete(events)
+    await quota.redis.zadd(dispatcher.work.ready, {events: 0})
+    assert await dispatcher.dispatch(max_users=1) == 1
+    await quota.record_tool_usage(tool)
+    assert await quota.redis.hget(total, "used") == "1600"
+    assert await quota.redis.xlen(events) == 1
+    with scope() as repository:
+        call = repository.session.get(DshToolCall, tool.request_id)
+        assert call is not None and call.billed_tokens == 700
+
+
 async def test_automatic_quota_recovery_healthy_and_rebuild_include_tools(ledger_db):
     from bisheng.dsh.domain.services.automatic_quota_recovery import AutomaticQuotaRecovery
 
@@ -354,16 +422,22 @@ async def test_automatic_quota_recovery_healthy_and_rebuild_include_tools(ledger
         base + ":month:2026-11": {"used": "1500", "epoch": "1", "state": "READY"},
         base + ":models:2026-11": {"_initialized": "1", "4": "1500"},
     }
-    assert await AutomaticQuotaRecovery(
-        QuotaRedis(_HealthyRedis(legacy_hashes), topo, prefix="dsh_quota"), scope, billing_timezone="Asia/Shanghai"
-    ).healthy(base, "2026-11") is True
+    assert (
+        await AutomaticQuotaRecovery(
+            QuotaRedis(_HealthyRedis(legacy_hashes), topo, prefix="dsh_quota"), scope, billing_timezone="Asia/Shanghai"
+        ).healthy(base, "2026-11")
+        is True
+    )
 
     # Mismatched tool sum returns False
     broken = dict(valid_hashes)
     broken[base + ":month:2026-11"] = {"used": "1500", "epoch": "1", "state": "READY"}
-    assert await AutomaticQuotaRecovery(
-        QuotaRedis(_HealthyRedis(broken), topo, prefix="dsh_quota"), scope, billing_timezone="Asia/Shanghai"
-    ).healthy(base, "2026-11") is False
+    assert (
+        await AutomaticQuotaRecovery(
+            QuotaRedis(_HealthyRedis(broken), topo, prefix="dsh_quota"), scope, billing_timezone="Asia/Shanghai"
+        ).healthy(base, "2026-11")
+        is False
+    )
 
     # ensure() rebuilds :month.used = model + tool, writes :models and :tools
     rebuilder = _HealthyRedis({})

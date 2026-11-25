@@ -96,9 +96,11 @@ describe('ToolPriceDialog & ToolItem unified pricing', () => {
         expect(saveBtn).toBeDisabled()
         expect(screen.getByText('pricing.priceInvalid')).toBeInTheDocument()
 
-        // Blank price treated as 0 and enabled
+        // Blank price treated as 0 and enabled, showing zero-price hint and billing note
         fireEvent.change(priceInput, { target: { value: '' } })
         expect(saveBtn).toBeEnabled()
+        expect(screen.getByText('pricing.freeHint')).toBeInTheDocument()
+        expect(screen.getByText('pricing.billingNote')).toBeInTheDocument()
 
         // Valid input saves
         fireEvent.change(priceInput, { target: { value: '0.02' } })
@@ -128,27 +130,26 @@ describe('ToolPriceDialog & ToolItem unified pricing', () => {
             Object.assign(new Error('conflict'), { statusCode: 26130, status_code: 26130 }),
         )
 
-        render(
-            <ToolPriceDialog
-                tool={{ id: 101, name: 'Web Fetch', tool_key: 'web_fetch' }}
-                item={{
-                    tool_id: 101,
-                    pricing_mode: 'CREDITS',
-                    currency: null,
-                    price: '5',
-                    price_micro: 5_000_000,
-                    call_count: 1,
-                    version: 3,
-                    estimated_credits: '5',
-                    estimated_cost: '0.05',
-                    effective_currency: 'CNY',
-                }}
-                creditSetting={CREDIT_SETTING}
-                onClose={vi.fn()}
-                onSaved={vi.fn()}
-                onConflict={onConflict}
-            />,
-        )
+        const item = {
+            tool_id: 101,
+            pricing_mode: 'CREDITS' as const,
+            currency: null,
+            price: '5',
+            price_micro: 5_000_000,
+            call_count: 1,
+            version: 3,
+            estimated_credits: '5',
+            estimated_cost: '0.05',
+            effective_currency: 'CNY' as const,
+        }
+        const props = {
+            tool: { id: 101, name: 'Web Fetch', tool_key: 'web_fetch' },
+            creditSetting: CREDIT_SETTING,
+            onClose: vi.fn(),
+            onSaved: vi.fn(),
+            onConflict,
+        }
+        const { rerender } = render(<ToolPriceDialog {...props} item={item} />)
 
         fireEvent.change(screen.getByLabelText(/pricing\.price/), { target: { value: '8' } })
         fireEvent.click(screen.getByRole('button', { name: 'pricing.save' }))
@@ -157,6 +158,16 @@ describe('ToolPriceDialog & ToolItem unified pricing', () => {
             expect(screen.getByRole('alert')).toHaveTextContent('pricing.conflict')
         })
         expect(onConflict).toHaveBeenCalledTimes(1)
+        expect(screen.getByRole('button', { name: 'pricing.save' })).toBeDisabled()
+
+        const refreshed = { ...item, version: 4, price: '6', price_micro: 6_000_000 }
+        rerender(<ToolPriceDialog {...props} item={refreshed} />)
+        expect(screen.getByRole('alert')).toHaveTextContent('pricing.conflict')
+        expect(screen.getByLabelText(/pricing\.price/)).toHaveValue('8')
+        vi.mocked(saveToolPricingApi).mockResolvedValueOnce({ ...refreshed, version: 5, price: '8' })
+        fireEvent.click(screen.getByRole('button', { name: 'pricing.save' }))
+        await waitFor(() => expect(props.onSaved).toHaveBeenCalledTimes(1))
+        expect(saveToolPricingApi).toHaveBeenLastCalledWith(101, expect.objectContaining({ price: '8', version: 4 }), undefined)
     })
 
     it('shows pricing column and gates set-price button by admin permission and master switch in ToolItem', () => {

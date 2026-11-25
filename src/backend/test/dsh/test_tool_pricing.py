@@ -144,7 +144,9 @@ def test_tool_pricing_repository_optimistic_lock_and_audit(pricing_db):
             value=ToolPricingInput(pricing_mode="CREDITS", price="2", call_count=1, version=1),
         )
         assert updated["version"] == 2
-        audits = list(session.scalars(select(UnifiedPolicyAudit).where(UnifiedPolicyAudit.resource == "tool_pricing:101")))
+        audits = list(
+            session.scalars(select(UnifiedPolicyAudit).where(UnifiedPolicyAudit.resource == "tool_pricing:101"))
+        )
         assert len(audits) == 2
 
 
@@ -156,7 +158,9 @@ async def test_tool_pricing_http_endpoints_permissions_and_conflict(monkeypatch,
     from bisheng.dsh.api.router import router
     from bisheng.main import handle_http_exception
 
-    app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, exception_handlers={BaseErrorCode: handle_http_exception})
+    app = FastAPI(
+        openapi_url=None, docs_url=None, redoc_url=None, exception_handlers={BaseErrorCode: handle_http_exception}
+    )
     app.include_router(router, prefix="/api/v1")
 
     state = SimpleNamespace(is_admin=True, allow_auth=True, tenant_id=1, user_id=7)
@@ -309,7 +313,9 @@ async def test_child_tenant_copy_and_tool_delete_sync(monkeypatch, pricing_db):
             )
         finally:
             current_tenant_id.reset(t_token)
-    await GptsToolsDao.delete_tool_type(30)
+    await GptsToolsDao.delete_tool_type(30, tenant_id=2)
     with bypass_tenant_filter(), Session(pricing_db) as s:
+        assert s.get(GptsToolsType, 30).is_delete == 1
+        assert s.get(GptsTools, 301).is_delete == 1
         assert s.exec(select(DshToolPricing).where(DshToolPricing.tool_id == 301)).first() is None
     await async_engine.dispose()

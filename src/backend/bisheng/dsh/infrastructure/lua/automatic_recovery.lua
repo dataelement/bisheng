@@ -26,7 +26,7 @@ elseif command=='events' then
     local key=KEYS[i+5]
     local event_kind=event.event_kind or 'model'
     redis.call('HSET',key,'event',event.event,'event_kind',event_kind,'version',event.version,'status',event.status,'month',event.month,'model',event.model,'epoch',event.epoch,'identity',event.identity)
-    if event.billed_tokens then redis.call('HSET',key,'billed_tokens',event.billed_tokens) end
+    if event_kind=='tool' then redis.call('HSET',key,'billed_tokens',event.billed_tokens) end
     local id=redis.call('XADD',KEYS[3],'*','event',event.event,'event_kind',event_kind)
     redis.call('HSET',key,'latest_stream_id',id)
     redis.call('HINCRBY',key,'retained_stream_count',1)

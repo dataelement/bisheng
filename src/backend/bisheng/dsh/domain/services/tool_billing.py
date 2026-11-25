@@ -9,6 +9,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from loguru import logger
+from redis.exceptions import RedisError
 
 from bisheng.common.errcode.dsh import (
     DshMonthlyTokenLimitExceededError,
@@ -71,7 +72,7 @@ def _load_tool_pricing_and_setting(session, *, tool_id: int) -> tuple[dict | Non
 
 
 async def _get_quota_store():
-    return await chat_credits._runtime()
+    return (await chat_credits.get_billing_runtime()).quota
 
 
 async def _read_user_monthly_limit(user_id: int) -> int | None:
@@ -113,11 +114,7 @@ async def prepare_tool_billing(
 
     if not settings.credit_billing.enabled:
         return None
-    unbilled = (
-        chat_credits.is_open_api_unbilled()
-        if open_api_unbilled_override is None
-        else open_api_unbilled_override
-    )
+    unbilled = chat_credits.is_open_api_unbilled() if open_api_unbilled_override is None else open_api_unbilled_override
     if unbilled:
         return None
     tenant_id = get_current_tenant_id()
@@ -221,20 +218,23 @@ async def settle_tool_billing(
         started_at=prepared.started_at,
         ended_at=datetime.now(UTC),
     )
+    quota = await _get_quota_store()
+    # 先持久化结算事件。工作进程可以用同一请求 ID 安全重试。
+    await quota.stage_tool_usage(event)
     try:
-        quota = await _get_quota_store()
         await quota.record_tool_usage(event)
-        logger.bind(
-            tenant_id=prepared.tenant_id,
-            user_id=prepared.user_id,
-            tool_id=prepared.tool_id,
-            billed_tokens=prepared.billed_tokens,
-            result=result,
-        ).info("tool_billing.recorded")
-    except Exception:
+    except (QuotaRejected, RedisError):
         logger.bind(
             tenant_id=prepared.tenant_id,
             user_id=prepared.user_id,
             tool_id=prepared.tool_id,
             request_id=prepared.request_id,
-        ).exception("tool_billing.record_failed")
+        ).exception("tool_billing.settlement_queued")
+        return
+    logger.bind(
+        tenant_id=prepared.tenant_id,
+        user_id=prepared.user_id,
+        tool_id=prepared.tool_id,
+        billed_tokens=prepared.billed_tokens,
+        result=result,
+    ).info("tool_billing.recorded")

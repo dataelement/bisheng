@@ -51,6 +51,17 @@ def is_open_api_unbilled() -> bool:
     return _open_api_unbilled.get()
 
 
+async def get_billing_runtime():
+    from bisheng.common.services.config_service import settings
+    from bisheng.dsh.runtime import get_model_runtime
+
+    loop = asyncio.get_running_loop()
+    runtime = _runtimes.setdefault(loop, SimpleNamespace(settings=settings.dsh))
+    service = await get_model_runtime(runtime)
+    await service.activate()
+    return service
+
+
 def governed(model) -> bool:
     """Return True when this model invocation must go through the credit ledger."""
     from bisheng.common.services.config_service import settings
@@ -94,7 +105,6 @@ async def start(model, *, mode: str = ""):
     from bisheng.dsh.domain.services.pricing import billing_snapshot
     from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
     from bisheng.dsh.runtime import (
-        get_model_runtime,
         read_credit_setting,
         read_ledger_policy,
         read_model_pricing,
@@ -125,10 +135,7 @@ async def start(model, *, mode: str = ""):
     # F016: read prices fresh (never from the cached model_info) and freeze them for this call.
     # A model without a usable price is billed as free (never refused).
     pricing = billing_snapshot(await read_model_pricing(model_id), await read_credit_setting(), model_id=model_id)
-    loop = asyncio.get_running_loop()
-    runtime = _runtimes.setdefault(loop, SimpleNamespace(settings=settings.dsh))
-    service = await get_model_runtime(runtime)
-    await service.activate()
+    service = await get_billing_runtime()
     if pricing.free or administrator:
         if mode == "probe":
             # Free/admin probes do not compare a personal allowance or write a call.
@@ -139,7 +146,9 @@ async def start(model, *, mode: str = ""):
     now = datetime.now(UTC)
     request_id = str(uuid4())
     source_type, source_id = current_billing_source()
-    app_type_val = getattr(model.app_type, "value", model.app_type) if getattr(model, "app_type", None) is not None else None
+    app_type_val = (
+        getattr(model.app_type, "value", model.app_type) if getattr(model, "app_type", None) is not None else None
+    )
     app_id_val = getattr(model, "app_id", None)
     event = UsageEvent(
         request_id=request_id,

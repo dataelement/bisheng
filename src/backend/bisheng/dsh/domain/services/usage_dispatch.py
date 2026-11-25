@@ -6,8 +6,10 @@ from time import monotonic
 from uuid import uuid4
 
 from loguru import logger
+from redis.exceptions import RedisError
 
 from bisheng.dsh.domain.services.profile import profile_scope
+from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.usage_work import UsageWorkQueue
 
 
@@ -32,7 +34,14 @@ class UsageDispatcher:
             stream = claim[0]
             tenant, user = self.partition(stream)
             try:
+                retry_tool_settlement = False
                 with profile_scope(tenant):
+                    try:
+                        await self.quota.replay_tool_settlements(tenant, user)
+                    except (QuotaRejected, RedisError):
+                        # 已持久化的工具结算继续重试。现有事件仍可投影。
+                        retry_tool_settlement = True
+                        logger.exception("DSH tool settlement pending tenant={} user={}", tenant, user)
                     count, more = await self.projection.drain_user(tenant, user)
                 async with self.quota.topology.lock:
                     await self.quota.topology.check()
@@ -42,6 +51,8 @@ class UsageDispatcher:
                     pending = next((g["pending"] for g in groups if g["name"] == self.projection.group), 0)
                 # Unknown lag never drives scheduling. Pending entries wait for reclaim eligibility.
                 delay = 2000 if more else max(2000, self.projection.claim_idle_ms) if pending else 0
+                if retry_tool_settlement:
+                    delay = min(delay, 30000) if delay else 30000
                 await self.work.finish(claim, retry_ms=delay)
                 events += count
             except Exception:
@@ -67,18 +78,22 @@ class UsageDispatcher:
                 next_cursor, streams = await redis.sscan(self.work.partitions, cursor, count=100)
             for stream in streams:
                 tenant, user = self.partition(stream)
+                base = stream.removesuffix(":events")
                 async with self.quota.topology.lock:
                     await self.quota.topology.check()
-                    if not await redis.exists(stream):
-                        continue
-                    groups = await redis.xinfo_groups(stream)
+                    pending_tool = await redis.exists(base + ":tool_settlements")
+                    is_stream = await redis.type(stream) == "stream"
+                    groups = await redis.xinfo_groups(stream) if is_stream else []
                     group = next((g for g in groups if g["name"] == self.projection.group), None)
-                    unread = group is None or bool(
-                        await redis.xrange(stream, min="(" + group["last-delivered-id"], max="+", count=1)
+                    unread = is_stream and (
+                        group is None
+                        or bool(await redis.xrange(stream, min="(" + group["last-delivered-id"], max="+", count=1))
                     )
-                    running = await redis.zcard(stream.removesuffix(":events") + ":running")
-                if unread or (group is not None and group["pending"]):
+                    running = await redis.zcard(base + ":running") if is_stream else 0
+                if pending_tool or unread or (group is not None and group["pending"]):
                     await self.work.mark(stream)
+                if not is_stream:
+                    continue
                 with profile_scope(tenant):
                     if running:
                         await self.projection.inspect_running(tenant, user, now=datetime.now(UTC), timeout_seconds=3600)

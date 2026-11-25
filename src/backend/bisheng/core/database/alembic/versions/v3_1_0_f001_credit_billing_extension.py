@@ -10,7 +10,7 @@ from bisheng.core.database.alembic_helpers.online import (
     table_exists,
     unique_constraint_exists,
 )
-from bisheng.core.database.dialect_helpers import JsonType, update_time_server_default
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, update_time_server_default
 
 revision = "v310_f001_credit_billing_extension"
 down_revision = "v310b2_merge_f016_pricing_memory_heads"
@@ -46,6 +46,7 @@ def _drop_unique(table: str, constraint: str) -> None:
 def _upgrade_tool_pricing(conn) -> None:
     if table_exists("dsh_tool_pricing"):
         return
+    update_default = UPDATE_TIME_SERVER_DEFAULT if conn.dialect.name == "sqlite" else update_time_server_default(conn)
     op.create_table(
         "dsh_tool_pricing",
         sa.Column("id", sa.BigInteger().with_variant(sa.Integer, "sqlite"), primary_key=True, autoincrement=True),
@@ -58,7 +59,7 @@ def _upgrade_tool_pricing(conn) -> None:
         sa.Column("version", sa.BigInteger(), nullable=False, server_default=sa.text("1")),
         sa.Column("updated_by", sa.BigInteger(), nullable=False),
         sa.Column("create_time", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
-        sa.Column("update_time", sa.DateTime(), nullable=False, server_default=update_time_server_default(conn)),
+        sa.Column("update_time", sa.DateTime(), nullable=False, server_default=update_default),
         sa.UniqueConstraint("tenant_id", "tool_id", name="uq_dsh_tool_pricing_tenant_tool"),
         sa.CheckConstraint("pricing_mode IN ('MONEY', 'CREDITS')", name="ck_dsh_tool_pricing_mode"),
         sa.CheckConstraint("currency IS NULL OR currency IN ('CNY', 'USD')", name="ck_dsh_tool_pricing_currency"),
@@ -180,7 +181,9 @@ def _downgrade_monthly_usage(conn) -> None:
     if not unique_constraint_exists("dsh_monthly_usage", _OLD_USAGE_UQ) and not index_exists(
         "dsh_monthly_usage", _OLD_USAGE_UQ
     ):
-        op.create_unique_constraint(_OLD_USAGE_UQ, "dsh_monthly_usage", ["tenant_id", "user_id", "usage_month", "model_id"])
+        op.create_unique_constraint(
+            _OLD_USAGE_UQ, "dsh_monthly_usage", ["tenant_id", "user_id", "usage_month", "model_id"]
+        )
     _drop_unique("dsh_monthly_usage", _NEW_USAGE_UQ)
     if column_exists("dsh_monthly_usage", "usage_type"):
         op.drop_column("dsh_monthly_usage", "usage_type")

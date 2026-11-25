@@ -19,7 +19,10 @@ from bisheng.tool.domain.services.executor import ToolExecutor
 def _make_tool_stub(*, app_type=ApplicationTypeEnum.DAILY_CHAT, run_fn=None, arun_fn=None, user_id=42, tool_id=101):
     return SimpleNamespace(
         _require_current_use=AsyncMock(
-            return_value=(SimpleNamespace(id=tool_id, type=10, tool_key="web_search"), SimpleNamespace(id=10, name="BuiltIn"))
+            return_value=(
+                SimpleNamespace(id=tool_id, type=10, tool_key="web_search"),
+                SimpleNamespace(id=10, name="BuiltIn"),
+            )
         ),
         tool_id=tool_id,
         tool_key="web_search",
@@ -41,6 +44,7 @@ def _make_tool_stub(*, app_type=ApplicationTypeEnum.DAILY_CHAT, run_fn=None, aru
 
 @pytest.fixture
 def patched_tool_env(monkeypatch):
+    from bisheng.dsh import runtime
     from bisheng.dsh.domain.services import tool_billing
 
     state = {
@@ -71,15 +75,29 @@ def patched_tool_env(monkeypatch):
         state["recorded_events"].append(event)
         return event
 
-    quota_mock = SimpleNamespace(check_tool_quota=_check_quota, record_tool_usage=_record_usage)
+    quota_mock = SimpleNamespace(
+        check_tool_quota=_check_quota,
+        stage_tool_usage=AsyncMock(),
+        record_tool_usage=_record_usage,
+    )
     monkeypatch.setattr(tool_billing, "_session_scope", _mock_scope)
     monkeypatch.setattr(tool_billing, "_load_tool_pricing_and_setting", _read_config)
-    monkeypatch.setattr(tool_billing, "_get_quota_store", AsyncMock(return_value=quota_mock))
+    monkeypatch.setattr(
+        runtime, "get_model_runtime", AsyncMock(return_value=SimpleNamespace(activate=AsyncMock(), quota=quota_mock))
+    )
     monkeypatch.setattr(tool_billing, "_read_user_monthly_limit", AsyncMock(return_value=10_000))
 
     avail = SimpleNamespace(
-        ensure_enabled=AsyncMock(side_effect=lambda *a, **k: (_ for _ in ()).throw(state["ensure_enabled_err"]) if state["ensure_enabled_err"] else None),
-        ensure_enabled_sync=Mock(side_effect=lambda *a, **k: (_ for _ in ()).throw(state["ensure_enabled_err"]) if state["ensure_enabled_err"] else None),
+        ensure_enabled=AsyncMock(
+            side_effect=lambda *a, **k: (
+                (_ for _ in ()).throw(state["ensure_enabled_err"]) if state["ensure_enabled_err"] else None
+            )
+        ),
+        ensure_enabled_sync=Mock(
+            side_effect=lambda *a, **k: (
+                (_ for _ in ()).throw(state["ensure_enabled_err"]) if state["ensure_enabled_err"] else None
+            )
+        ),
     )
     monkeypatch.setattr("bisheng.tool.domain.services.executor.UserToolAvailabilityService", lambda *a, **k: avail)
 
@@ -123,10 +141,21 @@ async def test_non_task_paid_tool_blocks_on_quota_exhausted_and_charges_on_allow
 
     # Allowed (used < limit, slight overdraft allowed) -> executes & bills
     patched_tool_env["quota_reject"] = None
-    patched_tool_env["pricing"] = {"pricing_mode": "CREDITS", "currency": None, "price_micro": 2_000_000, "call_count": 1}
+    patched_tool_env["pricing"] = {
+        "pricing_mode": "CREDITS",
+        "currency": None,
+        "price_micro": 2_000_000,
+        "call_count": 1,
+    }
+
     # Simulate price changing during tool execution — must bill with frozen start snapshot (2 credits)!
     async def _run_and_mutate_price(*args, **kwargs):
-        patched_tool_env["pricing"] = {"pricing_mode": "CREDITS", "currency": None, "price_micro": 9_000_000, "call_count": 1}
+        patched_tool_env["pricing"] = {
+            "pricing_mode": "CREDITS",
+            "currency": None,
+            "price_micro": 9_000_000,
+            "call_count": 1,
+        }
         return "workflow-ok"
 
     tool.tool_instance._arun = AsyncMock(side_effect=_run_and_mutate_price)
