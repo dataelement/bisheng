@@ -1414,7 +1414,7 @@ class DirectRunner:
         """Same rule as deep research: one quota check when the run starts (AC-37)."""
         from bisheng.common.services.config_service import settings
 
-        if not settings.dsh.enabled:
+        if not settings.credit_billing.enabled:
             return
         from bisheng.dsh.domain.services.chat_credits import admit_round
         from bisheng.linsight.domain.services import agent_factory

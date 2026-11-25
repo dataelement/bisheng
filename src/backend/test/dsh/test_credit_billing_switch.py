@@ -175,3 +175,28 @@ def test_worker_beat_keeps_dsh_projection_and_recovery_when_billing_off(monkeypa
     finally:
         monkeypatch.setattr(settings.credit_billing, "enabled", True)
         importlib.reload(worker_config)
+
+
+async def test_direct_runner_default_admit_uses_credit_billing_switch(monkeypatch):
+    from bisheng.common.services.config_service import settings
+    from bisheng.dsh.domain.services import chat_credits
+    from bisheng.linsight.domain.services import agent_factory
+    from bisheng.workstation.domain.services.direct_run import DirectRunContext, DirectRunner
+
+    runner = object.__new__(DirectRunner)
+    ctx = DirectRunContext(conversation_id="c1", run_id="r1", tenant_id=1, user_id=2, model_id=10)
+    fake_model = SimpleNamespace(id=10)
+    resolve_mock = AsyncMock(return_value=(fake_model, None))
+    admit_mock = AsyncMock()
+    monkeypatch.setattr(agent_factory, "_resolve_model", resolve_mock)
+    monkeypatch.setattr(chat_credits, "admit_round", admit_mock)
+
+    monkeypatch.setattr(settings.credit_billing, "enabled", False)
+    await runner._default_admit(ctx)
+    resolve_mock.assert_not_awaited()
+    admit_mock.assert_not_awaited()
+
+    monkeypatch.setattr(settings.credit_billing, "enabled", True)
+    await runner._default_admit(ctx)
+    resolve_mock.assert_awaited_once()
+    admit_mock.assert_awaited_once_with(fake_model)
