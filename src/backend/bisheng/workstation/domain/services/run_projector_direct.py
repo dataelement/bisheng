@@ -430,6 +430,9 @@ class DirectRunProjector:
         idx = self._inflight_tools.pop(call_id, None)
         if idx is not None:
             entry = self.events[idx]
+            # Streamed args are complete only at the end frame; the start frame had none.
+            if not entry.get("args") and data.get("params"):
+                entry["args"] = redact_args(name, data["params"])
             entry["results"] = results
             entry["error"] = error
             entry["ended_at"] = now_ms
@@ -442,7 +445,7 @@ class DirectRunProjector:
                 "tool_name": name,
                 "display_name": extra_info.get("display_name") or name,
                 "tool_type": extra_info.get("tool_type") or "tool",
-                "args": {},
+                "args": redact_args(name, data.get("params") or {}),
                 "results": results,
                 "error": error,
                 "started_at": now_ms,

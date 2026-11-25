@@ -55,6 +55,21 @@ describe('mergeWorkspaceFiles', () => {
     it('appends live files after the history files', () => {
         expect(mergeWorkspaceFiles(known, [live()]).map((f) => f.file_id)).toEqual(['h1', 'f1']);
     });
+    it('keeps the answer row copy when a replayed live file has its workspace id', () => {
+        // The answer row stores its own copy (`file_id`) and the event id in
+        // `workspace_file_id`; the finished run's events are replayed on load.
+        const stored: ArtifactFile[] = [
+            {
+                file_id: 'copy-1',
+                file_name: 'report.md',
+                file_url: 'chat/3/answers/r1/live-1.md',
+                directUrl: 'chat/3/answers/r1/live-1.md',
+                workspaceFileId: 'live-1',
+            },
+        ];
+        const merged = mergeWorkspaceFiles(stored, [live({ file_id: 'live-1', path: 'output/report.md' })], 'c1');
+        expect(merged).toBe(stored);
+    });
     it('keeps the history entry when the ids match', () => {
         const merged = mergeWorkspaceFiles(known, [live({ file_id: 'h1', name: 'renamed.md' })]);
         expect(merged).toBe(known);

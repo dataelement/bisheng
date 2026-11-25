@@ -640,10 +640,13 @@ class TenantService:
         ``TenantResolver`` so v2.5.0 ``aadd_users`` residue rows do not
         surface as phantom members. Return shape unchanged.
         """
+        import asyncio
+
         from fastapi import HTTPException
 
         from bisheng.common.subject_search import normalize_keyword
         from bisheng.tenant.domain.repositories.management_search_repository import ManagementSearchRepository
+        from bisheng.user.domain.services.user import UserService
 
         try:
             keyword = normalize_keyword(keyword or "")
@@ -655,6 +658,10 @@ class TenantService:
             page_size=page_size,
             keyword=keyword,
         )
+        # User rows store object names; expose the same display links as the user list.
+        avatar_urls = await asyncio.gather(*[UserService.get_avatar_share_link(user.get("avatar")) for user in users])
+        for user, avatar_url in zip(users, avatar_urls, strict=True):
+            user["avatar"] = avatar_url
         return {"data": users, "total": total}
 
     # ── User-facing: tenant selection & switching ──────────────

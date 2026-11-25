@@ -69,8 +69,9 @@ function pathKeys(file: ArtifactFile): string[] {
 
 /**
  * The live files that `known` does not have yet. A live file is the same file as
- * a known one when the ids match, else when the paths match; the known entry
- * wins because it carries the stored address.
+ * a known one when its id is the known entry's `file_id` or `workspaceFileId`
+ * (an answer row's own copy keeps the event id there), else when the paths
+ * match; the known entry wins because it carries the stored address.
  */
 export function newLiveArtifacts(
     known: ArtifactFile[],
@@ -78,7 +79,7 @@ export function newLiveArtifacts(
     conversationId?: string,
 ): ArtifactFile[] {
     if (!live?.length) return NO_ARTIFACTS;
-    const ids = new Set(known.map((f) => f.file_id).filter(Boolean));
+    const ids = new Set(known.flatMap((f) => [f.file_id, f.workspaceFileId]).filter(Boolean));
     const paths = new Set(known.flatMap(pathKeys));
     const added: ArtifactFile[] = [];
     for (const event of live) {
