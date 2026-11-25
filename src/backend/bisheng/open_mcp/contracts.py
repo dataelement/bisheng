@@ -412,6 +412,42 @@ class FileListData(McpContract):
     writeable: bool = Field(description="当前身份是否可向本次查询的目录上传文件。")
 
 
+class AnswerSpaceFilter(McpContract):
+    knowledge_base_id: int = Field(gt=0)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AnswerFilters(McpContract):
+    knowledge_base_filters: list[AnswerSpaceFilter] = Field(default_factory=list, max_length=20)
+
+
+class KnowledgeAnswerInput(McpContract):
+    query: str = Field(min_length=1, max_length=4096)
+    knowledge_base_ids: list[int] = Field(min_length=1, max_length=20, description="仅支持知识空间。")
+    model_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="作答用的文本模型 ID; 不传则使用服务端配置的默认模型, 调用方通常不需要传。",
+    )
+    filters: AnswerFilters | None = None
+    top_k: int = Field(default=10, ge=1, le=50)
+    max_content: int = Field(default=15000, ge=1, le=60000)
+
+
+class AnswerReference(McpContract):
+    knowledge_id: int = Field(description="参考文件所属知识空间 ID。")
+    document_id: int = Field(description="参考文件 ID。")
+    document_name: str = Field(description="参考文件名称。")
+    document_update_time: str = Field(default="", description="文件最后更新时间; 不可用时为空字符串。")
+
+
+class KnowledgeAnswerData(McpContract):
+    answer: str = Field(description="由服务端模型基于检索结果生成的答案。")
+    has_context: bool = Field(description="是否检索到可用上下文; false 时答案不是依据知识库生成。")
+    model_id: int = Field(description="实际使用的模型 ID。")
+    references: list[AnswerReference] = Field(description="答案依据的参考文件, 粒度为文件, 不含段序号。")
+
+
 MCP_INPUT_MODELS = {
     "bisheng_knowledge_list": KnowledgeListInput,
     "bisheng_knowledge_create": KnowledgeCreateInput,
@@ -423,6 +459,7 @@ MCP_INPUT_MODELS = {
     "bisheng_knowledge_file_list": KnowledgeFileListInput,
     "bisheng_knowledge_file_delete": KnowledgeFileDeleteInput,
     "bisheng_knowledge_files_delete": KnowledgeFilesDeleteInput,
+    "bisheng_knowledge_answer": KnowledgeAnswerInput,
 }
 
 
@@ -432,6 +469,7 @@ __all__ = [
     "FileListData",
     "FileRecord",
     "KnowledgeResource",
+    "KnowledgeAnswerData",
     "OperationResult",
     "ResourceListData",
     "RetrieveData",

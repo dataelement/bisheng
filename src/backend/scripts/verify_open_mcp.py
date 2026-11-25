@@ -43,6 +43,7 @@ EXPECTED_TOOL_NAMES = frozenset(
         "bisheng_knowledge_file_list",
         "bisheng_knowledge_file_delete",
         "bisheng_knowledge_files_delete",
+        "bisheng_knowledge_answer",
     }
 )
 READ_ONLY_TOOL_NAMES = frozenset(

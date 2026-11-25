@@ -1,7 +1,7 @@
 # Open MCP 接入指南
 
 F067 在每个 BISHENG 部署上提供一个统一的远程 MCP 服务，本期仅暴露
-10 个知识资源和知识文件工具。MCP 的 JSON 合同由 MCP 层适配，不会修改
+11 个知识资源、知识文件和服务端作答工具。MCP 的 JSON 合同由 MCP 层适配，不会修改
 对应的 `/api/v2/filelib/` HTTP API 入参、出参、错误信封或业务逻辑。
 
 ## Endpoint 与协议
@@ -32,7 +32,7 @@ scope、租户、数据范围和资源权限判定。`tools/list` 只返回当�
 `X-On-Behalf-Of` 同时使用。`Authorization`、`X-On-Behalf-Of`、`X-End-User`、
 `user_id` 和 `tenant_id` 都不属于工具 arguments，不得由模型在工具参数中指定。
 
-## 10 个工具
+## 11 个工具
 
 | 工具 | scope | PAT | 主要输入 | 成功输出 |
 |---|---|---:|---|---|
@@ -46,6 +46,7 @@ scope、租户、数据范围和资源权限判定。`tools/list` 只返回当�
 | `bisheng_knowledge_file_list` | `knowledge:read` | 是 | `knowledge_id`, `parent_id?`, `keyword?`, `status?`, `page_size?`, `cursor?` | `FileListData` |
 | `bisheng_knowledge_file_delete` | `knowledge:write` | 否 | `file_id` | `{"success":true}` |
 | `bisheng_knowledge_files_delete` | `knowledge:write` | 否 | `file_ids` | `{"success":true}` |
+| `bisheng_knowledge_answer` | `knowledge:read` | 否 | `query`, `knowledge_base_ids`, `model_id?`, `filters?`, `top_k?`, `max_content?` | `KnowledgeAnswerData` |
 
 完整的字段类型、枚举、默认值、上限和 `inputSchema` / `outputSchema` 由
 `tools/list` 返回。每个成功输出字段都在 `outputSchema` 中带有 `description`，说明其
@@ -201,7 +202,7 @@ export BISHENG_API_KEY='<full-scope-api-key>'
 ```
 
 脚本会完成 `initialize` 和 `tools/list`，输出服务端信息、协议版本和当前可见工具，
-并按 `--expected-profile full` 对 10 个工具做双向差集；任一工具缺失或多出都会失败。
+并按 `--expected-profile full` 对 11 个工具做双向差集；任一工具缺失或多出都会失败。
 脚本不会输出凭据。
 
 可选执行只读 smoke call：

@@ -7,9 +7,11 @@ from typing import Any
 from pydantic import BaseModel
 
 from bisheng.open_mcp.contracts import (
+    AnswerReference,
     FileItem,
     FileListData,
     FileRecord,
+    KnowledgeAnswerData,
     KnowledgeResource,
     ResourceListData,
     RetrieveData,
@@ -72,7 +74,14 @@ def map_file_list_to_mcp(value: Any) -> FileListData:
     )
 
 
+def map_answer_to_mcp(value: Any) -> KnowledgeAnswerData:
+    data = _explicit_fields(KnowledgeAnswerData, value)
+    data["references"] = [_explicit_fields(AnswerReference, item) for item in data.get("references", [])]
+    return KnowledgeAnswerData.model_validate(data)
+
+
 __all__ = [
+    "map_answer_to_mcp",
     "map_file_item_to_mcp",
     "map_file_list_to_mcp",
     "map_file_record_to_mcp",

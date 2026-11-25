@@ -184,6 +184,19 @@ TOOL_DEFINITIONS = (
         contracts.OperationResult,
         _annotations(read_only=False, destructive=True, idempotent=True),
     ),
+    McpToolDefinition(
+        "bisheng_knowledge_answer",
+        "服务端检索并作答",
+        "在知识空间中检索并由服务端模型生成答案和参考文件, 仅支持知识空间; 需要核对原文或跨文档综合时改用检索工具。",
+        "POST",
+        "/api/v2/filelib/answer",
+        "knowledge:read",
+        frozenset({"S", "D"}),
+        False,
+        contracts.KnowledgeAnswerInput,
+        contracts.KnowledgeAnswerData,
+        _annotations(read_only=True, destructive=False, idempotent=False, open_world=True),
+    ),
 )
 
 TOOL_REGISTRY = {definition.name: definition for definition in TOOL_DEFINITIONS}

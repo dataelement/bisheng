@@ -12,6 +12,7 @@ EXPECTED_SOURCES = {
     ("GET", "/api/v2/filelib/file/list"),
     ("DELETE", "/api/v2/filelib/file/{file_id}"),
     ("POST", "/api/v2/filelib/delete_file"),
+    ("POST", "/api/v2/filelib/answer"),
 }
 
 
@@ -31,8 +32,8 @@ def _principal(*, actor_kind="service_account", scopes=frozenset({"knowledge:rea
     )
 
 
-def test_allowlist_is_exactly_ten_and_bidirectional():
-    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 10
+def test_allowlist_is_exactly_eleven_and_bidirectional():
+    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 11
     assert SOURCE_ALLOWLIST == EXPECTED_SOURCES
 
 
