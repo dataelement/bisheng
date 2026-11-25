@@ -65,7 +65,7 @@ def create_inventory(metadata, *, platform, release, source_revision, published,
         tools = (
             {
                 "python-abi": "3.11",
-                "runtime-package": "3.0.0",
+                "runtime-package": "3.1.0-beta2",
                 "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
             }
             if name in {"runtime-helper", "runtime-assembler"}
