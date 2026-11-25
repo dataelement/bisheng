@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgePermissionService,
 )
 from bisheng.knowledge.rag.elasticsearch_factory import ElasticsearchFactory
+from bisheng.knowledge.rag.es_phrase_strategy import AsyncPhraseBoostBM25Strategy, PhraseBoostBM25Strategy
 from bisheng.knowledge.rag.milvus_factory import MilvusFactory
 from bisheng.llm.domain import LLMService
 from bisheng.resource_reference.application.contracts import canonical_target_id
@@ -542,10 +543,10 @@ class KnowledgeRag:
 
     @classmethod
     def init_es_vectorstore(cls, index_name: str, **kwargs) -> AsyncElasticsearchStore:
-        """init es vectorstore by index name"""
-        return ElasticsearchFactory.init_vectorstore(index_name, **kwargs)
+        """init es vectorstore by index name; searches rank whole query words first (es_phrase_strategy.py)"""
+        return ElasticsearchFactory.init_vectorstore(index_name, strategy=AsyncPhraseBoostBM25Strategy(), **kwargs)
 
     @classmethod
     def init_es_vectorstore_sync(cls, index_name: str, **kwargs) -> ElasticsearchStore:
-        """init es vectorstore by index name"""
-        return ElasticsearchFactory.init_vectorstore_sync(index_name, **kwargs)
+        """init es vectorstore by index name; searches rank whole query words first (es_phrase_strategy.py)"""
+        return ElasticsearchFactory.init_vectorstore_sync(index_name, strategy=PhraseBoostBM25Strategy(), **kwargs)

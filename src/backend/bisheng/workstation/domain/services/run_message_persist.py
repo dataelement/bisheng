@@ -16,7 +16,8 @@ worker), so nothing here lives in process memory (C8):
    closed by whoever notices the lapsed lease (``persist_expired_direct_answer``);
    a run parked on a question is closed by the stop request
    (``persist_stopped_direct_answer``). The last two rebuild the row from the
-   accumulated text in the Redis snapshot.
+   answer events kept at the last park (``parked_answer``) and the accumulated
+   text in the Redis snapshot.
 
 3. **Who a direct run answers for.** ``remember_direct_run`` keeps the few
    values such a row needs (user, model display name, model id, tenant).
@@ -41,11 +42,17 @@ Redis contract (same hash tag ``{<cid>}`` as every key of the conversation)
 
 ``bisheng:run:direct:{<cid>}`` -- HASH of the conversation's latest direct run:
     ``run_id user_id tenant_id sender model_id``, plus ``answer_saved`` once a
-    row was written here for that run (so two recoveries write one row).
+    row was written here for that run (so two recoveries write one row), plus
+    ``parked_answer`` (JSON ``{"msg", "events"}``) once the run asked the user:
+    the answer row as the parking execution had it, written once per question
+    by that execution's projector (``save_parked_answer``). The execution that
+    resumes the run starts its projector from it (``seed_parked_answer``) and
+    keeps it on the hash (``remember_direct_run(parked_answer=...)``).
 """
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -59,6 +66,7 @@ STEER_KEY_PREFIX = "bisheng:run:steer:"
 RELAY_READ_KEY_PREFIX = "bisheng:run:relay_read:"
 DIRECT_RUN_KEY_PREFIX = "bisheng:run:direct:"
 KEY_TTL_SECONDS = STATE_TTL_SECONDS
+PARKED_ANSWER_FIELD = "parked_answer"
 READ_MARK = "read"
 DISCARD_MARK = "discarded"
 # How many of the newest rows are checked for an answer row of the same run.
@@ -281,24 +289,36 @@ async def remember_direct_run(
     sender: str,
     model_id: Any = None,
     storage_partition: str | None = None,
+    parked_answer: str | None = None,
 ) -> None:
-    """``storage_partition``: the caller's file partition (Open API); empty = the user's own."""
+    """``storage_partition``: the caller's file partition (Open API); empty = the user's own.
+
+    ``parked_answer``: the raw ``parked_answer`` of the run, kept by a resumed
+    execution (``parked_answer_raw``); the hash is rewritten otherwise.
+    """
     key = direct_run_key(conversation_id)
+    mapping = {
+        "run_id": run_id,
+        "user_id": str(user_id),
+        "tenant_id": str(tenant_id or ""),
+        "sender": sender or "",
+        "model_id": "" if model_id is None else str(model_id),
+        "storage_partition": storage_partition or "",
+    }
+    if parked_answer:
+        mapping[PARKED_ANSWER_FIELD] = parked_answer
     async with redis.pipeline(transaction=True) as pipe:
         pipe.delete(key)
-        pipe.hset(
-            key,
-            mapping={
-                "run_id": run_id,
-                "user_id": str(user_id),
-                "tenant_id": str(tenant_id or ""),
-                "sender": sender or "",
-                "model_id": "" if model_id is None else str(model_id),
-                "storage_partition": storage_partition or "",
-            },
-        )
-        pipe.expire(key, KEY_TTL_SECONDS)
+        pipe.hset(key, mapping=mapping)
+        pipe.expire(key, _parked_ttl() if parked_answer else KEY_TTL_SECONDS)
         await pipe.execute()
+
+
+def _parked_ttl() -> int:
+    """At least as long as the parked run's event stream lives (design §5 #26)."""
+    from bisheng.linsight.domain.services.run_event_stream import PARKED_TTL_SECONDS
+
+    return max(KEY_TTL_SECONDS, PARKED_TTL_SECONDS)
 
 
 async def direct_run_info(redis: Any, conversation_id: str) -> dict | None:
@@ -351,8 +371,170 @@ async def relay_run_hooks(item: dict, *, redis: Any = None) -> tuple[list[EventH
         user_id=int(item["user_id"]),
         sender=sender,
         storage_partition=previous.get("storage_partition"),
+        on_parked=lambda state: save_parked_answer(redis, conversation_id, run_id, state),
     )
     return [projector.on_event, steer_read_hook(conversation_id, redis=redis)], model_id
+
+
+# --------------------------------------------------------------------------- #
+# Direct run: questions the user answered
+# --------------------------------------------------------------------------- #
+
+ASK_USER_TOOL_NAME = "ask_user"
+# ``extra`` key of the question row that answers a question of a run.
+ASKED_QUESTION_KEY = "ask_user"
+
+
+def answer_extra(run_id: str, pending_question: dict | None) -> dict:
+    """``extra`` of the question row that answers the parked question of ``run_id``.
+
+    The row keeps the question, so the answer row can show the question and its
+    answer in place and the history can leave the row out of the message list.
+    """
+    return {"run_id": run_id, ASKED_QUESTION_KEY: dict(pending_question or {})}
+
+
+def asked_question_event(question: dict, answer: str) -> dict:
+    """One answered ``ask_user`` as the answer row stores a tool call."""
+    return {
+        "type": "tool_call",
+        "tool_call_id": str(question.get("call_id") or ""),
+        "tool_name": ASK_USER_TOOL_NAME,
+        "display_name": ASK_USER_TOOL_NAME,
+        "tool_type": "tool",
+        "args": question,
+        "results": answer,
+        "error": None,
+    }
+
+
+async def answered_question_events(conversation_id: str, run_id: str) -> list[dict]:
+    """The answered questions of ``run_id``, oldest first, as stored tool calls.
+
+    Read from the question rows marked by ``answer_extra``: a run that asks more
+    than once keeps every question and answer on its single answer row.
+    """
+    from bisheng.database.models.message import ChatMessageDao
+
+    events = []
+    for row in await ChatMessageDao.aget_messages_by_chat_id(conversation_id, limit=RECENT_ROWS):
+        if row.is_bot or not row.extra:
+            continue
+        try:
+            extra = json.loads(row.extra)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(extra, dict) or extra.get("run_id") != run_id:
+            continue
+        question = extra.get(ASKED_QUESTION_KEY)
+        if not isinstance(question, dict):
+            continue
+        events.append(asked_question_event(question, _question_text(row.message)))
+    return events
+
+
+async def save_parked_answer(redis: Any, conversation_id: str, run_id: str, state: dict) -> bool:
+    """Keep the answer row of ``run_id`` as it is when the run parks (``DirectRunProjector.parked_state``).
+
+    Written once per question, by the projector of the execution that asked, in
+    whichever process it runs; the answer may reach another process. Returns
+    False when the hash belongs to another run (nothing is written).
+    """
+    key = direct_run_key(conversation_id)
+    if _s(await redis.hget(key, "run_id")) != run_id:
+        logger.warning(
+            "direct run={} conversation={} parked, but the direct-run record names another run; "
+            "its answer events are not kept",
+            run_id,
+            conversation_id,
+        )
+        return False
+    await redis.hset(key, PARKED_ANSWER_FIELD, json.dumps(state, ensure_ascii=False))
+    await redis.expire(key, _parked_ttl())
+    return True
+
+
+async def parked_answer_raw(redis: Any, conversation_id: str, run_id: str) -> str | None:
+    """The ``parked_answer`` of ``run_id`` as stored, or None."""
+    key = direct_run_key(conversation_id)
+    run_field, raw = await redis.hmget(key, ["run_id", PARKED_ANSWER_FIELD])
+    if _s(run_field) != run_id or not raw:
+        return None
+    return _s(raw)
+
+
+async def seed_parked_answer(projector: Any, conversation_id: str, run_id: str, text: str, raw: str | None) -> None:
+    """Start ``projector`` from what the run showed before it parked.
+
+    ``text`` is the run's accumulated text in the snapshot. With a kept
+    ``parked_answer`` (``raw``) the row keeps the thinking, tool calls and text
+    before each question, and each question gets the answer of its question row
+    in place; a question nobody answered (the run was stopped while parked) is
+    left out, as before. Text the run wrote after its last park is appended.
+    Without one (a run parked before the upgrade, or the save failed) the row
+    is the text followed by the answered questions.
+    """
+    answered = await answered_question_events(conversation_id, run_id)
+    state = _load_parked(raw, run_id)
+    if state is None:
+        if text:
+            projector.final_msg = text
+            projector.events.append({"type": "text", "content": text})
+        projector.events.extend(answered)
+        return
+
+    answers = {event["tool_call_id"]: event for event in answered}
+    events = []
+    for entry in state["events"]:
+        if entry.get("type") == "tool_call" and entry.get("tool_name") == ASK_USER_TOOL_NAME and "results" not in entry:
+            answer = answers.get(str(entry.get("tool_call_id") or ""))
+            if answer is None:
+                continue
+            entry = {**entry, **answer}
+        events.append(entry)
+
+    msg = state["msg"]
+    tail = ""
+    if text.startswith(msg):
+        tail = text[len(msg) :]
+    elif text:
+        logger.warning(
+            "direct run={} conversation={}: the kept answer text is not a prefix of the snapshot text; "
+            "the row keeps the kept events and the snapshot text as its message",
+            run_id,
+            conversation_id,
+        )
+    if tail:
+        if events and events[-1].get("type") == "text":
+            events[-1] = {**events[-1], "content": events[-1].get("content", "") + tail}
+        else:
+            events.append({"type": "text", "content": tail})
+    projector.seed_events(events, text or msg)
+
+
+def _load_parked(raw: str | None, run_id: str) -> dict | None:
+    if not raw:
+        return None
+    try:
+        state = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("direct run={}: the kept answer events are not JSON; ignored", run_id)
+        return None
+    if not isinstance(state, dict) or not isinstance(state.get("events"), list):
+        return None
+    return {"msg": str(state.get("msg") or ""), "events": copy.deepcopy(state["events"])}
+
+
+def _question_text(message: Any) -> str:
+    """The text the user sent, from a stored question row (``serialize_user_question``)."""
+    if isinstance(message, str):
+        try:
+            message = json.loads(message)
+        except (json.JSONDecodeError, TypeError):
+            return message
+    if isinstance(message, dict):
+        return str(message.get("query") or "")
+    return str(message or "")
 
 
 async def _answer_row_exists(conversation_id: str, run_id: str) -> bool:
@@ -399,9 +581,10 @@ async def _persist_from_snapshot(
             sender=info["sender"],
             storage_partition=info.get("storage_partition"),
         )
-        if text:
-            projector.final_msg = text
-            projector.events.append({"type": "text", "content": text})
+        # Their question rows stay out of the history list; the answer row shows them.
+        await seed_parked_answer(
+            projector, conversation_id, run_id, text, await parked_answer_raw(redis, conversation_id, run_id)
+        )
         await projector.on_event(terminal_event)
         return projector.answer_row
     finally:

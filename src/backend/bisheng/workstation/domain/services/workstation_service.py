@@ -1399,8 +1399,13 @@ class WorkStationService(BaseService):
         use_knowledge_param: UseKnowledgeBaseParam,
         max_token: int,
         login_user: UserPayload,
+        sort_by_source_and_index: bool = True,
     ) -> tuple[list[str], list[dict] | None, list[dict]]:
         """Query relevant knowledge blocks from the database.
+
+        ``sort_by_source_and_index`` reorders the chunks of a base by file and
+        position when they all come from one file; pass False to keep the
+        fused rank order (a caller that takes the first n chunks needs it).
 
         Returns (formatted_results, finally_docs, failures) where `failures`
         is a list of per-KB error descriptors:
@@ -1536,7 +1541,7 @@ class WorkStationService(BaseService):
                             identity_user=login_user,
                             max_content=max_token,
                             metadata_filter_fn=metadata_filter,
-                            sort_by_source_and_index=True,
+                            sort_by_source_and_index=sort_by_source_and_index,
                             access_scope="per_user",
                             retrieval_multipliers=(1,),
                         )
@@ -1604,7 +1609,7 @@ class WorkStationService(BaseService):
                         elastic_retriever=per_kb_es,
                         max_content=max_token,
                         rrf_remove_zero_score=True,
-                        sort_by_source_and_index=True,
+                        sort_by_source_and_index=sort_by_source_and_index,
                     )
                     kb_docs = await per_kb_tool.ainvoke({"query": question})
                     pre_filter_count = len(kb_docs) if kb_docs else 0

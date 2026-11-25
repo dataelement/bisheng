@@ -419,12 +419,13 @@ async def _insert_question_row(
     conversation_id: str,
     memory_register: MemoryRegister | None,
     storage_partition: str | None = None,
+    extra: dict | None = None,
 ) -> Any:
     """The question row daily chat writes today (``_agent_initialize_chat``), same order of steps."""
     # F132: registration precedes this turn's question row (AC-40 of F132).
     await register_session(memory_register, conversation_id)
     await promote_chat_attachments(data.files, login_user.user_id, storage_partition=storage_partition)
-    return await ChatMessageDao.ainsert_one(_question_row(data, login_user, conversation_id))
+    return await ChatMessageDao.ainsert_one(_question_row(data, login_user, conversation_id, extra))
 
 
 async def _insert_steer_row(
@@ -929,7 +930,16 @@ async def _start_direct(
     conversation_id = conversation.chat_id
     is_resume = result.kind == KIND_ANSWER
     storage_partition = session_subject.storage_partition if session_subject is not None else None
-    question = await _insert_question_row(data, login_user, conversation_id, memory_register, storage_partition)
+    # The hooks of a resumed execution do not see what the run wrote before it
+    # parked; the accumulated state of the run is in the Redis snapshot.
+    parked = ((await svc.stream.snapshot(conversation_id)) or {}) if is_resume else {}
+    # The row of an answer keeps the question it answers (shown in the answer row).
+    answer_extra = (
+        run_message_persist.answer_extra(result.run_id, parked.get("pending_question")) if is_resume else None
+    )
+    question = await _insert_question_row(
+        data, login_user, conversation_id, memory_register, storage_partition, extra=answer_extra
+    )
 
     persisted = asyncio.Event()
 
@@ -950,15 +960,19 @@ async def _start_direct(
         # The sources this execution's tools registered (T059).
         citation_items=lambda: direct_run_turn.collected_citations(result.run_id),
         on_persisted=on_persisted,
+        # Design §5 #34: when the run asks again, the row so far waits in Redis.
+        on_parked=lambda state: run_message_persist.save_parked_answer(
+            svc.redis, conversation_id, result.run_id, state
+        ),
     )
+    parked_answer = None
     if is_resume:
-        # The hooks of this execution do not see what the run wrote before it
-        # parked; the accumulated text of the run is in the Redis snapshot.
-        parked = (await svc.stream.snapshot(conversation_id)) or {}
-        earlier = parked.get("text") or ""
-        if earlier:
-            projector.final_msg = earlier
-            projector.events.append({"type": "text", "content": earlier})
+        # What the run showed before it parked (thinking, tool calls, text), with
+        # every question it asked answered in place.
+        parked_answer = await run_message_persist.parked_answer_raw(svc.redis, conversation_id, result.run_id)
+        await run_message_persist.seed_parked_answer(
+            projector, conversation_id, result.run_id, parked.get("text") or "", parked_answer
+        )
         # T055: files written before the park belong to the same answer row.
         projector.seed_files(parked.get("files"))
 
@@ -998,6 +1012,8 @@ async def _start_direct(
         sender=sender,
         model_id=data.model,
         storage_partition=storage_partition,
+        # Kept for whoever closes the resumed run without this projector.
+        parked_answer=parked_answer,
     )
     # The only attachment of these hooks: no process-wide hook factory is
     # registered in the API process, or every row would be written twice.

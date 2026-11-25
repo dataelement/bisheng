@@ -634,5 +634,13 @@
   "valueType": "值类型",
   "selectDbType": "请选择数据库类型",
   "modelLoadFailed": "模型列表读取失败，请重试",
-  "retryModelLoad": "重试"
+  "retryModelLoad": "重试",
+  "referencePreflight": {
+    "changed": "画布已变化，请重新点击运行进行校验。",
+    "failed": "引用校验失败，请重试。本次未启动工作流。",
+    "issue": "{{node}}：{{label}}（ID：{{id}}）{{state}}，请移除或重新选择。",
+    "missing": "不存在",
+    "unavailable": "当前不可用或无权使用",
+    "reselect": "存在失效引用，请移除或重新选择标红项。"
+  }
 }

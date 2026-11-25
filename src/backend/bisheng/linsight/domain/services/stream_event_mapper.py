@@ -729,6 +729,10 @@ class StreamEventMapper:
         # also carried the tool result), recover them from the buffer so the end
         # frame still carries the delegation goal. The buffer is then disposable.
         self._enrich_delegation_from_buffer(open_call)
+        # A streamed ordinary tool call surfaced with empty args (only the first
+        # delta carries name+id); its reassembled args are complete by now.
+        if not open_call.params:
+            open_call.params = self._parse_arg_buffer(raw_call_id) or open_call.params
         self.ctx.tool_arg_buffers.pop(raw_call_id, None)
         return [self._build_end_step(open_call, payload)]
 

@@ -315,6 +315,39 @@ describe('store/runStore', () => {
         expect(run.pendingQuestion).toBeNull();
     });
 
+    it('the answer closes the ask_user call with its question and answer', () => {
+        const question = { call_id: 'q1', reason: '', questions: [{ question: 'Which?', options: ['A', 'B'] }] };
+        apply({ type: 'run_started', run_id: 'r1', data: {} });
+        apply({ type: 'tool_call', run_id: 'r1', data: { call_id: 'q1', name: 'ask_user', status: 'start' } });
+        apply({ type: 'ask_user', run_id: 'r1', data: question });
+        apply({ type: 'ask_user_answered', run_id: 'r1', data: { call_id: 'q1', answer: 'A' } });
+        const [call] = selectRun(CID)(state())!.toolCalls;
+        expect(call).toMatchObject({ callId: 'q1', name: 'ask_user', status: 'done', params: question, output: 'A' });
+    });
+
+    it('keeps the question when the send of the answer clears it before ask_user_answered', () => {
+        const question = { call_id: 'q1', reason: '', questions: [{ question: 'Which?', options: ['A', 'B'] }] };
+        apply({ type: 'run_started', run_id: 'r1', data: {} });
+        apply({ type: 'tool_call', run_id: 'r1', data: { call_id: 'q1', name: 'ask_user', status: 'start', params: { x: 1 } } });
+        apply({ type: 'ask_user', run_id: 'r1', data: question });
+        // The JSON answer of the send comes first and clears the pending question.
+        useRunStore.getState().applySendResult(CID, { run_id: 'r1', disposition: 'started', message_id: 'm2' });
+        expect(selectRun(CID)(state())!.pendingQuestion).toBeNull();
+        apply({ type: 'ask_user_answered', run_id: 'r1', data: { call_id: 'q1', answer: 'A' } });
+        const [call] = selectRun(CID)(state())!.toolCalls;
+        expect(call).toMatchObject({ status: 'done', params: question, output: 'A' });
+    });
+
+    it('an answer to a question whose call frame was missed adds the call', () => {
+        const question = { call_id: 'q9', questions: [{ question: 'Which?' }] };
+        apply({ type: 'run_started', run_id: 'r1', data: {} });
+        apply({ type: 'ask_user', run_id: 'r1', data: question });
+        apply({ type: 'ask_user_answered', run_id: 'r1', data: { call_id: 'q9', answer: 'B' } });
+        const calls = selectRun(CID)(state())!.toolCalls;
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({ callId: 'q9', status: 'done', params: question, output: 'B' });
+    });
+
     it('file dedupe', () => {
         apply({ type: 'run_started', run_id: 'r1', data: {} });
         apply({ type: 'file', run_id: 'r1', data: { file_id: 'f1', name: 'a.md', path: 'p/a.md' } });

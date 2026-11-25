@@ -10,6 +10,7 @@ from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.resource_reference.application.contracts import TargetKey
+from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference as Ref
 from bisheng.resource_reference.domain.repositories.reference_hint_repository import ReferenceHintRepository
 from test.knowledge_unification import test_kn_delete_plan as fixtures
 
@@ -82,3 +83,21 @@ async def test_moved_file_hint_uses_current_membership_and_ignores_deleted_sourc
         new = await repo.aread(session, (TargetKey("knowledge_space", "2"),), space_id=2)
     assert not old
     assert len(new) == 1 and new[0].source_id == "visible" and new[0].target_space_id == "1"
+
+
+async def test_space_file_hints_keep_large_ids_exact_without_numeric_coercion(hints):
+    _app, context = hints
+    await fixtures.native.native.seed(
+        context,
+        (31, 101, "assistant", "exact", "current", "file"),
+        (31, 101, "assistant", "padded", "current", "file"),
+        (31, 101, "assistant", "suffix", "current", "file"),
+    )
+    large_id = 9007199254740993
+    async with context.db.sessions() as session, session.begin():
+        await session.execute(update(KnowledgeFile).where(KnowledgeFile.id == 31).values(id=large_id))
+        for source, target in (("exact", str(large_id)), ("padded", f"0{large_id}"), ("suffix", f"{large_id}tail")):
+            await session.execute(update(Ref).where(Ref.source_id == source).values(target_id=target))
+    async with context.db.sessions() as session, session.begin():
+        rows = await ReferenceHintRepository().aread(session, (), space_id=1)
+    assert [(row.source_id, row.target_id) for row in rows] == [("exact", str(large_id))]

@@ -1202,7 +1202,9 @@ class LinsightWorkflowTask:
                 # researcher subagent's tool subset.
                 allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
                 linsight_tools = await ToolServices.init_linsight_tools(
-                    root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                    root_path=self.file_dir,
+                    allowed_knowledge_ids=allowed_knowledge_ids,
+                    login_user=await self._knowledge_search_user(session_model, allowed_knowledge_ids),
                 )
                 tools.extend(linsight_tools)
                 # Rebuild on the SAME thread_id with a durable checkpointer so the
@@ -1315,7 +1317,9 @@ class LinsightWorkflowTask:
             try:
                 allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
                 linsight_tools = await ToolServices.init_linsight_tools(
-                    root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                    root_path=self.file_dir,
+                    allowed_knowledge_ids=allowed_knowledge_ids,
+                    login_user=await self._knowledge_search_user(session_model, allowed_knowledge_ids),
                 )
                 tools.extend(linsight_tools)
                 agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
@@ -1488,7 +1492,9 @@ class LinsightWorkflowTask:
                 # it has no access to.
                 allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
                 linsight_tools = await ToolServices.init_linsight_tools(
-                    root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                    root_path=self.file_dir,
+                    allowed_knowledge_ids=allowed_knowledge_ids,
+                    login_user=await self._knowledge_search_user(session_model, allowed_knowledge_ids),
                 )
                 tools.extend(linsight_tools)
                 # Create agent (deepagents CompiledStateGraph, F035 §2.1).
@@ -2546,6 +2552,17 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.warning(f"Failed to resolve knowledge block: {e}")
             return None
+
+    @staticmethod
+    async def _knowledge_search_user(session_model: LinsightSessionVersion, allowed_knowledge_ids: set[str]):
+        """The user the knowledge tool searches as, or None when there is nothing to search."""
+        if not allowed_knowledge_ids or getattr(session_model, "user_id", None) is None:
+            return None
+        from bisheng.common.dependencies.user_deps import UserPayload
+
+        return await UserPayload.init_login_user(
+            user_id=session_model.user_id, user_name="", tenant_id=current_tenant_id.get()
+        )
 
     async def _resolve_allowed_knowledge_ids(self, session_model: LinsightSessionVersion) -> set[str]:
         """Build the SearchKnowledgeBase whitelist (C4 permission isolation).

@@ -801,7 +801,9 @@ class ToolServices(BaseModel):
         return res
 
     @classmethod
-    async def init_linsight_tools(cls, root_path: str, allowed_knowledge_ids: set[str] | None = None) -> list[BaseTool]:
+    async def init_linsight_tools(
+        cls, root_path: str, allowed_knowledge_ids: set[str] | None = None, login_user=None
+    ) -> list[BaseTool]:
         """Initialize Linsight task-mode built-in tools.
 
         Only the knowledge-retrieval tool is injected here. The legacy local_file
@@ -820,10 +822,13 @@ class ToolServices(BaseModel):
         uploaded files), there is nothing to search, so the tool is NOT injected
         at all — otherwise the model would still see it and call it with a missing
         knowledge_id ("Field required"). ``None`` (back-compat) keeps the tool.
+
+        ``login_user`` is the user the tool searches as (daily-chat retrieval and
+        its file permissions); a tool without it answers every search with a failure.
         """
         if allowed_knowledge_ids is not None and not allowed_knowledge_ids:
             return []
-        return [SearchKnowledgeBase(allowed_knowledge_ids=allowed_knowledge_ids)]
+        return [SearchKnowledgeBase(allowed_knowledge_ids=allowed_knowledge_ids, login_user=login_user)]
 
     @classmethod
     async def get_linsight_tools(cls) -> list[GptsToolsTypeRead]:

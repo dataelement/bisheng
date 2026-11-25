@@ -31,6 +31,7 @@ import type {
     RunTextData,
 } from './runEventTypes';
 import { answerFilesOf, type RunAnswerFile } from './runAnswerFiles';
+import { answerAskUserCall, askAskUserCall } from './runAskUser';
 import { planProgressOf, type PlanProgress } from './runPlanProgress';
 import {
     reduceClearDraftReturn,
@@ -254,9 +255,19 @@ function reduceIntoRun(run: RunState, event: RunEvent): RunState {
             return { ...run, files };
         }
         case 'ask_user':
-            return { ...run, status: 'waiting', pendingQuestion: event.data ?? null };
+            return {
+                ...run,
+                status: 'waiting',
+                pendingQuestion: event.data ?? null,
+                toolCalls: askAskUserCall(run, event.data),
+            };
         case 'ask_user_answered':
-            return { ...run, status: isActive(run.status) ? 'running' : run.status, pendingQuestion: null };
+            return {
+                ...run,
+                status: isActive(run.status) ? 'running' : run.status,
+                pendingQuestion: null,
+                toolCalls: answerAskUserCall(run, event.data),
+            };
         case 'queued':
             return { ...run, queuePosition: typeof event.data?.position === 'number' ? event.data.position : null };
         case 'run_finished':

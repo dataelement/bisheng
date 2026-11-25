@@ -236,7 +236,6 @@ class RoleDao(RoleBase):
         tenant_id: int,
         keyword: str | None = None,
         department_ids: list[int] | None = None,
-        tenant_custom_roles_only: bool = False,
     ):
         """Build statement for visible roles: global + current tenant, excluding AdminRole.
 
@@ -245,8 +244,6 @@ class RoleDao(RoleBase):
             keyword: Optional keyword filter on role_name.
             department_ids: When set (department admin): **global** preset roles plus
                 **tenant** roles whose ``department_id`` is NULL (global scope) or in this subtree.
-            tenant_custom_roles_only: When True and ``department_ids`` is None (tenant admin),
-                exclude ``global`` roles so the list only contains editable tenant roles.
         """
         # bypass_tenant_filter is used by callers, so explicitly scope tenant roles
         stmt = select(Role).where(
@@ -282,8 +279,6 @@ class RoleDao(RoleBase):
                         ),
                     ),
                 )
-        elif tenant_custom_roles_only:
-            stmt = stmt.where(Role.role_type == "tenant")
         return stmt
 
     @classmethod
@@ -294,7 +289,6 @@ class RoleDao(RoleBase):
         page: int = 1,
         limit: int = 10,
         department_ids: list[int] | None = None,
-        tenant_custom_roles_only: bool = False,
     ) -> list[Role]:
         """Get visible roles for role list API (AD-09).
 
@@ -307,7 +301,6 @@ class RoleDao(RoleBase):
             tenant_id,
             keyword,
             department_ids,
-            tenant_custom_roles_only,
         )
         stmt = stmt.order_by(Role.create_time.desc())
         if page and limit:
@@ -322,7 +315,6 @@ class RoleDao(RoleBase):
         tenant_id: int,
         keyword: str | None = None,
         department_ids: list[int] | None = None,
-        tenant_custom_roles_only: bool = False,
     ) -> int:
         """Count visible roles (companion for aget_visible_roles)."""
         from bisheng.core.context.tenant import bypass_tenant_filter
@@ -331,7 +323,6 @@ class RoleDao(RoleBase):
             tenant_id,
             keyword,
             department_ids,
-            tenant_custom_roles_only,
         )
         stmt = select(func.count()).select_from(base_stmt.subquery())
         with bypass_tenant_filter():

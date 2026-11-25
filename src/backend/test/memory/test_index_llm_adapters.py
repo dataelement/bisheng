@@ -16,7 +16,7 @@ from bisheng.memory.domain.services.index import ES_INDEX_NAME, PlatformMemoryIn
 
 class StubES:
     def __init__(self):
-        self.added, self.deleted, self.searches = [], [], []
+        self.added, self.deleted, self.searches, self.bodies = [], [], [], []
 
     async def aadd_texts(self, texts, metadatas=None, ids=None, **kw):
         self.added.append((texts, metadatas, ids))
@@ -25,7 +25,10 @@ class StubES:
     async def adelete(self, ids=None, **kw):
         self.deleted.append(ids)
 
-    async def asimilarity_search_with_score(self, query, k=4, filter=None, **kw):
+    async def asimilarity_search_with_score(self, query, k=4, filter=None, custom_query=None, **kw):
+        # The body the real store builds (BM25Strategy), after the caller's custom_query.
+        body = {"query": {"bool": {"must": [{"match": {"text": {"query": query}}}], "filter": filter or []}}}
+        self.bodies.append(custom_query(body, query) if custom_query else body)
         self.searches.append((query, k, filter))
         doc = SimpleNamespace(metadata={"item_id": "i1"})
         return [(doc, 3.0)]
@@ -95,6 +98,22 @@ async def test_ac58_upsert_and_search_carry_tenant_and_user(stubs, make_ctx):
     vhits = await stubs.index.vector_search(ctx, scope, "爬山", 5)
     assert [h.item_id for h in vhits] == ["i2"]
     assert stubs.milvus.searches[0][2] == f"tenant_id == {ctx.tenant_id} and user_id == {ctx.user_id}"
+
+
+async def test_keyword_search_asks_for_words_not_characters(stubs, make_ctx):
+    """Each jieba word of the query must appear as a phrase; stopwords are not asked for."""
+    scope = build_scope_filter(make_ctx())
+    await stubs.index.keyword_search(scope, "用户旅行偏好 出行习惯", 5)
+    query = stubs.es.bodies[0]["query"]["bool"]
+    assert query["should"] == [{"match_phrase": {"text": "旅行"}}, {"match_phrase": {"text": "出行"}}]
+    assert query["minimum_should_match"] == 1
+    assert {"term": {"metadata.user_id": scope["user_id"]}} in query["filter"]
+
+
+async def test_keyword_search_with_only_stopwords_asks_nothing(stubs, make_ctx):
+    scope = build_scope_filter(make_ctx())
+    assert await stubs.index.keyword_search(scope, "用户喜欢什么", 5) == []
+    assert stubs.es.searches == []
 
 
 async def test_delete_targets_items(stubs, make_ctx):

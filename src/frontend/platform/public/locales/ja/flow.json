@@ -634,5 +634,13 @@
   "valueType": "値のタイプ",
   "selectDbType": "データベースの種類を選択",
   "modelLoadFailed": "モデル一覧を読み込めませんでした。再試行してください。",
-  "retryModelLoad": "再試行"
+  "retryModelLoad": "再試行",
+  "referencePreflight": {
+    "changed": "ワークフローが変更されました。実行を押して再検証してください。",
+    "failed": "参照の検証に失敗しました。再試行してください。ワークフローは開始されていません。",
+    "issue": "{{node}}：{{label}}（ID：{{id}}）は{{state}}。削除するか選択し直してください。",
+    "missing": "存在しません",
+    "unavailable": "現在利用できないか、権限がありません",
+    "reselect": "無効な参照があります。強調表示された項目を削除するか選択し直してください。"
+  }
 }

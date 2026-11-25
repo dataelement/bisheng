@@ -41,7 +41,7 @@ export function MemorySearchHits({ itemIds }: MemorySearchHitsProps) {
 
   if (isError) {
     return (
-      <div className="flex items-center gap-2 text-caption text-text-3">
+      <div className="flex items-center gap-2 text-xs leading-5 text-text-3">
         {localize("memory.load_failed")}
         <Button size="small" variant="text" color="default" onClick={() => void refetch()}>
           {localize("memory.retry")}
@@ -49,36 +49,40 @@ export function MemorySearchHits({ itemIds }: MemorySearchHitsProps) {
       </div>
     );
   }
-  if (!data) return <p className="text-caption text-text-3">{localize("memory.loading")}</p>;
+  if (!data) return <p className="text-xs leading-5 text-text-3">{localize("memory.loading")}</p>;
 
   const byId = new Map(data.map((item) => [item.id, item]));
   const hits = itemIds.map((id) => byId.get(id)).filter((item): item is MemoryItem => !!item);
-  if (!hits.length) return <p className="text-caption text-text-3">{localize("memory.step.hits_gone")}</p>;
+  if (!hits.length) return <p className="text-xs leading-5 text-text-3">{localize("memory.step.hits_gone")}</p>;
 
   return (
-    <ul className="flex flex-col gap-1" data-slot="memory-search-hits">
-      {hits.map((item) => (
-        <li key={item.id} className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-body-sm text-text-1">{item.content}</p>
-            <Button
-              size="small"
-              variant="text"
-              color="default"
-              className="shrink-0"
-              loading={remove.isLoading && remove.variables === item.id}
-              onClick={() => remove.mutate(item.id)}
-            >
-              {localize("memory.delete")}
-            </Button>
-          </div>
-          {errors[item.id] && (
-            <p role="alert" className="text-caption text-danger">
-              {errors[item.id]}
-            </p>
-          )}
-        </li>
-      ))}
+    <ul className="flex flex-col gap-1.5" data-slot="memory-search-hits">
+      {hits.map((item) => {
+        const deleting = remove.isLoading && remove.variables === item.id;
+        return (
+          <li key={item.id} className="flex flex-col">
+            <div className="flex items-start gap-3">
+              <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-5 text-text-2">
+                {item.content}
+              </p>
+              <button
+                type="button"
+                className="shrink-0 rounded-sm text-xs leading-5 text-text-3 transition-colors hover:text-danger focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-default disabled:opacity-50"
+                disabled={deleting}
+                aria-busy={deleting}
+                onClick={() => remove.mutate(item.id)}
+              >
+                {localize("memory.delete")}
+              </button>
+            </div>
+            {errors[item.id] && (
+              <p role="alert" className="text-xs leading-5 text-danger">
+                {errors[item.id]}
+              </p>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

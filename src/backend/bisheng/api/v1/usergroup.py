@@ -223,7 +223,6 @@ async def get_group_roles(
             page=page or 1,
             limit=limit or 0,
             login_user=user,
-            include_global_for_binding=True,
         )
         return resp_200(data=result)
 
