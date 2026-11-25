@@ -38,6 +38,11 @@ const defaultToolParams = {
         endpoint: '',
         base_url: ''
     },
+    xiaosu: {
+        api_key: '',
+        base_path: 'searchapi.xiaosuai.com',
+        endpoint: 'AOLwWFjoedCbmysb'
+    },
     searXNG: {
         server_url: ''
     },
@@ -136,6 +141,9 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             api_key: (value) => !value && 'AccessKey ' + t('chatConfig.errors.required'),
             endpoint: (value) => !value && 'Endpoint ' + t('chatConfig.errors.required')
         },
+        xiaosu: {
+            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
+        },
         searXNG: {
             server_url: (value) => !value && 'The server address cannot be empty'
         },
@@ -189,6 +197,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             serp: (allToolsConfig as any).serp || defaultToolParams.serp,
             tavily: (allToolsConfig as any).tavily || defaultToolParams.tavily,
             cloudsway: (allToolsConfig as any).cloudsway || defaultToolParams.cloudsway,
+            xiaosu: allToolsConfig.xiaosu || defaultToolParams.xiaosu,
             searXNG: (allToolsConfig as any).searXNG || defaultToolParams.searXNG,
             deepseek: allToolsConfig.deepseek || defaultToolParams.deepseek,
         };
@@ -384,6 +393,41 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                         />
                     </>
                 );
+            case 'xiaosu':
+                return (
+                    <>
+                        {/* XiaoSu issues a base path and a random endpoint segment; both fall back to the reference client's defaults */}
+                        <InputField
+                            required
+                            label="API Key"
+                            type="password"
+                            name="api_key"
+                            value={currentToolMap['api_key'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as Record<string, string>).api_key}
+                            id="xiaosu-api-key"
+                            tooltip={t('chatConfig.webSearch.xiaosuApiKeyTip')}
+                        />
+                        <InputField
+                            label="Base Path"
+                            name="base_path"
+                            value={currentToolMap['base_path'] || defaultToolParams.xiaosu.base_path}
+                            onChange={handleParamChange}
+                            error={(formErrors as Record<string, string>).base_path}
+                            id="xiaosu-base-path"
+                            tooltip={t('chatConfig.webSearch.xiaosuBasePathTip')}
+                        />
+                        <InputField
+                            label="Endpoint"
+                            name="endpoint"
+                            value={currentToolMap['endpoint'] || defaultToolParams.xiaosu.endpoint}
+                            onChange={handleParamChange}
+                            error={(formErrors as Record<string, string>).endpoint}
+                            id="xiaosu-endpoint"
+                            tooltip={t('chatConfig.webSearch.xiaosuEndpointTip')}
+                        />
+                    </>
+                );
             case 'searXNG':
                 return (
                     <InputField
@@ -429,6 +473,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                         { value: 'tavily', label: t('chatConfig.webSearch.tavily') },
                         { value: 'searXNG', label: t('chatConfig.webSearch.searXNG') },
                         { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
+                        { value: 'xiaosu', label: t('chatConfig.webSearch.xiaosu') },
                         { value: 'deepseek', label: t('chatConfig.webSearch.deepseek') },
                     ]}
                     id="search-tool-selector"
