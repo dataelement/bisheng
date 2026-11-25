@@ -355,6 +355,75 @@ async def relay_run_hooks(item: dict, *, redis: Any = None) -> tuple[list[EventH
     return [projector.on_event, steer_read_hook(conversation_id, redis=redis)], model_id
 
 
+# --------------------------------------------------------------------------- #
+# Direct run: questions the user answered
+# --------------------------------------------------------------------------- #
+
+ASK_USER_TOOL_NAME = "ask_user"
+# ``extra`` key of the question row that answers a question of a run.
+ASKED_QUESTION_KEY = "ask_user"
+
+
+def answer_extra(run_id: str, pending_question: dict | None) -> dict:
+    """``extra`` of the question row that answers the parked question of ``run_id``.
+
+    The row keeps the question, so the answer row can show the question and its
+    answer in place and the history can leave the row out of the message list.
+    """
+    return {"run_id": run_id, ASKED_QUESTION_KEY: dict(pending_question or {})}
+
+
+def asked_question_event(question: dict, answer: str) -> dict:
+    """One answered ``ask_user`` as the answer row stores a tool call."""
+    return {
+        "type": "tool_call",
+        "tool_call_id": str(question.get("call_id") or ""),
+        "tool_name": ASK_USER_TOOL_NAME,
+        "display_name": ASK_USER_TOOL_NAME,
+        "tool_type": "tool",
+        "args": question,
+        "results": answer,
+        "error": None,
+    }
+
+
+async def answered_question_events(conversation_id: str, run_id: str) -> list[dict]:
+    """The answered questions of ``run_id``, oldest first, as stored tool calls.
+
+    Read from the question rows marked by ``answer_extra``: a run that asks more
+    than once keeps every question and answer on its single answer row.
+    """
+    from bisheng.database.models.message import ChatMessageDao
+
+    events = []
+    for row in await ChatMessageDao.aget_messages_by_chat_id(conversation_id, limit=RECENT_ROWS):
+        if row.is_bot or not row.extra:
+            continue
+        try:
+            extra = json.loads(row.extra)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(extra, dict) or extra.get("run_id") != run_id:
+            continue
+        question = extra.get(ASKED_QUESTION_KEY)
+        if not isinstance(question, dict):
+            continue
+        events.append(asked_question_event(question, _question_text(row.message)))
+    return events
+
+
+def _question_text(message: Any) -> str:
+    """The text the user sent, from a stored question row (``serialize_user_question``)."""
+    if isinstance(message, str):
+        try:
+            message = json.loads(message)
+        except (json.JSONDecodeError, TypeError):
+            return message
+    if isinstance(message, dict):
+        return str(message.get("query") or "")
+    return str(message or "")
+
+
 async def _answer_row_exists(conversation_id: str, run_id: str) -> bool:
     from bisheng.database.models.message import ChatMessageDao
 
@@ -402,6 +471,8 @@ async def _persist_from_snapshot(
         if text:
             projector.final_msg = text
             projector.events.append({"type": "text", "content": text})
+        # Their question rows stay out of the history list; the answer row shows them.
+        projector.events.extend(await answered_question_events(conversation_id, run_id))
         await projector.on_event(terminal_event)
         return projector.answer_row
     finally:

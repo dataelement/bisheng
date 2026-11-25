@@ -403,6 +403,7 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
                     userMessageId: args.userMessageId,
                     sender: senderRef.current,
                     runKnown,
+                    answered,
                 }),
             );
             // `queued` marks the message; `started` makes the run current, or

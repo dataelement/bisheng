@@ -180,6 +180,11 @@ export interface ChatMessage {
     steerMessageId?: string;
     /** F004: with `steerMessageId` on a history row: the run has not read the message yet. */
     steerQueued?: boolean;
+    /**
+     * F004: a history row of a message that answered a question of a run. Not
+     * listed: the run's answer row shows the question with this answer.
+     */
+    answersQuestion?: boolean;
 }
 
 export interface ContentPart {
@@ -260,13 +265,16 @@ export async function getAgentMessages(
     // retry action uses to find the original question after a history reload.
     let previousMessageId = "";
     let questionMessageId = "";
-    return rows.map((row) => {
-        const message = mapAgentResponseItem(row);
-        message.parentMessageId = message.isCreatedByUser ? previousMessageId : questionMessageId;
-        if (message.isCreatedByUser) questionMessageId = message.messageId;
-        previousMessageId = message.messageId;
-        return message;
-    });
+    return rows
+        .map(mapAgentResponseItem)
+        // An answer to a question of a run is shown inside that run's answer row.
+        .filter((message) => !message.answersQuestion)
+        .map((message) => {
+            message.parentMessageId = message.isCreatedByUser ? previousMessageId : questionMessageId;
+            if (message.isCreatedByUser) questionMessageId = message.messageId;
+            previousMessageId = message.messageId;
+            return message;
+        });
 }
 
 /**
