@@ -62,12 +62,12 @@ from bisheng.permission.application.identity import (
 )
 
 # Resource type ↔ gate action, matching the two in-platform paths exactly:
-# a knowledge space is gated on ``visible``, a document library on ``use``.
+# knowledge spaces and document libraries are both gated on ``visible``.
 # The names are the ones registered in the F048 resource registry.
 _SPACE_RESOURCE_TYPE = "knowledge_space"
 _LIBRARY_RESOURCE_TYPE = "knowledge_library"
 _SPACE_ACTION = "visible"
-_LIBRARY_ACTION = "use"
+_LIBRARY_ACTION = "visible"
 
 
 class _ScopeResolution:

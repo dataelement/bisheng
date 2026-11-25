@@ -439,9 +439,10 @@ class UserService:
 
         validate_account(user.external_id)
         validate_nickname(user.user_name)
-        db_user = User.model_validate(user)
+        # Validate the stored hash, not the RSA ciphertext (344 characters).
+        password_hash = cls.decrypt_md5_password_strict(user.password)
+        db_user = User.model_validate(user, update={"password": password_hash})
         db_user.source, db_user.delete, db_user.disable_source = "local", 0, None
-        db_user.password = cls.decrypt_md5_password_strict(user.password)
         # Under JudgmentadminDoes the user exist
         assigned_tenant_id = await cls._resolve_registration_tenant_id()
 

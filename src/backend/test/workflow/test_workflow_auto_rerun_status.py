@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.chat.clients import workflow_client as workflow_client_module
 from bisheng.common.chat.clients.workflow_client import WorkflowClient
 from bisheng.database.models.flow import FlowStatus
@@ -49,7 +50,17 @@ def make_client(monkeypatch, callback, *, has_history=True, online=True):
     client.user_id = 1
     client.latest_history = SimpleNamespace(category="other") if has_history else None
     client.workflow = None
-    client.session_subject = None
+    client.login_user = SimpleNamespace(user_id=1, tenant_id=1)
+    client.session_subject = SessionSubject.natural_person(tenant_id=1, user_id=1)
+    session = SimpleNamespace(flow_id="flow-1")
+    monkeypatch.setattr(
+        workflow_client_module.ChatSessionService, "get_subject_session_if_exists", AsyncMock(return_value=session)
+    )
+    monkeypatch.setattr(
+        workflow_client_module.ChatSessionService, "get_subject_session", AsyncMock(return_value=session)
+    )
+    client.memory_register = None
+    monkeypatch.setattr(workflow_client_module, "require_business_action", AsyncMock())
     client.execution_snapshot = None
     client.hash_key = None
     monkeypatch.setattr(workflow_client_module, "ensure_client_execution_lease", AsyncMock(return_value="skipped"))
@@ -71,7 +82,7 @@ def make_client(monkeypatch, callback, *, has_history=True, online=True):
     client.send_response = send_response
     client.send_json = send_json
 
-    monkeypatch.setattr(workflow_client_module, "RedisCallback", lambda *_args: callback)
+    monkeypatch.setattr(workflow_client_module, "RedisCallback", lambda *_args, **_kwargs: callback)
     monkeypatch.setattr(
         workflow_client_module.FlowDao,
         "get_flow_by_id",

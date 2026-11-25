@@ -361,3 +361,36 @@ async def test_detail_retryability_matches_actual_finalize_only_eligibility(appl
         job.error_code = 10994
         await session.flush()
         assert (await app.app.aget(session, 40, job.id, identity=app.context.user)).retryable
+
+
+async def test_legacy_reference_fields_in_signed_rebuild_confirmation_do_not_block_acceptance(application, monkeypatch):
+    app = application
+    versions = app.app._versions
+
+    def legacy(preview, scope):
+        targets, sources = versions(preview, scope)
+        return {**targets, "models": {"model:11": "old-model-revision"}}, {
+            **sources,
+            "source_root_revision": 99,
+            "old_references_digest": "old-reference-digest",
+        }
+
+    monkeypatch.setattr(app.app, "_versions", legacy)
+    async with app.context.sessions() as session:
+        plan = await precheck(app, session)
+        await session.commit()
+    monkeypatch.setattr(app.app, "_versions", versions)
+    async with app.context.sessions() as session:
+        result = await app.app.acreate(
+            session,
+            40,
+            ProcessingCreateRequest(
+                confirmation_id=plan.confirmation_id,
+                plan_digest=plan.plan_digest,
+                idempotency_key="legacy-reference-shape",
+            ),
+            identity=app.context.user,
+            entry_kind="web",
+        )
+        assert result.accepted
+        await session.commit()

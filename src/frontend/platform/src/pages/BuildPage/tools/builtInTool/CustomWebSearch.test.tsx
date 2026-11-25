@@ -8,7 +8,7 @@ vi.mock('@/controllers/API/webSearch', () => api);
 vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 it('imports a sole operation, edits nested parameters and previews an arbitrary response', async () => {
-    api.parseWebSearchSchema.mockResolvedValue({ operations: [{ version: 2, server: 'https://search.example', method: 'POST', path: '/find', declaration: { security: { location: 'header', name: '' }, request_body: { content: { 'application/json': {} } }, responses: {} }, media_type: 'application/json', request: { body: { commands: { queries: [{ q: '' }] } } }, proof: { key_id: 'v1', ciphertext: 'sealed' }, security: { location: 'header', name: '' }, parameters: [] }] });
+    api.parseWebSearchSchema.mockResolvedValue({ operations: [{ version: 2, server: 'https://search.example', method: 'POST', path: '/find', declaration: { security: { location: 'header', name: '' }, request_body: { content: { 'application/json': {} } }, responses: {} }, media_type: 'application/json', request: { body: { commands: { queries: [{ q: '' }] } } }, security: { location: 'header', name: '' }, parameters: [] }] });
     api.testWebSearch.mockResolvedValue({ status: 'success', preview: { answer: 'complete result', extra: [1, 2] }, results: { answer: 'complete result' } });
     function Harness() {
         const [value, setValue] = useState<React.ComponentProps<typeof CustomWebSearch>['value']>();
@@ -25,6 +25,7 @@ it('imports a sole operation, edits nested parameters and previews an arbitrary 
     fireEvent.change(screen.getByLabelText('chatConfig.webSearch.testQuery'), { target: { value: 'keyword' } });
     fireEvent.click(screen.getByRole('button', { name: 'chatConfig.webSearch.test' }));
     await waitFor(() => expect(api.testWebSearch).toHaveBeenCalledWith('16', expect.objectContaining({ query: 'keyword', draft: expect.objectContaining({ operation: expect.objectContaining({ version: 2, request, response_mode: 'raw', auth: { location: 'header', name: 'Authorization' } }) }) })));
+    expect(api.testWebSearch.mock.calls[0][1].draft).not.toHaveProperty('proof');
     expect(await screen.findByText(/complete result/)).toBeInTheDocument();
     fireEvent.change(editor, { target: { value: '{invalid' } });
     expect(screen.getByRole('button', { name: 'chatConfig.webSearch.test' })).toBeDisabled();
@@ -44,7 +45,7 @@ it('opens saved legacy settings with the common import UI and no obsolete search
 });
 
 it('selects the first of multiple imported operations and follows replacement schema authentication', async () => {
-    const item = { version: 2, server: 'https://search.example', method: 'GET', path: '/one', declaration: { security: { location: 'header', name: 'X-Key' } }, request: {}, proof: { key_id: 'v1', ciphertext: 'sealed' }, security: { location: 'header', name: 'X-Key' }, parameters: [] };
+    const item = { version: 2, server: 'https://search.example', method: 'GET', path: '/one', declaration: { security: { location: 'header', name: 'X-Key' } }, request: {}, security: { location: 'header', name: 'X-Key' }, parameters: [] };
     api.parseWebSearchSchema.mockResolvedValueOnce({ operations: [item, { ...item, path: '/two' }] }).mockResolvedValueOnce({ operations: [{ ...item, path: '/public', declaration: { security: null }, security: null }] });
     function Harness() {
         const [value, setValue] = useState<React.ComponentProps<typeof CustomWebSearch>['value']>();

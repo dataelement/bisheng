@@ -1,0 +1,36 @@
+{
+  "id": "ambiguous-correct",
+  "acs": [
+    "AC-34"
+  ],
+  "turns": [
+    {
+      "user": "记一下张工负责前端",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "记一下张工负责测试",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "张工那条改成负责运维",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "刚才你改了哪条？",
+    "new_session": false,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "哪",
+      "确认"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

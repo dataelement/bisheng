@@ -13,7 +13,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.resource_reference.application.source_contracts import ReferenceTargetReadFact, TransientTargetRequest
@@ -63,8 +62,8 @@ async def test_actual_owner_revalidation_runs_between_targets_and_current_index_
 
         event.listen(session.sync_session, "do_orm_execute", current_index)
         result = await ctx.runtime.arequire_source_valid(session, scope, ctx.identity)
-        assert calls[:4] == ["candidate", "targets", "root", "index"]
-        assert result.snapshot == scopes.snapshot() and result.source_revision == 3 and result.root_revision == 4
+        assert calls == ["candidate", "targets", "root"]
+        assert result.snapshot == scopes.snapshot()
         assert result.target_states[0].is_valid and not session.sync_session.identity_map
 
 
@@ -109,7 +108,7 @@ async def test_inspection_and_execution_authority_cannot_be_interchanged(runtime
         "inactive",
     ],
 )
-async def test_index_defects_are_never_treated_as_an_empty_or_new_source(runtime_context, case):
+async def test_auxiliary_index_defects_do_not_override_actual_source(runtime_context, case):
     ctx = runtime_context
     async with AsyncSession(ctx.engine) as session, session.begin():
         where = (BusinessReferenceSet.tenant_id == 101, BusinessReferenceSet.source_version == "current")
@@ -150,9 +149,9 @@ async def test_index_defects_are_never_treated_as_an_empty_or_new_source(runtime
             await session.execute(update(BusinessReferenceSet).where(*where).values(**values[case]))
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, scopes.REQUEST, ctx.identity)
-        error = ResourceReferenceInvalidError if case == "inactive" else ReferenceCoverageNotReadyError
-        with pytest.raises(error):
-            await ctx.runtime.arequire_source_valid(session, scope, ctx.identity)
+        result = await ctx.runtime.arequire_source_valid(session, scope, ctx.identity)
+        expected = "22" if case == "business_drift" else "11"
+        assert result.snapshot.references[0].target.target_id == expected
 
 
 async def test_configuration_changes_after_target_locks_refuse_before_return(runtime_context, monkeypatch):
@@ -172,7 +171,7 @@ async def test_configuration_changes_after_target_locks_refuse_before_return(run
             await ctx.runtime.arequire_source_valid(session, scope, ctx.identity)
 
 
-async def test_source_cas_change_after_target_locks_is_a_conflict(runtime_context, monkeypatch):
+async def test_auxiliary_source_revision_change_does_not_invalidate_actual_configuration(runtime_context, monkeypatch):
     ctx = runtime_context
     original = ctx.owner.arevalidate_source
 
@@ -191,8 +190,8 @@ async def test_source_cas_change_after_target_locks_is_a_conflict(runtime_contex
     monkeypatch.setattr(ctx.owner, "arevalidate_source", changed)
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, scopes.REQUEST, ctx.identity)
-        with pytest.raises(KnowledgeOperationPlanConflictError):
-            await ctx.runtime.arequire_source_valid(session, scope, ctx.identity)
+        result = await ctx.runtime.arequire_source_valid(session, scope, ctx.identity)
+        assert result.snapshot == scopes.snapshot()
 
 
 async def test_incomplete_target_owner_cannot_unlock_root_revalidation(runtime_context):

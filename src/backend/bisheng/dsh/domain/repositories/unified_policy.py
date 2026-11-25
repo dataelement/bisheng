@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshOperationConflictError
-from bisheng.core.context.tenant import strict_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
 from bisheng.database.models.tenant import UserTenant
 from bisheng.dsh.domain.models.unified_policy import (
     CreditRule,
@@ -61,9 +61,11 @@ class UnifiedPolicyRepository:
         }
 
     def visibility(self, model_id: int, *, default_everyone: bool = False) -> dict:
-        """``default_everyone`` describes a model without a stored row: DSH grants
-        access explicitly (no row = hidden), the platform without DSH shows every
-        online model until an administrator narrows it."""
+        """``default_everyone`` describes a model without a stored row.
+
+        Platform catalog callers use True in both deployment modes; accounting
+        callers retain their explicit policy-row contract.
+        """
         require_tenant()
         with strict_tenant_filter():
             row = self.session.exec(select(ModelVisibility).where(ModelVisibility.model_id == model_id)).one_or_none()
@@ -198,7 +200,7 @@ class UnifiedPolicyRepository:
         return effective_token_limit(user_id=user_id, departments=departments, roles=roles, rules=rules)
 
     def visible_model_ids(self, user_id: int, model_ids: list[int]) -> set[int]:
-        """Models of ``model_ids`` this user may pick when DSH is not deployed.
+        """Models of ``model_ids`` this user may pick in either deployment mode.
 
         A model without a stored visibility row is visible to everyone; a stored
         row applies exactly as under DSH. Credits are not involved.
@@ -263,3 +265,35 @@ class UnifiedPolicyRepository:
         return DshPolicySnapshot(
             tenant_id=tenant, user_id=user_id, rows=rows, shared_token_limit=limit, ledger_epoch=epoch
         )
+
+    def ledger_policy(self, user_id: int, *, lock: bool = False) -> DshPolicySnapshot:
+        """Ledger metadata without personal grants; grants no model or allowance."""
+        tenant = require_tenant()
+        if lock:
+            self.memberships._lock_tenant()
+        with strict_tenant_filter():
+            ledger = self.session.exec(
+                select(PersonalLedgerState).where(PersonalLedgerState.user_id == user_id)
+            ).one_or_none()
+        return DshPolicySnapshot(
+            tenant_id=tenant,
+            user_id=user_id,
+            rows=[],
+            shared_token_limit=0,
+            ledger_epoch=ledger.quota_epoch if ledger else 1,
+        )
+
+    def accounting_policy(self, user_id: int, *, lock: bool = False) -> DshPolicySnapshot:
+        """Recover historical/operator usage even if the person belongs elsewhere.
+
+        Admission still verifies current identity and model access. A foreign
+        person's accounting partition must never acquire personal grants.
+        """
+        tenant = require_tenant()
+        with bypass_tenant_filter():
+            home = self.session.exec(
+                select(UserTenant.tenant_id).where(
+                    UserTenant.user_id == user_id, UserTenant.is_active == 1, UserTenant.status == "active"
+                )
+            ).one_or_none()
+        return self.effective(user_id, lock=lock) if home == tenant else self.ledger_policy(user_id, lock=lock)

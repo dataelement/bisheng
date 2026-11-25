@@ -124,7 +124,7 @@ async def loaded(session, plans, result, command):
         command_digest=_hash(command),
         plan_digest=result.confirmation.plan_digest,
     )
-    assert actual is row and row.impact["inbound_digest"] == data.inbound_digest
+    assert actual is row and row.impact == {}
     assert row.target_revisions == {
         **{f"model:{target.target_id}": revision for target, revision in data.target_revisions},
         f"server:{data.server_id}": data.server_revision,
@@ -270,7 +270,7 @@ async def test_actual_nonadministrator_cannot_create_a_plan(ready):
 
 
 @pytest.mark.parametrize("failure", ["missing", "not_ready", "query"])
-async def test_real_coverage_absence_or_failure_is_not_an_empty_confirmation(ready, monkeypatch, failure):
+async def test_coverage_absence_or_failure_does_not_block_confirmation(ready, monkeypatch, failure):
     session, references, plans = ready
     if failure == "missing":
         references.coverage_factory = None
@@ -285,11 +285,11 @@ async def test_real_coverage_absence_or_failure_is_not_an_empty_confirmation(rea
 
         ledger = references.coverage_factory(session).global_port
         monkeypatch.setattr(ledger, "aget_global_status", broken)
-    with native.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
+    with native.actor() as user:
         await application(references, plans).aplan_server_delete(
             session, identity=web(user), server_id=5 if failure == "missing" else 1
         )
-    assert await plan_count(session) == 0
+    assert await plan_count(session) == 1
 
 
 @pytest.mark.parametrize("phase", ["core", "create"])

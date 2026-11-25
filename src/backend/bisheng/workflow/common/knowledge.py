@@ -460,9 +460,10 @@ class RagUtils(BaseNode):
             aretrieve_space_documents,
         )
 
-        # Identity: toggle ON → runtime user; OFF → config author (flow creator).
-        identity_user_id = self.user_id if self._knowledge_auth else self.flow_user_id
-        identity_user = await abuild_scoped_login_user(identity_user_id, self.tenant_id)
+        # Identity: toggle ON → runtime user file filter; OFF → no permission check.
+        identity_user = None
+        if self._knowledge_auth:
+            identity_user = await abuild_scoped_login_user(self.user_id, self.tenant_id)
         async with get_async_db_session() as session:
             version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
             return await aretrieve_space_documents(
@@ -528,12 +529,26 @@ class RagUtils(BaseNode):
 
     def init_knowledge_retriever(self):
         """retriever from knowledge base"""
-        if not self._knowledge_vector_list:
+        from bisheng.knowledge.domain.services.workflow_knowledge_authorization import authorized_knowledge_ids
+
+        allowed_ids = authorized_knowledge_ids(
+            identity_user_id=self.user_id if self._knowledge_auth else self.flow_user_id,
+            tenant_id=self.tenant_id,
+            knowledge_ids=self._knowledge_value,
+            check_permission=self._knowledge_auth,
+        )
+        if self._knowledge_vector_list:
+            self._knowledge_vector_list = {
+                item: value for item, value in self._knowledge_vector_list.items() if item in allowed_ids
+            }
+        else:
             self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore_sync(
                 invoke_user_id=self.user_id,
-                knowledge_ids=self._knowledge_value,
-                user_name=self.user_info.user_name,
-                check_auth=self._knowledge_auth,
+                knowledge_ids=allowed_ids,
+                # The IDs are already verified against the selected identity;
+                # check_auth here would re-resolve the runtime user's username
+                # and incorrectly replace author-sharing semantics.
+                check_auth=False,
                 include_es=self._keyword_weight > 0,
                 include_milvus=self._vector_weight > 0,
             )

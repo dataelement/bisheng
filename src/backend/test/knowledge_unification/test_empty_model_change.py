@@ -107,7 +107,7 @@ async def test_actual_empty_or_complete_skipped_scope_switches_current_slot_with
         assert not (await session.exec(select(KnowledgeProcessingItem))).all()
         await session.commit()
     refs = state(app.context)["business_resource_reference"]
-    assert {(row["slot_key"], row["target_id"]) for row in refs if row["source_id"] == "40"} == {("model", "12")}
+    assert {(row["slot_key"], row["target_id"]) for row in refs if row["source_id"] == "40"} == set()
     async with app.context.sessions() as session:
         if contents == "all_skipped":
             assert [(await session.get(KnowledgeFile, value)).status for value in (81, 82, 83)] == [3, 6, 7]
@@ -262,15 +262,15 @@ async def test_plan_rejects_copy_and_other_transaction(empty):
             await Models.aapply_model_change(session, change)
 
 
-async def test_r2_failure_rolls_back_current_model_state_and_revision(empty, monkeypatch):
-    before = state(empty.context)
+async def test_empty_model_change_does_not_call_reference_writer(empty, monkeypatch):
+    binding = AsyncMock(side_effect=RuntimeError("R2 failed"))
+    monkeypatch.setattr(empty.context.runtime, "aapply_source_bindings", binding)
     async with empty.context.sessions() as session:
         change = await prepare(empty, session)
-        monkeypatch.setattr(change.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("R2 failed")))
-        with pytest.raises(RuntimeError, match="R2 failed"):
-            await Models.aapply_model_change(session, change)
-        await session.rollback()
-    assert state(empty.context) == before
+        await Models.aapply_model_change(session, change)
+        await session.commit()
+    assert next(row for row in state(empty.context)["knowledge"] if row["id"] == 40)["model"] == "12"
+    binding.assert_not_awaited()
 
 
 @pytest.mark.parametrize("model", [33, 999])
@@ -308,7 +308,7 @@ async def test_explicit_repair_can_release_revoked_old_shared_model(empty):
         await Models.aapply_model_change(session, change)
         await session.commit()
     refs = state(empty.context)["business_resource_reference"]
-    assert {(row["slot_key"], row["target_id"]) for row in refs if row["source_id"] == "41"} == {("model", "12")}
+    assert {(row["slot_key"], row["target_id"]) for row in refs if row["source_id"] == "41"} == set()
 
 
 async def test_same_current_model_is_not_a_manual_rebuild(empty):

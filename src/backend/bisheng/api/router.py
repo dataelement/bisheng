@@ -20,6 +20,7 @@ from bisheng.api.v1 import (
     workflow_router,
     workstation_router,
 )
+from bisheng.api.v1.storage import router as storage_router
 from bisheng.app_governance.api.router import router as runtime_audit_router
 from bisheng.app_publish.api.router import v1_router as app_publish_v1_router
 from bisheng.app_publish.api.router import v2_router as app_publish_v2_router
@@ -59,6 +60,7 @@ from bisheng.knowledge.api.router import (
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.pricing import router as llm_pricing_router
 from bisheng.llm.api.router import router as llm_router
+from bisheng.memory.api.router import router as memory_router
 from bisheng.message.api.router import router as message_router
 from bisheng.open_api.api.dependencies import verify_open_api_access
 from bisheng.open_api.api.router import management_router as open_api_management_router
@@ -120,6 +122,11 @@ scope_overrides(
 scope_overrides(endpoints_router, S.PLATFORM, "get_config", "save_config", "update_web_config")
 scope_overrides(brand_router, S.PUBLIC, "get_brand_runtime_config")
 scope_overrides(share_link_router, S.CREDENTIAL, "get_share_link_info")
+# Document-server callbacks authenticate their signed body and bound edit ticket;
+# requiring a browser session here rejects legitimate server-to-server saves.
+# Editor configuration and template routes retain their tenant/browser admission.
+scope_overrides(report_router, S.CREDENTIAL, "callback")
+scope_overrides(workflow_router, S.CREDENTIAL, "upload_report_file")
 
 router = APIRouter(
     prefix="/api/v1",
@@ -174,11 +181,13 @@ router.include_router(sso_sync_router, request_scope=S.CREDENTIAL)
 router.include_router(relink_router, request_scope=S.PLATFORM)
 router.include_router(tenant_router, request_scope=S.PLATFORM)
 router.include_router(citation_router, request_scope=S.TENANT)
+router.include_router(memory_router, request_scope=S.TENANT)
 router.include_router(commercial_license_router, request_scope=S.PLATFORM)
 router.include_router(admin_router, request_scope=S.IDENTITY)
 router.include_router(approval_router, request_scope=S.PERSONAL)
 router.include_router(brand_router, request_scope=S.PLATFORM)
 router.include_router(sensitive_word_policy_router, request_scope=S.TENANT)
+router.include_router(storage_router, request_scope=S.PUBLIC)
 # Open API management face (features/v3.0.0-beta1/053): service accounts,
 # personal tokens, scope catalogue and skill-pack distribution — session auth,
 # tenant-admin gated inside the endpoints.

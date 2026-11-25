@@ -65,25 +65,27 @@ def test_preset_row_filter_targets_the_two_tool_tables():
         assert expr == "is_preset != 1"
 
 
-async def test_migrate_passes_preset_row_filter_to_dao():
+async def test_migrate_passes_preset_row_filter_to_atomic_permission_transfer():
     captured = {}
 
-    async def _fake_bulk(*, tables, from_tenant_id, to_tenant_id, table_row_filters):
+    async def _fake_bulk(*, source, tables, filters, operator_id):
         captured["tables"] = tables
-        captured["from"] = from_tenant_id
-        captured["to"] = to_tenant_id
-        captured["filters"] = table_row_filters
+        captured["from"] = source
+        captured["operator_id"] = operator_id
+        captured["filters"] = filters
         return dict.fromkeys(tables, 0)
 
-    with patch.object(TenantDao, "abulk_update_tenant_id", side_effect=_fake_bulk):
-        await TenantMountService._migrate_child_resources_to_root(42)
+    with patch(
+        "bisheng.tenant.application.resource_tenant_transfer.migrate_unmounted_resources", side_effect=_fake_bulk
+    ):
+        await TenantMountService._migrate_child_resources_to_root(42, operator_id=7)
 
     # Retired `dataset` is filtered out; tool tables survive and carry the
     # preset-exclusion predicate.
     assert "dataset" not in captured["tables"]
     assert "t_gpts_tools" in captured["tables"]
     assert captured["from"] == 42
-    assert captured["to"] == ROOT_TENANT_ID
+    assert captured["operator_id"] == 7
     assert captured["filters"] == {
         "t_gpts_tools": "is_preset != 1",
         "t_gpts_tools_type": "is_preset != 1",

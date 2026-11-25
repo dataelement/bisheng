@@ -2,6 +2,16 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## File/folder edit Catalog upgrade (beta2)
+
+Run `python scripts/upgrade_knowledge_edit_scopes.py plan` with the live service
+`config`. The default is read-only. Apply the returned digest with
+`apply --plan-digest DIGEST --operator-id USER_ID --idempotency-key KEY`, then
+run `verify`. Use the same key/operator with `resume --draft-id ID` after an
+interruption. It publishes the missing edit scopes through the existing Catalog
+publisher, preserving custom selections and resource grants; no schema rebuild.
+See [upgrade and recovery guide](../../../docs/upgrades/v3.1.0-beta2-knowledge-edit.md).
+
 ## Restore omitted Root model sharing
 
 Run from `src/backend` using the live service `config`. This tool recognizes the
@@ -1894,3 +1904,64 @@ proofs for a later full invocation. New Runs must use the unified dry-run/apply 
 
 The detailed version upgrade sequence, result checks and business acceptance
 remain in [v3.1.0-beta1 upgrade guide](../../../docs/upgrades/v3.1.0-beta1.md).
+
+## 中间件凭据维护（v3.1.0-beta2）
+
+部署密钥不在源码中。配置准备/原生改密/备份恢复见 [凭据运维手册](../../../docker/中间件凭据运维手册.html)。以下从 src/backend 执行，使用与服务相同的 config 和 BS_SECRET_KEYS_FILE。
+
+- `rewrap_credentials.sh` / `rewrap_credentials.py`：组织同步与沙箱页令牌的独立重加密；默认 dry-run，显式 --all-tenants，--apply 前 fsync 密文备份，失败按 journal resume，不修改真实中间件密码。
+  ```bash
+  bash scripts/rewrap_credentials.sh --all-tenants --backup-dir /secure/bisheng/rewrap/run-a
+  bash scripts/rewrap_credentials.sh --all-tenants --backup-dir /secure/bisheng/rewrap/run-a --apply
+  bash scripts/rewrap_credentials.sh --all-tenants --resume /secure/bisheng/rewrap/run-a --apply
+  ```
+- `check_image_secrets.py`：离线检查实际交付源码与 Docker-save 所有镜像层，不提取档案、不连接服务；缺档案/格式不支持非零退出。可通过 --keyring 传受控文件做已知 key 匹配，不把 key 写参数。
+  ```bash
+  python scripts/check_image_secrets.py --source-root . --image-archive /secure/release/backend.tar
+  ```
+
+
+中间件逐项改密使用原部署入口 `bash docker/install.sh` / `bash scripts/deploy.sh install` 内部编排。容器内管理接口为 `python -m bisheng.core.config.credential_tool rotation`，独立SDK位于 `bisheng/core/config/credential_rotation_native.py`，不初始化全应用上下文，不持有Docker权限；正常运维无需手动执行内部子命令。实际验收范围见特性003的验证记录。
+
+
+### 中间件凭据 v2（2026-11-14）
+
+仍执行原部署入口，不要求运维手动调用加解密、重新加密或权限修改工具。首次隐藏输入；重部署逐项选择是否改密，默认保留。v2 输入、原生配置包、历史和恢复材料加密；主密钥外置并限制访问，运行所需明文只在经过检查的内存文件系统或进程内存中使用。受管 v1 转换失败时保留现场，再次执行原命令恢复。未经验证的旧原生布局不得绕过拒绝检查。
+
+Milvus 原生内部消息 Base64 凭据为用户确认的明确例外，部署器生成材料仍加密。DM、正式发布镜像及主机重启尚待验收，不能将本地覆盖镜像的通过结果扩展到所有部署形态。参见 [HTML 运维手册](../../../docker/中间件凭据运维手册.html)。
+
+## 统一 agent 内核技术验证（F004 前置，v3.1.0-beta2）
+
+`spike_unified_runtime/` 下是只读的框架行为验证脚本，不读写业务数据。`s3c_steer_real_model.py` 需要连数据库读模型配置并调用真实模型，其余脚本不连接任何中间件。结论与运行方法见 [spike_unified_runtime/README.md](spike_unified_runtime/README.md)。
+
+```bash
+.venv/bin/python scripts/spike_unified_runtime/s1_todo_and_tool_output.py
+.venv/bin/python scripts/spike_unified_runtime/s3b_diff_todos_alignment.py
+.venv/bin/python scripts/spike_unified_runtime/s3c_steer_real_model.py --list
+```
+
+## Repair permissions left by an audited tenant unmount
+
+`repair_unmounted_tenant_permissions.py` handles the historical case where an archived Child's
+business resources have already moved to Root but their F048 modes/Grants still belong to
+that Child. It is environment-independent: pass the source Child and current system-admin
+operator, and use the same `config` as the backend. Run from `src/backend/`.
+
+```bash
+python scripts/repair_unmounted_tenant_permissions.py --source-tenant <child-id> --operator-id <admin-id> --plan-file /var/tmp/tenant-repair/preview.json
+python scripts/repair_unmounted_tenant_permissions.py --source-tenant <child-id> --operator-id <admin-id> --plan-file /var/tmp/tenant-repair/preview.json --apply --confirm-checksum <preview-checksum>
+# After interruption: continue the original durable projection journals.
+python scripts/repair_unmounted_tenant_permissions.py --source-tenant <child-id> --operator-id <admin-id> --plan-file /var/tmp/tenant-repair/preview.json --resume --confirm-checksum <preview-checksum>
+```
+
+The default is a read-only SQL/FGA preview plus an exclusive private plan/backup file;
+it never overwrites an existing plan. Retain this file outside the container before apply.
+Only audited unmounts, actual Root ownership, CURRENT source mirrors and matching physical
+Grant graphs are admitted. Conflicting destination modes/Grants, pending operations, unknown
+physical sources or changed preview/Catalog fail closed. No direct UPDATE-only shortcut,
+broad FGA reset, model publication, owner reassignment or expansion to Root-wide audiences.
+The source Child's presets stay with that Child. Permission SQL and native journals commit
+in one transaction; FGA writes and recovery use those original journals. Apply/resume verifies
+all selected SQL provenance and physical objects, then exercises permission-version readback.
+This script does not support arbitrary cross-tenant ownership transfer or invent authorization
+for missing/ambiguous historical records.

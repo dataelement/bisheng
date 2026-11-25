@@ -7,7 +7,7 @@ from functools import partial
 
 import anyio
 import anyio.from_thread
-from execute import handle_exec
+from execute import InvalidExecRequest, handle_exec
 from files import (
     MAX_MANIFEST_BYTES,
     ArchiveError,
@@ -141,13 +141,19 @@ def create_app(
     control_limiter = anyio.CapacityLimiter(8)
 
     async def _run(limiter: anyio.CapacityLimiter, func: Callable, *args, **kwargs):
-        return await anyio.to_thread.run_sync(partial(func, *args, **kwargs), limiter=limiter)
+        return await anyio.to_thread.run_sync(
+            partial(func, *args, **kwargs), limiter=limiter
+        )
 
     async def health(_request: Request) -> Response:
         return JSONResponse({"status": "ok"})
 
     def _bearer(request: Request) -> str:
-        header = request.headers.get("authorization") or request.headers.get("x-sandbox-token") or ""
+        header = (
+            request.headers.get("authorization")
+            or request.headers.get("x-sandbox-token")
+            or ""
+        )
         if header.lower().startswith("bearer "):
             return header[7:].strip()
         return header.strip()
@@ -158,7 +164,9 @@ def create_app(
     async def _acquire(request: Request, action: str) -> Lease | Response:
         session_id = request.path_params["id"]
         try:
-            return await _run(control_limiter, store.acquire, session_id, _lease_token(request))
+            return await _run(
+                control_limiter, store.acquire, session_id, _lease_token(request)
+            )
         except UnknownLeaseError:
             log.warning("session missing action=%s session_id=%s", action, session_id)
             return JSONResponse(_NOT_FOUND, status_code=404)
@@ -244,7 +252,9 @@ def create_app(
             except ManifestError:
                 return JSONResponse({"error": "invalid manifest"}, status_code=400)
             except ArchiveError:
-                log.warning("copy-in rejected session_id=%s error=invalid archive", session_id)
+                log.warning(
+                    "copy-in rejected session_id=%s error=invalid archive", session_id
+                )
                 return JSONResponse({"error": "invalid archive"}, status_code=400)
             except ZipSlipError as exc:
                 log.warning("copy-in rejected session_id=%s error=%s", session_id, exc)
@@ -304,10 +314,17 @@ def create_app(
             try:
                 payload = await request.json()
             except Exception:
-                log.warning("exec rejected session_id=%s error=invalid json", session_id)
+                log.warning(
+                    "exec rejected session_id=%s error=invalid json", session_id
+                )
                 return JSONResponse({"error": "invalid json"}, status_code=400)
             try:
                 result = await _run(exec_limiter, handle_exec, store, lease, payload)
+            except InvalidExecRequest:
+                log.warning(
+                    "exec rejected session_id=%s error=invalid exec request", session_id
+                )
+                return JSONResponse({"error": "invalid exec request"}, status_code=400)
             except UnknownLeaseError:
                 log.warning("session missing action=exec session_id=%s", session_id)
                 return JSONResponse(_NOT_FOUND, status_code=404)

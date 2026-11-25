@@ -1,3 +1,4 @@
+import catalog from '../../public/locales/en-US/api_errors.json';
 import { describe, expect, it, vi } from "vitest";
 
 import { isBlockingChatError, resolveChatErrorMessage } from "@/components/bs-comp/chatComponent/chatErrorMessage";
@@ -97,4 +98,20 @@ describe("resolveChatErrorMessage", () => {
         ).toBe("Connection failed");
         expect(translate).not.toHaveBeenCalled();
     });
+});
+
+
+it('explains referenced model failures without appending raw exception evidence', () => {
+    const translate = (key: string, values: Record<string, unknown> = {}) => {
+        const template = catalog[key.replace('api_errors:', '') as keyof typeof catalog] ?? key;
+        return template.replace(/{{(\w+)}}/g, (_, name: string) => String(values[name] ?? ''));
+    };
+    const message = resolveChatErrorMessage({ status_code: 10996, status_message: 'PRIVATE', data: {
+        reason: 'reference_target_invalid', exception: 'PRIVATE SQL', reference_errors: [{
+            node_name: 'LLM', resource_type: 'model', target_id: '375', state: 'invalid_missing',
+        }],
+    } }, translate);
+    expect(message).toContain('LLM'); expect(message).toContain('375');
+    expect(message).toContain('does not exist'); expect(message).not.toContain('PRIVATE');
+    expect(resolveChatErrorMessage({ status_code: 10996, data: { exception: 'PRIVATE' } }, translate)).toBe(catalog['10996']);
 });

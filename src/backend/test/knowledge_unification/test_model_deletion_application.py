@@ -1,6 +1,5 @@
 """Complete native business/RRT/confirmation transactions on real model SQL."""
 
-import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
@@ -9,12 +8,11 @@ import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.assistant.domain.services.reference_extractor import extract_assistant_references
-from bisheng.common.errcode.knowledge import ResourceReferenceConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.core.context.tenant import management_tenant_scope
 from bisheng.database.models.assistant import Assistant
-from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.llm.application.model_deletion import ModelDeletionApplication
-from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
+from bisheng.llm.domain.models.llm_server import LLMServer
 from bisheng.permission.application.model_sharing_projection import ModelSharingProjectionApplication
 from bisheng.permission.domain.models import PermissionProjectionOperation, PermissionProjectionTuple
 from bisheng.permission.domain.repositories.projection_repository import ProjectionRepository
@@ -115,21 +113,19 @@ async def test_ordinary_native_delete_and_same_body_replay_have_one_actual_busin
     async with factory() as session:
         assert await session.get(LLMServer, server_id) is None
         tombstones = (await session.execute(sa.select(ResourceReferenceTombstone))).scalars().all()
-        assert len(tombstones) == (5 if server_id == 1 else 0)
+        assert tombstones == []
         assert all(row.stage == "deleted" and row.operation_id == result["operation_id"] for row in tombstones)
     assert client.writes == []
 
 
-async def test_ordinary_references_refuse_before_preparation_or_business_or_sharing(business):
+async def test_ordinary_references_allow_delete_and_preserve_source_rows(business):
     factory, app, _, _, client = business
-    before = await records(factory, LLMModel)
+    before = await records(factory, BusinessResourceReference)
     with actual.native.actor() as user:
         actual.web(user)
-        with pytest.raises(ResourceReferenceConflictError) as failure:
-            await app.adelete_server(identity=user, server_id=1)
-    assert "same" not in json.dumps(failure.value.kwargs)
-    assert await records(factory, LLMModel) == before
-    assert not await records(factory, KnowledgeOperationPlan)
+        result = await app.adelete_server(identity=user, server_id=1)
+    assert result["deleted_server"] is True
+    assert await records(factory, BusinessResourceReference) == before
     assert not await records(factory, ResourceReferenceTombstone)
     assert client.writes == []
 

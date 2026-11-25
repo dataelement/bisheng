@@ -63,7 +63,7 @@ async def test_cross_tenant_readonly_adapter_has_no_independent_use_or_managemen
 
 
 @pytest.mark.parametrize("legacy_action", ["use", "use_kb"])
-async def test_legacy_action_is_normalized_before_the_channel_adapter(channel_permission, monkeypatch, legacy_action):
+async def test_retired_action_is_rejected_before_the_channel_adapter(channel_permission, monkeypatch, legacy_action):
     from bisheng.permission.application import business_authorization as module
 
     case = channel_permission
@@ -75,11 +75,11 @@ async def test_legacy_action_is_normalized_before_the_channel_adapter(channel_pe
 
     monkeypatch.setattr(module, "get_f048_resource_registry", AsyncMock(return_value=SimpleNamespace(resolve=resolve)))
     monkeypatch.setattr(module, "get_f048_runtime", AsyncMock(return_value=case.permission))
-    assert await module.check_business_action(
-        identity, resource_type="channel", resource_id="channel-a", action=legacy_action, actor=case.actor
-    )
-    assert case.permission.check_action.await_args.args[0] is case.actor
-    assert case.permission.check_action.await_args.args[2] == "visible"
+    with pytest.raises(InvalidCatalogActionError):
+        await module.check_business_action(
+            identity, resource_type="channel", resource_id="channel-a", action=legacy_action, actor=case.actor
+        )
+    case.permission.check_action.assert_not_awaited()
 
 
 @pytest.mark.parametrize("action", ["edit", "delete", "manage_permission"])

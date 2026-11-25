@@ -12,8 +12,8 @@ import pytest
 import sqlalchemy as sa
 
 from bisheng.common.errcode.knowledge import (
+    KnowledgeNoEmbeddingError,
     KnowledgeOperationPlanConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.core.database import tenant_filter
@@ -123,7 +123,7 @@ async def test_owner_rejects_unowned_space_and_parameter_model_is_never_a_read_f
     async with context.sessions() as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await owner.aread_current(session, 20)
-        with pytest.raises(ReferenceCoverageNotReadyError):
+        with pytest.raises(KnowledgeNoEmbeddingError):
             await owner.aread_current(session, 40)
 
 

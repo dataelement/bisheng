@@ -52,7 +52,7 @@
 | `file_type` | int | 0 = 目录，1 = 文件 |
 | `file_source` | str | 来源（upload / channel / space_upload） |
 | `md5` | str | 文件 MD5，用于去重 |
-| `parse_type` | str | 解析方式（etl4lm / mineru / paddle_ocr / local） |
+| `parse_type` | str | 解析方式（etl4lm / mineru / mineru_v4 / paddle_ocr / minicpm_ocr / local） |
 | `split_rule` | str | 分块规则 JSON |
 | `status` | int | 处理状态，取值见 `KnowledgeFileStatus` |
 | `object_name` | str | MinIO 中的源文件对象名 |
@@ -208,9 +208,14 @@ PDF 文件的加载器通过 `KnowledgeConf.loader_provider` 配置项动态选�
 | ETL4LM | `etl4lm` | `Etl4lmLoader` | 默认引擎，外部文档解析服务，支持版面分析和公式识别，超时 600 秒 |
 | MineRU | `mineru` | `MineruLoader` | 替代解析服务，超时 60 秒，支持自定义 Headers |
 | PaddleOCR | `paddle_ocr` | `PaddleOcrLoader` | 基于 OCR 的解析，适合扫描件，支持认证 Token |
+| MiniCPM-OCR | `minicpm_ocr` | `MinicpmOcrLoader` | 通过 OpenAI 兼容端点逐页识别，输出页级 Markdown，无 block bbox |
 | 本地解析 | 无配置 | `LocalPdfLoader` | 兜底方案，使用本地 PDF 库直接解析 |
 
 解析引擎的选择逻辑位于 `BaseFilePipeline._init_pdf_loader()`：按配置的 `loader_provider` 值匹配，若对应引擎的 URL 为空则回退到本地解析。图片文件（png/jpg/jpeg/bmp）复用 PDF 解析引擎进行 OCR，如果回退到本地解析器则抛出不支持异常。
+
+`minicpm_ocr` 按页渲染 PDF（默认 200 DPI），每页调用一次 `{base_url}/chat/completions`，content 顺序为图片在前、`Text Recognition:` 在后，并按 `concurrency` 并发。它只产出页级文本：`metadata.bboxes` 每页为空，`bbox_list` 为空，因此段落引用没有页内坐标；`filter_page_header_footer` / `retain_images` 对该引擎不生效。
+
+整页识别不跑版面模型，复杂多栏页面的阅读顺序由模型自身决定；需要版面分析与 block 坐标时请用 `mineru_v4`，或使用 MiniCPM-OCR 官方 SDK 的两阶段流程（PP-DocLayoutV3 + 区域识别）。请求级 `mm_processor_kwargs` 默认不发送（vLLM 需 `--trust-request-mm-kwargs`），服务端应固定 `--mm-processor-kwargs '{"downsample_mode":"4x"}'`；若模型把正文写进 `reasoning_content` 导致空输出，需在服务端关闭 thinking（vLLM `--default-chat-template-kwargs '{"enable_thinking":false}'`，llama.cpp `--reasoning off`），也可通过 `request_kwargs` 透传 `chat_template_kwargs`。
 
 ### 4.3 解析引擎配置
 
@@ -218,7 +223,7 @@ PDF 文件的加载器通过 `KnowledgeConf.loader_provider` 配置项动态选�
 
 ```yaml
 knowledge:
-  loader_provider: "etl4lm"       # 可选: etl4lm, mineru, paddle_ocr
+  loader_provider: "etl4lm"       # 可选: etl4lm, mineru, mineru_v4, paddle_ocr, minicpm_ocr
   etl4lm:
     url: "http://..."
     timeout: 600
@@ -232,6 +237,21 @@ knowledge:
     url: "http://..."
     timeout: 60
     auth_token: ""
+  minicpm_ocr:
+    base_url: "http://127.0.0.1:8000/v1"   # OpenAI 兼容端点根地址
+    model: "minicpm-ocr"
+    api_key: ""
+    prompt: "Text Recognition:"
+    timeout: 120
+    max_retries: 3
+    retry_backoff: 1
+    concurrency: 4
+    dpi: 200
+    max_tokens: 4096
+    temperature: 0
+    mm_processor_kwargs: null      # 默认不发送；开启需服务端 --trust-request-mm-kwargs
+    request_kwargs: {}             # 额外请求字段，如 {"chat_template_kwargs": {"enable_thinking": false}}
+    headers: {}
 ```
 
 ## 5. 文档转换器

@@ -1,4 +1,4 @@
-import { Cascader, type CascaderOption, type CascaderPath } from "@bisheng/ui";
+import { Cascader, Tooltip, type CascaderOption, type CascaderPath } from "@bisheng/ui";
 import { memo, useEffect, useMemo } from "react";
 import { useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
@@ -18,6 +18,8 @@ interface AiModelSelectProps {
   options?: BsConfig["models"];
   value: number;
   disabled: boolean;
+  /** Shown as a tooltip while the selector is disabled, to say when it comes back. */
+  disabledReason?: string;
   /** User-initiated model selection. */
   onChange: (value: string) => void;
   /**
@@ -29,7 +31,7 @@ interface AiModelSelectProps {
   onAutoChange?: (value: string) => void;
 }
 
-const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }: AiModelSelectProps) => {
+const AiModelSelect = memo(({ options, value, disabled, disabledReason, onChange, onAutoChange }: AiModelSelectProps) => {
   const localize = useLocalize();
   const selectCopy = useSelectCopy();
   // Dedup by model id — multiple LLM servers can expose the same model,
@@ -86,7 +88,7 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
     }
   }, [uniqueOptions, value, onAutoChange, onChange]);
 
-  return (
+  const cascader = (
     <Cascader
       {...selectCopy}
       variant="ghost"
@@ -109,6 +111,9 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
       className="min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)]"
     />
   );
+  // The tooltip adds a hover zone around a disabled trigger, so it is mounted
+  // only while there is a reason to show.
+  return disabled && disabledReason ? <Tooltip content={disabledReason}>{cascader}</Tooltip> : cascader;
 });
 
 AiModelSelect.displayName = "AiModelSelect";

@@ -14,8 +14,8 @@ import { chatIdState, chatsState } from "../store/atoms";
 const ACTION_BTN =
     "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1";
 
-interface MessageButtonsProps { id: string | number; text: string; onCopy: () => void; data?: number; children?: ReactNode }
-export default function MessageButtons({ id, text, onCopy, data, children = null }: MessageButtonsProps) {
+interface MessageButtonsProps { id: string | number; text: string; onCopy: () => void; data?: number; hideFeedback?: boolean; children?: ReactNode }
+export default function MessageButtons({ id, text, onCopy, data, hideFeedback = false, children = null }: MessageButtonsProps) {
     const localize = useLocalize();
     const [copied, setCopied] = useState(false)
     const chatId = useRecoilValue(chatIdState)
@@ -68,10 +68,12 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
                 ? <Outlined.Copied size={14} className="text-blue-500" />
                 : <Outlined.Copy size={14} className="text-text-3" />}
         </button>
-        <MessageFeedbackButtons
-            liked={data}
-            onLike={handleLike}
-            onDislikeComment={(comment) => disLikeCommentApi(id, comment)}
-        />
+        {!hideFeedback && (
+            <MessageFeedbackButtons
+                liked={data}
+                onLike={handleLike}
+                onDislikeComment={(comment) => disLikeCommentApi(id, comment)}
+            />
+        )}
     </div>
 };

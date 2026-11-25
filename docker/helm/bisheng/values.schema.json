@@ -22,6 +22,9 @@
             "existingPlatformSecret": {
               "type": "string"
             },
+            "existingKeyringSecret": {
+              "type": "string"
+            },
             "existingRuntimeSecret": {
               "type": "string"
             },

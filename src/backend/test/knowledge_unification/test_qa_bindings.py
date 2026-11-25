@@ -123,7 +123,7 @@ async def test_original_qa_creation_consumers_bind_actual_embedding(creation, mo
     actual = next(value for value in facts["knowledge"] if value["id"] == row.id)
     assert (actual["type"], actual["model"], actual["tenant_id"]) == (1, "11", 101)
     references = [value for value in facts["business_resource_reference"] if value["source_id"] == str(row.id)]
-    assert [(value["slot_key"], value["target_id"]) for value in references] == [("model", "11")]
+    assert references == []
     projection.assert_awaited_once_with(context.user, row)
     if asynchronous:
         consumers.module.KnowledgeRag.init_knowledge_milvus_vectorstore.assert_not_called()
@@ -157,12 +157,7 @@ async def test_clear_qa_removes_qa_rows(qa_service, only_clear):
     else:
         assert all(value["id"] != 40 for value in after["knowledge"])
         assert not after["business_resource_reference"]
-        source = next(
-            value
-            for value in after["business_reference_set"]
-            if value["source_id"] == "40" and value["record_kind"] == "source"
-        )
-        assert source["ready"] and not source["effective"]
+        assert not after["business_reference_set"]
 
 
 async def test_clear_normal_kb_skips_qa_rows(qa_service):
@@ -196,9 +191,14 @@ async def test_qa_actual_consumer_failure_keeps_business_and_references(qa_servi
         monkeypatch.setattr(
             context.runtime, "apply_source_bindings", Mock(side_effect=RuntimeError("transport failed"))
         )
-    with pytest.raises(RuntimeError, match="transport failed"):
-        await remove(context, only_clear=False)
-    assert state(context) == before
+    if failure == "references":
+        assert await remove(context, only_clear=False)
+        assert all(value["id"] != 40 for value in state(context)["knowledge"])
+        context.runtime.apply_source_bindings.assert_not_called()
+    else:
+        with pytest.raises(RuntimeError, match="transport failed"):
+            await remove(context, only_clear=False)
+        assert state(context) == before
 
 
 async def test_actual_qa_model_change_keeps_old_and_pending_slots_and_qa_dispatch(qa_service, monkeypatch):
@@ -214,9 +214,6 @@ async def test_actual_qa_model_change_keeps_old_and_pending_slots_and_qa_dispatc
     assert row.type == 1 and row.model == "11"
     assert row.model_transition["pending_model_id"] == "12"
     refs = state(context)["business_resource_reference"]
-    assert {(value["slot_key"], value["target_id"]) for value in refs} == {
-        ("model", "11"),
-        ("model_transition.pending_model_id", "12"),
-    }
+    assert refs == []
     command = dispatch.call_args.args[0]
     assert (command.type, command.tenant_id, command.knowledge_id) == (1, 101, 40)

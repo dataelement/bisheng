@@ -23,8 +23,8 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
   const similar = item.has_similar === true && item.is_multi_version !== true;
   const eligible = enabled && item.file_type === 1 && item.status === 2 && (!indicator || similar);
   const permission = useQuery({
-    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "detail-actions"],
-    queryFn: () => getMyResourcePermissionsApi("knowledge_space", String(spaceId)),
+    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-file-actions", item.id],
+    queryFn: ({ signal }) => getMyResourcePermissionsApi("knowledge_file", String(item.id), { signal }),
     enabled: eligible,
     retry: false,
     cacheTime: 0,
@@ -32,7 +32,7 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
   useEffect(() => {
     if (eligible && permission.error) showApiError(permission.error);
   }, [eligible, permission.error]);
-  if (!eligible || permission.isError || !permission.data?.actions?.includes("edit")) return null;
+  if (!eligible || permission.isFetching || permission.isError || !permission.data?.actions?.includes("edit")) return null;
   if (indicator) return (
     <button
       type="button"

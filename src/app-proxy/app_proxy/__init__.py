@@ -14,4 +14,4 @@ application frameworks that trust ``X-BiSheng-*`` unconditionally. See
 it.
 """
 
-__version__ = "3.1.0-beta1"
+__version__ = "3.1.0-beta2"

@@ -20,6 +20,8 @@ from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.database.models import flow as flow_model
 from bisheng.database.models import flow_version as version_model
 from bisheng.database.models.flow import FlowCreate
+from bisheng.database.models.tenant import Tenant
+from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.resource_reference.application.contracts import (
     ReferenceState,
@@ -27,6 +29,7 @@ from bisheng.resource_reference.application.contracts import (
     TransactionIdentity,
     VerifiedReferenceTarget,
 )
+from bisheng.resource_reference.application.source_sync import refresh_root
 from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
@@ -104,6 +107,15 @@ async def bindings(store, monkeypatch):
     async_engine, sync_engine = store
     for table in TABLES:
         table.create(sync_engine)
+    from sqlmodel import Session
+
+    for model in (Tenant, LLMServer, LLMModel):
+        model.__table__.create(sync_engine, checkfirst=True)
+    with Session(sync_engine) as sql:
+        sql.add(Tenant(id=101, tenant_code="leaf", tenant_name="Leaf"))
+        sql.add(LLMServer(id=1, tenant_id=101, name="test", type="openai"))
+        sql.add(LLMModel(id=7, tenant_id=101, server_id=1, model_name="m-7", model_type="llm"))
+        sql.commit()
     metadata = sa.MetaData()
     targets = sa.Table(
         "wf_test_target",
@@ -135,6 +147,7 @@ async def bindings(store, monkeypatch):
     monkeypatch.setattr(version_model, "get_sync_db_session", flow_model.get_sync_db_session)
     monkeypatch.setattr(workflow_endpoint, "get_sync_db_session", flow_model.get_sync_db_session, raising=False)
     monkeypatch.setattr(flow_service, "get_reference_binding_runtime", AsyncMock(return_value=runtime), raising=False)
+    monkeypatch.setattr(flow_service, "notify_reference_sync", AsyncMock())
     monkeypatch.setattr(flow_service.telemetry_service, "log_event", AsyncMock())
     monkeypatch.setattr(flow_service.telemetry_service, "log_event_sync", Mock())
     permission = SimpleNamespace(authorize_created=AsyncMock())
@@ -174,6 +187,8 @@ def rows(context, table):
 async def test_actual_create_endpoint_registers_v0_using_its_database_generated_id(bindings):
     result = await create(bindings, saved_data=graph(node("llm", "llm", model_id=7)))
     assert result.status_code == 200 and result.data.version_id is not None
+    assert not rows(bindings, "business_reference_set")
+    await refresh_root(101, "workflow_version", result.data.id, session_factory=bindings.session_factory)
     sources = [row for row in rows(bindings, "business_reference_set") if row["record_kind"] == "source"]
     assert len(sources) == 1
     assert (sources[0]["source_id"], sources[0]["source_version"], sources[0]["effective"], sources[0]["ready"]) == (
@@ -192,25 +207,22 @@ async def test_actual_create_endpoint_registers_v0_using_its_database_generated_
 
 async def test_empty_initial_draft_is_indexed_as_a_ready_zero_reference_source(bindings):
     result = await create(bindings, saved_data={})
+    assert not rows(bindings, "business_reference_set")
+    await refresh_root(101, "workflow_version", result.data.id, session_factory=bindings.session_factory)
     sources = [row for row in rows(bindings, "business_reference_set") if row["record_kind"] == "source"]
     assert len(sources) == 1 and sources[0]["source_version"] == str(result.data.version_id)
     assert sources[0]["ready"] == 1 and not rows(bindings, "business_resource_reference")
 
 
-async def test_binding_failure_rolls_back_initial_root_v0_index_and_details(bindings, monkeypatch):
-    original = bindings.runtime.aapply_source_bindings
-
-    async def fail_after_binding_write(session, prepared):
-        await original(session, prepared)
-        raise RuntimeError("binding write failed")
-
-    monkeypatch.setattr(bindings.runtime, "aapply_source_bindings", fail_after_binding_write)
-    with pytest.raises(RuntimeError, match="binding write failed"):
-        await create(bindings, saved_data=graph(node("llm", "llm", model_id=7)))
-    assert all(row["name"] != "new-workflow" for row in rows(bindings, "flow"))
-    assert {row["id"] for row in rows(bindings, "flowversion")} == {1, 2, 3}
+async def test_legacy_binding_failure_does_not_block_initial_root_and_v0(bindings, monkeypatch):
+    binding = AsyncMock(side_effect=RuntimeError("binding write failed"))
+    monkeypatch.setattr(bindings.runtime, "aapply_source_bindings", binding)
+    result = await create(bindings, saved_data=graph(node("llm", "llm", model_id=7)))
+    assert any(row["id"] == result.data.id for row in rows(bindings, "flow"))
+    assert result.data.version_id in {row["id"] for row in rows(bindings, "flowversion")}
     assert not rows(bindings, "business_reference_set") and not rows(bindings, "business_resource_reference")
-    bindings.permission.authorize_created.assert_not_awaited()
+    binding.assert_not_awaited()
+    bindings.permission.authorize_created.assert_awaited_once()
 
 
 async def test_copy_or_import_new_root_cannot_introduce_a_missing_target(bindings):
@@ -226,7 +238,7 @@ async def test_projection_follows_atomic_root_and_reference_commit_while_pending
         target = kwargs["target"]
         root = next(row for row in rows(bindings, "flow") if row["id"] == target.resource_id)
         assert root["creation_state"] == "PENDING"
-        assert rows(bindings, "business_reference_set")
+        assert not rows(bindings, "business_reference_set")
 
     bindings.permission.authorize_created.side_effect = assert_committed_pending
     result = await create(bindings, saved_data=graph(node("llm", "llm", model_id=7)))
@@ -240,7 +252,7 @@ async def test_projection_failure_preserves_pending_root_and_committed_reference
         await create(bindings, saved_data=graph(node("llm", "llm", model_id=7)))
     roots = [row for row in rows(bindings, "flow") if row["name"] == "new-workflow"]
     assert len(roots) == 1 and roots[0]["creation_state"] == "PENDING"
-    assert rows(bindings, "business_reference_set") and rows(bindings, "business_resource_reference")
+    assert not rows(bindings, "business_reference_set") and not rows(bindings, "business_resource_reference")
 
 
 async def test_duplicate_workflow_name_preserves_existing_business_guard(bindings):

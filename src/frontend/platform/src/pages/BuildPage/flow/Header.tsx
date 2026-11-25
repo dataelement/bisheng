@@ -31,7 +31,8 @@ import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import { useBeforeUnload } from "./hooks/useBeforeUnload";
-import { useNodeEvent } from "./hooks/useNodeEvent";
+import { useNodeEvent, validateMemoryLimits } from "./hooks/useNodeEvent";
+import { useWorkflowPreflight } from "./hooks/useWorkflowPreflight";
 import Notification from "./Notification";
 const APP_HEADER_ACTIONS = [
     'edit',
@@ -60,10 +61,11 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const canManage = flowId ? hasResourceAction(actions, flowId, 'manage_permission') : false;
     // console.log('flow :>> ', flow);
     const validateNodes = useNodeEvent(flow)
+    const preflight = useWorkflowPreflight(flow)
     const addNotification = useFlowStore((state) => state.addNotification);
     const handleRunClick = async () => {
         // 记录错误日志
-        const errors = await validateNodes()
+        const errors = await preflight.validate(validateNodes, snapshot => testRef.current?.run(snapshot))
         if (errors.length) {
             errors.map(el => addNotification({
                 type: 'warning',
@@ -72,10 +74,9 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             }))
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
-        testRef.current?.run(flow)
     }
     const handleOnlineClick = async () => {
-        const errors = await validateNodes()
+        const errors = await validateNodes({ publish: true })
         if (errors.length) {
             errors.map(el => addNotification({
                 type: 'warning',
@@ -113,6 +114,12 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         if (isOnlineVersionFun()) {
             toast.show({ type: 'warning', message: String(t('currentVersionLaunched') ?? '') })
             return !hasChanged
+        }
+        // F132: memory retriever limits must be integers from 1 to 100 before saving (AC-80)
+        const memoryErrors = validateMemoryLimits(flow.nodes, t)
+        if (memoryErrors.length) {
+            toast.show({ type: 'warning', message: memoryErrors.join('\n') })
+            return false
         }
         // temp
         // localStorage.setItem('flow_tmp', JSON.stringify(flow))
@@ -200,6 +207,12 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     }, [saveVersionId])
     // new version
     const handleSaveNewVersion = async () => {
+        // F132: same limit check as a normal save (AC-80)
+        const memoryErrors = validateMemoryLimits(flow.nodes, t)
+        if (memoryErrors.length) {
+            toast.show({ type: 'warning', message: memoryErrors.join('\n') })
+            return
+        }
         // 累加版本 vx ++
         const maxNo = lastVersionIndexRef.current + 1
         const { nodes, edges, viewport } = flow
@@ -278,7 +291,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             {/* Right Section with Options */}
             <div className="header-right flex items-center gap-2">
                 <Notification />
-                <Button variant="outlined" disabled={!canEdit} onClick={handleUiRequest(handleRunClick)} color="default">
+                <Button variant="outlined" disabled={!canEdit || preflight.validating} onClick={handleUiRequest(handleRunClick)} color="default">
                     <Filled.PlayerPlay className="size-3.5" />
                     {t('run')}
                 </Button>

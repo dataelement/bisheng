@@ -12,7 +12,7 @@ def _revision():
 
 
 def test_single_head_is_f016():
-    assert _script_directory().get_heads() == ["v310b1_f016_dsh_call_pricing"]
+    assert _script_directory().get_heads() == ["v310b2_merge_f016_pricing_memory_heads"]
 
 
 def test_columns_match_the_model_on_mysql():

@@ -1,8 +1,9 @@
 import asyncio
+import inspect
 import json
 from contextlib import nullcontext
 
-from fastapi import Request, WebSocket
+from fastapi import HTTPException, Request, WebSocket
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
@@ -13,12 +14,15 @@ from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.chat import WorkflowOfflineError
+from bisheng.common.errcode.flow import WorkFlowInvalidUserInputError, WorkFlowTaskOtherError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.interfaces.resource_execution import WorkflowExecutionPort
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
+from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, workflow_stateful_worker
@@ -50,7 +54,11 @@ class WorkflowClient(BaseClient):
         self.hash_key = None
         self.ws_closed = False
         self.run_lock = asyncio.Lock()
-        self.session_subject = kwargs.get("session_subject")
+        from bisheng.chat_session.domain.session_subject import SessionSubject
+
+        self.session_subject = kwargs.get("session_subject") or SessionSubject.natural_person(
+            tenant_id=login_user.tenant_id, user_id=login_user.user_id
+        )
         self.execution_snapshot = kwargs.get("execution_snapshot")
         self.execution_port = kwargs.get("workflow_execution_port")
 
@@ -73,12 +81,46 @@ class WorkflowClient(BaseClient):
         await super().close()
 
     async def _handle_message(self, message: dict[any, any]):
+        try:
+            await self._dispatch_message(message)
+        except BaseErrorCode as error:
+            logger.opt(exception=True).warning("workflow request rejected")
+            await self._report_request_error(error)
+        except HTTPException as error:
+            logger.opt(exception=True).warning("workflow request authorization failed")
+            error_type = {403: UnAuthorizedError, 404: NotFoundError}.get(error.status_code, WorkFlowTaskOtherError)
+            await self._report_request_error(error_type())
+        except Exception:
+            logger.exception("workflow request failed")
+            # Internal exception details can contain credentials or provider URLs.
+            await self._report_request_error(WorkFlowTaskOtherError())
+
+    async def _report_request_error(self, error: BaseErrorCode):
+        await error.websocket_close_message(websocket=self.websocket, close_ws=False)
+        await self.send_response("processing", "close", "")
+
+    def _new_workflow_callback(self, unique_id: str):
+        # The endpoint supplied this snapshot. Browser messages cannot select
+        # a persistence channel; use the same channel for WS and worker writes.
+        return RedisCallback(
+            unique_id,
+            self.client_id,
+            self.chat_id,
+            self.user_id,
+            source="api" if self.execution_snapshot is not None else "platform",
+        )
+
+    async def _dispatch_message(self, message: dict[any, any]):
         logger.debug("----------------------------- start handle message -----------------------")
         if message.get("flow_id", self.client_id) != self.client_id:
-            await ResourceReferenceInvalidError(reason="workflow_connection_root_mismatch").websocket_close_message(
-                websocket=self.websocket, close_ws=False
-            )
-            return
+            raise ResourceReferenceInvalidError(reason="workflow_connection_root_mismatch")
+        if message.get("action") in {"input", "stop"}:
+            if message.get("chat_id", self.chat_id) != self.chat_id:
+                raise NotFoundError.http_exception()
+            if self.chat_id and self.session_subject is not None:
+                session = await ChatSessionService.get_subject_session(self.chat_id, self.session_subject)
+                if session.flow_id != self.client_id:
+                    raise NotFoundError.http_exception()
         if message.get("action") == "init_data":
             # InisialisasiworkflowDATA
             await self.init_workflow(message)
@@ -114,25 +156,21 @@ class WorkflowClient(BaseClient):
         if message.get("flow_id", self.client_id) != self.client_id:
             raise ResourceReferenceInvalidError(reason="workflow_connection_root_mismatch")
         workflow_id = self.client_id
-        self.chat_id = message.get("chat_id", "")
-        if self.chat_id and self.session_subject is not None:
+        chat_id = message.get("chat_id", self.chat_id) or ""
+        if chat_id and self.session_subject is not None:
             session = await ChatSessionService.get_subject_session_if_exists(
-                self.chat_id,
+                chat_id,
                 self.session_subject,
             )
             if session is not None and session.flow_id != workflow_id:
-                from bisheng.common.errcode.http_error import NotFoundError
-
                 raise NotFoundError.http_exception()
             if session is None:
                 workflow_db = FlowDao.get_flow_by_id(workflow_id)
                 if workflow_db is None:
-                    from bisheng.common.errcode.http_error import NotFoundError
-
                     raise NotFoundError.http_exception()
                 await ChatSessionService.create_subject_session(
                     MessageSession(
-                        chat_id=self.chat_id,
+                        chat_id=chat_id,
                         flow_id=workflow_id,
                         flow_name=workflow_db.name,
                         flow_type=workflow_db.flow_type,
@@ -140,12 +178,20 @@ class WorkflowClient(BaseClient):
                     ),
                     self.session_subject,
                 )
+        if not chat_id and self.execution_snapshot is None:
+            await require_business_action(
+                self.login_user, resource_type="workflow", resource_id=workflow_id, action="edit"
+            )
+        # Commit the connection target only after ownership/flow checks pass.
+        self.chat_id = chat_id
+        if self.chat_id and self.memory_register is not None:
+            await self._register_memory_session()
         unique_id = generate_uuid()
         if self.chat_id:
             await self.init_history()
             unique_id = f"{self.chat_id}_async_task_id"
         logger.debug(f"init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}")
-        self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, self.user_id)
+        self.workflow = self._new_workflow_callback(unique_id)
         if not await self.ensure_workflow_available(workflow_id):
             return False, unique_id
 
@@ -182,6 +228,15 @@ class WorkflowClient(BaseClient):
         await self.workflow_run()
         return False, unique_id
 
+    async def _register_memory_session(self) -> None:
+        """F132: call the callback injected by the logged-in endpoint (never set for guest/open)."""
+        try:
+            result = self.memory_register(self.chat_id)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            logger.exception("memory session registration failed chat_id={}", self.chat_id)
+
     async def get_execute_worker(self) -> str | None:
         if not self.hash_key:
             self.hash_key = self.chat_id if self.chat_id else generate_uuid()
@@ -215,14 +270,10 @@ class WorkflowClient(BaseClient):
             # WAITING run behind.
             flow_outcome = await ensure_client_execution_lease(self)
             if flow_outcome == "rejected":
-                # Do not raise: the ``except Exception`` below would rewrite this
-                # to status_code 500 and the page would never see 12045.
-                await DepartmentDailyChatConcurrentLimitError().websocket_close_message(
-                    websocket=self.websocket, close_ws=False
-                )
+                await self._report_request_error(DepartmentDailyChatConcurrentLimitError())
                 return
             # Start a new workflow
-            self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, self.user_id)
+            self.workflow = self._new_workflow_callback(unique_id)
             await self.workflow.async_set_workflow_data(workflow_data)
             await self.workflow.async_set_workflow_status(WorkflowStatus.WAITING.value)
             # Start asynchronous task
@@ -242,12 +293,15 @@ class WorkflowClient(BaseClient):
             await self.workflow_run()
         except BaseErrorCode as error:
             self.workflow = None
-            await error.websocket_close_message(websocket=self.websocket, close_ws=False)
+            await self._report_request_error(error)
             return
-        except Exception as e:
+        except HTTPException:
+            self.workflow = None
+            raise
+        except Exception:
             logger.exception("init_workflow_error")
             self.workflow = None
-            await self.send_response("error", "over", {"status_code": 500, "message": str(e)})
+            await self._report_request_error(WorkFlowTaskOtherError())
             return
 
     async def workflow_run(self, close_message: str | dict = ""):
@@ -280,7 +334,9 @@ class WorkflowClient(BaseClient):
     async def ensure_workflow_available(self, workflow_id: str) -> bool:
         # Draft previews may run offline flows, but never deleted ones.
         workflow_db = FlowDao.get_flow_by_id(workflow_id)
-        if workflow_db and (not self.chat_id or workflow_db.status == FlowStatus.ONLINE.value):
+        if workflow_db and (
+            (not self.chat_id and self.execution_snapshot is None) or workflow_db.status == FlowStatus.ONLINE.value
+        ):
             return True
 
         if self.workflow:
@@ -311,18 +367,16 @@ class WorkflowClient(BaseClient):
             # INPUT_OVER with no worker behind it.
             flow_outcome = await ensure_client_execution_lease(self)
             if flow_outcome == "rejected":
-                # Not raised on purpose: this path runs inside ``wrapper_task``,
-                # whose ``except Exception`` only logs — the page would never
-                # receive 12045.
-                await DepartmentDailyChatConcurrentLimitError().websocket_close_message(
-                    websocket=self.websocket, close_ws=False
-                )
+                await self._report_request_error(DepartmentDailyChatConcurrentLimitError())
                 return
             user_input = {}
             message_id = None
             new_message = None
             new_files = None
-            # Currently one input node is supported
+            # Exactly one interrupted node is supported; extra nodes can carry
+            # executable parameter mutations and must not be dropped silently.
+            if not isinstance(data, dict) or len(data) != 1:
+                raise WorkFlowInvalidUserInputError(msg="input must contain exactly one waiting node")
             for node_id, node_info in data.items():
                 user_input[node_id] = node_info["data"]
                 message_id = node_info.get("message_id")
@@ -332,7 +386,11 @@ class WorkflowClient(BaseClient):
                 new_files = node_info.get("files")
                 break
             await self.workflow.async_set_user_input(
-                user_input, message_id=message_id, message_content=new_message, files=new_files
+                user_input,
+                message_id=message_id,
+                message_content=new_message,
+                files=new_files,
+                verify_input=True,
             )
             await self.workflow.async_set_workflow_status(WorkflowStatus.INPUT_OVER.value)
             continue_workflow.apply_async(

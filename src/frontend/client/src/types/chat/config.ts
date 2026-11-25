@@ -527,8 +527,11 @@ export type BsConfig = {
       enabled?: boolean;
     }>;
   }>;
-  /** Visible organization knowledge bases configured as new-chat defaults. */
-  orgKbs?: Array<{ id: string | number; name: string; default_checked?: boolean; sort_order?: number }>;
+  /**
+   * Configured knowledge bases the user can see. Every one starts selected in a new chat;
+   * `show_in_composer: false` hides its composer tag but it is still sent (F005).
+   */
+  orgKbs?: Array<{ id: string | number; name: string; show_in_composer?: boolean; sort_order?: number }>;
   applicationCenterWelcomeMessage: string;
   applicationCenterDescription: string;
   /**

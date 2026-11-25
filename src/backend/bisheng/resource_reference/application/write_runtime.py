@@ -368,7 +368,20 @@ class ReferenceBindingRuntime:
             receipt.target.state != ReferenceState.VALID or not receipt.target.new_binding_allowed
             for receipt in receipts
         ):
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+            raise ResourceReferenceInvalidError(
+                reason="reference_target_invalid",
+                reference_errors=[
+                    {
+                        "resource_type": receipt.target.key.target_type.value,
+                        "target_id": receipt.target.key.target_id,
+                        "state": receipt.target.state.value
+                        if receipt.target.state != ReferenceState.VALID
+                        else "unavailable",
+                    }
+                    for receipt in receipts
+                    if receipt.target.state != ReferenceState.VALID or not receipt.target.new_binding_allowed
+                ][:5],
+            )
 
     def require_source_valid(self, session: Session, source_key: SourceKey, *, references=None) -> None:
         candidate = self._read(session, source_key)

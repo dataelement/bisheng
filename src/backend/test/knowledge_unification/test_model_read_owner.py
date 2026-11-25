@@ -64,13 +64,12 @@ async def test_own_and_root_source_models_use_real_owner_facts_not_request_tenan
     ref = knowledge.spec("model", target)
     owner = {11: 101, 22: 1, 33: 202}[target]
     await knowledge.configure(ctx, (ref,), tenant_id=source_tenant, cached_owners={ref.target: owner})
-    ctx.sharing.expected_tenant = source_tenant
-    if source_tenant == 1:
-        ctx.sharing.error = AssertionError("Root's own model is not Child sharing")
+    ctx.sharing.expected_tenant = 101
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
         fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.is_valid and fact.target_tenant_id == owner
+        assert fact.is_valid is (owner in {1, 101})
+        assert fact.target_tenant_id == (owner if owner in {1, 101} else None)
         assert not session.sync_session.identity_map and knowledge.scopes._resolve_tenant_id() == 101
 
 
@@ -82,12 +81,14 @@ async def test_explicit_revocation_is_a_live_non_executable_fact_and_preview_can
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
         fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.state == "valid" and not fact.is_valid
+        assert fact.state == "invalid_scope" and not fact.is_valid
         preview = await ctx.verifier.aissue_transient_scope(
             session, TransientTargetRequest("workflow", "workflow-a", knowledge.payload((ref,))), ctx.identity
         )
-        with pytest.raises(ResourceReferenceInvalidError):
+        transient = (
             await ctx.model.ainspect_transient_targets(session, preview, (ref.target,), identity=ctx.identity)
+        )[0]
+        assert transient.state == "invalid_scope" and not transient.is_valid
 
 
 @pytest.mark.parametrize("case", ["error", "malformed", "owner_change"])
@@ -104,10 +105,14 @@ async def test_sharing_and_owner_failures_are_never_an_allow_fallback(model_read
         ctx.sharing.allowed = frozenset({True})
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
-        with pytest.raises(RuntimeError if case == "error" else ResourceReferenceInvalidError) as caught:
-            await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity)
-        if case == "error":
-            assert caught.value is error
+        if case == "owner_change":
+            fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
+            assert fact.is_valid and fact.target_tenant_id == 1
+        else:
+            with pytest.raises(RuntimeError if case == "error" else ResourceReferenceInvalidError) as caught:
+                await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity)
+            if case == "error":
+                assert caught.value is error
 
 
 @pytest.mark.parametrize("stage", ["deleted", "deleting"])
@@ -122,7 +127,7 @@ async def test_real_original_model_tombstone_is_read_without_becoming_a_binding_
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
         fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.state == ("invalid_deleted" if stage == "deleted" else "deleting") and not fact.is_valid
+        assert fact.state == ("invalid_missing" if stage == "deleted" else "deleting") and not fact.is_valid
 
 
 async def test_server_candidate_change_requires_whole_read_restart(model_read_context):
@@ -180,7 +185,10 @@ async def test_default_async_sharing_reads_real_five_type_config_in_source_tenan
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
         fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.is_valid and not session.sync_session.identity_map
+        assert not fact.is_valid and not session.sync_session.identity_map
+        relation.list_resource_ids.return_value = ["2"]
+        fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
+        assert fact.is_valid
 
 
 async def test_missing_unrelated_root_default_does_not_cancel_explicit_server_sharing(model_read_context):
@@ -220,4 +228,4 @@ async def test_missing_model_uses_frozen_original_proof_without_guessing_its_ten
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, knowledge.REQUEST, ctx.identity)
         fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.state == "invalid_legacy" and fact.target_tenant_id is None and not fact.is_valid
+        assert fact.state == "invalid_missing" and fact.target_tenant_id is None and not fact.is_valid

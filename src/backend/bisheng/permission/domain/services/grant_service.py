@@ -12,6 +12,7 @@ from bisheng.common.errcode.permission import (
     InvalidPermissionModeError,
     PermissionModelStateConflictError,
     PermissionMutationTooLargeError,
+    PermissionSubjectUnavailableError,
     PermissionVersionConflictError,
     ProtectedAssignmentMutationError,
 )
@@ -28,6 +29,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
+    is_missing_user_subject,
     is_visibility_only_model,
 )
 from bisheng.permission.domain.services.projection_plan import merge_projection_deltas
@@ -431,6 +433,8 @@ class GrantService:
             grants[source_model_key] = mutation.grant
             return mutation.deltas
 
+        if is_missing_user_subject(source.subject_type, source.subject_id):
+            raise PermissionSubjectUnavailableError()
         if not change.target_model_key:
             raise ValueError("MOVE requires target_model_key")
         target_model = self.require_grantable_model(

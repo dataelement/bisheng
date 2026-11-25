@@ -180,3 +180,15 @@ it('ignores a late menu grant after a folder A-B-A navigation', async () => {
     await act(async () => { pending.resolve({ actions: ['delete', 'move'] } as never); await opening; });
     expect(result.current.deleteEntryIds.size + result.current.moveEntryIds.size).toBe(0);
 });
+
+
+it.each([true, false])('uses file edit independently of space edit and rename (file edit=%s)', async edit => {
+    jest.mocked(getMyResourcePermissions).mockImplementation(async type => ({
+        mode: 'INHERIT', sources: [], roster_complete: true,
+        actions: type === 'knowledge_space' ? ['edit'] : edit ? ['edit'] : ['rename'],
+    }));
+    const { result } = mount();
+    await act(async () => { await result.current.ensureFilePermissions(file('11')); });
+    expect(result.current.editEntryIds.has('11')).toBe(edit);
+    expect(result.current.renameEntryIds.has('11')).toBe(!edit);
+});

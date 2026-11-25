@@ -14,6 +14,7 @@ import pytest
 from bisheng.common.errcode.permission import (
     GrantLevelForbiddenError,
     PermissionModelStateConflictError,
+    PermissionSubjectUnavailableError,
     PermissionVersionConflictError,
     ProtectedAssignmentMutationError,
 )
@@ -477,11 +478,15 @@ async def test_inactive_source_model_allows_precise_remove_and_visible_revoke() 
     )
     models = (inactive_viewer, *base.models[1:])
     grants = (seeded, *base.grants[1:])
-    existing = VisibilityProjectionCompiler().compile(
-        tenant_id=7,
-        grants=grants,
-        existing_sources=(),
-    ).active_sources
+    existing = (
+        VisibilityProjectionCompiler()
+        .compile(
+            tenant_id=7,
+            grants=grants,
+            existing_sources=(),
+        )
+        .active_sources
+    )
     context = replace(
         base,
         models=models,
@@ -531,11 +536,15 @@ async def test_move_freezes_action_and_single_slot_contribution_in_same_operatio
     )
     viewer = source_service.add_source(base.grants[0], source).grant
     grants = (viewer, *base.grants[1:])
-    existing = VisibilityProjectionCompiler().compile(
-        tenant_id=7,
-        grants=grants,
-        existing_sources=(),
-    ).active_sources
+    existing = (
+        VisibilityProjectionCompiler()
+        .compile(
+            tenant_id=7,
+            grants=grants,
+            existing_sources=(),
+        )
+        .active_sources
+    )
     context = replace(base, grants=grants, existing_visible_sources=existing)
 
     await service.mutate(
@@ -559,3 +568,73 @@ async def test_move_freezes_action_and_single_slot_contribution_in_same_operatio
     assert [row.model_key for row in visibility.active_sources] == ["editor"]
     assert [row.model_key for row in visibility.retired_sources] == ["viewer"]
     assert visibility.deltas == ()
+
+
+@pytest.mark.parametrize("operation", ["MOVE", "REMOVE"])
+async def test_tool_ordinary_owner_remains_manageable_without_touching_protected_creator(operation):
+    service, sources, projection, state, _ = _service()
+    context = _context(
+        capabilities=(
+            GrantCapability(
+                model=_model("owner", 4, "manage_permission", allow_same_level=True), source_key="actor-owner"
+            ),
+        )
+    )
+    target = VerifiedPermissionTarget.from_business_service(
+        tenant_id=7, resource_type="tool", resource_id="42", resource_version=4, context_version="tool-42-v4"
+    )
+    grants = tuple(replace(grant, resource_type="tool") for grant in context.grants)
+    creator = sources.canonicalize_source(
+        source_id=30, subject_type="user", subject_id="300", source_type="CREATOR", source_ref="tool:42", protected=True
+    )
+    ordinary = sources.canonicalize_source(source_id=31, subject_type="user", subject_id="301", source_type="DIRECT")
+    owner = sources.add_source(sources.add_source(grants[3], creator).grant, ordinary).grant
+    context = replace(context, target=target, grants=(*grants[:3], owner))
+    result = await service.mutate(
+        context,
+        changes=(
+            CanonicalGrantChange(
+                operation=operation,
+                assignee_id=31,
+                expected_assignee_version=1,
+                target_model_key="viewer",
+            ),
+        ),
+        expected_resource_version=4,
+        expected_catalog_release_id=12,
+        idempotency_key=f"ordinary-owner-{operation}",
+    )
+    owner = next(grant for grant in result.grants if grant.model.model_key == "owner")
+    assert [(source.subject_id, source.protected) for source in owner.sources] == [("300", True)]
+    assert len(projection.plans) == len(state.finalized) == 1
+
+
+async def test_historical_missing_user_cannot_be_moved_to_another_model():
+    service, sources, projection, _, _ = _service()
+    context = _context(
+        capabilities=(
+            GrantCapability(
+                model=_model("owner", 4, "manage_permission", allow_same_level=True), source_key="actor-owner"
+            ),
+        )
+    )
+    valid = sources.canonicalize_source(source_id=30, subject_type="user", subject_id="300", source_type="DIRECT")
+    historical = replace(valid, subject_id="None", projected_subject="user:None")
+    editor = replace(context.grants[1], active=True, sources=(historical,))
+    context = replace(context, grants=(context.grants[0], editor, *context.grants[2:]))
+    with pytest.raises(PermissionSubjectUnavailableError):
+        await service.mutate(
+            context,
+            changes=(
+                CanonicalGrantChange(
+                    operation="MOVE",
+                    assignee_id=30,
+                    expected_assignee_version=1,
+                    target_model_key="viewer",
+                ),
+            ),
+            expected_resource_version=4,
+            expected_catalog_release_id=12,
+            idempotency_key="missing-user-move",
+        )
+    assert not projection.prepared

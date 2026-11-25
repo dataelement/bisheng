@@ -57,14 +57,15 @@ services:
               capabilities: [gpu]
 
   gateway-db-init:
+    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
     profiles: [gateway]
     image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env (see .env.example)}
     environment:
-      MYSQL_PWD: "1234"
       GATEWAY_DATABASE_PASSWORD: ${BISHENG_GATEWAY_DB_PASSWORD:-}
     volumes:
       - ./gateway/init.sql:/schema.sql:ro
       - ./gateway/init.sh:/init.sh:ro
+      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql-client.cnf:/run/secrets/mysql-client.cnf:ro
     entrypoint: ["bash", "/init.sh"]
     depends_on:
       mysql:
@@ -85,7 +86,7 @@ services:
       GATEWAY_DATABASE_PASSWORD: ${BISHENG_GATEWAY_DB_PASSWORD:-}
       SPRING_CONFIG_LOCATION: file:/application.yml
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/gateway/config/application.yml:/application.yml:ro
+      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/gateway-application.yml:/application.yml:ro
       # A real user-provided file is required even with direct Compose commands.
       - type: bind
         source: ${BISHENG_GATEWAY_LICENSE_FILE:-./gateway/license.required}
@@ -103,63 +104,92 @@ services:
     restart: on-failure
 
   mysql:
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-mysql
     image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env (see .env.example)}
-    
+    entrypoint: ["bash", "/credential-entrypoint.sh"]
+    command: ["mysqld"]
     ports:
-      - "3306:3306"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: "1234"  # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql.password
       MYSQL_DATABASE: bisheng
       TZ: Asia/Shanghai
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
+    - ./mysql/credential-health.sh:/credential-health.sh:ro
+    - ./mysql/credential-entrypoint.sh:/credential-entrypoint.sh:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql.password:/run/secrets/mysql.password:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql-client.cnf:/run/secrets/mysql-client.cnf:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysql -u root -p$$MYSQL_ROOT_PASSWORD -e 'CREATE DATABASE IF NOT EXISTS openfga;'"]
+      test: ["CMD", "sh", "/credential-health.sh"]
       start_period: 30s
       interval: 20s
       timeout: 10s
       retries: 4
     restart: on-failure
 
-  openfga-migrate:
-    container_name: bisheng-openfga-migrate
-    image: ${OPENFGA_IMAGE:?set OPENFGA_IMAGE in docker/.env (see .env.example)}
-    command: migrate
-    environment:
-      OPENFGA_DATASTORE_ENGINE: mysql
-      OPENFGA_DATASTORE_URI: "root:1234@tcp(mysql:3306)/openfga?parseTime=true"
+  mysql-init:
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
+    image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env}
+    entrypoint: ["mysql", "--defaults-extra-file=/run/secrets/mysql-client.cnf", "--host=mysql", "--execute=CREATE DATABASE IF NOT EXISTS openfga;"]
+    volumes:
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql-client.cnf:/run/secrets/mysql-client.cnf:ro
     depends_on:
       mysql:
         condition: service_healthy
 
+  # Locked openfga:v1.15.2-dm has no --config flag. Datastore comes from
+  # openfga.env generated next to openfga.yaml (SSOT remains the YAML file).
+  openfga-migrate:
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
+    container_name: bisheng-openfga-migrate
+    image: ${OPENFGA_IMAGE:?set OPENFGA_IMAGE in docker/.env (see .env.example)}
+    entrypoint: ["/openfga"]
+    command: ["migrate"]
+    env_file:
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.env
+    volumes:
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.yaml:/etc/openfga/config.yaml:ro
+    depends_on:
+      mysql-init:
+        condition: service_completed_successfully
+
   openfga:
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-openfga
     image: ${OPENFGA_IMAGE:?set OPENFGA_IMAGE in docker/.env (see .env.example)}
-    command: run
+    entrypoint: ["/openfga"]
+    command: ["run"]
+    env_file:
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.env
     environment:
-      OPENFGA_DATASTORE_METRICS_ENABLED: "true"
-      OPENFGA_DATASTORE_ENGINE: mysql
-      OPENFGA_DATASTORE_URI: "root:1234@tcp(mysql:3306)/openfga?parseTime=true"
+      OPENFGA_DATASTORE_METRICS_ENABLED: 'true'
       OPENFGA_LOG_FORMAT: json
-      OPENFGA_PLAYGROUND_ENABLED: "true"
-      OPENFGA_CHECK_QUERY_CACHE_ENABLED: "true"
+      OPENFGA_PLAYGROUND_ENABLED: 'true'
+      OPENFGA_CHECK_QUERY_CACHE_ENABLED: 'true'
       OPENFGA_CHECK_QUERY_CACHE_TTL: 30s
-      OPENFGA_CHECK_ITERATOR_CACHE_ENABLED: "true"
+      OPENFGA_CHECK_ITERATOR_CACHE_ENABLED: 'true'
       OPENFGA_CHECK_ITERATOR_CACHE_TTL: 30s
       OPENFGA_CHECK_ITERATOR_CACHE_MAX_RESULTS: 10000
-      OPENFGA_CACHE_CONTROLLER_ENABLED: "true"
+      OPENFGA_CACHE_CONTROLLER_ENABLED: 'true'
       OPENFGA_CACHE_CONTROLLER_TTL: 10s
       OPENFGA_DATASTORE_MAX_OPEN_CONNS: 80
       OPENFGA_DATASTORE_MAX_IDLE_CONNS: 40
-      OPENFGA_METRICS_ENABLE_RPC_HISTOGRAMS: "true"
-      OPENFGA_RESOLVE_NODE_LIMIT: "${OPENFGA_RESOLVE_NODE_LIMIT:-25}"
+      OPENFGA_METRICS_ENABLE_RPC_HISTOGRAMS: 'true'
+      OPENFGA_RESOLVE_NODE_LIMIT: ${OPENFGA_RESOLVE_NODE_LIMIT:-25}
       OPENFGA_LIST_OBJECTS_MAX_RESULTS: 1000
     ports:
-      - "8080:8080"
-      - "8081:8081"
-      - "2112:2112"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:8080:8080"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:8081:8081"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:2112:2112"
+    volumes:
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.yaml:/etc/openfga/config.yaml:ro
     depends_on:
       openfga-migrate:
         condition: service_completed_successfully
@@ -168,18 +198,25 @@ services:
     restart: unless-stopped
 
   redis:
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-redis
     image: ${REDIS_IMAGE:?set REDIS_IMAGE in docker/.env (see .env.example)}
+    entrypoint: ["sh", "/credential-entrypoint.sh"]
     ports:
-      - "6379:6379"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:6379:6379"
     environment:
       TZ: Asia/Shanghai
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/redis:/data
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf
-    command: redis-server /etc/redis.conf
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/data/redis:/data
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf:ro
+    - ./redis/credential-health.sh:/credential-health.sh:ro
+    - ./redis/credential-entrypoint.sh:/credential-entrypoint.sh:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/redis-users.acl:/run/secrets/redis-users.acl:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/redis.password:/run/secrets/redis.password:ro
+    command: ["redis-server", "/etc/redis.conf", "--aclfile", "/run/secrets/redis-users.acl"]
     healthcheck:
-      test: ["CMD-SHELL", 'redis-cli ping|grep -e "PONG\|NOAUTH"']
+      test: ["CMD", "sh", "/credential-health.sh"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -188,32 +225,34 @@ services:
   backend:
     container_name: bisheng-backend
     image: ${BISHENG_BACKEND_IMAGE:?set BISHENG_BACKEND_IMAGE in docker/.env (see .env.example)}
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     ports:
       - "7860:7860"
     environment:
       <<: *runtime-platform-env
       TZ: Asia/Shanghai
+      BS_SECRET_KEYS_FILE: /run/secrets/bisheng-fernet-keys.json
+      BS_CREDENTIAL_REVISION: ${BISHENG_CREDENTIAL_REVISION:?set checked revision}
       BISHENG_PRO: ${BISHENG_PRO:-false}
       BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
-      BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
-      BS_MILVUS_IS_PARTITION: 'true'
-      BS_MILVUS_PARTITION_SUFFIX: '1'
-      BS_ELASTICSEARCH_URL: 'http://elasticsearch:9200'
-      BS_ELASTICSEARCH_SSL_VERIFY: '{}'  # 可根据自己部署的密码进行配置 '{"basic_auth": ("elastic", "elastic")}'
-      BS_MINIO_SCHEMA: 'false'
-      BS_MINIO_CERT_CHECK: 'false'
-      BS_MINIO_ENDPOINT: 'minio:9000'
-      BS_MINIO_SHAREPOINT: 'minio:9000'
-      BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
-      BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
+      # Topology !env left in the prepared config.yaml (compose --env-file does not
+      # inject host .env into the container unless listed here).
+      BS_MILVUS_IS_PARTITION: ${BS_MILVUS_IS_PARTITION:-true}
+      BS_MILVUS_PARTITION_SUFFIX: ${BS_MILVUS_PARTITION_SUFFIX:-1}
+      BS_MINIO_SCHEMA: ${BS_MINIO_SCHEMA:-false}
+      BS_MINIO_CERT_CHECK: ${BS_MINIO_CERT_CHECK:-false}
+      BS_MINIO_ENDPOINT: ${BS_MINIO_ENDPOINT:-minio:9000}
+      BS_MINIO_SHAREPOINT: ${BS_MINIO_SHAREPOINT:-minio:9000}
       # Shared with code-runner-*; editor "run once" executes in this process.
-      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       # One URL per replica. Adding code-runner-3 means appending its URL here.
       BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
       BS_SANDBOX_CONF__LOCAL_ISOLATION: ${LOCAL_ISOLATION:-uid}
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
+      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/config.yaml:/app/bisheng/config.yaml:ro
+      - ${BISHENG_SECRET_KEYS_FILE:?set BISHENG_SECRET_KEYS_FILE to external keys.json}:/run/secrets/bisheng-fernet-keys.json:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
     security_opt:
@@ -245,30 +284,31 @@ services:
   backend_worker:
     container_name: bisheng-backend-worker
     image: ${BISHENG_BACKEND_IMAGE:?set BISHENG_BACKEND_IMAGE in docker/.env (see .env.example)}
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     environment:
       <<: *runtime-platform-env
       TZ: Asia/Shanghai
+      BS_SECRET_KEYS_FILE: /run/secrets/bisheng-fernet-keys.json
+      BS_CREDENTIAL_REVISION: ${BISHENG_CREDENTIAL_REVISION:?set checked revision}
       BISHENG_PRO: ${BISHENG_PRO:-false}
       BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
-      BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
-      BS_MILVUS_IS_PARTITION: 'true'
-      BS_MILVUS_PARTITION_SUFFIX: '1'
-      BS_ELASTICSEARCH_URL: 'http://elasticsearch:9200'
-      BS_ELASTICSEARCH_SSL_VERIFY: '{}'  # 可根据自己部署的密码进行配置 '{"basic_auth": ("elastic", "elastic")}'
-      BS_MINIO_SCHEMA: 'false'
-      BS_MINIO_CERT_CHECK: 'false'
-      BS_MINIO_ENDPOINT: 'minio:9000'
-      BS_MINIO_SHAREPOINT: 'minio:9000'
-      BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
-      BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
+      # Same topology !env injection as backend (prepared config.yaml keeps these live).
+      BS_MILVUS_IS_PARTITION: ${BS_MILVUS_IS_PARTITION:-true}
+      BS_MILVUS_PARTITION_SUFFIX: ${BS_MILVUS_PARTITION_SUFFIX:-1}
+      BS_MINIO_SCHEMA: ${BS_MINIO_SCHEMA:-false}
+      BS_MINIO_CERT_CHECK: ${BS_MINIO_CERT_CHECK:-false}
+      BS_MINIO_ENDPOINT: ${BS_MINIO_ENDPOINT:-minio:9000}
+      BS_MINIO_SHAREPOINT: ${BS_MINIO_SHAREPOINT:-minio:9000}
       # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
-      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       # One URL per replica. Adding code-runner-3 means appending its URL here.
       BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
       BS_SANDBOX_CONF__LOCAL_ISOLATION: ${LOCAL_ISOLATION:-uid}
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
+      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/config.yaml:/app/bisheng/config.yaml:ro
+      - ${BISHENG_SECRET_KEYS_FILE:?set BISHENG_SECRET_KEYS_FILE to external keys.json}:/run/secrets/bisheng-fernet-keys.json:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
     security_opt:
@@ -280,6 +320,9 @@ services:
       - default
       - sandbox_net
     depends_on:
+      # API startup creates/migrates the schema before worker permission initialization.
+      backend:
+        condition: service_healthy
       # Application context initialization connects to object storage.
       minio:
         condition: service_healthy
@@ -307,16 +350,28 @@ services:
       - backend
 
   elasticsearch:
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-es
     image: ${ELASTICSEARCH_IMAGE:?set ELASTICSEARCH_IMAGE in docker/.env (see .env.example)}
-    user: root
     ports:
-      - "9200:9200"
-      - "9300:9300"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9200:9200"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9300:9300"
     environment:
       TZ: Asia/Shanghai
+      ELASTICSEARCH_ENABLE_SECURITY: ${BISHENG_ES_SECURITY_ENABLED:-true}
+      ELASTICSEARCH_PASSWORD_FILE: /run/secrets/elasticsearch.password
+      ELASTICSEARCH_ENABLE_REST_TLS: ${BISHENG_ES_REST_TLS:?explicit true or false}
+      ELASTICSEARCH_SKIP_TRANSPORT_TLS: ${BISHENG_ES_SKIP_TRANSPORT_TLS:?explicit yes or no}
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/es:/bitnami/elasticsearch/data
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/data/es:/bitnami/elasticsearch/data
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/elasticsearch.password:/run/secrets/elasticsearch.password:ro
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9200"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 18
     restart: on-failure
 
   etcd:
@@ -339,26 +394,21 @@ services:
       retries: 3
 
   minio:
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-milvus-minio
     image: ${MINIO_IMAGE:?set MINIO_IMAGE in docker/.env (see .env.example)}
     environment:
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
-    # Object storage holds every uploaded document, knowledge-base file and
-    # report template.
-    #   9000 - data API. Published because the document server runs as its own
-    #          compose project and cannot resolve `minio`, so BS_MINIO_SHAREPOINT
-    #          has to name the host for report templates to load. Restrict it to
-    #          the networks that need it and put it behind TLS.
-    #   9001 - admin console, deliberately NOT published: it is a full web UI
-    #          over every stored file and nothing in the stack needs it. Reach
-    #          it with `ssh -L 9001:localhost:9001 <host>` when required.
+      MINIO_ROOT_USER_FILE: /run/secrets/minio.user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio.password
     ports:
-      - "9100:9000"
+      - "${BISHENG_MINIO_BIND_IP:-127.0.0.1}:9100:9000"
     volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
-    command: minio server /minio_data --console-address ":9001"
+    - /etc/localtime:/etc/localtime:ro
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/minio.user:/run/secrets/minio.user:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/minio.password:/run/secrets/minio.password:ro
+    command: ["minio", "server", "/minio_data", "--console-address", ":9001"]
     restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -367,21 +417,21 @@ services:
       retries: 3
 
   milvus:
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-milvus-standalone
     image: ${MILVUS_IMAGE:?set MILVUS_IMAGE in docker/.env (see .env.example)}
-    command: ["milvus", "run", "standalone"]
+    entrypoint: ["sh", "/credential-entrypoint.sh"]
     security_opt:
     - seccomp:unconfined
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
-      # Without these Milvus falls back to its built-in minioadmin default and
-      # cannot open its own segments.
-      MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
-      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
     volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus:/var/lib/milvus
+    - /etc/localtime:/etc/localtime:ro
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus:/var/lib/milvus
+    - ./milvus/credential-entrypoint.sh:/credential-entrypoint.sh:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/milvus.yaml:/milvus/configs/user.yaml:ro
     restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
@@ -390,8 +440,8 @@ services:
       timeout: 20s
       retries: 3
     ports:
-      - "19530:19530"
-      - "9091:9091"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:19530:19530"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9091:9091"
     depends_on:
       - etcd
       - minio
@@ -404,6 +454,7 @@ services:
   #
   # 四者都**不 publish 端口**：外部流量一律经 frontend 的 nginx 进来；
   # docker-socket-proxy 与 egress-proxy 更是连内网都只对本层可见。
+
   runtime-manager:
     container_name: bisheng-runtime-manager
     profiles: [app-runtime]
@@ -593,20 +644,27 @@ services:
       - "find /sessions -mindepth 1 -delete || echo 'sandbox: stale session cleanup failed' >&2; exec python serve.py"
     environment:
       TZ: Asia/Shanghai
-      SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      SANDBOX_TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       SANDBOX_SESSIONS_ROOT: /sessions
       SANDBOX_MAX_SESSIONS: "50"
       # Total bytes copied into one session (512 MiB); files past it are skipped and reported.
       SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
       SANDBOX_ENABLE_UID_ISOLATION: "true"
       SANDBOX_LEASE_TTL_S: "900"
+    # Product alignment: unrestricted runner egress (intranet allowed). Host
+    # helper still provisions the dedicated bridge; firewall is accept-all.
     networks:
-      - sandbox_net
+      sandbox_net:
+        ipv4_address: 172.30.166.11
+    # Process crash self-heal only. Host reboot does not auto-start runners.
     restart: on-failure
 
   code-runner-2:
     <<: *code_runner
     container_name: bisheng-code-runner-2
+    networks:
+      sandbox_net:
+        ipv4_address: 172.30.166.12
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/sandbox/code-runner-2:/sessions
 
@@ -649,12 +707,8 @@ networks:
     name: bisheng-build
     driver: bridge
     internal: true
-  # User code shares the runner network namespace. Not internal, so the
-  # sandbox can reach the public internet. Runners still do not join the
-  # middleware network and do not publish host ports. Docker applies
-  # `internal` only when the network is created; an existing internal
-  # sandbox_net stays closed until it is recreated.
+  # Provisioned ONLY by root host policy helper, never silently by Compose.
+  # See runner-egress.md; runner egress is unrestricted (intranet allowed).
   sandbox_net:
-    name: bisheng-sandbox
-    driver: bridge
-    internal: false
+    name: bisheng-runner
+    external: true

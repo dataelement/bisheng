@@ -10,9 +10,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import bypass_tenant_filter, set_visible_tenant_ids, visible_tenant_ids
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.public_endpoints.domain.context import (
     PublicApiPrincipal,
     reset_current_public_api_principal,
@@ -26,6 +28,7 @@ from bisheng.resource_reference.application.source_contracts import (
 )
 from bisheng.workflow.application import reference_source_owner as module
 from bisheng.workflow.application.reference_source_owner import WorkflowReferenceSourceOwner, normalize_execution_graph
+from bisheng.workflow.domain.repositories.reference_source_repository import WorkflowReferenceSourceRepository
 from test.knowledge_unification import test_wf_transaction as fixtures
 
 store = fixtures.store
@@ -46,6 +49,30 @@ def authorization(monkeypatch):
 
 def request(version=None, **kwargs):
     return SourceReadRequest(SourceType.WORKFLOW_VERSION, "wf", version, **kwargs)
+
+
+@pytest.mark.parametrize("kind", [None, 2, 3])
+async def test_preview_reports_missing_space_without_relabeling_unsupported_resources(store, kind):
+    engine, sync = store
+    Knowledge.__table__.create(sync)
+    if kind is not None:
+        with sync.begin() as connection:
+            connection.execute(
+                sa.insert(Knowledge).values(id=31, name="selected", tenant_id=101, user_id=11, type=kind)
+            )
+    async with AsyncSession(engine) as session, session.begin():
+        if kind is None:
+            with pytest.raises(SpaceNotFoundError) as error:
+                await WorkflowReferenceSourceRepository.aget_knowledge_resource_type(session, 31)
+            assert error.value.code == 18000
+            assert error.value.kwargs["space_id"] == 31
+        elif kind == 2:
+            with pytest.raises(ResourceReferenceInvalidError):
+                await WorkflowReferenceSourceRepository.aget_knowledge_resource_type(session, 31)
+        else:
+            assert (
+                await WorkflowReferenceSourceRepository.aget_knowledge_resource_type(session, 31) == "knowledge_space"
+            )
 
 
 async def test_real_current_snapshot_is_canonical_and_no_managed_entities(store, identity, authorization):
@@ -234,28 +261,32 @@ async def test_preview_knowledge_kind_candidate_unlocked_final_current_read(
         "edges": [],
     }
     req = TransientTargetRequest("workflow", "wf", canonical_payload_json({"graph": graph}))
+    from bisheng.workflow.application import preview_knowledge_validation
+
+    knowledge_authorization = AsyncMock(
+        side_effect=lambda identity, **kwargs: {ident: {"visible"} for ident in kwargs["resource_ids"]}
+    )
+    monkeypatch.setattr(preview_knowledge_validation, "batch_check_business_actions", knowledge_authorization)
     locks = []
     async with AsyncSession(engine) as session, session.begin():
-        scalar = session.scalar
+        execute = session.execute
 
         async def record(query, *args, **kwargs):
             if "knowledge.type" in str(query):
                 locks.append(query._for_update_arg is not None)
-            return await scalar(query, *args, **kwargs)
+            return await execute(query, *args, **kwargs)
 
-        monkeypatch.setattr(session, "scalar", record)
+        monkeypatch.setattr(session, "execute", record)
         owner = WorkflowReferenceSourceOwner()
         before = await owner.aresolve_transient(session, req, identity)
         with sync.begin() as connection:
             connection.execute(knowledge.update().where(knowledge.c.id == 7).values(type=3))
         await owner.arevalidate_transient(session, req, identity, before)
     assert locks == [False, True]
-    knowledge_auth = [
-        call.kwargs for call in authorization.await_args_list if call.kwargs["resource_type"].startswith("knowledge_")
-    ]
+    knowledge_auth = [call.kwargs for call in knowledge_authorization.await_args_list]
     assert knowledge_auth == [
-        {"resource_type": "knowledge_library", "resource_id": "7", "action": "visible"},
-        {"resource_type": "knowledge_space", "resource_id": "7", "action": "visible"},
+        {"resource_type": "knowledge_library", "resource_ids": ("7",), "actions": ("visible",)},
+        {"resource_type": "knowledge_space", "resource_ids": ("7",), "actions": ("visible",)},
     ]
 
 

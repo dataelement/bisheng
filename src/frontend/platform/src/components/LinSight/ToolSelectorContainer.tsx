@@ -18,9 +18,7 @@ export default function ToolSelectorContainer({
   setShowToolSelector,
   toolSearchTerm,
   setToolSearchTerm,
-  showDefaultChecked,
-  onDefaultCheckedChange,
-  defaultCheckedLabel
+  onUsageChange
 }: any) {
   const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
   const filteredTools = useMemo(() => {
@@ -68,9 +66,7 @@ export default function ToolSelectorContainer({
       toggleGroup={toggleGroup}
       showToolSelector={showToolSelector}
       setShowToolSelector={setShowToolSelector}
-      showDefaultChecked={showDefaultChecked}
-      onDefaultCheckedChange={onDefaultCheckedChange}
-      defaultCheckedLabel={defaultCheckedLabel}
+      onUsageChange={onUsageChange}
     />
   );
 }

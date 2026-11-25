@@ -11,9 +11,11 @@ import sqlalchemy as sa
 
 from bisheng.api.services import flow as flow_service
 from bisheng.api.services import workflow as workflow_service
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
+from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.resource_reference.application.contracts import (
     DeletionEvidence,
     ReferenceState,
@@ -24,7 +26,7 @@ from bisheng.resource_reference.application.contracts import (
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from test.knowledge_unification import test_wf_create as create_fixtures
 from test.knowledge_unification import test_wf_save as save_fixtures
-from test.knowledge_unification.test_wf_extract import graph, node
+from test.knowledge_unification.test_wf_extract import graph, node, selection
 
 store = create_fixtures.store
 tenant = create_fixtures.tenant
@@ -66,12 +68,14 @@ async def configured(saved, monkeypatch):
     monkeypatch.setattr(workflow_service, "Workflow", Mock())
     await save(saved, 1, graph(node("old-current", "llm", model_id=7)))
     await save(saved, 2, graph(node("a", "llm", model_id=7), node("b", "llm", model_id=7)))
+    await save_fixtures.refresh(saved)
     return saved
 
 
 async def force_delete_model(context):
     async with context.session_factory() as session, session.begin():
         await session.execute(sa.text("DELETE FROM wf_test_target WHERE target_type='model' AND target_id='7'"))
+        await session.execute(sa.delete(LLMModel).where(LLMModel.id == 7))
         session.add(
             ResourceReferenceTombstone(
                 id=1,
@@ -125,6 +129,83 @@ async def test_invalid_version_cannot_publish_or_construct_runtime_graph(configu
     assert next(row for row in rows(configured, "flow") if row["id"] == "wf")["status"] == 1
 
 
+async def test_publish_missing_model_identifies_each_saved_node_and_keeps_version(configured):
+    await force_delete_model(configured)
+    before = rows(configured, "flowversion")
+    with pytest.raises(ResourceReferenceInvalidError) as raised:
+        await publish(configured, 2)
+    response = raised.value.return_resp_instance()
+    assert response.status_code == 10996
+    assert response.data["reason"] == "model_selection_unavailable"
+    assert response.data["workflow_reference_errors"] == [
+        {"node_id": ident, "node_name": ident, "resource_type": "model", "target_id": "7"} for ident in ("a", "b")
+    ]
+    assert rows(configured, "flowversion") == before
+    workflow_service.Workflow.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["knowledge_retriever", "qa_retriever"])
+async def test_publish_missing_knowledge_identifies_selection_and_does_not_switch(configured, kind):
+    Knowledge.__table__.create(configured.sync_engine, checkfirst=True)
+    params = {"knowledge": selection(999)} if kind == "knowledge_retriever" else {"qa_knowledge_id": [{"key": 999}]}
+    selected = node("retrieval", kind, **params)
+    selected["data"]["name"] = "Saved retrieval node"
+    async with configured.session_factory() as session, session.begin():
+        version = await session.get(FlowVersion, 2)
+        version.data = graph(selected)
+    before = rows(configured, "flowversion")
+    with pytest.raises(ResourceReferenceInvalidError) as raised:
+        await publish(configured, 2)
+    assert raised.value.kwargs["reason"] == "knowledge_reference_target_unavailable"
+    assert raised.value.kwargs["workflow_reference_errors"] == [
+        {
+            "node_id": "retrieval",
+            "node_name": "Saved retrieval node",
+            "target_id": "999",
+            "resource_type": "knowledge_space" if kind == "knowledge_retriever" else "qa_knowledge",
+        }
+    ]
+    assert rows(configured, "flowversion") == before
+    assert next(row for row in rows(configured, "flow") if row["id"] == "wf")["status"] == 1
+    workflow_service.Workflow.assert_not_called()
+
+
+async def test_publish_missing_rerank_model_uses_advanced_settings_location(configured):
+    selected = node("retriever.with.dot", "knowledge_retriever", advanced_retrieval_switch={"rerank_model": 99})
+    selected["data"]["name"] = "Search"
+    async with configured.session_factory() as session, session.begin():
+        version = await session.get(FlowVersion, 2)
+        version.data = graph(selected)
+    with pytest.raises(ResourceReferenceInvalidError) as raised:
+        await publish(configured, 2)
+    assert raised.value.kwargs["workflow_reference_errors"] == [
+        {
+            "node_id": "retriever.with.dot",
+            "node_name": "Search",
+            "target_id": "99",
+            "resource_type": "rerank_model",
+        }
+    ]
+
+
+async def test_publish_foreign_model_stays_unavailable_without_disclosing_owner_name(configured):
+    async with configured.session_factory() as session, session.begin():
+        session.add(LLMServer(id=2, tenant_id=202, name="Private provider", type="openai"))
+        session.add(LLMModel(id=99, tenant_id=202, server_id=2, model_name="Private model", model_type="llm"))
+        version = await session.get(FlowVersion, 2)
+        version.data = graph(node("my-node", "llm", model_id=99))
+    with pytest.raises(ResourceReferenceInvalidError) as raised:
+        await publish(configured, 2)
+    response = raised.value.return_resp_instance()
+    assert response.data["workflow_reference_errors"] == [
+        {"node_id": "my-node", "node_name": "my-node", "resource_type": "model", "target_id": "99"}
+    ]
+    assert "Private" not in response.model_dump_json()
+    assert "202" not in response.model_dump_json()
+    assert next(row for row in rows(configured, "flow") if row["id"] == "wf")["status"] == 1
+    workflow_service.Workflow.assert_not_called()
+
+
 async def test_valid_publish_atomically_changes_status_and_current_without_releasing_history(configured):
     before = {(row["source_version"], row["slot_key"]) for row in rows(configured, "business_resource_reference")}
     await publish(configured, 2)
@@ -135,22 +216,15 @@ async def test_valid_publish_atomically_changes_status_and_current_without_relea
     } == before
 
 
-async def test_publish_binding_failure_rolls_back_status_current_and_guard_revisions(configured, monkeypatch):
-    before_flow = rows(configured, "flow")
-    before_versions = rows(configured, "flowversion")
+async def test_publish_does_not_call_legacy_binding_writer(configured, monkeypatch):
     before_sets = rows(configured, "business_reference_set")
-    original = configured.runtime.aapply_source_bindings
-
-    async def fail_after_write(session, prepared):
-        await original(session, prepared)
-        raise RuntimeError("binding write failed")
-
-    monkeypatch.setattr(configured.runtime, "aapply_source_bindings", fail_after_write)
-    with pytest.raises(RuntimeError, match="binding write failed"):
-        await publish(configured, 2)
-    assert rows(configured, "flow") == before_flow
-    assert rows(configured, "flowversion") == before_versions
+    binding = AsyncMock(side_effect=RuntimeError("binding write failed"))
+    monkeypatch.setattr(configured.runtime, "aapply_source_bindings", binding)
+    await publish(configured, 2)
+    assert next(row for row in rows(configured, "flow") if row["id"] == "wf")["status"] == 2
+    assert next(row for row in rows(configured, "flowversion") if row["id"] == 2)["is_current"] == 1
     assert rows(configured, "business_reference_set") == before_sets
+    binding.assert_not_awaited()
 
 
 async def test_partial_repair_retains_other_invalid_slot_and_only_fully_repaired_version_can_publish(configured):
@@ -159,7 +233,10 @@ async def test_partial_repair_retains_other_invalid_slot_and_only_fully_repaired
         connection.execute(
             sa.text("INSERT INTO wf_test_target(target_type,target_id,tenant_id) VALUES('model','8',101)")
         )
+    async with configured.session_factory() as session, session.begin():
+        session.add(LLMModel(id=8, tenant_id=101, server_id=1, model_name="m-8", model_type="llm"))
     await save(configured, 2, graph(node("a", "llm", model_id=8), node("b", "llm", model_id=7)))
+    await save_fixtures.refresh(configured)
     assert {
         (row["slot_key"], row["target_id"])
         for row in rows(configured, "business_resource_reference")
@@ -178,12 +255,11 @@ async def test_partial_repair_retains_other_invalid_slot_and_only_fully_repaired
     )
 
 
-async def test_current_switch_rejects_configuration_index_drift(configured):
+async def test_current_switch_ignores_auxiliary_index_drift(configured):
     async with configured.session_factory() as session, session.begin():
         version = await session.get(FlowVersion, 2)
         version.data = graph(node("drift", "llm", model_id=7))
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await current(configured, 2)
+    assert (await current(configured, 2)).status_code == 200
 
 
 async def test_unpublish_still_allows_stopping_business_with_invalid_configuration(configured):

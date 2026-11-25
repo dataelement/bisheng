@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import type { ComposerReference } from './ComposerEditor';
+import type { ComposerReference } from './composerReferences';
 
 interface Skill { name: string; display_name?: string; }
 interface Space { id: string | number; type?: string; name?: string; tag?: { id: number; name: string }; }
@@ -25,7 +25,7 @@ export function useComposerReferences<S extends Skill, K extends Space, T extend
         ...skills.map((item) => ({ key: skillKey(item), kind: 'skill' as const, label: item.display_name || item.name })),
         ...spaces.flatMap((item) => [
             { key: spaceKey(item), kind: 'space' as const, label: String(item.name || item.id) },
-            ...(item.tag ? [{ key: tagKey(item), kind: 'space' as const, label: `#${item.tag.name}` }] : []),
+            ...(item.tag ? [{ key: tagKey(item), kind: 'space' as const, label: `#${item.tag.name}`, is_tag: true as const }] : []),
         ]),
         ...tools.map((item) => ({ key: toolKey(item), kind: 'tool' as const, label: toolLabel?.(item) ?? item.name })),
     ], [skills, spaces, tools, toolLabel]);

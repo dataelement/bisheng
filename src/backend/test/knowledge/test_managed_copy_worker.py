@@ -46,7 +46,8 @@ async def test_document_failure_stops_publication_and_duplicate_replay(copy_db, 
     assert copy.call_count == 1
     with bypass_tenant_filter(), db.sync_sessions() as session:
         assert session.get(Knowledge, target.id).state == 4
-        assert session.get(Knowledge, 10).copy_target_id == target.id
+        assert session.get(Knowledge, 10).copy_target_id is None
+        assert session.get(Knowledge, 10).state == 1
 
 
 async def test_qa_batch_failure_stops_publication(copy_db, monkeypatch):
@@ -93,4 +94,23 @@ async def test_qa_batch_failure_stops_publication(copy_db, monkeypatch):
         )
     with bypass_tenant_filter(), db.sync_sessions() as session:
         assert session.get(Knowledge, target.id).state == 4
-        assert session.get(Knowledge, 10).copy_target_id == target.id
+        assert session.get(Knowledge, 10).copy_target_id is None
+        assert session.get(Knowledge, 10).state == 1
+
+    second = await CopyRepository.reserve(
+        source, Knowledge(name="second QA copy", type=KnowledgeTypeEnum.QA.value, tenant_id=2, user_id=7)
+    )
+    assert (
+        invoke(
+            qa.copy_qa_knowledge_celery,
+            "bisheng.worker.knowledge.qa.copy_qa_knowledge_celery",
+            10,
+            target.id,
+            7,
+            tenant_id=2,
+        )
+        == "duplicate copy ignored"
+    )
+    assert qa.QAKnoweldgeDao.batch_insert_qa.call_count == 1
+    with bypass_tenant_filter(), db.sync_sessions() as session:
+        assert session.get(Knowledge, 10).copy_target_id == second.id

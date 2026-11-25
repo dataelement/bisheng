@@ -95,6 +95,8 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
     "edit": frozenset(
         {
             "knowledge_space",
+            "folder",
+            "knowledge_file",
             "knowledge_library",
             "workflow",
             "assistant",

@@ -1,68 +1,67 @@
-
-"""deepagents' English base prompt is swapped for the Chinese one on the main graph."""
+"""Task mode's Chinese base prompt is appended to the main graph's prompt, and only there."""
 
 from __future__ import annotations
 
 import inspect
 
 import pytest
-from deepagents.graph import BASE_AGENT_PROMPT
 from langchain_core.messages import SystemMessage
 
-from bisheng.linsight.domain.services import base_prompt
-from bisheng.linsight.domain.services.agent_factory import _build_linsight_system_prompt, create_linsight_agent
-from bisheng.linsight.domain.services.base_prompt import LINSIGHT_BASE_PROMPT_ZH, LinsightBasePromptMiddleware
+from bisheng.linsight.domain.services.agent_factory import (
+    _build_linsight_system_prompt,
+    _build_researcher_subagent,
+    create_linsight_agent,
+)
+from bisheng.linsight.domain.services.base_prompt import LINSIGHT_BASE_PROMPT_ZH, with_base_prompt
 
 
-class _Request:
-    def __init__(self, system_message):
-        self.system_message = system_message
-
-    def override(self, **kwargs):
-        return _Request(kwargs.get("system_message", self.system_message))
+def test_base_prompt_follows_the_main_prompt():
+    assert with_base_prompt("主提示词") == f"主提示词\n\n{LINSIGHT_BASE_PROMPT_ZH}"
 
 
-def _texts(message) -> list[str]:
-    return [block["text"] for block in message.content_blocks if block.get("text")]
+async def test_model_sees_the_chinese_base_prompt_and_no_english_one(monkeypatch):
+    """The real graph: the Chinese text reaches the model exactly once, and the
+    framework adds no English base prompt of its own next to it."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
 
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import AIMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
 
-def _assembled(main_prompt: str) -> SystemMessage:
-    # create_deep_agent: USER + "\n\n" + BASE, then framework middleware append blocks.
-    return SystemMessage(
-        content_blocks=[
-            {"type": "text", "text": f"{main_prompt}\n\n{BASE_AGENT_PROMPT}"},
-            {"type": "text", "text": "\n\n## `write_todos`"},
-        ]
-    )
+    from bisheng.core.config.settings import LinsightConf
+    from bisheng.linsight.domain.services import agent_factory
 
+    seen: list[str] = []
 
-def test_base_prompt_is_replaced_and_the_rest_is_kept():
-    request = _Request(_assembled("主提示词"))
-    shown = LinsightBasePromptMiddleware().wrap_model_call(request, lambda item: item)
-    texts = _texts(shown.system_message)
+    class _Model(BaseChatModel):
+        @property
+        def _llm_type(self) -> str:
+            return "scripted"
 
-    assert texts[0] == f"主提示词\n\n{LINSIGHT_BASE_PROMPT_ZH}"
-    assert texts[1] == "\n\n## `write_todos`"
-    assert "You are a deep agent" not in "".join(texts)
+        def _get_ls_params(self, stop=None, **kwargs):
+            # Own provider: the factory registers a process-wide profile per provider.
+            return {"ls_provider": "f004-base-prompt", "ls_model_name": "scripted"}
 
+        def bind_tools(self, tools, **kwargs):
+            return self
 
-async def test_async_hook_replaces_too():
-    async def handler(item):
-        return item
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            seen.extend(
+                "".join(b.get("text", "") for b in m.content_blocks) for m in messages if isinstance(m, SystemMessage)
+            )
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="done"))])
 
-    shown = await LinsightBasePromptMiddleware().awrap_model_call(_Request(_assembled("主提示词")), handler)
-    assert LINSIGHT_BASE_PROMPT_ZH in "".join(_texts(shown.system_message))
+    monkeypatch.setattr(agent_factory, "_resolve_model", AsyncMock(return_value=(_Model(), False)))
+    monkeypatch.setattr(agent_factory, "settings", SimpleNamespace(get_linsight_conf=lambda: LinsightConf()))
+    session = SimpleNamespace(id="sv-bp", session_id="chat-bp", tenant_id=1, user_id=1, question="q", api_meta=None)
 
+    agent = await create_linsight_agent(session, [])
+    await agent.ainvoke({"messages": [("user", "你好")]}, config={"configurable": {"thread_id": "t-bp"}})
 
-def test_missing_base_prompt_leaves_the_request_and_warns_once(monkeypatch):
-    warnings: list[str] = []
-    monkeypatch.setattr(base_prompt.logger, "warning", warnings.append)
-    middleware = LinsightBasePromptMiddleware()
-    request = _Request(SystemMessage(content="只有主提示词"))
-
-    assert middleware.wrap_model_call(request, lambda item: item) is request
-    middleware.wrap_model_call(request, lambda item: item)
-    assert len(warnings) == 1
+    system_text = "".join(seen)
+    assert system_text.count(LINSIGHT_BASE_PROMPT_ZH) == 1
+    assert "You are a deep agent" not in system_text
 
 
 @pytest.mark.parametrize("unattended", [False, True])
@@ -71,7 +70,7 @@ def test_step_zero_the_question_rule_points_at_exists(unattended):
     assert "\n0. 【" in prompt
 
 
-def test_only_the_main_graph_gets_the_middleware():
+def test_only_the_main_graph_gets_the_base_prompt():
     source = inspect.getsource(create_linsight_agent)
-    assert source.count("LinsightBasePromptMiddleware()") == 1
-    assert source.index("LinsightBasePromptMiddleware()") < source.index('researcher["middleware"]')
+    assert source.count("with_base_prompt(") == 1
+    assert "LINSIGHT_BASE_PROMPT_ZH" not in inspect.getsource(_build_researcher_subagent)

@@ -60,14 +60,15 @@ def test_dockerfile_is_single_multiarch_image_without_platform_payload():
 
 def test_compose_named_runners_and_hardening():
     data = yaml.safe_load(_COMPOSE.read_text(encoding="utf-8"))
-    assert data["networks"]["sandbox_net"]["internal"] is False
+    assert data["networks"]["sandbox_net"] == {"name": "bisheng-runner", "external": True}
     worker = data["services"]["backend_worker"]
     assert "sandbox_net" in worker["networks"]
     assert "default" in worker["networks"]
     assert worker["volumes"][0].endswith(":ro")
     assert worker["volumes"][1].endswith(":ro")
     assert "config.yaml" in worker["volumes"][0]
-    assert "entrypoint.sh" in worker["volumes"][1]
+    assert any("entrypoint.sh" in volume and volume.endswith(":ro") for volume in worker["volumes"])
+    assert any("/run/secrets/bisheng-fernet-keys.json:ro" in volume for volume in worker["volumes"])
     backend = data["services"]["backend"]
     assert backend["volumes"][0].endswith(":ro")
     assert backend["volumes"][1].endswith(":ro")
@@ -82,7 +83,8 @@ def test_compose_named_runners_and_hardening():
 
     for name in ("code-runner-1", "code-runner-2"):
         svc = data["services"][name]
-        assert svc["networks"] == ["sandbox_net"]
+        assert set(svc["networks"]) == {"sandbox_net"}
+        assert svc["networks"]["sandbox_net"]["ipv4_address"] in {"172.30.166.11", "172.30.166.12"}
         assert "ports" not in svc
         assert "deploy" not in svc
         assert svc["user"] == "0"

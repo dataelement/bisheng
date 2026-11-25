@@ -12,7 +12,6 @@ from bisheng.database.models.tenant import Tenant
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.llm.domain.repositories.model_delete_plan_repository import _hash
 from bisheng.llm.domain.repositories.model_provider_operation_repository import ModelProviderOperationRepository
-from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 
 
@@ -264,29 +263,27 @@ class ModelMutationRepository:
             self._check(session, tenant, transaction)
             if physical is not None:
                 raise KnowledgeOperationPlanChangedError()
-            with session.no_autoflush, strict_tenant_filter():
-                rows = (
-                    (
-                        await session.execute(
-                            select(ResourceReferenceTombstone).where(
-                                ResourceReferenceTombstone.target_type == "model",
-                                ResourceReferenceTombstone.target_id.in_(batch),
-                                ResourceReferenceTombstone.target_tenant_id == tenant,
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-            self._check(session, tenant, transaction)
-            if len(rows) != len(batch) or any(
-                row.tenant_id != tenant
-                or row.operation_id != plan.operation_id
-                or row.operation_type != plan.operation
-                or row.stage != "deleted"
-                or row.actor_type != "user"
-                or row.actor_id != str(plan.actor_user_id)
-                or row.deleted_at is None
-                for row in rows
-            ):
-                raise KnowledgeOperationPlanChangedError()
+
+    async def afinalize_legacy_deletion(self, session, *, plan):
+        """Finish markers already owned by an old persisted deletion operation."""
+        from bisheng.llm.domain.repositories.model_delete_plan_repository import _now
+        from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
+
+        tenant, transaction = self._context(session)
+        if not plan.impact:
+            return
+        ids = tuple(item["target_id"] for item in plan.target_manifest)
+        await session.execute(
+            update(ResourceReferenceTombstone)
+            .where(
+                ResourceReferenceTombstone.tenant_id == tenant,
+                ResourceReferenceTombstone.target_tenant_id == tenant,
+                ResourceReferenceTombstone.target_type == "model",
+                ResourceReferenceTombstone.target_id.in_(ids),
+                ResourceReferenceTombstone.operation_id == plan.operation_id,
+                ResourceReferenceTombstone.stage == "deleting",
+            )
+            .values(stage="deleted", deleted_at=_now())
+            .execution_options(synchronize_session=False)
+        )
+        self._check(session, tenant, transaction)

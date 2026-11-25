@@ -10,15 +10,14 @@ import {
 import { Outlined } from "bisheng-icons";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
-import { formatBytes } from "~/utils/files";
+import { FileAttachmentResourceCard, FolderAttachmentResourceCard } from "~/components/Chat/attachments/AttachmentResourceCards";
 import { isMediaChipFile, MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
 import { ContextResourceCard } from "./ContextResourceCard";
 import { Loader2 } from "lucide-react";
 import { isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
 import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
 import { groupAttachmentsByFolder } from "~/components/Linsight/Input/ContextChips";
-import { useLocalize } from "~/hooks";
-import { getFileTypeIcon } from "~/components/ui/icon/File/FileIcon";
+import { isImageFileName } from "~/components/ui/icon/File/FileIcon";
 
 /** Stable sequence key for a file attachment across upload → completed transition. */
 function attachmentSeqKey(clientId: string | undefined): string | undefined {
@@ -43,7 +42,6 @@ function resolveFilePreviewUrl(file: {
 const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     const fileName = file.name || file.file_name || file.filename || 'File';
     const [previewOpen, setPreviewOpen] = useState(false);
-    const TypeIcon = getFileTypeIcon(fileName);
 
     if (isMediaChipFile({ ...file, name: fileName })) {
         return (
@@ -56,15 +54,14 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     }
 
     const previewUrl = resolveFilePreviewUrl(file);
-    const isImagePreview = !!previewUrl && /\.(png|jpe?g|bmp|gif|webp)$/i.test(fileName);
+    const isImagePreview = !!previewUrl && isImageFileName(fileName);
 
     return (
         <>
-            <ContextResourceCard
-                label={fileName}
-                description={[fileName.split('.').pop()?.toUpperCase(), Number(file.size) >= 0 ? formatBytes(Number(file.size), 1, true) : ''].filter(Boolean).join(' · ')}
-                thumbnail={isImagePreview}
-                icon={isImagePreview ? <img src={previewUrl} alt="" /> : <TypeIcon size={28} />}
+            <FileAttachmentResourceCard
+                name={fileName}
+                size={file.size}
+                thumbnail={isImagePreview ? <img src={previewUrl} alt="" /> : undefined}
                 onRemove={onRemove}
                 onClick={isImagePreview ? () => setPreviewOpen(true) : undefined}
             />
@@ -84,28 +81,6 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
                 </OGDialog>
             )}
         </>
-    );
-};
-
-/** One card for a whole uploaded directory (see `groupAttachmentsByFolder`). */
-const FolderCard = ({
-    folderName,
-    fileCount,
-    onRemove,
-}: {
-    folderName: string;
-    fileCount: number;
-    onRemove?: () => void;
-}) => {
-    const localize = useLocalize();
-    const label = `${folderName} (${localize('com_folder_upload_file_count', { 0: fileCount })})`;
-    return (
-        <ContextResourceCard
-            icon={<Outlined.FolderClose size={16} />}
-            label={label}
-            title={label}
-            onRemove={onRemove}
-        />
     );
 };
 
@@ -344,9 +319,9 @@ export const AttachmentBar = ({
                                     );
                                 case "folder":
                                     return (
-                                        <FolderCard
+                                        <FolderAttachmentResourceCard
                                             key={entry.key}
-                                            folderName={entry.data.folderName}
+                                            name={entry.data.folderName}
                                             fileCount={entry.data.files.length}
                                             onRemove={
                                                 onRemoveFile && !entry.data.isUploading

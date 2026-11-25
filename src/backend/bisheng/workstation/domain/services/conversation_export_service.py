@@ -16,12 +16,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
-import hashlib
 import importlib.resources
 import json
 import os
 import re
-import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -62,7 +60,6 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileSource, FileType, KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
-from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_docx_to_pdf
 from bisheng.user.domain.services.auth import LoginUser
 from bisheng.workstation.domain.schemas.conversation_export import (
     ImportMessagesToKnowledgeRequest,
@@ -79,12 +76,12 @@ _MAX_BATCH = 200
 #    <citation_payload>    (with  as separator)
 # A single greedy-lazy regex strips the well-formed pairs; the translate()
 # pass below scrubs any stray markers left over from streaming truncation.
-_CITATION_PATTERN = re.compile('[\\s\\S]*?')
-_LONE_MARKER_TABLE = str.maketrans({'': '', '': '', '': ''})
+_CITATION_PATTERN = re.compile("[\\s\\S]*?")
+_LONE_MARKER_TABLE = str.maketrans({"": "", "": "", "": ""})
 
 
 # Markdown image syntax: ![alt](url)
-_IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 
 # Fallback for bare citation keys (``knowledgesearch_<hex>:N`` /
 # ``websearch_<hex>:N``) that survive when the surrounding private-use Unicode
@@ -95,7 +92,7 @@ _IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 # 6-character string ```` (backslash + ``u`` + ``e200``) — which leak
 # through any layer that JSON-encoded a marker character as text instead of
 # preserving the raw code point. Word/PDF rendered this verbatim previously.
-_LITERAL_PUA_ESCAPE_PATTERN = re.compile(r'\\u[eE]20[012]')
+_LITERAL_PUA_ESCAPE_PATTERN = re.compile(r"\\u[eE]20[012]")
 
 
 # Emoji / pictograph characters that the bundled docker fonts
@@ -104,18 +101,16 @@ _LITERAL_PUA_ESCAPE_PATTERN = re.compile(r'\\u[eE]20[012]')
 # boxes; the LibreOffice docx→pdf hop inherits the same. We replace them
 # with `●` before docx/pdf rendering — markdown and txt keep the originals.
 _EMOJI_PATTERN = re.compile(
-    '['
-    '\U0001F300-\U0001FAFF'  # symbols, emoticons, pictographs, ext, transport
-    '\U00002600-\U000027BF'  # misc symbols + dingbats (★ ✓ ✗ ❌ …)
-    '\U00002B00-\U00002BFF'  # misc symbols & arrows (⭐ ▶ ◀ …)
-    '\U00002300-\U000023FF'  # misc technical (⏰ ⌛ …)
-    ']'
+    "["
+    "\U0001f300-\U0001faff"  # symbols, emoticons, pictographs, ext, transport
+    "\U00002600-\U000027bf"  # misc symbols + dingbats (★ ✓ ✗ ❌ …)
+    "\U00002b00-\U00002bff"  # misc symbols & arrows (⭐ ▶ ◀ …)
+    "\U00002300-\U000023ff"  # misc technical (⏰ ⌛ …)
+    "]"
 )
 
 _BARE_CITATION_KEY_PATTERN = re.compile(
-    r'(?:||)*[ \t]*'
-    r'(?:knowledgesearch|websearch)_[0-9a-fA-F]+:\d+'
-    r'[ \t]*(?:||)*'
+    r"(?:||)*[ \t]*" r"(?:knowledgesearch|websearch)_[0-9a-fA-F]+:\d+" r"[ \t]*(?:||)*"
 )
 
 # Subprocess timeouts (spec §10 non-functional)
@@ -127,7 +122,7 @@ _IMAGE_FETCH_CONCURRENCY = 8
 # Filename sanitization (Windows-strictest cross-OS standard, AC-10)
 _FORBIDDEN_FILENAME_CHARS = set('<>:"/\\|?*')
 _MAX_FILENAME_TITLE_LEN = 80
-_FALLBACK_TITLE = '未命名会话'
+_FALLBACK_TITLE = "未命名会话"
 
 
 # --- Intermediate representation -------------------------------------------
@@ -187,7 +182,9 @@ class ConversationExportService:
             raise ConversationMessageNotOwnedError()
 
         messages = await ChatMessageDao.aget_messages_by_ids(
-            message_ids=message_ids, user_id=user_id, chat_id=chat_id,
+            message_ids=message_ids,
+            user_id=user_id,
+            chat_id=chat_id,
         )
         if not messages:
             # SQL filtered everything out: either all ids belong to another
@@ -198,14 +195,16 @@ class ConversationExportService:
             existing = {m.id for m in messages}
             missing = sorted(set(message_ids) - existing)
             raise ConversationMessageNotFoundError(
-                msg=f'消息不存在或已删除: {missing}',
+                msg=f"消息不存在或已删除: {missing}",
             )
         messages = await cls._backfill_paired_questions(messages, chat_id)
         return messages, session
 
     @classmethod
     async def _backfill_paired_questions(
-        cls, messages: list[ChatMessage], chat_id: str,
+        cls,
+        messages: list[ChatMessage],
+        chat_id: str,
     ) -> list[ChatMessage]:
         """Ensure every selected answer has its paired question in the set.
 
@@ -221,16 +220,16 @@ class ConversationExportService:
         """
         present_ids = {m.id for m in messages if m.id is not None}
         present_q_ids = {m.id for m in messages if cls._is_query(m)}
-        answer_ids = sorted(
-            m.id for m in messages if m.id is not None and not cls._is_query(m)
-        )
+        answer_ids = sorted(m.id for m in messages if m.id is not None and not cls._is_query(m))
         if not answer_ids:
             return messages
 
         # Chronological questions of this chat (most-recent window; covers any
         # realistic conversation given the 200-message export cap).
         questions = await ChatMessageDao.aget_messages_by_chat_id(
-            chat_id, category_list=['question'], limit=500,
+            chat_id,
+            category_list=["question"],
+            limit=500,
         )
         q_sorted = sorted((q for q in questions if q.id is not None), key=lambda q: q.id)
         if not q_sorted:
@@ -318,9 +317,9 @@ class ConversationExportService:
                 # Daily mode: take the model name from the first answer's
                 # sender field. Empty sender → fall back to flow_name to
                 # avoid showing a bare colon.
-                sender_name = (answer_msgs[0].sender if answer_msgs else '') or session.flow_name or ''
+                sender_name = (answer_msgs[0].sender if answer_msgs else "") or session.flow_name or ""
             else:
-                sender_name = session.flow_name or ''
+                sender_name = session.flow_name or ""
 
             answer_texts = [cls._extract_answer_text(a) for a in answer_msgs]
             # Answers only: a user may type [S1] on purpose; unresolved model handles live in answers.
@@ -345,7 +344,7 @@ class ConversationExportService:
 
     @staticmethod
     def _is_query(m: ChatMessage) -> bool:
-        return (m.category or '').lower() == 'question'
+        return (m.category or "").lower() == "question"
 
     @staticmethod
     def _extract_query_text(m: ChatMessage) -> str:
@@ -363,16 +362,16 @@ class ConversationExportService:
         row is valid JSON, we fall back to the raw string to avoid silently
         dropping content (better to render a JSON-y line than an empty turn).
         """
-        raw = m.message or ''
+        raw = m.message or ""
         if not raw:
-            return ''
+            return ""
         try:
             data = json.loads(raw)
         except (ValueError, TypeError):
             return raw
         if not isinstance(data, dict):
             return raw
-        for key in ('query', 'input'):
+        for key in ("query", "input"):
             value = data.get(key)
             if isinstance(value, str) and value:
                 return value
@@ -380,7 +379,7 @@ class ConversationExportService:
 
     @staticmethod
     def _parse_parent_msg_id(m: ChatMessage) -> Optional[int]:
-        raw = m.extra or ''
+        raw = m.extra or ""
         if not raw:
             return None
         try:
@@ -389,7 +388,7 @@ class ConversationExportService:
             return None
         if not isinstance(data, dict):
             return None
-        pid = data.get('parentMessageId')
+        pid = data.get("parentMessageId")
         if pid is None:
             return None
         try:
@@ -418,14 +417,14 @@ class ConversationExportService:
         workflow/assistant answers land in ``stream_msg``/``output_msg`` and were
         silently exported as empty.
         """
-        cat = (m.category or '').lower()
-        raw = m.message or ''
+        cat = (m.category or "").lower()
+        raw = m.message or ""
         if not raw:
-            return ''
+            return ""
 
         # Categories that never carry user-facing answer text.
-        if cat in {'agent_thinking', 'agent_tool_call', 'reasoning_answer', 'input'}:
-            return ''
+        if cat in {"agent_thinking", "agent_tool_call", "reasoning_answer", "input"}:
+            return ""
 
         # Plain-string answers (workflow / legacy ``answer``) aren't JSON.
         try:
@@ -436,7 +435,7 @@ class ConversationExportService:
             return raw
 
         # Knowledge / QA answers keep the body in ``content``.
-        content = data.get('content')
+        content = data.get("content")
         if isinstance(content, str) and content.strip():
             return content
 
@@ -445,39 +444,39 @@ class ConversationExportService:
         # ``msg`` may be empty when the text lives only in ``events`` (last item
         # with type ``text``); fall through to recover that case and capture
         # workflow OUTPUT nodes whose ``output_type`` is ``text``.
-        msg = data.get('msg') or ''
-        events = data.get('events') or []
+        msg = data.get("msg") or ""
+        events = data.get("events") or []
         text_chunks: list[str] = []
         placeholders: list[str] = []
         for e in events:
             if not isinstance(e, dict):
                 continue
-            etype = (e.get('type') or '').lower()
+            etype = (e.get("type") or "").lower()
             # Drop reasoning / tool interactions.
-            if etype in {'thinking', 'tool_call', 'tool_result'}:
+            if etype in {"thinking", "tool_call", "tool_result"}:
                 continue
-            if etype == 'text':
-                content = e.get('content') or ''
+            if etype == "text":
+                content = e.get("content") or ""
                 if content:
                     text_chunks.append(content)
                 continue
-            if etype == 'output':
-                output_kind = (e.get('output_type') or e.get('kind') or '').lower()
-                if output_kind == 'text':
+            if etype == "output":
+                output_kind = (e.get("output_type") or e.get("kind") or "").lower()
+                if output_kind == "text":
                     content = (
-                        e.get('content')
-                        or (e.get('data') or {}).get('content')
-                        or (e.get('data') or {}).get('text')
-                        or ''
+                        e.get("content")
+                        or (e.get("data") or {}).get("content")
+                        or (e.get("data") or {}).get("text")
+                        or ""
                     )
                     if isinstance(content, str) and content:
                         text_chunks.append(content)
                 elif output_kind:
-                    placeholders.append(f'[交互组件：{output_kind}]')
+                    placeholders.append(f"[交互组件：{output_kind}]")
 
-        body = msg if msg.strip() else '\n\n'.join(text_chunks)
+        body = msg if msg.strip() else "\n\n".join(text_chunks)
         if placeholders:
-            body = (body or '').rstrip() + '\n\n' + '\n\n'.join(placeholders)
+            body = (body or "").rstrip() + "\n\n" + "\n\n".join(placeholders)
         # JSON envelope with no recognizable text field → drop (don't dump JSON).
         return body
 
@@ -499,10 +498,10 @@ class ConversationExportService:
         """
         if not text:
             return text
-        text = _CITATION_PATTERN.sub('', text)
+        text = _CITATION_PATTERN.sub("", text)
         text = text.translate(_LONE_MARKER_TABLE)
-        text = _LITERAL_PUA_ESCAPE_PATTERN.sub('', text)
-        return _BARE_CITATION_KEY_PATTERN.sub('', text)
+        text = _LITERAL_PUA_ESCAPE_PATTERN.sub("", text)
+        return _BARE_CITATION_KEY_PATTERN.sub("", text)
 
     # ----------------------------------------------------------------------
     # Markdown intermediate representation (AD-03, AD-04)
@@ -531,20 +530,20 @@ class ConversationExportService:
         """
         lines: list[str] = []
         for turn in turns:
-            lines.append(f'**{turn.user_name}：**')
-            lines.append('')
+            lines.append(f"**{turn.user_name}：**")
+            lines.append("")
             lines.append(turn.user_query)
-            lines.append('')
-            lines.append('---')
-            lines.append('')
-            lines.append(f'**{turn.sender_name}：**')
-            lines.append('')
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+            lines.append(f"**{turn.sender_name}：**")
+            lines.append("")
             for ans in turn.answers:
                 lines.append(ans)
-                lines.append('')
+                lines.append("")
             # Extra blank line between turns
-            lines.append('')
-        return '\n'.join(lines).rstrip() + '\n'
+            lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
 
     # ----------------------------------------------------------------------
     # Renderers (T010): docx / pdf / txt
@@ -557,7 +556,7 @@ class ConversationExportService:
         # We keep the path resolution lazy because tests may monkeypatch it.
         from bisheng.workstation import assets as _assets_pkg
 
-        return str(importlib.resources.files(_assets_pkg) / 'conversation_export_template.docx')
+        return str(importlib.resources.files(_assets_pkg) / "conversation_export_template.docx")
 
     @staticmethod
     def _replace_emoji_for_office(markdown: str) -> str:
@@ -577,7 +576,7 @@ class ConversationExportService:
         """
         if not markdown:
             return markdown
-        return _EMOJI_PATTERN.sub('●', markdown)
+        return _EMOJI_PATTERN.sub("●", markdown)
 
     @classmethod
     def _render_docx(cls, markdown: str) -> bytes:
@@ -588,8 +587,8 @@ class ConversationExportService:
         """
         markdown = cls._replace_emoji_for_office(markdown)
         template = cls._get_template_path()
-        with tempfile.TemporaryDirectory(prefix='conv_export_docx_') as tmpdir:
-            out_path = os.path.join(tmpdir, 'out.docx')
+        with tempfile.TemporaryDirectory(prefix="conv_export_docx_") as tmpdir:
+            out_path = os.path.join(tmpdir, "out.docx")
             try:
                 # Use the GFM-flavored markdown reader with two extensions:
                 #   - lists_without_preceding_blankline: model output rarely
@@ -601,16 +600,16 @@ class ConversationExportService:
                 #     collapsing them into spaces.
                 pypandoc.convert_text(
                     markdown,
-                    'docx',
-                    format='markdown+lists_without_preceding_blankline+hard_line_breaks',
+                    "docx",
+                    format="markdown+lists_without_preceding_blankline+hard_line_breaks",
                     outputfile=out_path,
-                    extra_args=['--reference-doc=' + template],
+                    extra_args=["--reference-doc=" + template],
                 )
             except (RuntimeError, OSError) as e:
                 # Full pandoc detail goes to the log only — the user-facing
                 # message stays the clean default ("文件生成失败，请稍后重试"),
                 # never the raw pandoc/exception text.
-                logger.exception('pypandoc convert_text(docx) failed')
+                logger.exception("pypandoc convert_text(docx) failed")
                 raise ConversationExportRenderFailedError() from e
             return Path(out_path).read_bytes()
 
@@ -674,14 +673,14 @@ class ConversationExportService:
 
         body = md_lib.markdown(
             markdown_text,
-            extensions=['extra', 'tables', 'fenced_code', 'sane_lists', 'nl2br'],
-            output_format='html5',
+            extensions=["extra", "tables", "fenced_code", "sane_lists", "nl2br"],
+            output_format="html5",
         )
         return (
-            '<!DOCTYPE html>'
+            "<!DOCTYPE html>"
             '<html lang="zh-CN"><head><meta charset="utf-8">'
-            f'<style>{cls._PDF_CSS}</style>'
-            f'</head><body>{body}</body></html>'
+            f"<style>{cls._PDF_CSS}</style>"
+            f"</head><body>{body}</body></html>"
         )
 
     @classmethod
@@ -699,25 +698,24 @@ class ConversationExportService:
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(
-                    args=['--no-sandbox', '--disable-dev-shm-usage'],
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
                 )
                 try:
                     page = await browser.new_page()
                     # ``domcontentloaded`` is enough — we have no external
                     # network resources to wait for (pre-fetched images are
                     # embedded as data URLs by an earlier step).
-                    await page.set_content(html, wait_until='domcontentloaded')
+                    await page.set_content(html, wait_until="domcontentloaded")
                     return await page.pdf(
-                        format='A4',
-                        margin={'top': '2cm', 'right': '2cm',
-                                'bottom': '2cm', 'left': '2cm'},
+                        format="A4",
+                        margin={"top": "2cm", "right": "2cm", "bottom": "2cm", "left": "2cm"},
                         print_background=True,
                     )
                 finally:
                     await browser.close()
         except Exception as e:
             # Detail to logs only; user sees the clean default message.
-            logger.exception('Chromium PDF rendering failed')
+            logger.exception("Chromium PDF rendering failed")
             raise ConversationExportRenderFailedError() from e
 
     @classmethod
@@ -738,32 +736,32 @@ class ConversationExportService:
         def _img_sub(m: re.Match) -> str:
             alt = m.group(1).strip()
             url = m.group(2).strip()
-            label = alt or os.path.basename(url) or 'image'
-            return f'[图片：{label}]'
+            label = alt or os.path.basename(url) or "image"
+            return f"[图片：{label}]"
 
         text = _IMAGE_PATTERN.sub(_img_sub, text)
-        text = re.sub(r'^```[^\n]*\n', '', text, flags=re.MULTILINE)
-        text = re.sub(r'^```\s*$', '', text, flags=re.MULTILINE)
-        text = re.sub(r'`([^`]+)`', r'\1', text)
-        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
-        text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'\1', text)
-        text = re.sub(r'__([^_]+)__', r'\1', text)
-        text = re.sub(r'(?<!_)_([^_]+)_(?!_)', r'\1', text)
-        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
-        text = re.sub(r'^---+\s*$\n?', '', text, flags=re.MULTILINE)
+        text = re.sub(r"^```[^\n]*\n", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^```\s*$", "", text, flags=re.MULTILINE)
+        text = re.sub(r"`([^`]+)`", r"\1", text)
+        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+        text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+        text = re.sub(r"__([^_]+)__", r"\1", text)
+        text = re.sub(r"(?<!_)_([^_]+)_(?!_)", r"\1", text)
+        text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^---+\s*$\n?", "", text, flags=re.MULTILINE)
 
         out_lines: list[str] = []
-        for line in text.split('\n'):
+        for line in text.split("\n"):
             stripped = line.strip()
-            if stripped.startswith('|') and stripped.endswith('|'):
+            if stripped.startswith("|") and stripped.endswith("|"):
                 # Skip Markdown table alignment row (|---|:--:|---|)
-                if re.match(r'^\s*\|[\s\-:|]+\|\s*$', line):
+                if re.match(r"^\s*\|[\s\-:|]+\|\s*$", line):
                     continue
-                cells = [c.strip() for c in stripped.strip('|').split('|')]
-                out_lines.append('\t'.join(cells))
+                cells = [c.strip() for c in stripped.strip("|").split("|")]
+                out_lines.append("\t".join(cells))
             else:
                 out_lines.append(line)
-        return '\n'.join(out_lines).encode('utf-8')
+        return "\n".join(out_lines).encode("utf-8")
 
     # ----------------------------------------------------------------------
     # Image preprocessing (AD-06)
@@ -771,8 +769,11 @@ class ConversationExportService:
 
     # Image extension → MIME for data: URIs.
     _IMAGE_MIME = {
-        'jpg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif',
-        'webp': 'image/webp', 'svg': 'image/svg+xml',
+        "jpg": "image/jpeg",
+        "png": "image/png",
+        "gif": "image/gif",
+        "webp": "image/webp",
+        "svg": "image/svg+xml",
     }
 
     @classmethod
@@ -798,38 +799,42 @@ class ConversationExportService:
         minio_host = await cls._resolve_minio_host()
 
         async with httpx.AsyncClient(timeout=_IMAGE_FETCH_TIMEOUT_SECONDS) as client:
+
             async def _wrap(url: str):
                 async with sem:
                     return await cls._fetch_image_bytes(url, client, minio_host)
 
             results = await asyncio.gather(
-                *(_wrap(u) for u in unique_urls), return_exceptions=True,
+                *(_wrap(u) for u in unique_urls),
+                return_exceptions=True,
             )
 
         replacements: dict[str, Optional[str]] = {}
-        for url, result in zip(unique_urls, results):
+        for url, result in zip(unique_urls, results, strict=False):
             if isinstance(result, BaseException):
-                logger.warning('image fetch failed url={} reason={}', url, result)
+                logger.warning("image fetch failed url={} reason={}", url, result)
                 replacements[url] = None
                 continue
             raw, ext = result
-            mime = cls._IMAGE_MIME.get(ext, 'image/png')
-            b64 = base64.b64encode(raw).decode('ascii')
-            replacements[url] = f'data:{mime};base64,{b64}'
+            mime = cls._IMAGE_MIME.get(ext, "image/png")
+            b64 = base64.b64encode(raw).decode("ascii")
+            replacements[url] = f"data:{mime};base64,{b64}"
 
         def _replace(m: re.Match) -> str:
             alt = m.group(1)
             url = m.group(2)
             data_uri = replacements.get(url)
             if data_uri:
-                return f'![{alt}]({data_uri})'
-            return f'[图片加载失败：{url}]'  # AC-29
+                return f"![{alt}]({data_uri})"
+            return f"[图片加载失败：{url}]"  # AC-29
 
         return _IMAGE_PATTERN.sub(_replace, markdown)
 
     @staticmethod
     async def _fetch_image_bytes(
-        url: str, client: httpx.AsyncClient, minio_host: Optional[str] = None,
+        url: str,
+        client: httpx.AsyncClient,
+        minio_host: Optional[str] = None,
     ) -> tuple[bytes, str]:
         """Fetch image bytes + extension hint. Raises on failure.
 
@@ -846,45 +851,46 @@ class ConversationExportService:
         bisheng backend network reaches both internal MinIO and external HTTPS
         endpoints; no protocol switching is required.
         """
-        if url.startswith('data:'):
+        if url.startswith("data:"):
             try:
-                header, payload = url.split(',', 1)
+                header, payload = url.split(",", 1)
             except ValueError as e:
-                raise ValueError(f'malformed data URL: {url[:60]}') from e
-            ext = 'png'
-            if 'jpeg' in header or 'jpg' in header:
-                ext = 'jpg'
-            elif 'gif' in header:
-                ext = 'gif'
-            elif 'webp' in header:
-                ext = 'webp'
-            elif 'svg' in header:
-                ext = 'svg'
+                raise ValueError(f"malformed data URL: {url[:60]}") from e
+            ext = "png"
+            if "jpeg" in header or "jpg" in header:
+                ext = "jpg"
+            elif "gif" in header:
+                ext = "gif"
+            elif "webp" in header:
+                ext = "webp"
+            elif "svg" in header:
+                ext = "svg"
             try:
                 raw = base64.b64decode(payload)
             except binascii.Error as e:
-                raise ValueError('invalid base64 payload') from e
+                raise ValueError("invalid base64 payload") from e
             return raw, ext
 
         # Root-relative path (nginx-proxied on the frontend, e.g.
         # "/bisheng/knowledge/images/..."): rebuild the absolute MinIO URL.
-        if url.startswith('/') and not url.startswith('//') and minio_host:
-            url = minio_host.rstrip('/') + url
+        if url.startswith("/") and not url.startswith("//") and minio_host:
+            path = url[len("/object") :] if url.startswith("/object/") else url
+            url = minio_host.rstrip("/") + path
 
-        if url.startswith(('http://', 'https://')):
+        if url.startswith(("http://", "https://")):
             resp = await client.get(url)
             resp.raise_for_status()
-            ext = _guess_ext_from_content_type(resp.headers.get('content-type', ''))
-            if ext == 'bin':
+            ext = _guess_ext_from_content_type(resp.headers.get("content-type", ""))
+            if ext == "bin":
                 # MinIO serves images as application/octet-stream — fall back to
                 # the URL path suffix so the local file carries a real image
                 # extension and pandoc/Word embeds it instead of dropping it.
-                suffix = url.split('?', 1)[0].rsplit('.', 1)[-1].lower()
-                if suffix in {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}:
-                    ext = 'jpg' if suffix == 'jpeg' else suffix
+                suffix = url.split("?", 1)[0].rsplit(".", 1)[-1].lower()
+                if suffix in {"png", "jpg", "jpeg", "gif", "webp", "svg"}:
+                    ext = "jpg" if suffix == "jpeg" else suffix
             return resp.content, ext
 
-        raise ValueError(f'unsupported image URL scheme: {url[:40]}')
+        raise ValueError(f"unsupported image URL scheme: {url[:40]}")
 
     @staticmethod
     async def _resolve_minio_host() -> Optional[str]:
@@ -893,10 +899,11 @@ class ConversationExportService:
         fall back to the load-failure placeholder)."""
         try:
             from bisheng.core.storage.minio.minio_manager import get_minio_storage
+
             storage = await get_minio_storage()
             return storage.get_minio_share_host()
-        except Exception:  # noqa: BLE001 — best-effort; missing host is non-fatal
-            logger.warning('resolve minio host failed; relative image URLs unfetchable')
+        except Exception:  # — best-effort; missing host is non-fatal
+            logger.warning("resolve minio host failed; relative image URLs unfetchable")
             return None
 
     # ----------------------------------------------------------------------
@@ -920,24 +927,24 @@ class ConversationExportService:
 
         Timestamp local clock by default; tests inject ``now`` for determinism.
         """
-        raw_title = (session.name or '').strip()
-        if not raw_title or raw_title.lower() == 'new chat':
+        raw_title = (session.name or "").strip()
+        if not raw_title or raw_title.lower() == "new chat":
             title = _FALLBACK_TITLE
         else:
             cleaned = []
             for c in raw_title:
                 if c in _FORBIDDEN_FILENAME_CHARS or ord(c) < 32:
-                    cleaned.append('_')
+                    cleaned.append("_")
                 else:
                     cleaned.append(c)
-            title = ''.join(cleaned).rstrip(' .')
+            title = "".join(cleaned).rstrip(" .")
             if not title:
                 title = _FALLBACK_TITLE
             if len(title) > _MAX_FILENAME_TITLE_LEN:
-                title = title[:_MAX_FILENAME_TITLE_LEN].rstrip(' .') or _FALLBACK_TITLE
+                title = title[:_MAX_FILENAME_TITLE_LEN].rstrip(" .") or _FALLBACK_TITLE
 
-        ts = (now or datetime.now()).strftime('%Y%m%d%H%M')
-        return f'{title}_{ts}.{ext}'
+        ts = (now or datetime.now()).strftime("%Y%m%d%H%M")
+        return f"{title}_{ts}.{ext}"
 
     # ----------------------------------------------------------------------
     # Import to knowledge space (T012)
@@ -967,7 +974,9 @@ class ConversationExportService:
           duplicate (spec §3)
         """
         messages, session = await cls._load_and_validate_messages(
-            chat_id=req.chat_id, message_ids=req.message_ids, user_id=user.user_id,
+            chat_id=req.chat_id,
+            message_ids=req.message_ids,
+            user_id=user.user_id,
         )
 
         # Pre-check: space exists & is the right resource type.
@@ -1000,33 +1009,34 @@ class ConversationExportService:
             raise ConversationImportPermissionDeniedError()
 
         # Build Markdown — same generator that powers export_messages.
-        turns = cls._build_turns(messages, session, user_name=user.user_name or '')
+        turns = cls._build_turns(messages, session, user_name=user.user_name or "")
         markdown = cls._render_markdown(turns)
-        markdown_bytes = markdown.encode('utf-8')
+        markdown_bytes = markdown.encode("utf-8")
 
         # Per-file size limit (env.uploaded_files_maximum_size, in MB). The
         # frontend enforces this for manual uploads; F028 builds the file
         # server-side and bypasses that check, so enforce it here too.
         from bisheng.common.services.config_service import settings as _bs_settings
-        env_conf = (await _bs_settings.aget_all_config()).get('env') or {}
-        max_mb = env_conf.get('uploaded_files_maximum_size')
+
+        env_conf = (await _bs_settings.aget_all_config()).get("env") or {}
+        max_mb = env_conf.get("uploaded_files_maximum_size")
         try:
             max_bytes = float(max_mb) * 1024 * 1024 if max_mb is not None else None
         except (TypeError, ValueError):
             max_bytes = None
         if max_bytes is not None and len(markdown_bytes) > max_bytes:
             raise ConversationImportFileTooLargeError(
-                msg=f'文件大小超过上传限制（{max_mb}MB）',
+                msg=f"文件大小超过上传限制（{max_mb}MB）",
             )
 
         # Resolve a non-conflicting filename within the target layer.
-        base_filename = cls._resolve_filename(session, 'md')
+        base_filename = cls._resolve_filename(session, "md")
         target_filename = await cls._resolve_unique_filename(
             knowledge_id=req.knowledge_space_id,
             parent_id=req.parent_id,
             base_filename=base_filename,
         )
-        dup_renamed = (target_filename != base_filename)
+        dup_renamed = target_filename != base_filename
 
         responses = await cls._upload_and_add_file(
             space_service=space_service,
@@ -1038,11 +1048,11 @@ class ConversationExportService:
         )
 
         if not responses:
-            raise ConversationImportFailedError(msg='add_file returned no results')
+            raise ConversationImportFailedError(msg="add_file returned no results")
 
         first = responses[0]
         # Race-retry path may have changed the on-disk filename; reflect it.
-        actual_filename = getattr(first, 'file_name', None) or target_filename
+        actual_filename = getattr(first, "file_name", None) or target_filename
         return ImportMessagesToKnowledgeResponse(
             file_id=first.id,
             target_filename=actual_filename,
@@ -1100,21 +1110,25 @@ class ConversationExportService:
                 )
             except SpaceFileNameDuplicateError as e:
                 raise ConversationImportFailedError(
-                    msg='文件名持续冲突，请稍后重试',
+                    msg="文件名持续冲突，请稍后重试",
                 ) from e
         except (SpaceFileSizeLimitError, TenantStorageQuotaExceededError) as e:
-            raise ConversationImportQuotaExceededError(msg=str(e) or '知识空间配额已满') from e
+            raise ConversationImportQuotaExceededError(msg=str(e) or "知识空间配额已满") from e
         except SpacePermissionDeniedError as e:
             raise ConversationImportPermissionDeniedError() from e
         except (SpaceNotFoundError, SpaceFolderNotFoundError) as e:
             raise ConversationImportFolderNotFoundError() from e
-        except (ConversationImportSpaceNotFoundError, ConversationImportFolderNotFoundError,
-                ConversationImportPermissionDeniedError, ConversationImportQuotaExceededError,
-                ConversationImportFailedError):
+        except (
+            ConversationImportSpaceNotFoundError,
+            ConversationImportFolderNotFoundError,
+            ConversationImportPermissionDeniedError,
+            ConversationImportQuotaExceededError,
+            ConversationImportFailedError,
+        ):
             raise
         except Exception as e:
-            logger.exception('conversation import: add_file failed')
-            raise ConversationImportFailedError(msg=f'导入失败: {e}') from e
+            logger.exception("conversation import: add_file failed")
+            raise ConversationImportFailedError(msg=f"导入失败: {e}") from e
 
     @staticmethod
     async def _save_markdown_to_minio(markdown_bytes: bytes, filename: str) -> str:
@@ -1124,7 +1138,7 @@ class ConversationExportService:
         bio = BytesIO(markdown_bytes)
         upload = UploadFile(filename=filename, file=bio)
         try:
-            return await save_uploaded_file(upload, 'bisheng', filename)
+            return await save_uploaded_file(upload, "bisheng", filename)
         finally:
             await upload.close()
 
@@ -1144,9 +1158,9 @@ class ConversationExportService:
         design — the import flow handles the race by retrying once with a
         fresh resolution.
         """
-        stem, dot, ext = base_filename.rpartition('.')
+        stem, dot, ext = base_filename.rpartition(".")
         if not dot:
-            stem, ext = base_filename, ''
+            stem, ext = base_filename, ""
 
         # Scan the target layer. page_size big enough to catch all siblings
         # for the realistic conversation-export workload (folders here are
@@ -1157,17 +1171,17 @@ class ConversationExportService:
             page=1,
             page_size=1000,
         )
-        existing = {c.file_name for c in children if getattr(c, 'file_name', None)}
+        existing = {c.file_name for c in children if getattr(c, "file_name", None)}
         if base_filename not in existing:
             return base_filename
 
         for n in range(1, 1001):
-            candidate = f'{stem}({n}).{ext}' if ext else f'{stem}({n})'
+            candidate = f"{stem}({n}).{ext}" if ext else f"{stem}({n})"
             if candidate not in existing:
                 return candidate
         # Pathological: 1000+ same-name siblings. Bail loud rather than loop.
         raise ConversationImportFailedError(
-            msg='同名文件过多，请稍后重试或更换会话标题',
+            msg="同名文件过多，请稍后重试或更换会话标题",
         )
 
 
@@ -1178,15 +1192,15 @@ class ConversationExportService:
 
 def _guess_ext_from_content_type(ct: str) -> str:
     """Map an HTTP Content-Type to a sensible file extension."""
-    ct = (ct or '').lower()
-    if 'png' in ct:
-        return 'png'
-    if 'jpeg' in ct or 'jpg' in ct:
-        return 'jpg'
-    if 'gif' in ct:
-        return 'gif'
-    if 'webp' in ct:
-        return 'webp'
-    if 'svg' in ct:
-        return 'svg'
-    return 'bin'
+    ct = (ct or "").lower()
+    if "png" in ct:
+        return "png"
+    if "jpeg" in ct or "jpg" in ct:
+        return "jpg"
+    if "gif" in ct:
+        return "gif"
+    if "webp" in ct:
+        return "webp"
+    if "svg" in ct:
+        return "svg"
+    return "bin"

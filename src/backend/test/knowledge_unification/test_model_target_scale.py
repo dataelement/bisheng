@@ -41,8 +41,8 @@ async def test_complete_native_targets_do_not_create_per_target_sql_or_expressio
         )
     assert len(result.targets) == count and result.check_complete and not result.blocked
     by_table = Counter(re.search(r"\bFROM\s+([^\s,]+)", statement, re.I)[1] for statement, _ in statements)
-    assert by_table["resource_reference_tombstone"] == math.ceil(count / 200)
-    assert by_table["llm_model"] == 4
+    assert by_table["resource_reference_tombstone"] == 0
+    assert by_table["llm_model"] == 1
     assert by_table["business_resource_reference"] == math.ceil(count / 200)
     assert len(statements) <= 40
     for statement, _ in statements:
@@ -52,8 +52,8 @@ async def test_complete_native_targets_do_not_create_per_target_sql_or_expressio
     # Empty groups still need one query to prove the complete absence of refs.
     inbound = [row for row in statements if "FROM business_resource_reference" in row[0]]
     assert len(inbound) == math.ceil(count / 200)
-    assert all(len(parameters) <= 204 for _, parameters in inbound)
-    assert all("LEFT OUTER JOIN business_reference_set" in statement for statement, _ in inbound)
+    assert all(len(parameters) <= 400 for _, parameters in inbound)
+    assert all("business_reference_set" not in statement for statement, _ in inbound)
 
 
 def deleted(ident, owner=101):

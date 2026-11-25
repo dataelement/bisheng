@@ -259,7 +259,19 @@ async def test_non_admin_runtime_uses_current_floor_and_does_not_grant_it_at_lev
 
 
 def test_none_model_checksum_stays_byte_identical():
+    from dataclasses import replace
+
+    from bisheng.permission.domain.services.catalog_policy import derive_action_release
+
+    # This checksum pins the pre-scope-upgrade Catalog, not the evolving
+    # fresh-install defaults. Preserve the historical compatibility contract.
+    actions = derive_action_release(
+        replace(action, resource_types=action.resource_types - {"folder", "knowledge_file"})
+        if action.code == "edit"
+        else action
+        for action in build_initial_action_release().actions
+    )
     models = derive_permission_models(
-        build_initial_action_release(), custom_models=(CustomModelSelection("ordinary", "Ordinary", ("download",)),)
+        actions, custom_models=(CustomModelSelection("ordinary", "Ordinary", ("download",)),)
     )
     assert models.checksum == "6c0df18f320a4ced9f6ab75d84097171891f38867bd6142cd1750b8d7092c83d"

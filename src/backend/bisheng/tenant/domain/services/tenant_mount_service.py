@@ -552,6 +552,7 @@ class TenantMountService:
         # 1. 资源迁移: Child 名下所有 tenant_aware 业务表批量改为 Root
         migrated_counts = await cls._migrate_child_resources_to_root(
             child_tenant_id,
+            operator_id=operator.user_id,
         )
 
         # 2 + 3 in one transaction: archive the Child + free up tenant_code
@@ -628,29 +629,18 @@ class TenantMountService:
         }
 
     @classmethod
-    async def _migrate_child_resources_to_root(
-        cls,
-        child_tenant_id: int,
-    ) -> dict[str, int]:
-        """Move every tenant-aware row from Child → Root via TenantDao.
+    async def _migrate_child_resources_to_root(cls, child_tenant_id: int, *, operator_id: int) -> dict[str, int]:
+        """Move native business rows and permission mirrors in one transaction.
 
-        Thin delegate over ``TenantDao.abulk_update_tenant_id`` so the
-        service layer does not own raw SQL — kept only as a semantic
-        wrapper (fixed table whitelist, fixed from=child / to=Root).
-
-        Tables whose model is not defined in the codebase are skipped: a
-        whitelist entry with no live SQLModel mapping is a stale/retired
-        table that no longer needs migrating. Preset tool rows are excluded
-        via ``_UNMOUNT_MIGRATE_ROW_FILTERS`` (per-tenant copies, not
-        Child-owned resources).
+        Failed projections retain their original journal and fenced destination;
+        retrying unmount resumes them before the Child can be archived.
         """
+        from bisheng.tenant.application.resource_tenant_transfer import migrate_unmounted_resources
+
         tables = cls._filter_known_tables(_UNMOUNT_MIGRATE_TABLES)
-        row_filters = {t: f for t, f in _UNMOUNT_MIGRATE_ROW_FILTERS.items() if t in tables}
-        return await TenantDao.abulk_update_tenant_id(
-            tables=tables,
-            from_tenant_id=child_tenant_id,
-            to_tenant_id=ROOT_TENANT_ID,
-            table_row_filters=row_filters,
+        row_filters = {name: value for name, value in _UNMOUNT_MIGRATE_ROW_FILTERS.items() if name in tables}
+        return await migrate_unmounted_resources(
+            source=child_tenant_id, tables=tables, filters=row_filters, operator_id=operator_id
         )
 
     @staticmethod

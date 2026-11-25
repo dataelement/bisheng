@@ -8,7 +8,6 @@ import sqlalchemy as sa
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.errcode.permission import PermissionProjectionFailedError
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -41,6 +40,7 @@ def enable_switch(monkeypatch):
     conf.version_management.enabled = True
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
+    monkeypatch.setattr(kvs_mod, "require_business_action", AsyncMock())
 
 
 async def _seed_two_version_doc(session):
@@ -67,7 +67,7 @@ async def _seed_two_version_doc(session):
 def _build_svc(session):
     return KnowledgeVersionService(
         request=MagicMock(),
-        login_user=MagicMock(),
+        login_user=SimpleNamespace(user_id=1, tenant_id=1),
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
@@ -86,16 +86,18 @@ async def test_delete_history_removes_version_and_file(deletion_case):
 
 
 @pytest.mark.asyncio
-async def test_delete_primary_is_rejected(enable_switch, async_db_session, monkeypatch):
-    _doc, _v1, v2 = await _seed_two_version_doc(async_db_session)
+async def test_delete_primary_is_rejected(deletion_case, monkeypatch):
+    case = deletion_case
+    row = await case.seed(
+        file_id=100, version_id=1, document_id=1, primary_file_id=101, primary_version_id=2, space_id=1
+    )
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
         "KnowledgeAuditTelemetryService.audit_delete_file_version",
         MagicMock(return_value=None),
     )
-    svc = _build_svc(async_db_session)
     with pytest.raises(HTTPException) as ctx:
-        await svc.delete_version(version_id=v2.id)
+        await case.service.delete_version(version_id=row.primary_version_id)
     assert ctx.value.status_code == 409
 
 
@@ -116,10 +118,13 @@ async def test_delete_rejected_when_switch_off(async_db_session, monkeypatch):
     conf.version_management.enabled = False
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
+    monkeypatch.setattr(kvs_mod, "require_business_action", AsyncMock())
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    from bisheng.common.errcode.knowledge_space import VersionManagementDisabledError
+
+    with pytest.raises(VersionManagementDisabledError) as ctx:
         await svc.delete_version(version_id=1)
-    assert ctx.value.status_code == 403
+    assert ctx.value.Code == VersionManagementDisabledError.Code
 
 
 # Real deletion application, SQL cutover/Plan/TargetOwner and F048 journals;
@@ -133,6 +138,14 @@ consumer, deletion_consumer = native.consumer, native.deletion_consumer
 @pytest.fixture
 async def deletion_case(deletion_consumer, enable_switch, monkeypatch):
     context, _space_service, _adapter = deletion_consumer
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+
+    async with context.engine.begin() as connection:
+        for model in (KnowledgeProcessingFence, KnowledgeProcessingArtifact):
+            await connection.run_sync(lambda sync, model=model: model.__table__.create(sync, checkfirst=True))
     case = SimpleNamespace(context=context, app=context.deletion, fail=None, io=[], primary_id=None)
     # The old repository constructors take a concrete native Session. Keep
     # it alive only for their public pre-read; it never owns deletion writes.
@@ -144,6 +157,24 @@ async def deletion_case(deletion_consumer, enable_switch, monkeypatch):
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
     )
+    # These cleanup cases use a tenant101 natural person, not management-scope switching.
+    context.user.tenant_id = 101
+    context.user._runtime_credential_reference = {
+        **context.user._runtime_credential_reference,
+        "tenant_id": context.user.tenant_id,
+    }
+
+    async def read_tuples(*, object, consistency):
+        return [
+            {"user": user, "relation": relation, "object": obj}
+            for user, relation, obj in context.transport.present
+            if obj == object
+        ]
+
+    from bisheng.knowledge.application import knowledge_deletion
+
+    permission_runtime = await knowledge_deletion.get_f048_runtime()
+    permission_runtime._client.read_tuples = read_tuples
     svc.deletion_application_factory = lambda: case.app
     case.service = svc
     monkeypatch.setattr(
@@ -253,6 +284,9 @@ async def deletion_case(deletion_consumer, enable_switch, monkeypatch):
     # selected file IDs, so the current primary's index entries cannot disappear.
     from bisheng.core.storage.minio import minio_manager
     from bisheng.knowledge.domain import knowledge_rag
+    from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+
+    monkeypatch.setattr(KnowledgeUtils, "delete_violation_display_chunks", MagicMock(), raising=False)
 
     async def remove(*, bucket_name, object_name):
         case.io.append(("minio", object_name))
@@ -397,8 +431,9 @@ async def test_delete_version_knowledge_none_skips_vector_but_runs_minio(deletio
     case = deletion_case
     row = await case.seed(file_id=13, version_id=45, document_id=10, version_no=5, space_id=99, root_exists=False)
     before = native.state(case.context)
-    with pytest.raises(KnowledgeOperationPlanConflictError):
+    with pytest.raises(HTTPException) as error:
         await case.service.delete_version(version_id=45)
+    assert error.value.status_code == 404
     assert native.state(case.context) == before and not case.io and not case.context.order
     async with case.context.sessions() as session:
         assert await session.get(KnowledgeFile, row.file_id) is not None
@@ -423,6 +458,33 @@ async def test_projection_failure_keeps_original_history_and_remains_fail_closed
     with pytest.raises(PermissionProjectionFailedError, match="fail closed"):
         await case.app.aconfirm(identity=case.context.user, space_id=5, request=command)
     async with case.context.sessions() as session:
+        assert await session.get(KnowledgeFile, row.file_id) is not None
+        assert await session.get(KnowledgeDocumentVersion, row.version_id) is not None
+    assert not case.io
+
+
+@pytest.mark.parametrize("edit,delete", [(False, True), (True, False)])
+async def test_historical_delete_requires_both_file_edit_and_delete(deletion_case, monkeypatch, edit, delete):
+    from bisheng.common.errcode.permission import PermissionDeniedError
+    from bisheng.knowledge.application import knowledge_deletion
+
+    case = deletion_case
+    row = await case.seed(file_id=15, version_id=47, document_id=12)
+
+    async def require_edit(identity, *, resource_type, resource_id, action):
+        assert resource_type == "knowledge_file" and resource_id == row.file_id and action == "edit"
+        if not edit:
+            raise PermissionDeniedError()
+
+    async def delete_actions(identity, *, resource_type, resource_ids, actions):
+        return {str(ident): set(actions) if delete else set() for ident in resource_ids}
+
+    monkeypatch.setattr(knowledge_deletion, "require_business_action", require_edit)
+    monkeypatch.setattr(knowledge_deletion, "batch_check_business_actions", delete_actions)
+    monkeypatch.setattr(knowledge_deletion.admission, "batch_check_business_actions", delete_actions)
+    with pytest.raises(PermissionDeniedError):
+        await case.service.delete_version(row.version_id)
+    async with AsyncSession(case.context.engine) as session:
         assert await session.get(KnowledgeFile, row.file_id) is not None
         assert await session.get(KnowledgeDocumentVersion, row.version_id) is not None
     assert not case.io

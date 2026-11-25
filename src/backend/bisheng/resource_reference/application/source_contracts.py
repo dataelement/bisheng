@@ -156,8 +156,8 @@ class ReferenceTargetReadFact:
         if self.state == ReferenceState.VALID and not self.is_valid and self.key.target_type != TargetType.MODEL:
             raise ValueError("only a live model can have revoked binding eligibility")
         if self.target_tenant_id is None:
-            if self.state != ReferenceState.INVALID_LEGACY:
-                raise ValueError("only frozen legacy facts can have unknown target ownership")
+            if self.state not in {ReferenceState.INVALID_LEGACY, ReferenceState.INVALID_MISSING}:
+                raise ValueError("only missing targets can have unknown ownership")
         else:
             _tenant(self.target_tenant_id)
         if self.target_space_id is not None:
@@ -176,15 +176,11 @@ def _result(snapshot, states) -> None:
 class SourceReferenceReadResult:
     snapshot: AuthorizedSourceSnapshot
     target_states: tuple[ReferenceTargetReadFact, ...]
-    source_revision: int
-    root_revision: int
 
     def __post_init__(self):
         if not isinstance(self.snapshot, AuthorizedSourceSnapshot):
             raise TypeError("saved result needs a saved source snapshot")
         _result(self.snapshot, self.target_states)
-        if any(type(value) is not int or value < 0 for value in (self.source_revision, self.root_revision)):
-            raise ValueError("source read revisions must be nonnegative integers")
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,8 +255,6 @@ class ModelDefaultSlotReadResult:
 
     snapshot: AuthorizedSourceSnapshot
     target_states: tuple[ReferenceTargetReadFact, ...]
-    source_revision: int
-    root_revision: int
     slots: tuple[str, ...]
 
     def __post_init__(self):

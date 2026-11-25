@@ -172,7 +172,7 @@ async function menu(name = "file-11.pdf") {
 beforeEach(() => {
   vi.clearAllMocks();
   rows = [file()];
-  actions = ["visible", "rename", "move", "manage_permission"];
+  actions = ["visible", "edit", "rename", "move", "manage_permission"];
   rootActions = ["visible", "edit", "manage_permission"];
   mocks.get.mockImplementation(async () => ({
     data: rows,
@@ -511,7 +511,7 @@ it("opens version management from the badge and keeps the separate similar-docum
 });
 
 it("shows version management and history when the permission payload omits the visible relation", async () => {
-  actions = ["rename", "move", "manage_permission", "delete", "download"];
+  actions = ["edit", "rename", "move", "manage_permission", "delete", "download"];
   rootActions = ["edit", "manage_permission", "delete"];
   rows = [file(11, { version_no: 2, is_multi_version: true, file_name: "versioned.md" })];
   mount("workspace", true);
@@ -540,9 +540,9 @@ it("shows version numbers and history for multiple versions", async () => {
 });
 
 it.each([false, true])(
-  "withholds version management without a feature flag or space edit (flag=%s)",
+  "withholds version management without a feature flag or file edit (flag=%s)",
   async (enabled) => {
-    rootActions = enabled ? ["visible", "manage_permission"] : ["visible", "edit", "manage_permission"];
+    actions = enabled ? ["visible", "manage_permission"] : ["visible", "edit", "manage_permission"];
     rows = [file(11, { has_similar: true, is_multi_version: false })];
     mount("workspace", enabled);
     const opened = await menu();
@@ -581,11 +581,12 @@ it.each([0, 1])("omits reference sources from both batch toolbar variants for ty
 });
 
 it.each([true, false])("requires edit instead of permission management for batch similar documents (edit=%s)", async (edit) => {
-  rootActions = ["visible", edit ? "edit" : "manage_permission"];
+  rootActions = ["visible", edit ? "manage_permission" : "edit"];
+  actions = ["visible", edit ? "edit" : "manage_permission"];
   rows = [file(11, { has_similar: true, is_multi_version: false })];
   mount("workspace", true);
   fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
-  await waitFor(() => expect(mocks.permissions).toHaveBeenCalledWith("knowledge_space", "7", expect.anything()));
+  await waitFor(() => expect(mocks.permissions).toHaveBeenCalledWith("knowledge_file", "11", expect.anything()));
   const name = "knowledge.version.header_process_similar_label";
   if (edit) {
     fireEvent.click(await screen.findByRole("button", { name }));

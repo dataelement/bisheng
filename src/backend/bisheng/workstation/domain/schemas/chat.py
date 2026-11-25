@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from bisheng.chat_session.domain.schemas.user_message import ComposerReference
+
 
 class ToolPayload(BaseModel):
     id: int = 0
@@ -71,6 +73,7 @@ class APIChatCompletion(BaseModel):
     skill_ids: list[int] | None = None
     use_knowledge_base: UseKnowledgeBaseParam | None = None
     files: list[dict] | None = None
+    composer_references: list[ComposerReference] | None = None
     search_enabled: bool | None = False
     parentMessageId: str | None = None
     overrideParentMessageId: str | None = None

@@ -47,12 +47,14 @@ def view(monkeypatch):
         )
         for ref in refs
     )
-    prepare = AsyncMock(return_value=SourceReferenceReadResult(snapshot, states, 3, 4))
+    prepare = AsyncMock(return_value=SourceReferenceReadResult(snapshot, states))
     monkeypatch.setattr(AssistantExecutionAdmission, "prepare", prepare)
     monkeypatch.setattr(assistant_module.AssistantDao, "aget_one_assistant", AsyncMock(return_value=row))
     rows = [Knowledge(id=target, name=f"actual-{target}", user_id=8, tenant_id=101, type=3) for target in (10, 20)]
     monkeypatch.setattr(assistant_module.KnowledgeDao, "get_list_by_ids", MagicMock(return_value=rows))
-    decorate = MagicMock(side_effect=lambda tools, flows, ids: ([], [], [item for item in rows if item.id in ids]))
+    decorate = AsyncMock(
+        side_effect=lambda user, tools, flows, ids: ([], [], [item for item in rows if item.id in ids])
+    )
     monkeypatch.setattr(AssistantService, "get_link_info", decorate)
     monkeypatch.setattr(AssistantService, "get_logo_share_link_async", AsyncMock(return_value="logo"))
 

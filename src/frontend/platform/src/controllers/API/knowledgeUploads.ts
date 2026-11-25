@@ -10,6 +10,7 @@ export interface SpaceUploadFile {
   upload_id?: string;
   flowId?: string | null;
   file_path: string;
+  preview_upload_ref?: string | null;
   relative_path?: string | null;
   file_name?: string | null;
   repeat: boolean;
@@ -21,6 +22,8 @@ export interface SpaceUploadFile {
 export interface SpaceFilesCreate {
   upload_context?: UploadContext;
   file_path: string[];
+  /** Legacy wire (no upload_context): one server-issued reference per file_path. */
+  preview_upload_refs?: string[];
   parent_id?: number | null;
   overrides?: ProcessingOverrides | null;
 }
@@ -53,6 +56,9 @@ export async function registerSpaceFiles(
     {
       file_path: body.file_path.slice(),
       ...(body.upload_context ? { upload_context: body.upload_context } : {}),
+      ...(body.preview_upload_refs
+        ? { preview_upload_refs: body.preview_upload_refs.slice() }
+        : {}),
       ...(body.parent_id === undefined ? {} : { parent_id: body.parent_id }),
       ...(body.overrides === undefined ? {} : { overrides: body.overrides }),
     },

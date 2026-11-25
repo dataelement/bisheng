@@ -2,16 +2,15 @@ import { useVisibleKnowledgeSelections } from "./hooks/useVisibleKnowledgeSelect
 import { useTaskModeNavigation } from "./hooks/useTaskModeNavigation";
 import { useChatModelSelection } from "./hooks/useChatModelSelection";
 import { isApiError } from "@bisheng/api-client";
+import { toast } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useActivate, useUnactivate } from "react-activation";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState } from "recoil";
 import { useTaskInviteQuota } from "~/components/Chat/TaskInviteQuota";
-import {
-  getLinsightSessionVersionList,
-  userStopLinsightEvent,
-} from "~/api/linsight";
-import { SopStatus, taskModeState } from "~/store/linsight";
+import { getLinsightSessionVersionList } from "~/api/linsight";
+import { taskModeState } from "~/store/linsight";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
 import { useDesktopConversation } from "./useDesktopConversation";
 import { useAuthContext } from "~/hooks/AuthContext";
@@ -41,6 +40,8 @@ import { NotificationSeverity } from "~/common";
 import { type AddToKnowledgeSelection } from "~/pages/Subscription/Article/AddToKnowledgeModal";
 import { useChatSurfaceLayout } from "./hooks/useChatSurfaceLayout";
 import { useTaskWorkspaceState } from "./hooks/useTaskWorkspaceState";
+import { useReturnedDraft } from "./hooks/runComposerState";
+import { useChatSendActions } from "./hooks/useChatSendActions";
 import { ChatSurfacePresentation } from "./ChatSurfacePresentation";
 import { readNewChatKey } from './newChatDraft';
 
@@ -112,6 +113,7 @@ function useChatView(
   const {
     selectedOrgKbs,
     knowledgeAccessMessage,
+    knowledgeAccessVerifying,
     setSelectedOrgKbs,
     messages,
     conversationId: activeConvoId,
@@ -127,12 +129,20 @@ function useChatView(
     regenerate,
   } = useAiChat(
     conversationId,
-    false,
     shareToken,
-    "chat",
     presence.ensureLeaseId,
     draftIdentity,
   );
+
+  const [chatActive, setChatActive] = useState(true);
+  useActivate(() => setChatActive(true));
+  useUnactivate(() => setChatActive(false));
+  const verifyingLabel = t("knowledgeAccess.checking");
+  useEffect(() => {
+    if (!chatActive || !knowledgeAccessVerifying) return;
+    const toastId = toast.loading(verifyingLabel);
+    return () => toast.dismiss(toastId);
+  }, [chatActive, knowledgeAccessVerifying, verifyingLabel]);
 
   useVisibleKnowledgeSelections({ user, selectedOrgKbs, setSelectedOrgKbs });
 
@@ -283,20 +293,11 @@ function useChatView(
     allowSend: allowInviteSend,
   } = useTaskInviteQuota(inviteOn);
 
-  const handleSend = useCallback(
-    async (text: string, files?: any[] | null) => {
-      const isTaskTurn = taskMode && canUseTaskMode;
-      if (isTaskTurn && !allowInviteSend()) return false;
-      // Capture the turn's resources before resetting its composer draft. A
-      // `false` result (e.g. the department is full) keeps the draft so the
-      // user can send again once a slot frees up.
-      const sendingIdentity = composerIdentity;
-      const accepted = await sendMessage(text, files, { taskMode: isTaskTurn });
-      if (accepted && composerIdentityRef.current === sendingIdentity) setInputText("");
-      return accepted;
-    },
-    [taskMode, canUseTaskMode, sendMessage, allowInviteSend, composerIdentity],
-  );
+  const { handleSend, handleSendAnswer, handleRetryTaskTurn } = useChatSendActions({
+    taskMode, canUseTaskMode, conversationId: activeConvoId,
+    sendMessage, allowInviteSend, composerIdentity, composerIdentityRef, setInputText,
+  });
+  useReturnedDraft(activeConvoId, setInputText);
 
   const isNew = conversationId === "new";
   const hasMessages = messages.length > 0;
@@ -449,7 +450,6 @@ function useChatView(
   // workspace itself belongs to the conversation. The drawer only opens on the
   // header button — no auto-expand (the entry icon appearing is enough).
   const {
-    updateLinsight,
     taskArtifacts,
     chatAttachments,
     dockedCardRef,
@@ -462,8 +462,6 @@ function useChatView(
     taskWorkspaceFiles,
     reportTaskTurnLoadFailed,
     taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
   } = useTaskWorkspaceState({
     conversationId,
     messages,
@@ -473,39 +471,6 @@ function useChatView(
     taskVersionIds,
     latestTaskVersionId,
   });
-
-  // Stop button handler. A task round runs via the linsight worker/WS, normally
-  // AFTER the handoff SSE stream closed — route the stop to terminate-execute.
-  const handleStop = useCallback(() => {
-    if (taskRunning && latestTaskVersionId) {
-      userStopLinsightEvent(latestTaskVersionId).catch(() => {
-        /* best-effort: WS task_terminated reconciles */
-      });
-      updateLinsight(latestTaskVersionId, (prev) => ({
-        ...prev,
-        status: SopStatus.Stoped,
-        tasks: (prev.tasks || []).map((tk: any) => ({
-          ...tk,
-          status: tk.status === "in_progress" ? "terminated" : tk.status,
-          children: tk.children
-            ? tk.children.map((c: any) => ({
-                ...c,
-                status: c.status === "in_progress" ? "terminated" : c.status,
-              }))
-            : tk.children,
-        })),
-      }));
-      // The handoff SSE may still be open when the user stops quickly (esp. while
-      // queued): isStreaming would then keep the input's stop button lit after the
-      // terminate, since the button gates on `isStreaming || taskRunning` and only
-      // taskRunning flipped here. Abort the (now-useless) handoff stream + clear
-      // isStreaming so the input syncs to the stopped state immediately instead of
-      // lingering until the stream drops on its own. (QA: stop-while-queued.)
-      stopGenerating();
-      return;
-    }
-    stopGenerating();
-  }, [taskRunning, latestTaskVersionId, updateLinsight, stopGenerating]);
 
   return {
     t,
@@ -551,6 +516,7 @@ function useChatView(
     inviteQuotaBar,
     inviteQuotaDialog,
     handleSend,
+    handleSendAnswer,
     isNew,
     hasMessages,
     activeCitationMessageId,
@@ -576,9 +542,7 @@ function useChatView(
     taskWorkspaceFiles,
     reportTaskTurnLoadFailed,
     taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
-    handleStop,
+    handleRetryTaskTurn,
     id,
     shareToken,
     taskVersionIds,

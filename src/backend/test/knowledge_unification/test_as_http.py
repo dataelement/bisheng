@@ -34,7 +34,7 @@ def assistant_http(monkeypatch):
     return SimpleNamespace(module=module, app=app, identity=identity, page=page, listing=listing)
 
 
-@pytest.mark.parametrize("action", [None, "use", "visible"])
+@pytest.mark.parametrize("action", [None, "visible"])
 async def test_http_list_preserves_identity_filters_cursor_and_envelope(assistant_http, action):
     case = assistant_http
     params = {"name": "same", "tag_id": "8", "page_size": "2", "status": "2", "cursor": "original-cursor"}
@@ -63,7 +63,7 @@ async def test_openapi_default_is_canonical_visible(assistant_http):
     assert action["schema"]["default"] == "visible"
 
 
-@pytest.mark.parametrize("action", ["edit", "use_kb", "publish"])
+@pytest.mark.parametrize("action", ["use", "edit", "use_kb", "publish"])
 async def test_unsupported_list_action_remains_rejected(assistant_http, action):
     case = assistant_http
     async with httpx.AsyncClient(
@@ -82,7 +82,7 @@ async def test_http_scope_or_resource_failure_is_not_replaced_by_an_empty_page(a
         transport=httpx.ASGITransport(app=case.app), base_url="http://asgi", trust_env=False
     ) as client:
         with pytest.raises(error):
-            await client.get("/api/v1/assistant", params={"action": "use"})
+            await client.get("/api/v1/assistant", params={"action": "visible"})
     assert case.listing.await_args.args[0] is case.identity
 
 
@@ -111,7 +111,8 @@ async def test_socket_uses_visible_and_passes_the_original_identity_and_lease(as
     )
     assert case.dispatch.await_args.args[3] is case.identity
     assert case.dispatch.await_args.args[:3] == (case.socket, "assistant-a", "chat-a")
-    assert case.dispatch.await_args.kwargs == {"flow_lease_id": "lease-a"}
+    assert case.dispatch.await_args.kwargs["flow_lease_id"] == "lease-a"
+    assert callable(case.dispatch.await_args.kwargs["message_admission"])
     case.socket.close.assert_not_awaited()
 
 

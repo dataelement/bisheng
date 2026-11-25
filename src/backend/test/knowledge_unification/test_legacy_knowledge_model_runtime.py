@@ -3,7 +3,7 @@
 import pytest
 import sqlalchemy as sa
 
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as App
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.services.model_reference_extractor import legacy_knowledge_model_version
@@ -59,9 +59,18 @@ async def test_explicit_authorized_reconfiguration_replaces_invalid_raw_name(adm
         assert value.model_id == 12
 
 
-async def test_unregistered_legacy_name_is_not_admitted_as_historical_evidence(admission):
+async def test_unregistered_legacy_name_is_inspectable_without_reference_receipt(admission):
     context, _, source, _ = admission
     await legacy(context, proof=False)
     async with context.sessions() as session:
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await source.aresolve_source(session, SourceReadRequest("knowledge", "40", purpose="inspect"), context.user)
+        snapshot = await source.aresolve_source(
+            session, SourceReadRequest("knowledge", "40", purpose="inspect"), context.user
+        )
+        assert snapshot.invalid_reason == "knowledge_legacy_model_name_unresolved"
+        assert not snapshot.references
+        assert (
+            await source.arevalidate_source(
+                session, SourceReadRequest("knowledge", "40", purpose="inspect"), context.user, snapshot
+            )
+            == snapshot
+        )

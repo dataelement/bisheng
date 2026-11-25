@@ -25,7 +25,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
 from bisheng.public_endpoints.domain.context import get_current_public_api_principal
-from bisheng.resource_reference.application.contracts import SourceKey, SourceType, TargetType
+from bisheng.resource_reference.application.contracts import SourceKey, SourceType
 from bisheng.resource_reference.application.source_contracts import (
     AuthorizedSourceSnapshot,
     AuthorizedTransientSnapshot,
@@ -35,6 +35,7 @@ from bisheng.resource_reference.application.source_contracts import (
     payload_digest,
 )
 from bisheng.resource_reference.application.source_disclosure import SourceDisclosure
+from bisheng.workflow.application.preview_knowledge_validation import require_preview_knowledge
 from bisheng.workflow.domain.repositories.reference_source_repository import WorkflowReferenceSourceRepository
 from bisheng.workflow.domain.services.reference_extractor import (
     WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
@@ -256,14 +257,7 @@ class WorkflowReferenceSourceOwner:
             raise ResourceReferenceInvalidError(reason="workflow_preview_payload_invalid")
         graph = normalize_execution_graph(supplied["graph"])
         references = _references(graph)
-        for target in sorted(
-            {ref.target for ref in references if ref.target.target_type == TargetType.KNOWLEDGE_SPACE},
-            key=lambda item: int(item.target_id),
-        ):
-            kind = await self.repository.aget_knowledge_resource_type(
-                session, int(target.target_id), for_update=for_update
-            )
-            await require_business_action(identity, resource_type=kind, resource_id=target.target_id, action="visible")
+        await require_preview_knowledge(session, identity, references, graph, self.repository, for_update=for_update)
         payload = {"graph": graph}
         if "node_input" in supplied:
             payload["node_input"] = deepcopy(supplied["node_input"])

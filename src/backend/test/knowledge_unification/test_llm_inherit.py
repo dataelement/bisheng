@@ -10,7 +10,6 @@ import pytest
 from sqlalchemy import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError, ReferenceCoverageNotReadyError
 from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.llm.application.model_default import ModelDefaultApplication
@@ -52,11 +51,7 @@ async def test_restore_five_keys_preserves_root_other_tenant_and_inactivates_onl
         assert await ModelDefaultRepository().aget_own(session, key) is None
         source = SourceKey(101, "model_default", key, "current")
         index = await business.runtime.repository.aget_source_set(session, source)
-        assert (
-            index.ready
-            and not index.effective
-            and not await business.runtime.repository.alist_source_references(session, source)
-        )
+        assert index is None and not await business.runtime.repository.alist_source_references(session, source)
     async with AsyncSession(business.engine) as session:
         with bypass_tenant_filter():
             values = {
@@ -65,25 +60,16 @@ async def test_restore_five_keys_preserves_root_other_tenant_and_inactivates_onl
         assert (1, "{}") in values and (202, '{"do_not_touch":202}') in values
 
 
-async def test_restore_r2_failure_after_delete_rolls_back_override_and_revision(business, monkeypatch):
+async def test_restore_inheritance_does_not_call_reference_writer(business, monkeypatch):
     async with AsyncSession(business.engine) as session, session.begin():
         await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 11}, login_user=business.user)
-    original = business.runtime.aapply_source_bindings
-
-    async def fail(session, prepared):
-        await original(session, prepared)
-        raise RuntimeError("index save failed")
-
-    monkeypatch.setattr(business.runtime, "aapply_source_bindings", fail)
-    with pytest.raises(RuntimeError):
-        async with AsyncSession(business.engine) as session, session.begin():
-            await ModelDefaultApplication.arestore_inheritance(session, "evaluation_llm", login_user=business.user)
+    binding = AsyncMock(side_effect=RuntimeError("index save failed"))
+    monkeypatch.setattr(business.runtime, "aapply_source_bindings", binding)
+    async with AsyncSession(business.engine) as session, session.begin():
+        await ModelDefaultApplication.arestore_inheritance(session, "evaluation_llm", login_user=business.user)
     async with AsyncSession(business.engine) as session:
-        assert (await ModelDefaultRepository().aget_own(session, "evaluation_llm")).value
-        index = await business.runtime.repository.aget_source_set(
-            session, SourceKey(101, "model_default", "evaluation_llm", "current")
-        )
-        assert index.effective and index.source_revision == 1
+        assert await ModelDefaultRepository().aget_own(session, "evaluation_llm") is None
+    binding.assert_not_awaited()
 
 
 async def test_absent_override_does_not_materialize_an_inherited_consumer_source(business):
@@ -95,19 +81,18 @@ async def test_absent_override_does_not_materialize_an_inherited_consumer_source
         assert not (await session.execute(select(BusinessReferenceSet))).all()
 
 
-async def test_unindexed_override_is_not_deleted_by_restore(business):
+async def test_unindexed_override_can_be_removed_by_restore(business):
     async with AsyncSession(business.engine) as session, session.begin():
         session.add(TenantSystemModelConfig(tenant_id=101, key="evaluation_llm", value='{"model_id":11}'))
     async with AsyncSession(business.engine) as session:
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await ModelDefaultApplication.arestore_inheritance(session, "evaluation_llm", login_user=business.user)
-        await session.rollback()
+        await ModelDefaultApplication.arestore_inheritance(session, "evaluation_llm", login_user=business.user)
+        await session.commit()
     async with AsyncSession(business.engine) as session:
-        assert await ModelDefaultRepository().aget_own(session, "evaluation_llm") is not None
+        assert await ModelDefaultRepository().aget_own(session, "evaluation_llm") is None
 
 
 @pytest.mark.parametrize("stage", ["deleting", "deleted"])
-async def test_restore_respects_deleting_fence_but_can_unlink_deleted_target(business, stage):
+async def test_restore_ignores_auxiliary_model_deletion_markers(business, stage):
     async with AsyncSession(business.engine) as session, session.begin():
         await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 11}, login_user=business.user)
         session.add(
@@ -126,12 +111,8 @@ async def test_restore_respects_deleting_fence_but_can_unlink_deleted_target(bus
         if stage == "deleted":
             await session.execute(delete(LLMModel).where(LLMModel.tenant_id == 101, LLMModel.id == 11))
     async with AsyncSession(business.engine) as session, session.begin():
-        if stage == "deleting":
-            with pytest.raises(KnowledgeProcessingConflictError):
-                await ModelDefaultApplication.arestore_inheritance(session, "evaluation_llm", login_user=business.user)
-        else:
-            await ModelDefaultApplication.arestore_inheritance(session, "evaluation_llm", login_user=business.user)
-            assert await ModelDefaultRepository().aget_own(session, "evaluation_llm") is None
+        await ModelDefaultApplication.arestore_inheritance(session, "evaluation_llm", login_user=business.user)
+        assert await ModelDefaultRepository().aget_own(session, "evaluation_llm") is None
 
 
 async def test_root_itself_has_no_restore_inheritance_action(business):

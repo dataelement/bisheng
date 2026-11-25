@@ -5,8 +5,7 @@ Kept out of ``chat_service.py`` so the turn loop only gains call sites:
 - tool output: show ``<ref>S3</ref>`` / ``"ref": "S7"`` instead of registry
   keys (:func:`handles_for_chunks`, :func:`handles_for_web_results`);
 - completion: bind exactly the sources the answer cites, including sources
-  retrieved in earlier turns (:func:`select_cited_items`,
-  :func:`select_cited_items_sync`);
+  retrieved in earlier turns (:func:`select_cited_items`);
 - one audit log line per turn (:func:`log_citation_audit`).
 
 Nothing here may break a turn: every failure degrades to "no citation this
@@ -102,21 +101,6 @@ async def select_cited_items(
     if missing:
         try:
             extra = await _runtime_cache.get_citations_by_ids(missing)
-        except Exception:
-            logger.opt(exception=True).warning("[daily-citation] cross-turn source lookup failed")
-    return _merge(collected, extra, text)
-
-
-def select_cited_items_sync(
-    collected: list[CitationRegistryItemSchema],
-    text: str,
-) -> list[CitationRegistryItemSchema]:
-    """Same as :func:`select_cited_items` for the interruption path (no await)."""
-    extra: list[CitationRegistryItemSchema] = []
-    missing = _missing_ids(collected, text)
-    if missing:
-        try:
-            extra = _runtime_cache.get_citations_by_ids_sync(missing)
         except Exception:
             logger.opt(exception=True).warning("[daily-citation] cross-turn source lookup failed")
     return _merge(collected, extra, text)

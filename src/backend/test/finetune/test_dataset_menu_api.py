@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 """Real dataset routes and ORM isolation for ordinary menu-authorized people."""
 
 import json
@@ -13,6 +14,7 @@ from bisheng.common.errcode.llm_tenant import LLMModelSharedReadonlyError
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.finetune.api import dependencies
 from bisheng.finetune.domain.models.preset_train import PresetTrainDao
+from bisheng.finetune.domain.repositories.file_download_repository import FileDownloadRepository
 from bisheng.finetune.domain.services import finetune_file as service
 from bisheng.knowledge.domain import upload_file_size
 from bisheng.knowledge.domain.models import knowledge as knowledge_model
@@ -68,6 +70,28 @@ async def web(datasets, monkeypatch):
     web.menu_check = AsyncMock(side_effect=menu)
     monkeypatch.setattr(UserPayload, "assert_effective_web_menu_contains", web.menu_check)
     monkeypatch.setattr(service, "get_minio_storage", AsyncMock(return_value=web.objects))
+    monkeypatch.setattr(FileDownloadRepository, "preset_by_object", AsyncMock(return_value=None))
+    monkeypatch.setattr(FileDownloadRepository, "owned_jobs", AsyncMock(return_value=[]))
+
+    class MemoryRedis:
+        def __init__(self):
+            self.store = {}
+
+        async def aset(self, key, value, expiration=None):
+            self.store[key] = value
+
+        async def aget(self, key):
+            return self.store.get(key)
+
+    redis = MemoryRedis()
+
+    async def redis_client():
+        return redis
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.preview_source_service.get_redis_client",
+        redis_client,
+    )
     monkeypatch.setattr(
         dependencies,
         "check_tenant_admin",

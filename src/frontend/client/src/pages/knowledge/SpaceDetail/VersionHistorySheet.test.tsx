@@ -54,7 +54,7 @@ it("checks version history entries using each physical file's effective permissi
     knowledge_id: 8, document_id: 19, title: "Versions", versions,
   });
   jest.mocked(getMyResourcePermissions).mockResolvedValue({
-    mode: "INHERIT", actions: ["delete"], sources: [], roster_complete: true,
+    mode: "INHERIT", actions: ["edit", "delete"], sources: [], roster_complete: true,
   });
   jest.mocked(inspectBatch).mockResolvedValue({
     tenant: "42",
@@ -112,7 +112,7 @@ it("keeps reading history after the formerly primary file is deleted", async () 
     };
   });
   jest.mocked(getMyResourcePermissions).mockResolvedValue({
-    mode: "INHERIT", actions: ["delete"], sources: [], roster_complete: true,
+    mode: "INHERIT", actions: ["edit", "delete"], sources: [], roster_complete: true,
   });
   jest.mocked(inspectBatch).mockResolvedValue({
     tenant: "42",
@@ -131,4 +131,14 @@ it("keeps reading history after the formerly primary file is deleted", async () 
   await waitFor(() => expect(currentDialog()?.data?.versions).toEqual([{ ...versions[1], is_primary: true }]));
   expect(jest.mocked(getFileVersionsApi).mock.calls.map(([fileId]) => fileId)).toEqual([15, 17, 17]);
   expect(onChanged).toHaveBeenCalledTimes(2);
+});
+
+
+it("does not grant history writes from delete alone", async () => {
+  jest.mocked(getFileVersionsApi).mockResolvedValue({ knowledge_id: 8, document_id: 19, title: "Versions", versions });
+  jest.mocked(getMyResourcePermissions).mockResolvedValue({ mode: "INHERIT", actions: ["delete"], sources: [], roster_complete: true });
+  mount();
+  await waitFor(() => expect(getMyResourcePermissions).toHaveBeenCalled());
+  expect(currentDialog()?.canSetPrimary?.(versions[1])).toBe(false);
+  expect(currentDialog()?.canDelete?.(versions[1])).toBe(false);
 });

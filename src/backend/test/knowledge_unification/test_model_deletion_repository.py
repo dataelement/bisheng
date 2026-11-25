@@ -15,8 +15,8 @@ model_owner_tenant = models.model_owner_tenant
 
 
 @pytest.fixture
-async def removal_session():
-    engine = await models.async_database()
+async def removal_session(tmp_path):
+    engine = await models.async_database(f"sqlite+aiosqlite:///{tmp_path / 'model-deletion.db'}")
     from bisheng.dsh.domain.models.unified_policy import ModelVisibility, UnifiedPolicyAudit
     from bisheng.llm.domain.models.model_sharing_intent import ModelSharingInitialization, ModelSharingIntent
 

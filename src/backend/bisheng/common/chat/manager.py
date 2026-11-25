@@ -252,8 +252,12 @@ class ChatManager:
         flow_lease_id: str | None = None,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
         workflow_execution_port: WorkflowExecutionPort | None = None,
+        memory_register: Callable[[str], Any] | None = None,
         conversation_persistence: ConversationPersistencePort | None = None,
     ):
+        """``memory_register`` (F132) is passed only by logged-in endpoints; the
+        client calls it whenever its chat_id is set or switched. Guest-link and
+        open-API endpoints never pass it, so their sessions are never registered."""
         start_time = time.time()
         client_key = generate_uuid()
         if work_type == WorkType.GPTS:
@@ -272,7 +276,14 @@ class ChatManager:
                 execution_snapshot=execution_snapshot,
                 flow_lease_id=flow_lease_id,
             )
+            chat_client.memory_register = memory_register
         else:
+            if session_subject is None:
+                from bisheng.chat_session.domain.session_subject import SessionSubject
+
+                session_subject = SessionSubject.natural_person(
+                    tenant_id=login_user.tenant_id, user_id=login_user.user_id
+                )
             chat_client = WorkflowClient(
                 request,
                 client_key,
@@ -288,6 +299,7 @@ class ChatManager:
                 flow_lease_id=flow_lease_id,
                 workflow_execution_port=workflow_execution_port,
             )
+            chat_client.memory_register = memory_register
         await self.accept_client(client_key, chat_client, websocket)
         logger.debug(f"act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}")
         try:

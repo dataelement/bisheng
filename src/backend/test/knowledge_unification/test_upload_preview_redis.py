@@ -370,5 +370,10 @@ async def test_legacy_preview_still_requires_original_write_permission(upload, m
         await cls.get_preview_file_chunk(None, upload.context.user, request)
     parser.assert_not_called()
     gate.side_effect = None
+    # The legacy entry parses only a server-resolved upload source.
+    from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+
+    source = object()
+    monkeypatch.setattr(PreviewSourceService, "resolve", AsyncMock(return_value=source))
     await cls.get_preview_file_chunk(None, upload.context.user, request)
-    parser.assert_awaited_once_with(upload.context.user, request)
+    parser.assert_awaited_once_with(upload.context.user, request, source=source)

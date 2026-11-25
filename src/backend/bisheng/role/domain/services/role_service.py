@@ -2,7 +2,7 @@
 
 Four-level permission check for role management:
   1. System admin → full access
-  2. Tenant admin → tenant roles read/write; role list hides global (non-manageable) rows
+  2. Tenant admin → tenant roles read/write; global roles visible read-only
   3. Department admin → list shows global presets (read-only) + tenant roles in managed subtree
      or global scope; update/delete are restricted to the role creator
   4. Regular user → denied (24003)
@@ -165,7 +165,6 @@ class RoleService:
         page: int,
         limit: int,
         login_user,
-        include_global_for_binding: bool = False,
     ) -> dict:
         """List visible roles with pagination (AC-03, AC-04, AC-04b).
 
@@ -174,7 +173,6 @@ class RoleService:
         department_ids = None
         permission_level = "admin"
         dept_subtree_ids: set[int] | None = None
-        tenant_custom_roles_only = False
 
         if not cls._is_platform_admin(login_user):
             from bisheng.database.models.department import DepartmentDao
@@ -229,10 +227,9 @@ class RoleService:
                         "list_roles: tenant admin check failed user=%s",
                         getattr(login_user, "user_id", None),
                     )
-                    is_tenant_admin = False
+                    tenant_admin = False
                 if tenant_admin:
                     permission_level = "tenant_admin"
-                    tenant_custom_roles_only = not include_global_for_binding
                 else:
                     permission_level = "regular"
 
@@ -247,13 +244,11 @@ class RoleService:
             page=page,
             limit=limit,
             department_ids=department_ids,
-            tenant_custom_roles_only=tenant_custom_roles_only,
         )
         total = await RoleDao.acount_visible_roles(
             tenant_id=view_tenant,
             keyword=keyword,
             department_ids=department_ids,
-            tenant_custom_roles_only=tenant_custom_roles_only,
         )
 
         # Get user counts

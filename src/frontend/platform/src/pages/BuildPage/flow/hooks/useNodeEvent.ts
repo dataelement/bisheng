@@ -1,5 +1,6 @@
 import type { WorkflowNode } from "@/types/flow";
 import { findParallelNodes } from "@/util/flowUtils";
+import { MEMORY_LIMIT_MAX, MEMORY_LIMIT_MIN, invalidMemoryLimitNodes, memoryRetrieversWithSwitchOff } from "@/util/workflowMemory";
 import { useEffect,useRef } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -8,6 +9,20 @@ interface ValidationFlow {
     edges: { source: string; target: string; sourceHandle?: string | null }[];
 }
 type BranchNode = { branch: string; nodeId: string; type: string };
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+export { MEMORY_LIMIT_MAX, MEMORY_LIMIT_MIN };
+
+/** Save-time check: every memory retriever limit is an integer from 1 to 100 (AC-80). */
+export function validateMemoryLimits(nodes: ValidationFlow['nodes'], t: Translate): string[] {
+    return invalidMemoryLimitNodes(nodes.map(node => node.data))
+        .map(node => t('memoryLimitInvalid', { name: node.name, min: MEMORY_LIMIT_MIN, max: MEMORY_LIMIT_MAX }));
+}
+
+export interface NodeValidateOptions {
+    /** Publishing additionally requires the workflow memory switch for retriever nodes (AC-85). */
+    publish?: boolean;
+}
+
 export const useNodeEvent = (flow: ValidationFlow) => {
     const { t } = useTranslation('flow');
 
@@ -28,7 +43,7 @@ export const useNodeEvent = (flow: ValidationFlow) => {
         };
     }, []);
 
-    return async () => {
+    return async (options: NodeValidateOptions = {}) => {
         let errors: string[] = [];
 
         const promises = Object.keys(nodeValidateEntitiesRef.current).map(async (key) => {
@@ -50,6 +65,12 @@ export const useNodeEvent = (flow: ValidationFlow) => {
             });
             window.dispatchEvent(event);
         };
+
+        const invalidLimitNodes = invalidMemoryLimitNodes(flow.nodes.map(node => node.data));
+        if (invalidLimitNodes.length) {
+            errors = [...errors, ...validateMemoryLimits(flow.nodes, t as Translate)];
+            sendEvent(invalidLimitNodes.map(node => node.id));
+        }
 
         if (errors.length) return errors;
         if (!flow.edges.length) {
@@ -173,6 +194,14 @@ export const useNodeEvent = (flow: ValidationFlow) => {
         if (incompleteNode) {
             sendEvent(incompleteNode.nodeId);
             return [t('unconnectedConditionNode', { nodeName: incompleteNode.name })];
+        }
+
+        if (options.publish) {
+            const blocked = memoryRetrieversWithSwitchOff(flow.nodes.map(node => node.data));
+            if (blocked.length) {
+                sendEvent(blocked.map(node => node.id));
+                return [t('memoryRetrieverNeedsSwitch')];
+            }
         }
 
         sendEvent([]); // reduction

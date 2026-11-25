@@ -1,14 +1,14 @@
 """Actual folder registration carries temporary rules and preserves dedicated media."""
 
 import json
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from bisheng.api.v1.schemas import FileProcessBase, KnowledgeFileOne
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
-from bisheng.knowledge.api.endpoints.knowledge_space import router
+from bisheng.knowledge.api.endpoints.knowledge_space import PreviewSourceService, router
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.schemas.processing_settings import ProcessingOverrides
 from test.knowledge_unification import test_kn_folder_upload_wiring as native
@@ -27,14 +27,16 @@ async def test_actual_folder_http_registers_document_table_overrides_without_sav
     server = FastAPI()
     server.include_router(router, prefix="/api/v1")
     server.dependency_overrides[get_knowledge_space_service] = lambda: context.service
-    async with AsyncClient(transport=ASGITransport(app=server), base_url="http://native") as client:
-        response = await client.post(
-            "/api/v1/knowledge/space/40/folders/upload",
-            json={
-                "items": [item.model_dump() for item in native.items()],
-                "overrides": {"document": {"chunk_size": 123}, "table": {"slice_length": 17}},
-            },
-        )
+    # Legacy wire resolves issued upload references first; that contract is tested separately.
+    with patch.object(PreviewSourceService, "resolve", AsyncMock(return_value=None)):
+        async with AsyncClient(transport=ASGITransport(app=server), base_url="http://native") as client:
+            response = await client.post(
+                "/api/v1/knowledge/space/40/folders/upload",
+                json={
+                    "items": [item.model_dump() for item in native.items()],
+                    "overrides": {"document": {"chunk_size": 123}, "table": {"slice_length": 17}},
+                },
+            )
     assert response.status_code == 200
     actual = [json.loads(row["split_rule"]) for row in response.json()["data"]]
     assert actual[0]["chunk_size"] == 123 and actual[1]["excel_rule"]["slice_length"] == 17

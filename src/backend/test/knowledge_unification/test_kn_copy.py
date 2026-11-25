@@ -321,7 +321,7 @@ async def test_empty_copy_is_accepted_retried_and_completed_by_worker(copying, a
         await SourceMoveInputRepository().arequire_released(session, space_id=40)
 
 
-async def test_partial_copy_retries_only_failed_item_and_releases_source_after_native_final_ack(copying):
+async def test_partial_copy_releases_source_and_explicit_retry_protects_only_its_active_attempt(copying):
     from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
     from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
     from bisheng.knowledge.domain.schemas.processing_job import ProcessingRetryRequest
@@ -339,14 +339,18 @@ async def test_partial_copy_retries_only_failed_item_and_releases_source_after_n
     failed = await owner.afinalize(lease)
     assert failed.state == "partial_failed"
     async with ctx.sessions() as session, session.begin():
-        with pytest.raises(KnowledgeProcessingConflictError):
-            await SourceMoveInputRepository().arequire_released(session, space_id=40)
+        await SourceMoveInputRepository().arequire_released(session, space_id=40)
+    assert await owner.aguard(second.lease) is None
+    assert not await owner.acomplete(second.lease, error_code=10998)
     retry = await owner.aretry(
         jid,
         ProcessingRetryRequest(idempotency_key="retry-copy", expected_job_revision=failed.revision),
         identity=ctx.user,
     )
     assert retry.job_id == jid and retry.state == "accepted"
+    async with ctx.sessions() as session, session.begin():
+        with pytest.raises(KnowledgeProcessingConflictError):
+            await SourceMoveInputRepository().arequire_released(session, space_id=40)
     retry_job, _ = await owner.aread(jid)
     next_lease = await owner.astart(jid, retry_job.revision)
     claimed = await owner.aclaim(next_lease)
@@ -641,3 +645,41 @@ async def test_current_source_retry_does_not_overwrite_target_user_edits(copying
         items = (await session.execute(sa.select(Item).where(Item.job_id == jid))).scalars().all()
         assert next(item for item in items if item.file_id == kept_id).state == "failed"
         assert sum(item.state == "pending" for item in items) == 1
+
+
+@pytest.mark.parametrize("removed_side", ["source", "target"])
+async def test_retry_after_finished_copy_does_not_resurrect_deleted_files(
+    copying, actual_processing_task, removed_side
+):
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
+    from bisheng.knowledge.domain.schemas.processing_job import ProcessingRetryRequest
+
+    ctx = copying.ctx
+    result = await copying.app.aconfirm(
+        40, command(await copying.app.aprecheck(40, name="Finished copy", identity=ctx.user)), identity=ctx.user
+    )
+    owner, jid = SpaceCopyOwner(copying.app), result["processing_job"].job_id
+    await owner.aensure_logical(result["knowledge"].id, jid)
+    failed = await owner.afail(jid, 0, error_code=10998)
+    async with ctx.sessions() as session, session.begin():
+        await SourceMoveInputRepository().arequire_released(session, space_id=40)
+        items = (await session.execute(sa.select(Item).where(Item.job_id == jid))).scalars().all()
+        item = next(item for item in items if item.processing_snapshot["source_version"]["is_primary"])
+        item_id = item.id
+        removed_id = item.processing_snapshot["source_file"]["id"] if removed_side == "source" else item.file_id
+        await session.execute(
+            sa.delete(KnowledgeFile).where(KnowledgeFile.id == removed_id, KnowledgeFile.tenant_id == 101)
+        )
+    await owner.aretry(
+        jid,
+        ProcessingRetryRequest(
+            idempotency_key="retry-deleted-input", expected_job_revision=failed.revision, refresh_source=True
+        ),
+        identity=ctx.user,
+    )
+    async with ctx.sessions() as session:
+        assert await session.get(KnowledgeFile, removed_id) is None
+        item = await session.get(Item, item_id)
+        assert item.state == "failed" and item.error_message == "file_changed"
+        assert (await session.get(Knowledge, result["knowledge"].id)).state == 1

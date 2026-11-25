@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.linsight.domain.services import agent_factory
+from bisheng.linsight.domain.services.base_prompt import LINSIGHT_BASE_PROMPT_ZH
 from bisheng.linsight.domain.services.unattended_run import caller_instructions, is_unattended_run
 
 FLAG_SETS = [
@@ -106,4 +107,5 @@ async def test_bound_tools_and_prompt_move_together(factory_env, api_meta, expec
     assert ("ask_user" in names) is expect_ask_user
     assert ("ask_user" in factory_env["system_prompt"]) is expect_ask_user
     if not expect_ask_user:
-        assert factory_env["system_prompt"].rstrip().endswith("IN")
+        # Caller instructions close BiSheng's own prompt; only the base prompt follows.
+        assert factory_env["system_prompt"].endswith(f"IN\n\n{LINSIGHT_BASE_PROMPT_ZH}")

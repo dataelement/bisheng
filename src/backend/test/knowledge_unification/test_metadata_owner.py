@@ -228,9 +228,7 @@ async def test_empty_receipt_preserves_unrelated_pending_name_and_allows_only_re
         assert (await session.get(Knowledge, 40)).metadata_schema_revision == 1
 
 
-async def test_default_model_read_uses_actual_runtime_without_constructing_an_outer_processing_owner(
-    owner, monkeypatch
-):
+async def test_metadata_reads_business_configuration_without_reference_runtime(owner, monkeypatch):
     from bisheng.knowledge.application import processing_owner as model_module
 
     actual = await model_module.get_knowledge_model_read_runtime()
@@ -242,4 +240,4 @@ async def test_default_model_read_uses_actual_runtime_without_constructing_an_ou
             session, 40, identity=owner.app.context.user, parameters=fixtures.parameters(fixtures.rename())
         )
         assert plan.configuration.model_config_revision == 0 and plan.configuration.metadata_schema_revision == 1
-    read.assert_awaited_once()
+    read.assert_not_awaited()

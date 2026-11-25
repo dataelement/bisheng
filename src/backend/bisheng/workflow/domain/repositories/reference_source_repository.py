@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
 from bisheng.database.models.flow import Flow, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersion
@@ -189,6 +190,20 @@ class WorkflowReferenceSourceRepository:
         return WorkflowVersionReadFact(*row[:6], json.dumps(row.data, ensure_ascii=False, allow_nan=False))
 
     @classmethod
+    async def aget_knowledge_resource_types(cls, session, target_ids, *, for_update=False):
+        """Read the distinct preview selections in bounded batches under C3."""
+        cls._context(session)
+        ids = sorted({int(value) for value in target_ids})
+        result = {}
+        for offset in range(0, len(ids), 200):
+            query = select(Knowledge.id, Knowledge.type).where(Knowledge.id.in_(ids[offset : offset + 200]))
+            if for_update:
+                query = query.with_for_update()
+            with session.no_autoflush:
+                result.update((str(row.id), row.type) for row in (await session.execute(query)).all())
+        return result
+
+    @classmethod
     async def aget_knowledge_resource_type(
         cls, session: AsyncSession, target_id: int, *, for_update: bool = False
     ) -> str:
@@ -198,6 +213,8 @@ class WorkflowReferenceSourceRepository:
             query = query.with_for_update()
         with session.no_autoflush:
             kind = await session.scalar(query)
+        if kind is None:
+            raise SpaceNotFoundError(space_id=target_id)
         if kind not in {0, 1, 3}:
             raise ResourceReferenceInvalidError(reason="preview_knowledge_unavailable")
         return "knowledge_space" if kind == 3 else "knowledge_library"

@@ -209,7 +209,7 @@
   "tmpKnowledgeBaseNotSupportSingleNodeDebug": "Temporary knowledge base does not support single node debugging",
   "userInputContent": "User input content",
   "userAuthVerification": "User knowledge base access verification",
-  "userAuthVerificationTips": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions.",
+  "userAuthVerificationTips": "When enabled, retrieval is filtered by the current user's own knowledge-base / knowledge-space permissions. When disabled, no permission check is applied — every bound knowledge base and space is searchable by all users.",
   "retrieverWeightSettings": "Retriever weight settings",
   "adjustWeightForVectorOrKeywordSearch": "Adjust the weight to prioritize either vector or keyword search.",
   "keyword": "Keyword",
@@ -270,6 +270,8 @@
   "enterVariableValue": "Enter variable value",
   "kbQueryToolIntro": "## Knowledge Base Search Tool Intro\nWhen a knowledge base search is required to solve a user's problem, invoke the knowledge base search tool and rewrite the user's requirement into a suitable query as the input parameter.",
   "sqlAgentToolIntro": "## SQLAgent Database Tool Intro\n1. Use natural language to accurately describe the user's query needs, and use this description as the value for the 'query' parameter to invoke the sqlagent tool;\n2. If the user has multiple query requirements, invoke sqlagent multiple times separately.",
+  "memoryLimitInvalid": "{{name}}: Maximum Results must be an integer from {{min}} to {{max}}",
+  "memoryRetrieverNeedsSwitch": "This workflow has a Memory Retrieval node. Turn on Workflow Memory in the Start node before going online.",
   "node": {
     "start": {
       "name": "Start",
@@ -299,6 +301,11 @@
       "custom_variables": {
         "label": "Custom Global Variables",
         "help": "Set variables that can be referenced in other nodes"
+      },
+      "memory": "Memory",
+      "memory_enabled": {
+        "label": "Workflow Memory",
+        "desc": "When on, key points from a user's conversations in this workflow are saved to that user's own memory, and the workflow can read the current user's memory with the Memory Retrieval node. What it reads may appear in answers and outputs. Each user's memory is their own; other users cannot see it."
       }
     },
     "input": {
@@ -456,7 +463,7 @@
       },
       "user_auth": {
         "label": "User knowledge permission check",
-        "help": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions."
+        "help": "When enabled, retrieval is filtered by the current user's own knowledge-base / knowledge-space permissions. When disabled, no permission check is applied — every bound knowledge base and space is searchable by all users."
       },
       "sql_agent": {
         "label": "Database Configuration"
@@ -566,6 +573,24 @@
         "label": "Retrieved Result"
       }
     },
+    "memory_retriever": {
+      "name": "Memory Retrieval",
+      "description": "Retrieves relevant entries from the current user's own memory for later nodes.",
+      "retrieval_settings": "Retrieval Settings",
+      "output": "Output",
+      "query": {
+        "label": "Search Content",
+        "placeholder": "Enter what to search for; variables are allowed"
+      },
+      "limit": {
+        "label": "Maximum Results",
+        "help": "An integer from 1 to 100. Defaults to 20."
+      },
+      "retrieved_memory": {
+        "label": "Retrieved Memory",
+        "help": "The list of retrieved memory entries. Each entry includes its text and when it was recorded."
+      }
+    },
     "report": {
       "name": "Report",
       "description": "Generates a report based on a predefined Word template.",
@@ -609,5 +634,13 @@
   "valueType": "Value type",
   "selectDbType": "Select a database type",
   "modelLoadFailed": "Failed to load models. Please retry.",
-  "retryModelLoad": "Retry"
+  "retryModelLoad": "Retry",
+  "referencePreflight": {
+    "changed": "The workflow changed. Click Run again to validate it.",
+    "failed": "Reference validation failed. Please retry. The workflow was not started.",
+    "issue": "{{node}}: {{label}} (ID: {{id}}) {{state}}. Remove it or select another resource.",
+    "missing": "does not exist",
+    "unavailable": "is unavailable or you do not have access",
+    "reselect": "Invalid references found. Remove or replace the highlighted selections."
+  }
 }

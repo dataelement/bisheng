@@ -8,7 +8,6 @@ from sqlalchemy import update
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -98,9 +97,9 @@ async def test_empty_space_still_checks_coverage_and_current_root(context, servi
     actual = await service.ainspect(identity=service.user, space_id=2, whole_space=True)
     assert not actual.blocked and not actual.facts.scope.resources
     assert actual.facts.scope.cleanup_identity["id"] == 2
+    assert actual.check_complete
     context.failure = "global"
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await service.ainspect(identity=service.user, space_id=2, whole_space=True)
+    assert (await service.ainspect(identity=service.user, space_id=2, whole_space=True)).check_complete
 
 
 async def test_source_cursor_ignores_only_trace_and_rejects_changed_physical_scope(context, service):
@@ -131,8 +130,7 @@ async def test_source_cursor_ignores_only_trace_and_rejects_changed_physical_sco
 
 async def test_whole_space_retains_known_legacy_missing_but_rejects_new_unexplained_missing_target(context, service):
     await native.seed(context, (999, 101, "assistant", "legacy", "current", "missing"))
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await service.ainspect(identity=service.user, space_id=1, whole_space=True)
+    assert not (await service.ainspect(identity=service.user, space_id=1, whole_space=True)).blocked
     async with context.db.sessions() as session, session.begin():
         await session.execute(
             update(BusinessResourceReference).values(
@@ -143,7 +141,7 @@ async def test_whole_space_retains_known_legacy_missing_but_rejects_new_unexplai
             )
         )
     result = await service.ainspect(identity=service.user, space_id=1, whole_space=True)
-    assert result.blocked and sum(dict(result.slot_counts).values()) == 1
+    assert not result.blocked and sum(dict(result.slot_counts).values()) == 0
 
 
 def test_workflow_slot_location_names_the_setting_without_the_node_id():

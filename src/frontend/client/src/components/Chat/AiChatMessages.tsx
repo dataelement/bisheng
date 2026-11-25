@@ -38,6 +38,8 @@ interface AiChatMessagesProps {
     hideHeaderTitle?: boolean;
     /** When true, renders messages as a flat list without tree/sibling navigation */
     flatMode?: boolean;
+    /** Use the input box's attachment cards in the flat workbench history. */
+    showComposerAttachments?: boolean;
     scrollOnUserMessage?: boolean;
     /** Knowledge space AI panel: full-width column, 14px body, gray user / borderless assistant */
     knowledgeChatLayout?: boolean;
@@ -188,6 +190,7 @@ export default function AiChatMessages({
     hideShare = false,
     hideHeaderTitle = false,
     flatMode = false,
+    showComposerAttachments,
     scrollOnUserMessage = false,
     knowledgeChatLayout = false,
     allowExport = false,
@@ -444,6 +447,7 @@ export default function AiChatMessages({
                                             : undefined
                                     }
                                     knowledgeChatLayout={knowledgeChatLayout}
+                                    showComposerAttachments={showComposerAttachments}
                                     allowExport={allowExport}
                                     stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
                                     allowFeedback={allowFeedback}

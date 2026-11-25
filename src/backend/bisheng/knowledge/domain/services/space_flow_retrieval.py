@@ -1,13 +1,12 @@
 """F041: knowledge-space retrieval helpers shared by workflow nodes and assistants.
 
 Adds knowledge-space (``type=3``) support to the flow / assistant retrieval path,
-reusing F029's two-layer ``view_file`` filter (`KnowledgeFileVisibilityService`).
-The filter identity is chosen by the「用户知识库权限校验」toggle:
+reusing F029's two-layer ``view_file`` filter (`KnowledgeFileVisibilityService`)
+when the「用户知识库权限校验」toggle is ON:
 
   - toggle ON  → runtime user (workflow ``self.user_id`` / assistant ``invoke_user_id``)
-  - toggle OFF → config author (``Flow.user_id`` / ``Assistant.user_id``), resolved
-                 within the current (flow) tenant WITHOUT switching the tenant
-                 ContextVar.
+  - toggle OFF → no file permission filter; retrieve all successfully indexed files
+                 in the bound spaces (product alignment)
 
 Lives in the knowledge domain (not ``workflow/common``) so both workflow nodes and
 ``AssistantAgent`` can import it without a cross-module workflow dependency.
@@ -76,11 +75,35 @@ def _merge_es_clauses(*clause_lists: list | None) -> list:
     return merged
 
 
+async def _aopen_space_index_filter(space_id: int):
+    """Index filter over every successfully indexed file (no permission gate)."""
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.config.settings import KnowledgeQAFilterConf
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
+    from bisheng.knowledge.domain.services.knowledge_file_visibility_service import IndexFilter
+
+    threshold = (getattr(settings, "knowledge_qa_filter", None) or KnowledgeQAFilterConf()).index_filter_threshold
+    async with get_async_db_session() as session:
+        eligible = await KnowledgeRetrievalFileRepository().alist_successful_files(session, space_id=space_id)
+    if not eligible:
+        return IndexFilter(strategy="empty", accessible_size=0)
+    if len(eligible) <= threshold:
+        selected = sorted(eligible)
+        return IndexFilter(
+            strategy="in",
+            milvus_expr=f"document_id in {selected}",
+            es_filter=[{"terms": {"metadata.document_id": selected}}],
+            accessible_size=len(eligible),
+        )
+    return IndexFilter(strategy="none", accessible_size=len(eligible))
+
+
 async def _aretrieve_one_space(
     *,
     space,
     query: str,
-    identity_user: UserPayload,
+    identity_user: UserPayload | None,
     max_content: int,
     metadata_filter_fn: Any,
     rrf_weights: list | None,
@@ -90,28 +113,32 @@ async def _aretrieve_one_space(
     request: Any,
     retrieval_multipliers: tuple[int, ...] | None = None,
 ) -> list[Document]:
-    """Retrieve view_file-filtered docs from a single knowledge space.
+    """Retrieve docs from a single knowledge space.
 
-    Mirrors F029 ``KnowledgeSpaceChatService._retrieve_and_filter`` (index prefilter
-    → 2-attempt retrieval → result-layer post_filter) but AND-combines the caller's
-    metadata filter (AC-08) and honors the node's advanced-retrieval knobs. The
-    filter identity is ``identity_user`` (runtime user when the toggle is ON, config
-    author when OFF).
+    When ``identity_user`` is set (toggle ON), mirrors F029 view_file pre/post
+    filter. When unset (toggle OFF), indexes every successfully processed file
+    with no permission gate.
     """
     from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
     from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
         KnowledgeFileVisibilityService,
     )
 
-    visibility = KnowledgeFileVisibilityService(request, identity_user)
-    visibility.version_repo = version_repo
+    visibility = None
+    if identity_user is not None:
+        visibility = KnowledgeFileVisibilityService(request, identity_user)
+        visibility.version_repo = version_repo
+        index_filter = await visibility.build_index_prefilter(space.id, None)
+        identity_label = identity_user.user_id
+    else:
+        index_filter = await _aopen_space_index_filter(space.id)
+        identity_label = "open"
 
-    index_filter = await visibility.build_index_prefilter(space.id, None)
     if index_filter.is_empty:
         logger.info(
             "space_flow_retrieval | space_id={} strategy=empty identity_user={} dropped=all",
             space.id,
-            identity_user.user_id,
+            identity_label,
         )
         return []
 
@@ -125,13 +152,17 @@ async def _aretrieve_one_space(
     base_milvus = _and_milvus_expr(index_filter.milvus_expr, extra_milvus_expr)
     base_es = _merge_es_clauses(index_filter.es_filter, extra_es_filter)
 
-    conf = visibility._config()
-    multipliers = (
-        retrieval_multipliers
-        if retrieval_multipliers is not None
-        else (conf.retrieval_initial_multiplier, conf.retrieval_expansion_multiplier)
-    )
+    if visibility is not None:
+        conf = visibility._config()
+        multipliers = (
+            retrieval_multipliers
+            if retrieval_multipliers is not None
+            else (conf.retrieval_initial_multiplier, conf.retrieval_expansion_multiplier)
+        )
+    else:
+        multipliers = retrieval_multipliers or (1, 2)
 
+    invoke_user_id = identity_user.user_id if identity_user is not None else 0
     survivors: list[Document] = []
     for attempt_idx, multiplier in enumerate(multipliers, start=1):
         base_k = 100
@@ -142,7 +173,7 @@ async def _aretrieve_one_space(
         if base_es:
             es_kwargs["filter"] = base_es
 
-        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(identity_user.user_id, knowledge=space)
+        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=space)
         es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
         retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=milvus_vector.as_retriever(search_kwargs=milvus_kwargs),
@@ -155,17 +186,22 @@ async def _aretrieve_one_space(
         )
         docs: list[Document] = await retriever_tool.ainvoke(query)
 
-        unique_file_ids = {
-            int(d.metadata.get("document_id")) for d in docs if d.metadata and d.metadata.get("document_id") is not None
-        }
-        permitted = await visibility.post_filter_retrievable_files(space.id, unique_file_ids)
-        survivors = [d for d in docs if int(d.metadata.get("document_id", -1)) in permitted]
+        if visibility is not None:
+            unique_file_ids = {
+                int(d.metadata.get("document_id"))
+                for d in docs
+                if d.metadata and d.metadata.get("document_id") is not None
+            }
+            permitted = await visibility.post_filter_retrievable_files(space.id, unique_file_ids)
+            survivors = [d for d in docs if int(d.metadata.get("document_id", -1)) in permitted]
+        else:
+            survivors = docs
 
         logger.info(
             "space_flow_retrieval | space_id={} strategy={} identity_user={} attempt={} hit={} kept={} dropped={}",
             space.id,
             index_filter.strategy,
-            identity_user.user_id,
+            identity_label,
             attempt_idx,
             len(docs),
             len(survivors),
@@ -191,21 +227,20 @@ async def aretrieve_space_documents(
     access_scope: str = "per_user",
     retrieval_multipliers: tuple[int, ...] | None = None,
 ) -> list[Document]:
-    """Retrieve view_file-filtered chunks across one or more knowledge spaces.
+    """Retrieve chunks across one or more knowledge spaces.
 
     F041 entry shared by workflow nodes (rag / knowledge_retriever / agent) and
-    ``AssistantAgent``. ``identity_user`` decides the filter identity (runtime user
-    ON / config author OFF). Returns Documents in the same shape as document-KB
+    ``AssistantAgent``. When ``identity_user`` is set (toggle ON), apply that
+    user's view_file filter. When unset (toggle OFF), retrieve without a file
+    permission gate. Returns Documents in the same shape as document-KB
     retrieval, so the caller can reuse the unified citation path (6.3).
 
-    ``access_scope`` (``per_user`` when the permission toggle is ON, ``shared`` when
-    OFF) is stamped onto each doc's metadata so the downstream citation registry
-    (T008) records it — the resolve endpoint then honors the same gate (T009).
-
-    ``identity_user is None`` (e.g. author could not be resolved) → empty result,
-    treated as "no visible files".
+    ``access_scope`` (``per_user`` when ON, ``shared`` when OFF) is stamped onto
+    each doc's metadata so the downstream citation registry (T008) records it.
     """
-    if identity_user is None or not space_ids:
+    if not space_ids:
+        return []
+    if access_scope == "per_user" and identity_user is None:
         return []
 
     from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
@@ -259,9 +294,11 @@ async def _aretrieve_space_with_session(
         KnowledgeDocumentVersionRepositoryImpl,
     )
 
-    identity_user = await abuild_scoped_login_user(identity_user_id, tenant_id)
-    if identity_user is None:
-        return []
+    identity_user = None
+    if identity_user_id is not None:
+        identity_user = await abuild_scoped_login_user(identity_user_id, tenant_id)
+        if identity_user is None and access_scope == "per_user":
+            return []
     async with get_async_db_session() as session:
         version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
         return await aretrieve_space_documents(
@@ -330,8 +367,8 @@ def build_space_knowledge_tool(
     """Build an LLM-facing knowledge tool backed by knowledge-space retrieval.
 
     ``identity_user_id`` and ``access_scope`` are chosen by the caller from the
-    permission toggle: runtime user + ``per_user`` when ON, config author +
-    ``shared`` when OFF.
+    permission toggle: runtime user + ``per_user`` when ON; ``identity_user_id=None``
+    + ``shared`` when OFF (no file permission filter).
     """
     space_retriever = SpaceKnowledgeRetrieverTool(
         space_ids=list(space_ids),

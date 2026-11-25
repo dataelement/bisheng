@@ -87,6 +87,25 @@ async def test_builds_nested_tree_and_groups_files(folder_upload):
     svc._initialize_child_resource_permissions.assert_not_awaited()
 
 
+async def test_nested_folder_grouping_preserves_trusted_sources(folder_upload):
+    """Legacy-wire folder uploads keep each server-resolved source with its own file."""
+    svc = folder_upload.upload.service
+    svc.add_file = AsyncMock(return_value=[])
+    items = [
+        FolderUploadItem(file_path=f"opaque-{i}", relative_path=path, size=10)
+        for i, path in enumerate(("Root/a.pdf", "Root/Sub/b.pdf", "Root/c.pdf"))
+    ]
+    sources = [object(), object(), object()]
+
+    await svc.upload_folder_items(40, items, trusted_sources=sources)
+
+    calls = {tuple(call.args[1]): call.kwargs["trusted_sources"] for call in svc.add_file.await_args_list}
+    assert calls == {
+        ("opaque-0", "opaque-2"): [sources[0], sources[2]],
+        ("opaque-1",): [sources[1]],
+    }
+
+
 async def test_upload_under_existing_parent_folder(folder_upload):
     upload = folder_upload.upload
     parent = await _existing_parent(upload, 2)
