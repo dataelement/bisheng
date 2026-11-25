@@ -10,7 +10,7 @@ import {
     type KeyboardEventHandler,
     type MutableRefObject,
 } from "react";
-import { cn } from "~/utils";
+import cn from "~/utils/cn";
 
 export interface ExpandableSearchFieldProps
     extends Omit<
@@ -27,6 +27,7 @@ export interface ExpandableSearchFieldProps
     /** Always show the full input (no icon-only collapsed state); better for mobile / app center */
     alwaysExpanded?: boolean;
     showClearButton?: boolean;
+    clearButtonLabel?: string;
     containerClassName?: string;
 }
 
@@ -45,6 +46,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
             expandedWidthClassName = "w-[220px]",
             alwaysExpanded = false,
             showClearButton = false,
+            clearButtonLabel = "Clear search",
             className,
             containerClassName,
             onKeyDown,
@@ -102,12 +104,6 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
             wasExpandedRef.current = expanded;
         }, [expanded, alwaysExpanded]);
 
-        const focusInput = useCallback(() => {
-            requestAnimationFrame(() => {
-                inputRef.current?.focus({ preventScroll: true });
-            });
-        }, []);
-
         const handleKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
             onKeyDown?.(e);
         };
@@ -134,7 +130,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
             <div
                 data-expandable-search="true"
                 className={cn(
-                    "flex items-center h-8 rounded-md border bg-white overflow-hidden shrink-0 select-none",
+                    "relative flex items-center h-8 rounded-md border bg-white overflow-hidden shrink-0 select-none",
                     "transition-[width,border-color,background-color] duration-300 ease-out motion-reduce:transition-none",
                     expanded
                         ? cn(
@@ -145,13 +141,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     disabled && "pointer-events-none opacity-50",
                     containerClassName
                 )}
-                onClick={() => {
-                    if (!disabled && !alwaysExpanded && !expanded) {
-                        setShowExpanded(true);
-                        focusInput();
-                    }
-                }}
-                title={expanded || alwaysExpanded ? undefined : titleWhenCollapsed ?? placeholder}
+                title={expanded ? undefined : titleWhenCollapsed ?? placeholder}
             >
                 <div
                     className={cn(
@@ -173,7 +163,6 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     onKeyDown={handleKeyDown}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
-                    tabIndex={expanded || alwaysExpanded ? 0 : -1}
                     className={cn(
                         "flex-1 min-w-0 h-full text-[14px] font-normal text-text-1 bg-transparent outline-none placeholder:text-text-4 placeholder:font-normal",
                         "transition-[opacity] duration-200 ease-out motion-reduce:transition-none",
@@ -182,17 +171,31 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                         className
                     )}
                     {...inputProps}
+                    aria-hidden={!expanded || inputProps["aria-hidden"]}
+                    tabIndex={expanded ? inputProps.tabIndex ?? 0 : -1}
                 />
+                {!expanded && (
+                    <button
+                        type="button"
+                        className="absolute inset-0 cursor-pointer rounded-[inherit] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-deep"
+                        aria-label={titleWhenCollapsed ?? placeholder}
+                        aria-expanded={false}
+                        disabled={disabled}
+                        onClick={() => setShowExpanded(true)}
+                    />
+                )}
                 {showClearButton && expanded && value ? (
                     <button
                         type="button"
                         className="pr-2 text-text-3 hover:text-text-2 shrink-0"
+                        disabled={disabled}
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={(e) => {
                             e.stopPropagation();
+                            inputRef.current?.focus({ preventScroll: true });
                             onChange("");
-                            focusInput();
                         }}
-                        aria-label="Clear search"
+                        aria-label={clearButtonLabel}
                     >
                         <X className="size-4" aria-hidden />
                     </button>
