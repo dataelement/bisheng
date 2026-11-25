@@ -2,17 +2,36 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ConversationComposer } from '@bisheng/chat';
+import { Outlined } from "bisheng-icons";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
 import { useVoiceModels } from "~/hooks/useVoice";
 import { useLocalize } from "~/hooks";
+import { useOptionalStandaloneChatContext } from "~/pages/standaloneChat/StandaloneChatContext";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { useFileDropAndPaste } from "./useFileDropAndPaste";
+import "~/components/Chat/chat-surface.css";
+
+const composerAppearance = {
+    root: "app-chat-composer",
+    panel: "dsh-chat-composer",
+    toolbar: "dsh-composer-toolbar",
+    field: "dsh-composer-writing",
+    editor: "dsh-composer-editor",
+    hint: "text-caption text-text-3",
+    rows: 1,
+    attachButton: "dsh-composer-add",
+    sendButton: "dsh-composer-submit dsh-composer-send",
+    stopButton: "dsh-composer-submit",
+    attachIcon: <Outlined.Plus size={14} aria-hidden />,
+    sendIcon: <Outlined.ArrowUp size={18} aria-hidden />,
+};
 
 export default function ChatInput({ readOnly, v }) {
+    const standaloneChat = useOptionalStandaloneChatContext();
     const [bishengConfig] = useRecoilState(bishengConfState);
     const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState);
     // useAreaText
@@ -35,8 +54,7 @@ export default function ChatInput({ readOnly, v }) {
         }
     });
 
-    // ... Placeholder 和 AutoFocus 逻辑保持不变 ...
-    const placholder = useMemo(() => {
+    const placeholder = useMemo(() => {
         return inputDisabled ?
             (inputMsg.code ? localize(`api_errors.${inputMsg.code}`, { ...(inputMsg.data || {}), defaultValue: localize('api_errors.fallback') }) : ' ')
             : localize('com_ui_please_enter_question')
@@ -48,11 +66,12 @@ export default function ChatInput({ readOnly, v }) {
         }, 60)
     }, [inputDisabled]);
 
-    return <ConversationComposer inputRef={inputRef} canExecute={!readOnly} inputDisabled={inputDisabled}
+    return <ConversationComposer appearance={standaloneChat ? undefined : composerAppearance}
+        inputRef={inputRef} canExecute={!readOnly} inputDisabled={inputDisabled}
         busy={fileUploading || audioOpening} hasAttachments={fileCount > 0} showStop={showStop}
         showRestart={showReRun && !inputMsg.code && !showStop}
         labels={{ attach: localize('shared:app_chat.attach'), send: localize('shared:app_chat.send'), stop: localize('com_ui_stop'), restart: localize('com_ui_restart') }}
-        placeholder={placholder} hint={bishengConfig?.dialog_tips}
+        placeholder={placeholder} hint={bishengConfig?.dialog_tips}
         onSend={() => { handleSendClick(); setFileCount(0); }} onStop={handleStopClick} onRestart={handleRestart}
         onAttach={showUpload ? () => inputFilesRef.current?.openPicker() : undefined} attachmentDisabled={audioOpening}
         onPaste={handlePaste} overlay={isDragging ? <DragDropOverlay /> : undefined}
