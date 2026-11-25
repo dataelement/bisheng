@@ -16,6 +16,12 @@ let lastReport: string | undefined;
 
 const onDesktop = () => getClientEnvironment().channel === "desktop";
 
+/** The native sidebar owns a separate project cache; creation must reach it before the answer ends. */
+export function reportProjectConversationCreated(conversationId: string, projectId: string): void {
+  if (!onDesktop() || !conversationId || conversationId === 'new') return;
+  readDesktopPresentation().reportProjectConversationCreated?.({ conversationId, projectId });
+}
+
 function flush(force = false): void {
   if (!onDesktop()) return;
   const ids = [...new Set([...activityByOwner.values()].flat())].sort().slice(0, MAX_REPORTED);

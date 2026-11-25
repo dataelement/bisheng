@@ -110,12 +110,7 @@ jest.mock("~/pages/appChat/SideNav", () => ({
 }));
 jest.mock("~/pages/appChat/hooks/useAppSidebar", () => ({
   useAppSidebar: () => ({
-    groups: [
-      {
-        label: "Today",
-        conversations: [{ id: "old", title: "Previous conversation" }],
-      },
-    ],
+    conversations: [{ id: "old", title: "Previous conversation" }],
     activeConversationId: "old",
     switchConversation: mockSwitch,
     createNewChat: mockCreate,

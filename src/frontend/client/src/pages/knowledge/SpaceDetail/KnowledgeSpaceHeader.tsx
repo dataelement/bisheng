@@ -13,6 +13,7 @@ import { SpaceBreadcrumb } from "./SpaceBreadcrumb";
 import { SpaceActionMenuItems, getSpaceActionFlags } from "./SpaceActionMenuItems";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { useLocalize } from "~/hooks";
+import { KnowledgeSpaceBackControl } from "../KnowledgeSpaceBackControl";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { useRecoilValue } from "recoil";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
@@ -268,8 +269,8 @@ export function KnowledgeSpaceHeader({
                 shrinking it there would drag those 8px right along with it. */}
       <div className="-ml-2 flex min-w-0 flex-1 items-center gap-1 text-sm">
         {/* This header is desktop-only, including when the DSH pane is narrow. */}
-        <button
-          type="button"
+        <KnowledgeSpaceBackControl
+          label={localize("com_ui_go_back")}
           onClick={() => {
             if (currentPath.length === 0) {
               navigate(knowledgePathWithTab("/knowledge", location.search));
@@ -278,12 +279,7 @@ export function KnowledgeSpaceHeader({
             const parent = currentPath[currentPath.length - 2];
             onNavigateFolder(parent?.id);
           }}
-          aria-label={localize("com_ui_go_back")}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
-        >
-          <Outlined.ArrowLeft className="size-4" />
-        </button>
-        <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
+        />
         <SpaceBreadcrumb
           space={space}
           currentPath={currentPath}

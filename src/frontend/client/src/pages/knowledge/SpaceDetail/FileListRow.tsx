@@ -20,6 +20,7 @@ import {
   isKnowledgeItemUploading,
 } from "../knowledgeUtils";
 import FileIconRenderer from "./FileIcon";
+import { getEmbeddedKnowledgeFileReader } from "../FilePreview/KnowledgeFilePreviewOverlay";
 import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import TagGroup from "./TagGroup";
 
@@ -375,6 +376,8 @@ export function FileListRow({
   };
 
   const showEncoding = shougangEnabled && !isFolder;
+  const embeddedPreview = Boolean(!isFolder && !isCreating && namePreviewable && onPreview && getEmbeddedKnowledgeFileReader());
+  const FileName = embeddedPreview ? "button" : "span";
 
   return (
     <div
@@ -450,9 +453,11 @@ export function FileListRow({
                     {`V${file.version_no}`}
                   </Tag>
                 )}
-              <span
+              <FileName
+                type={embeddedPreview ? "button" : undefined}
                 className={cn(
                   "min-w-0 truncate text-sm leading-[22px]",
+                  embeddedPreview && "rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-1",
                   namePreviewable && !isUploadingFolderPlaceholder
                     ? "cursor-pointer text-text-1 hover:text-blue-500"
                     : "cursor-default text-text-3",
@@ -460,14 +465,15 @@ export function FileListRow({
                 )}
                 // A name that can't open anything falls through to the
                 // row's select-toggle instead of dead-ending the click.
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent<HTMLElement>) => {
                   if (!namePreviewable || isUploadingFolderPlaceholder) return;
                   e.stopPropagation();
+                  if (embeddedPreview) e.currentTarget.focus({ preventScroll: true });
                   handleOpen();
                 }}
               >
                 {renderHighlightedName(file.name, highlightKeyword)}
-              </span>
+              </FileName>
               {versionManagementEnabled &&
                 canManageVersions &&
                 file.has_similar &&

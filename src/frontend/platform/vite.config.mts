@@ -1,4 +1,5 @@
 import { diagramAssetTargets } from '../config/diagramAssets';
+import { browserObjectProxy } from '../config/browserObjectProxy';
 import { createFrontendProxy, frontendEnvDefinitions, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from "@vitejs/plugin-react";
 import fs from "fs";
@@ -282,6 +283,7 @@ export default defineConfig(({ command, mode }) => {
       }
     },
     plugins: [
+      browserObjectProxy(fileServiceTarget, target, app_env.BASE_URL),
       dshContentSafetyStyles(),
       react(),
       svgr(),

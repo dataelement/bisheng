@@ -5,6 +5,7 @@ import {
   resetDesktopConversationBridge,
   useDesktopConversationActivity,
   useDesktopConversationRenamed,
+  reportProjectConversationCreated,
 } from './desktopConversationBridge';
 
 let mockChannel = 'desktop';
@@ -29,6 +30,21 @@ beforeEach(() => {
 });
 afterEach(() => {
   delete window.dshChatPresentation;
+});
+
+it('reports committed project creation to the native sidebar and tolerates older hosts', () => {
+  const report = jest.fn();
+  window.dshChatPresentation = { reportProjectConversationCreated: report };
+  reportProjectConversationCreated('chat-one', 'project-one');
+  expect(report).toHaveBeenCalledWith({ conversationId: 'chat-one', projectId: 'project-one' });
+  reportProjectConversationCreated('new', 'project-one');
+  expect(report).toHaveBeenCalledTimes(1);
+  mockChannel = 'web';
+  reportProjectConversationCreated('chat-two', 'project-one');
+  expect(report).toHaveBeenCalledTimes(1);
+  mockChannel = 'desktop';
+  delete window.dshChatPresentation;
+  expect(() => reportProjectConversationCreated('chat-three', 'project-one')).not.toThrow();
 });
 
 describe('useDesktopConversationActivity', () => {

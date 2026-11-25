@@ -1,4 +1,5 @@
 import { diagramAssetTargets } from '../config/diagramAssets';
+import { browserObjectProxy } from '../config/browserObjectProxy';
 import { createFrontendProxy, frontendEnvDefinitions, createMinioWarning, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
@@ -160,6 +161,7 @@ export default defineConfig(({ command, mode }) => {
     envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
     plugins: [
       minioFileProxyPlugin(minioTarget),
+      browserObjectProxy(minioTarget, apiTarget, app_env.BASE_URL),
       react(),
       nodePolyfills(),
       VitePWA({

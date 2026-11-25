@@ -29,6 +29,7 @@ export function readDesktopPresentation(): DesktopPresentation {
     requestSettingsClose: method("requestSettingsClose"),
     requestSettingsFocus: method("requestSettingsFocus"),
     reportRunning: method("reportRunning"),
+    reportProjectConversationCreated: method("reportProjectConversationCreated"),
     onConversationRenamed: method("onConversationRenamed"),
   });
 }

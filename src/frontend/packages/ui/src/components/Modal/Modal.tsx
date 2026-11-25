@@ -103,8 +103,12 @@ export interface ModalProps {
   beforeClose?: (source: ModalDismissSource) => boolean | void;
   /** Portal target; defaults to `document.body`. */
   container?: HTMLElement | null;
+  /** Restore focus for controlled modals that open without a Modal trigger. */
+  onCloseAutoFocus?: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>['onCloseAutoFocus'];
   /** Extra classes on the card. */
   className?: string;
+  /** Extra classes on the header. */
+  headerClassName?: string;
   /** Extra classes on the body — e.g. `p-0` for a preview that bleeds to the edge. */
   bodyClassName?: string;
   /** Extra classes on the footer. */
@@ -131,7 +135,9 @@ export function Modal({
   submitting = false,
   beforeClose,
   container,
+  onCloseAutoFocus,
   className,
+  headerClassName,
   bodyClassName,
   footerClassName,
   overlayClassName,
@@ -159,6 +165,7 @@ export function Modal({
             isFullscreen ? null : [CONTENT_CARD, SIZE_WIDTH[size]],
             className,
           )}
+          onCloseAutoFocus={onCloseAutoFocus}
           onEscapeKeyDown={(event) => {
             if (!escClosable || blocked('esc')) event.preventDefault();
           }}
@@ -169,7 +176,7 @@ export function Modal({
           {/* §4 — header and footer never scroll; only the body does. Same
            * arrangement at every size, 全屏档 and phone included: title left,
            *「×」right, actions in the footer (§2). */}
-          <div className="flex h-14 shrink-0 items-center gap-3 px-4">
+          <div className={cn('flex h-14 shrink-0 items-center gap-3 px-4', headerClassName)}>
             <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-h4 text-text-1">
               {title}
             </DialogPrimitive.Title>

@@ -30,6 +30,7 @@ import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAtta
 import { useDesktopConversationActivity, useDesktopConversationRenamed } from "~/components/Chat/desktopConversationBridge";
 import { runningConversationIds } from "~/components/Chat/runningConversations";
 import { captureProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
+import { useProjectConversationCache } from './useChatProjects';
 
 /**
  * Turns that are still generating, across every mounted chat surface.
@@ -266,6 +267,7 @@ export default function useAiChat(
         useKnowledgeSpaceAccess(savedKnowledge, `${draftScope}:${conversationId}`, !shareToken);
 
     const queryClient = useQueryClient();
+    const { created: cacheProjectCreated, titleChanged: cacheProjectTitle } = useProjectConversationCache();
 
     // F035 Track J (TJ-6): task-mode turns reuse the linsight execution machinery
     // (createLinsight seeds the per-SV store, startLinsight kicks off the run, the
@@ -787,7 +789,8 @@ export default function useAiChat(
                                 tags: [],
                             } as unknown as TConversation;
 
-                            queryClient.setQueryData<ConversationData>(
+                            cacheProjectCreated(projectDraft, placeholderConvo);
+                            if (!projectDraft) queryClient.setQueryData<ConversationData>(
                                 [QueryKeys.allConversations],
                                 (convoData) => {
                                     if (!convoData) return convoData;
@@ -859,7 +862,8 @@ export default function useAiChat(
                                 isArchived: false,
                                 tags: [],
                             } as unknown as TConversation;
-                            queryClient.setQueryData<ConversationData>(
+                            cacheProjectCreated(projectDraft, placeholderConvo);
+                            if (!projectDraft) queryClient.setQueryData<ConversationData>(
                                 [QueryKeys.allConversations],
                                 (convoData) =>
                                     convoData ? addConversation(convoData, placeholderConvo) : convoData,
@@ -1007,6 +1011,7 @@ export default function useAiChat(
                             .then((res: { title?: string }) => {
                                 if (!res?.title) return;
                                 setTitle(res.title);
+                                cacheProjectTitle(chat_id, res.title);
                                 queryClient.setQueryData<ConversationData>(
                                     [QueryKeys.allConversations],
                                     (convoData) =>
@@ -1140,6 +1145,7 @@ export default function useAiChat(
                             .then((res: { title?: string }) => {
                                 if (!res?.title) return;
                                 setTitle(res.title);
+                                cacheProjectTitle(finalConvoId, res.title);
                                 queryClient.setQueryData<ConversationData>(
                                     [QueryKeys.allConversations],
                                     (convoData) => {
@@ -1207,7 +1213,7 @@ export default function useAiChat(
             beginStream(turn.bucketId, submission);
             return true;
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, cacheProjectCreated, cacheProjectTitle, finishMediaParsing, ensureFlowLeaseId]
     );
 
     // --- Stop generating ---

@@ -2,6 +2,7 @@ import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyStateIllustration, NoPermissionIllustration } from "~/components/illustrations";
 import { KnowledgePreviewNavigation } from "./KnowledgePreviewNavigation";
+import { KnowledgeFilePreviewOverlay, useKnowledgeFilePreview } from "./FilePreview/KnowledgeFilePreviewOverlay";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 
 import { Button } from "~/components/ui/Button";
@@ -49,6 +50,7 @@ export function KnowledgeSpacePreviewDrawer({
     const { isOverQuota } = useEffectiveQuota();
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
+    const { filePreview, openFilePreview, closeFilePreview } = useKnowledgeFilePreview(open && space ? String(space.id) : undefined);
     const [status, setStatus] = useState<SpaceJoinStatus>("none");
     const [subscribing, setSubscribing] = useState(false);
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
@@ -259,9 +261,7 @@ export function KnowledgeSpacePreviewDrawer({
         if (!space) return;
         const file = filesPreview.find((f) => f.id === fileId);
         const fileName = file?.name || localize("com_knowledge.unknown_file");
-        const ext = fileName.split(".").pop()?.toLowerCase() || "";
-        const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(ext)}&spaceId=${encodeURIComponent(space.id)}`;
-        window.open(url, "_blank");
+        openFilePreview(fileId, fileName);
     };
 
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
@@ -565,6 +565,9 @@ export function KnowledgeSpacePreviewDrawer({
                             localize("com_knowledge.space_invalid_or_deleted")
                         )}
                     </div>
+                )}
+                {filePreview && (
+                    <KnowledgeFilePreviewOverlay preview={filePreview} onClose={closeFilePreview} />
                 )}
             </SheetContent>
         </Sheet>

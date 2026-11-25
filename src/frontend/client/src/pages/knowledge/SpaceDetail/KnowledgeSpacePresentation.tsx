@@ -16,6 +16,7 @@ import { cn } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import type { KnowledgeSpaceModel } from "./index";
 import { KnowledgeSpaceOverlays } from "./KnowledgeSpaceOverlays";
+import { KnowledgeFilePreviewOverlay } from "../FilePreview/KnowledgeFilePreviewOverlay";
 import { KnowledgeSpaceToolbar } from "./KnowledgeSpaceToolbar";
 import desktopLayout from "./KnowledgeSpaceLayout.module.css";
 interface KnowledgeSpacePresentationProps {
@@ -387,6 +388,9 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
       )}
 
       <KnowledgeSpaceOverlays model={model} />
+      {model.filePreview && (
+        <KnowledgeFilePreviewOverlay preview={model.filePreview} onClose={model.closeFilePreview} />
+      )}
     </div>
   );
 }

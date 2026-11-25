@@ -7,6 +7,7 @@ import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import { isKnowledgeItemUploading, triggerUrlDownload } from "../knowledgeUtils";
 import { getFullWidthLength } from "~/utils";
+import { useKnowledgeFilePreview } from "../FilePreview/KnowledgeFilePreviewOverlay";
 export function useKnowledgeFileActions({
   localize,
   displayFiles,
@@ -27,6 +28,7 @@ export function useKnowledgeFileActions({
   onDeleteFile,
   onEditTags,
 }: UseKnowledgeFileActionsOptions) {
+  const { filePreview, openFilePreview, closeFilePreview } = useKnowledgeFilePreview(String(space.id));
   const batch = useKnowledgeBatch(JSON.stringify([space.id, deletionScopeKey]));
   const runOrdinaryBatch = async (operation: "download" | "retry", items: typeof selectedList) => {
     const result = await batch.open({
@@ -130,14 +132,11 @@ export function useKnowledgeFileActions({
     }
   };
 
-  const handlePreviewFile = (fileId: string, explicitFileName?: string) => {
+  const handlePreviewFile = (fileId: string, explicitFileName?: string, aboveDialog = false) => {
     const file = displayFiles.find((f) => f.id === fileId);
-    // Version files aren't in displayFiles, so accept an explicit name for them.
+    // Historical versions use the name supplied by the version history dialog.
     const fileName = explicitFileName || file?.name || localize("com_knowledge.unknown_file");
-    // Use extension from filename for preview viewer dispatch instead of API type field
-    const ext = fileName.split(".").pop()?.toLowerCase() || "";
-    const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(ext)}&spaceId=${encodeURIComponent(space.id)}`;
-    window.open(url, "_blank");
+    openFilePreview(fileId, fileName, aboveDialog);
   };
 
   const handleOpenEditTags = (fileId: string) => {
@@ -260,6 +259,8 @@ export function useKnowledgeFileActions({
     handleBatchMove,
     handleSingleDownload,
     handlePreviewFile,
+    filePreview,
+    closeFilePreview,
     handleOpenEditTags,
     handleCloseEditTags,
     handleTagsSaved,

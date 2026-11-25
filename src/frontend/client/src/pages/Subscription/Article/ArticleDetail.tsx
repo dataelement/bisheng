@@ -1,4 +1,5 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { Button, Tooltip } from "@bisheng/ui";
 import {
   ArrowLeft,
   ArrowUp,
@@ -34,6 +35,9 @@ interface ArticleDetailProps {
   onBack?: () => void;
   compactMode?: boolean;
   preserveAiDraft?: boolean;
+  embeddedFullscreen?: boolean;
+  onExitEmbeddedFullscreen?: () => void;
+  fullscreenDisabled?: boolean;
 }
 
 export function ArticleDetail({
@@ -48,6 +52,9 @@ export function ArticleDetail({
   onBack,
   compactMode = false,
   preserveAiDraft = false,
+  embeddedFullscreen,
+  onExitEmbeddedFullscreen,
+  fullscreenDisabled = false,
 }: ArticleDetailProps) {
   const localize = useLocalize();
 
@@ -58,8 +65,12 @@ export function ArticleDetail({
   const [showBackTop, setShowBackTop] = useState(false);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const fullscreenButtonRef = useRef<HTMLButtonElement>(null);
+  const exitFullscreenButtonRef = useRef<HTMLButtonElement>(null);
+  const wasEmbeddedFullscreen = useRef(false);
   const { handleShare } = useArticleShare();
   const { showToast } = useToastContext();
+  const isFullscreen = screenFull || embeddedFullscreen;
 
   const articleHtml = article.content_html || "";
 
@@ -73,6 +84,7 @@ export function ArticleDetail({
           #js_content, .rich_media_area_primary, .rich_media_content { padding: 0 !important; }
           img { max-width: 100%; cursor: zoom-in; }
           ${screenFull ? "/* Fullscreen: drop the source content wrapper's card shadow. */\n          body > * { box-shadow: none !important; }" : ""}
+          ${embeddedFullscreen !== undefined ? "html[data-embedded-fullscreen] body > * { box-shadow: none !important; }" : ""}
         </style>
       </head>
       <body>
@@ -127,6 +139,43 @@ export function ArticleDetail({
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
+
+  useEffect(() => {
+    if (embeddedFullscreen) exitFullscreenButtonRef.current?.focus();
+    else if (wasEmbeddedFullscreen.current) fullscreenButtonRef.current?.focus();
+    wasEmbeddedFullscreen.current = embeddedFullscreen === true;
+  }, [embeddedFullscreen]);
+
+  useEffect(() => {
+    if (!embeddedFullscreen || !onExitEmbeddedFullscreen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || event.repeat || showKnowledgeModal) return;
+      event.preventDefault();
+      if (previewUrl) setPreviewUrl(null);
+      else onExitEmbeddedFullscreen();
+    };
+    // Keep srcDoc stable across expansion and listen in the frame when it owns keyboard focus.
+    const frame = iframeRef.current;
+    let articleDocument: Document | null = null;
+    const unbindFrame = () => {
+      articleDocument?.documentElement?.removeAttribute("data-embedded-fullscreen");
+      articleDocument?.removeEventListener("keydown", onEscape);
+    };
+    const bindFrame = () => {
+      unbindFrame();
+      articleDocument = frame?.contentDocument ?? null;
+      articleDocument?.documentElement?.setAttribute("data-embedded-fullscreen", "");
+      articleDocument?.addEventListener("keydown", onEscape);
+    };
+    bindFrame();
+    frame?.addEventListener("load", bindFrame);
+    window.addEventListener("keydown", onEscape);
+    return () => {
+      unbindFrame();
+      frame?.removeEventListener("load", bindFrame);
+      window.removeEventListener("keydown", onEscape);
+    };
+  }, [embeddedFullscreen, onExitEmbeddedFullscreen, previewUrl, showKnowledgeModal]);
 
   // Helper: draw the preview image onto a canvas and return a PNG blob.
   // This bypasses CORS issues since the image is loaded via <img> with crossOrigin.
@@ -258,6 +307,21 @@ export function ArticleDetail({
 
         <div className="flex items-center justify-between">
           <div className="w-full h-6 flex items-center gap-4">
+            {embeddedFullscreen && (
+              <Tooltip content={localize("com_ui_go_back")}>
+                <Button
+                  ref={exitFullscreenButtonRef}
+                  color="default"
+                  variant="outlined"
+                  size="small"
+                  iconOnly
+                  aria-label={localize("com_ui_go_back")}
+                  onClick={onExitEmbeddedFullscreen}
+                >
+                  <Outlined.ArrowLeft />
+                </Button>
+              </Tooltip>
+            )}
             <button
               onClick={() => window.open(article.url)}
               className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
@@ -285,10 +349,12 @@ export function ArticleDetail({
             )}
 
             {!isNarrowShell &&
-            (!screenFull || (showFullScreenBtn && aiAssistantOpen)) ? (
+            (!isFullscreen || (showFullScreenBtn && aiAssistantOpen)) ? (
               <button
+                ref={fullscreenButtonRef}
                 type="button"
-                className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
+                disabled={fullscreenDisabled}
+                className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333] disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => {
                   screenFull && showFullScreenBtn
                     ? onExitAiAssistant?.()
@@ -301,7 +367,7 @@ export function ArticleDetail({
             ) : null}
 
             <div className="ml-auto flex gap-3 items-center">
-              {screenFull && (
+              {isFullscreen && (
                 <div className="flex items-center text-[12px]">
                   <img
                     className="size-4 mr-1.5"
@@ -350,6 +416,7 @@ export function ArticleDetail({
           <iframe
             ref={iframeRef}
             srcDoc={processedHtml}
+            title={embeddedFullscreen !== undefined ? article.title : undefined}
             className="w-full h-full border-none"
           />
         )}

@@ -7,6 +7,7 @@ import React, {
   useLayoutEffect,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import { useUnactivate } from "react-activation";
 import { useSetRecoilState } from "recoil";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import { subscriptionDetailPaneWidthState } from "~/store/subscriptionLayout";
@@ -72,10 +73,18 @@ export function ChannelLayout({
   const {
     channel: runtimeChannel,
     layout: { isNarrowViewport },
+    capabilities: { hasHostChatHeader },
   } = useClientEnvironment();
+  const usesEmbeddedReader = runtimeChannel === "desktop" || hasHostChatHeader;
   const navigate = useNavigate();
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [embeddedDetailReady, setEmbeddedDetailReady] = useState(false);
+  const [embeddedFullscreen, setEmbeddedFullscreen] = useState(false);
+  const detailRequest = useRef(0);
+
+  const closeEmbeddedFullscreen = useCallback(() => setEmbeddedFullscreen(false), []);
+  useUnactivate(closeEmbeddedFullscreen);
 
   const [h5AiAssistantOpen, setH5AiAssistantOpen] = useState(false);
   const [isToggleHovering, setIsToggleHovering] = useState(false);
@@ -102,12 +111,17 @@ export function ChannelLayout({
     minLeftWidth: MIN_LEFT_WIDTH,
     minRightWidth: MIN_RIGHT_WIDTH,
     containerRef,
-    enabled: Boolean(selectedArticle),
+    enabled: Boolean(selectedArticle) && !embeddedFullscreen,
     defaultLeftWidth: (width) => getDefaultLeftWidth(width, runtimeChannel === "desktop"),
   });
 
   const handleArticleSelect = useCallback(
     async (article: Article | null) => {
+      const request = ++detailRequest.current;
+      if (usesEmbeddedReader) {
+        setEmbeddedDetailReady(false);
+        closeEmbeddedFullscreen();
+      }
       if (!article) {
         setSelectedArticle(null);
         setH5AiAssistantOpen(false);
@@ -129,6 +143,11 @@ export function ChannelLayout({
 
       try {
         const detail = await getArticleDetailApi(article.id, article.channelId);
+        if (usesEmbeddedReader && request !== detailRequest.current) return;
+        if (usesEmbeddedReader) {
+          const review = detail.sensitive_review ?? article.sensitiveReview;
+          setEmbeddedDetailReady(review?.can_view !== false);
+        }
 
         setSelectedArticle((prev) => {
           if (prev?.id !== article.id) return prev;
@@ -145,10 +164,10 @@ export function ChannelLayout({
         console.error("Failed to load article detail:", e);
         // Retain the list data if the detail request fails.
       } finally {
-        setDetailLoading(false);
+        if (!usesEmbeddedReader || request === detailRequest.current) setDetailLoading(false);
       }
     },
-    [runtimeChannel, isNarrowViewport, navigate],
+    [closeEmbeddedFullscreen, runtimeChannel, isNarrowViewport, navigate, usesEmbeddedReader],
   );
 
   const splitDetail = canSplit && Boolean(selectedArticle);
@@ -212,6 +231,8 @@ export function ChannelLayout({
           className={cn(
             "flex min-h-0 h-full min-w-0 flex-col overflow-hidden",
             splitDetail ? "shrink-0" : "w-full flex-1",
+            // Preserve list geometry and scroll position while the article covers it.
+            embeddedFullscreen && "invisible",
           )}
         >
           <ArticleList
@@ -226,7 +247,7 @@ export function ChannelLayout({
         </div>
 
         {/* Splitter only when the selected detail fits beside the list. */}
-        {splitDetail && (
+        {splitDetail && !embeddedFullscreen && (
           <div className="relative w-px min-w-[1px] max-w-[1px] shrink-0">
             <div
               onMouseDown={startResizing}
@@ -241,12 +262,13 @@ export function ChannelLayout({
           <div
             key="article-detail"
             className={cn(
-              splitDetail && desktopLayout.detailPane,
               "relative h-full min-w-0 flex-1 bg-white",
-              !canSplit && "absolute inset-0 z-[35] flex flex-col",
+              splitDetail && !embeddedFullscreen && desktopLayout.detailPane,
+              !canSplit && !embeddedFullscreen && "absolute inset-0 z-[35] flex flex-col",
+              embeddedFullscreen && "absolute inset-0 z-50 mx-auto w-full max-w-[1000px]",
             )}
           >
-            {canSplit && (
+            {canSplit && !embeddedFullscreen && (
               <NavToggle
                 navVisible={true}
                 onToggle={() => setSelectedArticle(null)}
@@ -259,10 +281,19 @@ export function ChannelLayout({
             <ArticleDetail
               article={selectedArticle}
               loading={detailLoading}
-              compactMode={!canSplit}
+              compactMode={!canSplit && !embeddedFullscreen}
               preserveAiDraft
-              onBack={!canSplit ? () => setSelectedArticle(null) : undefined}
-              onFullScreen={() => onFullScreen?.(selectedArticle, false)}
+              onBack={!canSplit && !embeddedFullscreen ? () => setSelectedArticle(null) : undefined}
+              embeddedFullscreen={usesEmbeddedReader ? embeddedFullscreen : undefined}
+              onExitEmbeddedFullscreen={closeEmbeddedFullscreen}
+              fullscreenDisabled={usesEmbeddedReader && !embeddedDetailReady}
+              onFullScreen={() => {
+                if (usesEmbeddedReader) {
+                  if (embeddedDetailReady) setEmbeddedFullscreen(true);
+                } else {
+                  onFullScreen?.(selectedArticle, false);
+                }
+              }}
               onAiAssistant={() =>
                 canSplit
                   ? onFullScreen?.(selectedArticle, true)

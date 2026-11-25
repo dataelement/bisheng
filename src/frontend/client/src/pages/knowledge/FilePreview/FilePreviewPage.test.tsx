@@ -4,21 +4,23 @@ import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
 import { getMyResourcePermissions } from "~/api/permission";
 import { triggerUrlDownload } from "../knowledgeUtils";
 import type { FilePreviewProps } from "./index";
-import FilePreviewPage from "./FilePreviewPage";
+import FilePreviewPage, { KnowledgeFileReader } from "./FilePreviewPage";
+
+let mockUserId = "7";
 
 jest.mock("~/api/permission", () => ({ getMyResourcePermissions: jest.fn() }));
 jest.mock("~/api/knowledge", () => ({
     getFilePreviewApi: jest.fn(),
     getFileDownloadApi: jest.fn(),
 }));
-jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: '7', role: 'member', tenant_id: 60 } }) }));
+jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: mockUserId, role: 'member', tenant_id: 60 } }) }));
 jest.mock("~/pages/Subscription/AiChat/FileAiDock", () => ({ FileAiDock: () => null }));
 jest.mock("./RichKnowledgePreview", () => ({ RichKnowledgePreview: () => null }));
 jest.mock("./index", () => ({
     __esModule: true,
-    default: ({ fileUrl, fileType, onDownloadFile, conversionFailed, allowDownload }: FilePreviewProps) => (
+    default: ({ fileUrl, fileType, onDownloadFile, conversionFailed, allowDownload, manageDocumentTitle, hideHeader }: FilePreviewProps) => (
         <div>
-            <output data-testid="viewer" data-type={fileType} data-conversion-failed={conversionFailed}>{fileUrl}</output>
+            <output data-testid="viewer" data-type={fileType} data-conversion-failed={conversionFailed} data-manage-title={manageDocumentTitle} data-hide-header={hideHeader}>{fileUrl}</output>
             {allowDownload && <button onClick={onDownloadFile}>Download</button>}
         </div>
     ),
@@ -30,6 +32,7 @@ const metadata = { file_source: "space_upload", source_url: "", final_url: "", w
 
 describe("knowledge preview resource contract", () => {
     beforeEach(() => {
+        mockUserId = "7";
         jest.mocked(getMyResourcePermissions).mockResolvedValue({
             actions: ["download"], sources: [], mode: "INHERIT", roster_complete: true,
         } as never);
@@ -58,6 +61,55 @@ describe("knowledge preview resource contract", () => {
         await waitFor(() => expect(screen.getByTestId("viewer")).toHaveTextContent(expected));
         expect(screen.getByTestId("viewer")).toHaveAttribute("data-type", type);
         expect(previewApi).toHaveBeenCalledWith("6", "4");
+    });
+
+    it("uses the existing mobile layout without taking over the embedded document title", async () => {
+        window.matchMedia = jest.fn().mockReturnValue({
+            matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn(),
+        });
+        previewApi.mockResolvedValue({ ...metadata, original_url: "/bisheng/original/file.txt", preview_url: "" });
+        const previousTitle = document.title;
+        document.title = "Knowledge list";
+        try {
+            const view = render(<KnowledgeFileReader fileId="4" spaceId="6" fileName="file.txt" embedded="mobile-app" />);
+            const viewer = await screen.findByTestId("viewer");
+            expect(viewer).toHaveAttribute("data-manage-title", "false");
+            expect(viewer).toHaveAttribute("data-hide-header", "true");
+            expect(document.title).toBe("Knowledge list");
+            view.unmount();
+            expect(document.title).toBe("Knowledge list");
+        } finally {
+            document.title = previousTitle;
+        }
+    });
+
+    it("drops the previous embedded document when the account loses access", async () => {
+        previewApi.mockResolvedValueOnce({ ...metadata, original_url: "/bisheng/original/file.txt", preview_url: "" })
+            .mockRejectedValueOnce(new Error("Preview revoked"));
+        const reportError = jest.spyOn(console, "error").mockImplementation(() => {});
+        const reader = <KnowledgeFileReader fileId="4" spaceId="6" fileName="file.txt" embedded="desktop" />;
+        const view = render(reader);
+        await screen.findByTestId("viewer");
+        mockUserId = "8";
+        view.rerender(<KnowledgeFileReader fileId="4" spaceId="6" fileName="file.txt" embedded="desktop" />);
+        expect(screen.queryByTestId("viewer")).not.toBeInTheDocument();
+        expect(await screen.findByText("com_knowledge.fetch_preview_link_failed")).toBeVisible();
+        expect(previewApi).toHaveBeenLastCalledWith("6", "4", { skip403Redirect: true, showError: false });
+        expect(reportError).toHaveBeenCalledWith("Failed to load preview URL:", expect.any(Error));
+    });
+
+    it("handles a denied embedded download in the open reader", async () => {
+        previewApi.mockResolvedValue({ ...metadata, original_url: "/bisheng/original/file.txt", preview_url: "" });
+        const denied = new Error("Download revoked");
+        downloadApi.mockRejectedValueOnce(denied);
+        const reportError = jest.spyOn(console, "error").mockImplementation(() => {});
+        const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+        render(<KnowledgeFileReader fileId="4" spaceId="6" fileName="file.txt" embedded="desktop" />);
+        fireEvent.click(await screen.findByRole("button", { name: "Download" }));
+        await waitFor(() => expect(reportError).toHaveBeenCalledWith("Failed to download file:", denied));
+        expect(downloadApi).toHaveBeenCalledWith("6", "4", undefined, { skip403Redirect: true, showError: false });
+        expect(click).not.toHaveBeenCalled();
+        expect(screen.getByTestId("viewer")).toHaveTextContent("/bisheng/original/file.txt");
     });
 
     it("shows conversion failure when PPTX has no derived preview", async () => {

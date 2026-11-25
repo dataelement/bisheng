@@ -11,6 +11,7 @@ import { TopBar } from "./TopBar";
 
 interface RichKnowledgePreviewProps {
     fileName: string;
+    hideFileName?: boolean;
     preview: KnowledgeFilePreview;
     actions?: ReactNode;
     allowDownload?: boolean;
@@ -65,6 +66,7 @@ export function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
 
 export function RichKnowledgePreview({
     fileName,
+    hideFileName = false,
     preview,
     actions,
     allowDownload = true,
@@ -86,6 +88,7 @@ export function RichKnowledgePreview({
                 {!compactMode && (
                     <TopBar
                         fileName={fileName}
+                        hideFileName={hideFileName}
                         showZoom={false}
                         onDownload={allowDownload ? onDownloadFile : undefined}
                         actions={actions}
@@ -120,6 +123,7 @@ export function RichKnowledgePreview({
             {!compactMode && (
                 <TopBar
                     fileName={fileName}
+                    hideFileName={hideFileName}
                     showZoom={false}
                     onDownload={allowDownload ? onDownloadFile : undefined}
                     actions={actions}

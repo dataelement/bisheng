@@ -3018,6 +3018,14 @@
     "move_out_of_project": "プロジェクトから外す",
     "project_none": "プロジェクトがありません",
     "project_empty": "会話はまだありません",
+    "conversation_age": {
+      "days": "{{n}}日",
+      "hours": "{{n}}時間",
+      "minutes": "{{n}}分",
+      "months": "{{n}}か月",
+      "now": "たった今",
+      "years": "{{n}}年"
+    },
     "demo": {
       "project_travel": "旅行ガイド",
       "project_files": "ファイル整理",

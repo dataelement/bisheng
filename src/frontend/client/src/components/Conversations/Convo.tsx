@@ -17,6 +17,7 @@ import store from "~/store";
 import { conversationTaskRunningState } from "~/store/linsight";
 import { cn } from "~/utils";
 import { ConvoOptions } from "./ConvoOptions";
+import { ConversationHistoryDate } from "./ConversationHistoryDate";
 import { useTitleReveal } from "./useTitleReveal";
 
 type KeyEvent = KeyboardEvent<HTMLInputElement>;
@@ -54,8 +55,6 @@ export default function Conversation({
   const { navigateWithLastTools } = useNavigateToConvo();
   const { showToast } = useToastContext();
   const { conversationId, title } = conversation;
-  const updatedAt = new Date(conversation.updatedAt ?? '');
-  const hasDate = Number.isFinite(updatedAt.getTime());
   // Task-mode execution indicator: true while this conversation's linsight
   // session is still running, driving the sidebar spinner.
   const isTaskRunning = useRecoilValue(
@@ -197,6 +196,7 @@ export default function Conversation({
   );
 
   const titleReveal = useTitleReveal(title ?? "");
+  const titleLineHeight = compact && !isSmallScreen ? "leading-[22px]" : "leading-[20px]";
   return (
     <div
       data-active={isActiveConvo}
@@ -225,11 +225,11 @@ export default function Conversation({
       )}
     >
       {renaming ? (
-        <div className="flex h-5 grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all">
+        <div className="flex grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all">
           <input
             ref={inputRef}
             type="text"
-            className="w-full bg-transparent text-[14px] leading-[20px] focus-visible:outline-none text-text-1"
+            className={cn("w-full bg-transparent text-[14px] focus-visible:outline-none text-text-1", titleLineHeight)}
             value={titleInput ?? ""}
             onChange={(e) => setTitleInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -289,7 +289,7 @@ export default function Conversation({
               ref={titleReveal.ref}
               className={cn(
                 "dsh-history-label text-text-1 text-[14px] font-normal truncate",
-                compact && !isSmallScreen ? "leading-[22px]" : "leading-[20px]",
+                titleLineHeight,
               )}
             >
               {title}
@@ -297,10 +297,12 @@ export default function Conversation({
           </div>
         </a>
       )}
-      {!renaming && hasDate && !isPopoverPresent && (
-        <time className="dsh-history-time coarse-pointer:hidden" dateTime={updatedAt.toISOString()}>
-          {updatedAt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
-        </time>
+      {!renaming && !isPopoverPresent && (
+        <ConversationHistoryDate
+          updatedAt={conversation.updatedAt}
+          createdAt={conversation.createdAt}
+          className="dsh-history-time coarse-pointer:hidden"
+        />
       )}
       {/* While renaming, drop the options slot entirely — an empty flex item
           would still cost the row an extra 8px gap before the right padding. */}
