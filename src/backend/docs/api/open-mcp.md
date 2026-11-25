@@ -28,6 +28,8 @@ scope、租户、数据范围和资源权限判定。`tools/list` 只返回当�
 | 服务账号委托身份（D） | 上述 header + `X-On-Behalf-Of: <BISHENG_PLATFORM_USER_ID>` | 另需凭据允许委托，按被代表用户执行 |
 | PAT | `Authorization: Bearer <PAT>` | 仅可发现和调用 3 个 `knowledge:read` 工具 |
 
+PAT 直接调用开放 API 的 HTTP 接口时同样只能调用 3 个：`GET /api/v2/filelib/`（知识库列表）、`GET /api/v2/filelib/file/list`（文件列表）、`POST /api/v2/filelib/retrieve`（检索）。调用其他接口（服务端作答、问答查询、问答详情、引用查询、下载统计文件、全部写入类接口）返回 HTTP 403、错误码 26050，不执行业务逻辑；服务账号和委托身份不受影响。
+
 `X-End-User: <external_user_partition>` 只用于已有 F053 终端用户分区语义，不能与
 `X-On-Behalf-Of` 同时使用。`Authorization`、`X-On-Behalf-Of`、`X-End-User`、
 `user_id` 和 `tenant_id` 都不属于工具 arguments，不得由模型在工具参数中指定。

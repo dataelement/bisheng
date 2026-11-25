@@ -192,6 +192,17 @@ class PersonalTokenHolderInvalidError(OpenApiAuthError):
     http_status = 401
 
 
+class PersonalTokenEndpointNotAllowedError(OpenApiAuthError):
+    """Personal tokens may only call the knowledge list, file list and retrieve endpoints.
+
+    The payload never names the endpoint's resources; retrying or asking for scopes will not help.
+    """
+
+    Code = 26050
+    Msg = "Personal access token cannot call this endpoint"
+    http_status = 403
+
+
 class PersonalTokenDataScopeError(OpenApiAuthError):
     """F066: the tenant narrowed personal tokens to holder-created knowledge.
 

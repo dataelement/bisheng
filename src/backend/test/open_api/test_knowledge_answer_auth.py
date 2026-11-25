@@ -212,26 +212,20 @@ async def test_delegated_key_without_header_cannot_reach_answer(wired):
     wired.model.prepare.assert_not_awaited()
 
 
-@pytest.mark.parametrize("space,expected_status", [(1, 200), (2, 403)])
-async def test_pat_narrowed_actor_enforced_inside_real_answer(wired, space, expected_status):
+@pytest.mark.parametrize("space", [1, 2])
+async def test_personal_token_cannot_call_answer(wired, space):
+    """Personal tokens are limited to the list, file list and retrieve endpoints (26050), whatever the space."""
     wired.key = "bs-pat-" + "a" * 43
     wired.credential.subject_kind = "natural_person"
     wired.credential.subject_id = 5
     wired.credential.token_hash = hash_token(wired.key)
     wired.credential.key_prefix = "bs-pat-"
     response = await post(wired, body={**BODY, "knowledge_base_ids": [space]})
-    assert response.status_code == expected_status
-    actor = wired.observed[0]
-    assert actor.fga_subject == "user:5"
-    assert actor.data_scope == "personal_only"
-    if space == 2:
-        assert response.json()["status_code"] == 26044
-        wired.model.prepare.assert_not_awaited()
-        wired.retrieval.aretrieve_chunks.assert_not_awaited()
-        assert not wired.fga.calls
-    else:
-        wired.model.prepare.assert_awaited_once_with(model_id=3, user_id=5)
-        assert wired.fga.calls
+    assert response.status_code == 403
+    assert response.json()["status_code"] == 26050
+    wired.model.prepare.assert_not_awaited()
+    wired.retrieval.aretrieve_chunks.assert_not_awaited()
+    assert not wired.fga.calls
 
 
 async def test_actual_dependency_factory_preserves_operator_and_session(monkeypatch):

@@ -232,7 +232,7 @@ async def update_knowledge(
 
 
 @router.get("/", status_code=200)
-@open_api_scope("knowledge:read")
+@open_api_scope("knowledge:read", pat=True)
 async def get_knowledge(
     *,
     request: Request,
@@ -446,7 +446,7 @@ def delete_file_batch_api(request: Request, file_ids: list[int]):
 
 
 @router.get("/file/list", status_code=200)
-@open_api_scope("knowledge:read")
+@open_api_scope("knowledge:read", pat=True)
 async def get_filelist(
     request: Request,
     knowledge_id: int,
@@ -718,7 +718,7 @@ def detail_qa(*, id: int):
 
 
 @router.post("/retrieve")
-@open_api_scope("knowledge:read")
+@open_api_scope("knowledge:read", pat=True)
 async def retrieve_chunks(
     request: Request,
     req: RetrieveReq,
