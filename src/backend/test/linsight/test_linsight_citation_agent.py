@@ -143,7 +143,7 @@ def test_with_citation_rules_delegates_to_the_shared_backstop():
     """Linsight teaches exactly the same rules as daily chat / knowledge space /
     channel — no task-mode-only paragraph any more."""
     prompt = "system prompt"
-    assert _with_citation_rules(prompt, True) == ensure_citation_rules(prompt)
+    assert _with_citation_rules(prompt, True) == ensure_citation_rules(prompt) + agent_factory._GROUNDING_RULES_ZH
     assert "File Output" not in _with_citation_rules(prompt, True)
 
 
@@ -185,7 +185,10 @@ def test_handle_rules_replace_verbatim_rules_when_enabled():
 
 
 def test_handles_off_keeps_the_verbatim_contract():
-    assert _with_citation_rules("system prompt", True, handles=False) == ensure_citation_rules("system prompt")
+    assert (
+        _with_citation_rules("system prompt", True, handles=False)
+        == ensure_citation_rules("system prompt") + agent_factory._GROUNDING_RULES_ZH
+    )
 
 
 def test_researcher_handoff_uses_handles_when_enabled():

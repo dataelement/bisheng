@@ -210,6 +210,18 @@ class BrandService:
             file_name=default_asset.file_name,
         )
 
+    async def get_brand_name(self) -> BrandText:
+        """The brand name alone, without signing asset URLs (prompt assembly reads it on every run)."""
+        default = _default_config().brandName
+        raw_value = await self.repository.get_value(BRAND_CONFIG_KEY)
+        if not raw_value:
+            return default
+        try:
+            data = json.loads(raw_value)
+        except json.JSONDecodeError:
+            return default
+        return _merge_text(default, data.get("brandName") if isinstance(data, dict) else None)
+
     async def get_runtime_config(self) -> dict[str, Any]:
         config = await self.get_config()
         payload_data = config.model_dump(mode="json")

@@ -2131,6 +2131,10 @@ class LinsightWorkflowTask:
         backend.skill_snapshot = list(getattr(session_model, "skill_snapshot", None) or [])
         if skills.failed:
             await self._push_skill_load_failure(session_model.id, skills.failed)
+        # F004 决策 15: the workbench persona leads deep research's prompt too.
+        from bisheng.workstation.domain.services.custom_system_prompt import custom_system_prompt
+
+        persona = await custom_system_prompt()
         return await create_linsight_agent(
             session_model=session_model,
             tools=tools,
@@ -2146,6 +2150,7 @@ class LinsightWorkflowTask:
             citation_scope=citation_scope,
             memory_prompt=self._memory_round().prompt(),
             inbox=self._inbox_middleware(),
+            custom_system_prompt=persona,
         )
 
     def _inbox_middleware(self):

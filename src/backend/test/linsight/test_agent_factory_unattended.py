@@ -34,7 +34,7 @@ def _meta(**kwargs):
 
 
 @pytest.mark.parametrize("flags", FLAG_SETS)
-def test_workbench_prompt_keeps_the_clarify_step(flags):
+def test_planning_prompt_keeps_the_clarify_step(flags):
     prompt = agent_factory._build_linsight_system_prompt(flags.pop("has_knowledge_base", False), **flags)
     assert "ask_user" in prompt
     assert agent_factory._CLARIFY_STEP_START in prompt

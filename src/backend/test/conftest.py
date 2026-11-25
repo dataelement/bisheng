@@ -98,23 +98,28 @@ def _local_code_tests_stay_unisolated(monkeypatch, _credential_keys):
 
 @pytest.fixture(autouse=True)
 def _direct_run_outside_services(monkeypatch):
-    """A direct run reads the workbench prompt (database) and logs telemetry
-    (Elasticsearch) by default. Unit tests have neither; a test that checks them
-    injects its own ``workbench_prompt`` / ``log_telemetry`` into ``DirectRunner``.
+    """Both runtimes read the workbench custom system prompt (database) and a direct
+    run logs telemetry (Elasticsearch) by default. Unit tests have neither; a test
+    that checks them injects its own ``custom_prompt`` / ``log_telemetry`` into
+    ``DirectRunner`` or calls the real function it saved at import time.
     """
     import sys
+
+    async def no_prompt():
+        return None
+
+    persona = sys.modules.get("bisheng.workstation.domain.services.custom_system_prompt")
+    if persona is not None:
+        monkeypatch.setattr(persona, "custom_system_prompt", no_prompt)
 
     module = sys.modules.get("bisheng.workstation.domain.services.direct_run")
     if module is None:
         return
 
-    async def no_prompt():
-        return None
-
     async def no_telemetry(_ctx, _started_at):
         return None
 
-    monkeypatch.setattr(module, "workbench_system_prompt", no_prompt)
+    monkeypatch.setattr(module, "custom_system_prompt", no_prompt)
     monkeypatch.setattr(module, "log_daily_chat_telemetry", no_telemetry)
 
 

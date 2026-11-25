@@ -51,7 +51,7 @@ from bisheng.common.image_view.loop import IMAGE_VIEW_PROMPT_RULES
 from bisheng.common.image_view.tool import MAX_IMAGES_PER_TURN, TOOL_NAME, ViewImageArgs
 
 VIEW_IMAGE_GUIDE = (
-    "检索结果里图片后面的 `⟦img#N⟧` 是图片编号。需要知道图片里的内容时，调用 "
+    "以上规则只在检索结果里出现图片编号时适用。检索结果里图片后面的 `⟦img#N⟧` 是图片编号。需要知道图片里的内容时，调用 "
     f"{TOOL_NAME}(image_ids=[...]) 查看对应编号的图片，一次最多 {MAX_IMAGES_PER_TURN} 张；"
     "不需要图片内容的问题不要调用。本节只说明如何查看图片，不改变上文其它任何要求。"
 )
@@ -206,16 +206,17 @@ class KbImageViewMiddleware(AgentMiddleware):
                 if numbered != message.content:
                     message = message.model_copy(update={"content": numbered})
             messages.append(message)
-        if not len(self._registry):
-            return request
         from deepagents.middleware._utils import append_to_system_message
 
-        return request.override(
-            messages=messages,
-            system_message=append_to_system_message(
-                request.system_message, f"{IMAGE_VIEW_PROMPT_RULES}\n\n{VIEW_IMAGE_GUIDE}"
-            ),
+        # Appended on every call, pictures or not: a section that appears with the
+        # first picture changes the prompt mid-thread and the provider re-reads the
+        # rest of it and the whole history (design 决策 15, §5 #36).
+        system_message = append_to_system_message(
+            request.system_message, f"{IMAGE_VIEW_PROMPT_RULES}\n\n{VIEW_IMAGE_GUIDE}"
         )
+        if not len(self._registry):
+            return request.override(system_message=system_message)
+        return request.override(messages=messages, system_message=system_message)
 
     async def _prepare(self, request):
         prepared = self._numbered(request)

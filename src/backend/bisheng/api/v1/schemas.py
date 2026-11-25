@@ -522,7 +522,10 @@ class WorkstationConfig(BaseModel):
     # F035 (v2.6): gate for the client 添加技能 (Add Skill) entry. Defaults to
     # off — the entry only shows in the input when admin enables it.
     skillEntry: WSPrompt | None = None
-    systemPrompt: str | None = None
+    # F004 决策 15: the administrator's persona and business requirements, layered
+    # first in the system prompt of both daily chat and deep research. Replaces the
+    # legacy ``systemPrompt`` key, which is ignored and dropped on the next save.
+    customSystemPrompt: str | None = None
     # --- v2.5 Agent-mode additions ---
     tools: list[ToolConfig] | None = Field(
         default=None,

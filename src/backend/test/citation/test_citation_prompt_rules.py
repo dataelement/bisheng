@@ -76,9 +76,9 @@ def _locale_prompts():
         if not path.is_file():
             continue
         chat_config = json.loads(path.read_text(encoding="utf-8-sig")).get("chatConfig", {})
-        # Knowledge-space / channel default. The daily chat default
-        # (systemPrompt2) teaches [Sn] handles since F075 and is pinned in
-        # test/citation/test_daily_handle_rules.py.
+        # Knowledge-space / channel default. The workbench default
+        # (customSystemPromptDefault) is a persona only and carries no citation
+        # rules; see test/workstation/test_custom_system_prompt.py.
         yield pytest.param(chat_config.get("aiPrompt", ""), id=f"{lang}:aiPrompt")
 
 

@@ -3,8 +3,8 @@ behaviours of the legacy daily chat that the direct run took over.
 
 * Open API (AC-39): the run is unattended (no question to a user who is not
   there) and takes over the department lease the send request acquired.
-* For every caller: the administrator's workbench system prompt reaches the
-  model, and a finished or failed run logs the daily-chat telemetry.
+* For every caller: the workbench custom system prompt leads the system prompt
+  (design 决策 15), and a finished or failed run logs the daily-chat telemetry.
 
 The REAL graph runs with the scripted model of ``test_direct_run``.
 """
@@ -18,18 +18,19 @@ from typing import Any
 import pytest
 from langchain_core.messages import AIMessage, SystemMessage
 
+from bisheng.workstation.domain.services import custom_system_prompt as custom_system_prompt_module
 from bisheng.workstation.domain.services import direct_run
 from bisheng.workstation.domain.services.direct_run import DirectRunContext, DirectRunner
 from test.workstation.test_direct_run import ASK, TENANT, USER, make_env  # noqa: F401  (fixture)
 
 # The root conftest replaces these two for every test; keep the real ones.
-REAL_WORKBENCH_PROMPT = direct_run.workbench_system_prompt
+REAL_CUSTOM_PROMPT = custom_system_prompt_module.custom_system_prompt
 REAL_TELEMETRY = direct_run.log_daily_chat_telemetry
 
 
 def _system_text(model) -> str:
     first = model.inputs[0]
-    return "\n".join(str(m.content) for m in first if isinstance(m, SystemMessage))
+    return "\n".join(m.text for m in first if isinstance(m, SystemMessage))
 
 
 class _Telemetry:
@@ -41,31 +42,32 @@ class _Telemetry:
         self.calls.append((ctx.run_id, ctx.conversation_id))
 
 
-async def test_workbench_prompt_reaches_the_model_under_the_platform_rules(make_env):  # noqa: F811
+async def test_custom_prompt_leads_the_system_prompt(make_env):  # noqa: F811
     env = make_env([AIMessage(content="好的")])
 
     async def prompt() -> str:
-        return "回答一律用表格。"
+        return "你是星河公司的智能助手。回答一律用表格。"
 
-    runner = env.make_runner(workbench_prompt=prompt)
+    runner = env.make_runner(custom_prompt=prompt)
     ctx = await env.submit("你好")
 
     assert (await env.run(ctx, runner)).status == "finished"
 
     system = _system_text(env.model)
-    assert "# 管理员设定的回答要求" in system
-    assert "回答一律用表格。" in system
-    # Platform rules come first and win a conflict.
-    assert system.index("你是工作台助手") < system.index("# 管理员设定的回答要求")
+    # The persona comes first; the main prompt no longer names an identity of its own.
+    assert system.startswith("# 助手设定（由管理员配置）")
+    assert system.index("回答一律用表格。") < system.index("本次是日常对话")
+    assert "你是工作台助手" not in system
+    assert "管理员设定的回答要求" not in system
 
 
-async def test_no_workbench_prompt_adds_no_section(make_env):  # noqa: F811
+async def test_no_custom_prompt_adds_no_section(make_env):  # noqa: F811
     env = make_env([AIMessage(content="好的")])
     ctx = await env.submit("你好")
 
     assert (await env.run(ctx)).status == "finished"
 
-    assert "管理员设定的回答要求" not in _system_text(env.model)
+    assert "助手设定" not in _system_text(env.model)
 
 
 async def test_telemetry_is_logged_for_finished_and_failed_runs_only(make_env):  # noqa: F811
@@ -146,34 +148,76 @@ async def test_department_slot_takes_over_the_lease_of_the_send_request(monkeypa
     assert held[-1] == (USER, "L1", "exit")
 
 
-async def test_workbench_system_prompt_prepares_the_saved_prompt(monkeypatch: pytest.MonkeyPatch):
+async def test_custom_prompt_is_used_as_saved(monkeypatch: pytest.MonkeyPatch):
     from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
-    saved = "当前时间：{cur_date}\n\n# 引用规则\n引用时逐字复制 <chunk_id> 中的来源 ID。\n\n# 语气\n礼貌。"
+    saved = "  你是星河助手。今天是 {cur_date}。  "
 
     async def config():
-        return SimpleNamespace(systemPrompt=saved)
+        return SimpleNamespace(customSystemPrompt=saved)
 
     monkeypatch.setattr(WorkStationService, "aget_config", staticmethod(config))
 
-    prompt = await REAL_WORKBENCH_PROMPT()
-
-    assert "{cur_date}" not in prompt and prompt.startswith("当前时间：20")
-    # The legacy "copy the id verbatim" section became the handle rules.
-    assert "<chunk_id>" not in prompt
-    assert "# 语气" in prompt
+    # No date substitution: the time is in each turn's user message, and the prompt
+    # prefix must stay the same across turns (design 决策 15).
+    assert await REAL_CUSTOM_PROMPT() == "你是星河助手。今天是 {cur_date}。"
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])
-async def test_workbench_system_prompt_is_none_when_nothing_is_saved(monkeypatch: pytest.MonkeyPatch, value):
+async def test_empty_custom_prompt_uses_the_default_persona(monkeypatch: pytest.MonkeyPatch, value):
+    from bisheng.brand.domain.schemas.brand_schema import BrandText
+    from bisheng.brand.domain.services.brand_service import BrandService
     from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
     async def config():
-        return SimpleNamespace(systemPrompt=value)
+        return SimpleNamespace(customSystemPrompt=value)
+
+    async def brand_name(self):
+        return BrandText(zh="星河", en="Galaxy")
 
     monkeypatch.setattr(WorkStationService, "aget_config", staticmethod(config))
+    monkeypatch.setattr(BrandService, "get_brand_name", brand_name)
 
-    assert await REAL_WORKBENCH_PROMPT() is None
+    assert await REAL_CUSTOM_PROMPT() == "你是 星河 智能助手，帮助用户解答问题、完成工作任务。"
+
+
+async def test_legacy_system_prompt_key_is_not_read(monkeypatch: pytest.MonkeyPatch):
+    """Upgrade (design 决策 15): a saved ``systemPrompt`` no longer applies; the default does."""
+    from bisheng.api.v1.schemas import WorkstationConfig
+    from bisheng.brand.domain.services.brand_service import BrandService
+    from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+    config = WorkstationConfig.model_validate({"systemPrompt": "# 角色\n你是旧模板。当前时间：{cur_date}。"})
+    assert config.customSystemPrompt is None
+    assert "systemPrompt" not in config.model_dump()
+
+    async def aget_config():
+        return config
+
+    async def no_brand(self):
+        raise RuntimeError("brand row unreadable")
+
+    monkeypatch.setattr(WorkStationService, "aget_config", staticmethod(aget_config))
+    monkeypatch.setattr(BrandService, "get_brand_name", no_brand)
+
+    assert await REAL_CUSTOM_PROMPT() == "你是 BISHENG 智能助手，帮助用户解答问题、完成工作任务。"
+
+
+async def test_unreadable_config_falls_back_to_the_default(monkeypatch: pytest.MonkeyPatch):
+    from bisheng.brand.domain.schemas.brand_schema import BrandText
+    from bisheng.brand.domain.services.brand_service import BrandService
+    from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+    async def broken():
+        raise RuntimeError("database down")
+
+    async def brand_name(self):
+        return BrandText(zh="BISHENG", en="BISHENG")
+
+    monkeypatch.setattr(WorkStationService, "aget_config", staticmethod(broken))
+    monkeypatch.setattr(BrandService, "get_brand_name", brand_name)
+
+    assert (await REAL_CUSTOM_PROMPT()).startswith("你是 BISHENG 智能助手")
 
 
 async def test_daily_chat_telemetry_uses_the_legacy_events(monkeypatch: pytest.MonkeyPatch):
