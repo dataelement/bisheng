@@ -50,6 +50,8 @@ async def test_list_tools_returns_only_principal_visible_tools():
         "bisheng_knowledge_list",
         "bisheng_knowledge_retrieve",
         "bisheng_knowledge_file_list",
+        "bisheng_knowledge_qa_query",
+        "bisheng_knowledge_qa_detail",
     }
 
 
@@ -242,4 +244,4 @@ async def test_real_streamable_http_initialize_then_stateless_list(monkeypatch):
     assert initialized.status_code == 200
     assert initialized.json()["result"]["protocolVersion"] == "2025-11-25"
     assert listed.status_code == 200
-    assert len(listed.json()["result"]["tools"]) == 10
+    assert len(listed.json()["result"]["tools"]) == 16

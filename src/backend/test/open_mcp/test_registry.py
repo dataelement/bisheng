@@ -12,6 +12,12 @@ EXPECTED_SOURCES = {
     ("GET", "/api/v2/filelib/file/list"),
     ("DELETE", "/api/v2/filelib/file/{file_id}"),
     ("POST", "/api/v2/filelib/delete_file"),
+    ("POST", "/api/v2/filelib/query_qa"),
+    ("GET", "/api/v2/filelib/detail_qa"),
+    ("POST", "/api/v2/filelib/add_qa"),
+    ("POST", "/api/v2/filelib/add_relative_qa"),
+    ("POST", "/api/v2/filelib/update_qa"),
+    ("DELETE", "/api/v2/filelib/qa/{qa_id}"),
 }
 
 
@@ -31,21 +37,23 @@ def _principal(*, actor_kind="service_account", scopes=frozenset({"knowledge:rea
     )
 
 
-def test_allowlist_is_exactly_ten_and_bidirectional():
-    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 10
+def test_allowlist_is_exactly_sixteen_and_bidirectional():
+    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 16
     assert SOURCE_ALLOWLIST == EXPECTED_SOURCES
 
 
-def test_pat_only_discovers_the_three_read_tools():
+def test_pat_only_discovers_the_read_tools():
     tools = list_tools_for(_principal(actor_kind="natural_person", scopes=frozenset({"knowledge:read"})))
     assert {tool.name for tool in tools} == {
         "bisheng_knowledge_list",
         "bisheng_knowledge_retrieve",
         "bisheng_knowledge_file_list",
+        "bisheng_knowledge_qa_query",
+        "bisheng_knowledge_qa_detail",
     }
 
 
 def test_service_account_discovery_obeys_scope():
     tools = list_tools_for(_principal(scopes=frozenset({"knowledge:write"})))
-    assert len(tools) == 7
+    assert len(tools) == 11
     assert all(TOOL_REGISTRY[tool.name].scope == "knowledge:write" for tool in tools)

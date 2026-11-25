@@ -412,6 +412,78 @@ class FileListData(McpContract):
     writeable: bool = Field(description="当前身份是否可向本次查询的目录上传文件。")
 
 
+class QaItem(McpContract):
+    id: int = Field(description="问答条目唯一 ID; 更新、删除、追加相似问时作为 id 使用。")
+    knowledge_id: int = Field(description="所属问答知识库 ID。")
+    questions: list[str] = Field(description="该问答的标准问和相似问。")
+    answers: list[str] = Field(description="该问答的答案列表。")
+    user_id: int | None = Field(default=None, description="创建者的 BISHENG 用户 ID。")
+    source: int | None = Field(
+        default=None,
+        description="来源: 0=未知, 1=手工, 2=审计, 3=API, 4=批量导入。",
+    )
+    status: int | None = Field(default=None, description="状态: 1=启用, 0=手动关闭, 2=处理中, 3=写入失败。")
+    extra_meta: str | None = Field(default=None, description="创建时附带的扩展信息, JSON 字符串。")
+    remark: str | None = Field(default=None, description="备注或处理说明。")
+    create_time: datetime | None = Field(default=None, description="创建时间。")
+    update_time: datetime | None = Field(default=None, description="最后更新时间。")
+
+
+class QaListData(McpContract):
+    items: list[QaItem] = Field(description="问答条目列表。")
+    total: int = Field(description="本次返回的条目数量。")
+
+
+class QaQueryInput(McpContract):
+    time_range: list[str] = Field(
+        min_length=2,
+        max_length=2,
+        description="创建时间范围 [开始, 结束], 格式 YYYY-MM-DD HH:mm:ss; 只返回当前身份可见的问答库中来源为手工或审计的条目。",
+    )
+
+
+class QaDetailInput(McpContract):
+    id: int = Field(gt=0, description="问答条目 ID。")
+
+
+class QaAddItem(McpContract):
+    question: str = Field(min_length=1, description="标准问。")
+    answer: list[str] = Field(min_length=1, description="答案列表。")
+    extra: dict[str, Any] | None = Field(default=None, description="扩展信息, 原样保存。")
+
+
+class QaAddInput(McpContract):
+    knowledge_id: int = Field(gt=0, description="目标问答知识库 ID。")
+    data: list[QaAddItem] = Field(min_length=1, max_length=100)
+
+
+class QaAddRelativeInput(McpContract):
+    knowledge_id: int = Field(gt=0, description="问答条目所属的问答知识库 ID。")
+    id: int = Field(gt=0, description="要追加相似问的问答条目 ID。")
+    relative_questions: list[str] = Field(min_length=1, description="要追加的相似问。")
+
+
+class QaUpdateInput(McpContract):
+    id: int = Field(gt=0, description="问答条目 ID。")
+    question: str | None = Field(default=None, description="新的问题; 与 original_question 同传时只替换那一条相似问。")
+    original_question: str | None = Field(default=None, description="要被替换的原问题。")
+    answer: list[str] | None = Field(default=None, description="新的答案列表; 不传则不改答案。")
+
+    @model_validator(mode="after")
+    def require_question_with_original(self):
+        if self.original_question and self.question is None:
+            raise ValueError("question is required with original_question")
+        return self
+
+
+class QaDeleteInput(McpContract):
+    id: int = Field(gt=0, description="问答条目 ID。")
+    question: str | None = Field(
+        default=None,
+        description="只删除这条相似问; 不传则删除整个问答条目。",
+    )
+
+
 MCP_INPUT_MODELS = {
     "bisheng_knowledge_list": KnowledgeListInput,
     "bisheng_knowledge_create": KnowledgeCreateInput,
@@ -423,6 +495,12 @@ MCP_INPUT_MODELS = {
     "bisheng_knowledge_file_list": KnowledgeFileListInput,
     "bisheng_knowledge_file_delete": KnowledgeFileDeleteInput,
     "bisheng_knowledge_files_delete": KnowledgeFilesDeleteInput,
+    "bisheng_knowledge_qa_query": QaQueryInput,
+    "bisheng_knowledge_qa_detail": QaDetailInput,
+    "bisheng_knowledge_qa_add": QaAddInput,
+    "bisheng_knowledge_qa_add_relative": QaAddRelativeInput,
+    "bisheng_knowledge_qa_update": QaUpdateInput,
+    "bisheng_knowledge_qa_delete": QaDeleteInput,
 }
 
 
@@ -433,6 +511,8 @@ __all__ = [
     "FileRecord",
     "KnowledgeResource",
     "OperationResult",
+    "QaItem",
+    "QaListData",
     "ResourceListData",
     "RetrieveData",
 ]

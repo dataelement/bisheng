@@ -11,6 +11,8 @@ from bisheng.open_mcp.contracts import (
     FileListData,
     FileRecord,
     KnowledgeResource,
+    QaItem,
+    QaListData,
     ResourceListData,
     RetrieveData,
 )
@@ -72,11 +74,27 @@ def map_file_list_to_mcp(value: Any) -> FileListData:
     )
 
 
+def map_qa_item_to_mcp(value: Any) -> QaItem:
+    from bisheng.open_mcp.qa import decode_answers
+
+    data = _explicit_fields(QaItem, value)
+    answers = decode_answers(data.get("answers"))
+    data["answers"] = answers if answers is not None else []
+    return QaItem.model_validate(data)
+
+
+def map_qa_list_to_mcp(value: Any) -> QaListData:
+    items = [map_qa_item_to_mcp(item) for item in (value or [])]
+    return QaListData(items=items, total=len(items))
+
+
 __all__ = [
     "map_file_item_to_mcp",
     "map_file_list_to_mcp",
     "map_file_record_to_mcp",
     "map_knowledge_resource_to_mcp",
+    "map_qa_item_to_mcp",
+    "map_qa_list_to_mcp",
     "map_resource_list_to_mcp",
     "map_retrieve_to_mcp",
 ]
