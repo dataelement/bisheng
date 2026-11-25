@@ -10,6 +10,7 @@ import { MobileSidebarHeader } from '~/components/Nav/MobileSidebarHeaderTabs';
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { UserPopMenu } from '~/layouts/UserPopMenu';
+import { SidebarSectionLabel } from '~/layouts/WorkbenchSidebar/SidebarSectionLabel';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
 import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
@@ -17,10 +18,6 @@ import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import { currentChatState } from '~/pages/appChat/store/atoms';
 import { resolveAppChatExitNavigateTarget } from '~/pages/appChat/appChatOrigin';
 import { cn } from '~/utils';
-
-function formatConversationTimeGroupLabel(label: string, localize: (key: string) => string) {
-    return label.startsWith('com_ui_date_') || label.startsWith('com_') ? localize(label) : label;
-}
 
 /** Show the full text in a tooltip when the single-line label overflows. */
 function TruncatedLineTooltip({ text, className }: { text: string; className?: string }) {
@@ -85,12 +82,13 @@ export function SideNav() {
         listError,
         retryConversations,
         loading,
-        groups,
+        conversations,
         activeConversationId,
         switchConversation,
         createNewChat,
         shareApp,
         fetchConversations,
+        refreshRenamedConversation,
         currentApp,
     } = useAppSidebar();
 
@@ -187,63 +185,51 @@ export function SideNav() {
             {/* Conversation list */}
             <div
                 className={cn(
-                    'flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2',
+                    '-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1 pb-5',
                     'touch-mobile:pt-3',
                 )}
             >
                 {listError ? <ApiRequestFailure error={listError} onRetry={retryConversations} /> : null}
-                {groups.length === 0 ? (!listError && !loading && (
+                {conversations.length === 0 ? (!listError && !loading && (
                     <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
                         <p className="text-center text-[14px] leading-[19.5px] text-text-3">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
                     </div>
                 )) : (
-                    groups.map((group, groupIdx) => (
-                        <div key={groupIdx} className="flex flex-col">
-                            {/* Time label */}
-                            <div className="text-black opacity-60 pt-4 text-[12px] mb-1">
-                                {formatConversationTimeGroupLabel(group.label, localize)}
-                            </div>
-                            {/* Items */}
-                            <div className="flex flex-col">
-                                {group.conversations.map((conv) => {
-                                    const isActive = conv.id === activeConversationId;
-                                    return (
-                                        <AppSidebarConvoItem
-                                            key={conv.id}
-                                            conv={conv}
-                                            isActive={isActive}
-                                            onClick={() => {
-                                                switchConversation(conv);
-                                                if (isTabletOrMobile) {
-                                                    setSidebarVisible(false);
-                                                }
-                                            }}
-                                            onRenameSuccess={() => { void fetchConversations().catch(() => { /* The list keeps its retry state. */ }); }}
-                                            onDeleteSuccess={async () => {
-                                                const list = await fetchConversations().catch(() => null);
-                                                if (!list) return;
-                                                if (!isActive) return;
-                                                if (list.length > 0) {
-                                                    // Jump to the now-most-recent conversation
-                                                    switchConversation(list[0]);
-                                                } else if (flowId && flowType) {
-                                                    // Last conversation deleted — land on empty state, don't auto-create
-                                                    navigate(`/app/${flowId}/${flowType}`, {
-                                                        state: { ...(location.state as object | null), fromDelete: true },
-                                                    });
-                                                }
-                                            }}
-                                        />
-                                    );
-                                })}
-                            </div>
-
-                            {/* Spacer */}
-                            <div style={{ marginTop: '5px', marginBottom: '5px' }} />
-                        </div>
-                    ))
+                    <>
+                        <SidebarSectionLabel>{localize('com_workbench_sidebar.conversations')}</SidebarSectionLabel>
+                        {conversations.map((conv) => {
+                            const isActive = conv.id === activeConversationId;
+                            return (
+                                <AppSidebarConvoItem
+                                    key={conv.id}
+                                    conv={conv}
+                                    isActive={isActive}
+                                    compact
+                                    onClick={() => {
+                                        switchConversation(conv);
+                                        if (isTabletOrMobile) {
+                                            setSidebarVisible(false);
+                                        }
+                                    }}
+                                    onRenameSuccess={refreshRenamedConversation}
+                                    onDeleteSuccess={async () => {
+                                        const list = await fetchConversations().catch(() => null);
+                                        if (!list || !isActive) return;
+                                        if (list.length > 0) {
+                                            switchConversation(list[0]);
+                                        } else if (flowId && flowType) {
+                                            // Land on the empty state after deleting the last conversation.
+                                            navigate(`/app/${flowId}/${flowType}`, {
+                                                state: { ...(location.state as object | null), fromDelete: true },
+                                            });
+                                        }
+                                    }}
+                                />
+                            );
+                        })}
+                    </>
                 )}
             </div>
 

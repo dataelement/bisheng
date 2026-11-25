@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
 import { NotificationSeverity } from "~/common";
-import type { AppConversation, AppItem, ConversationGroup } from "~/@types/app";
+import type { AppConversation, AppItem } from "~/@types/app";
 import { getAppConversationsApi, getAssistantDetailApi, getFlowApi } from "~/api/apps";
-import { groupConversationsByTime, getAppShareUrl } from "~/pages/apps/appUtils";
+import { getAppShareUrl } from "~/pages/apps/appUtils";
 import { copyText, generateUUID } from "~/utils";
 import { useToastContext } from "~/Providers";
 import {
@@ -21,7 +21,7 @@ const FLOW_TYPE_ASSISTANT = 5;
 
 /**
  * Hook for the app chat sidebar.
- * Handles: loading conversations, time grouping, new/switch conversation, sidebar toggle.
+ * Handles loading and sorting conversations, creating and switching chats, and toggling the sidebar.
  */
 export function useAppSidebar() {
   const navigate = useNavigate();
@@ -37,7 +37,7 @@ export function useAppSidebar() {
   const currentApp = useRecoilValue(currentAppInfoState);
   const chatState = useRecoilValue(currentChatState);
   const setCurrentApp = useSetRecoilState(currentAppInfoState);
-  const [conversations, setConversations] = useRecoilState(appConversationsState);
+  const [storedConversations, setConversations] = useRecoilState(appConversationsState);
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
 
   const [loading, setLoading] = useState(false);
@@ -47,24 +47,27 @@ export function useAppSidebar() {
   // Track whether we previously had conversations (to distinguish initial empty from delete-all)
   const hadConversationsRef = useRef(false);
 
+  const requestConversations = useCallback(async (): Promise<AppConversation[]> => {
+    if (!flowId) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API untyped
+    const res: any = await getAppConversationsApi(flowId, 1, 100);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API response shape varies
+    return (res.data?.list || []).map((item: any) => ({
+      id: item.chat_id,
+      title: item.name || item.flow_name || localizeRef.current("com_ui_new_chat"),
+      flowId: item.flow_id || flowId,
+      flowType: Number(item.flow_type || flowType),
+      updatedAt: item.update_time || "",
+      createdAt: item.create_time || "",
+    }));
+  }, [flowId, flowType]);
+
   /** Fetch conversation list for the current app and return it. */
   const fetchConversations = useCallback(async (): Promise<AppConversation[]> => {
     if (!flowId) return [];
     setLoading(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API untyped
-      const res: any = await getAppConversationsApi(flowId, 1, 100);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API response shape varies
-      const list: AppConversation[] = (res.data?.list || []).map((item: any) => {
-        return {
-          id: item.chat_id,
-          title: item.name || item.flow_name || localizeRef.current("com_ui_new_chat"),
-          flowId: item.flow_id || flowId,
-          flowType: Number(item.flow_type || flowType),
-          updatedAt: item.update_time || "",
-          createdAt: item.create_time || "",
-        };
-      });
+      const list = await requestConversations();
       setConversations(list);
       setListError(null);
 
@@ -84,10 +87,24 @@ export function useAppSidebar() {
     } finally {
       setLoading(false);
     }
-  }, [flowId, flowType, setConversations]);
+  }, [flowId, requestConversations, setConversations]);
 
-  /** Grouped conversations by time */
-  const groups: ConversationGroup[] = groupConversationsByTime(conversations);
+  const refreshRenamedConversation = useCallback(async (id: string, title: string) => {
+    // A blur can submit a rename just before the user creates a new draft.
+    // Refresh the edited row without replacing the rest of the history.
+    const list = await requestConversations().catch(() => []);
+    const renamed = list.find((conversation) => conversation.id === id);
+    setConversations((prev) => prev.map((conversation) =>
+      conversation.id === id && conversation.flowId === flowId
+        ? (renamed ?? { ...conversation, title })
+        : conversation,
+    ));
+  }, [flowId, requestConversations, setConversations]);
+
+  const conversations = useMemo(
+    () => [...storedConversations].sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0)),
+    [storedConversations],
+  );
 
   /** Create a new conversation */
   const createNewChat = useCallback(() => {
@@ -219,13 +236,13 @@ export function useAppSidebar() {
   return {
     currentApp,
     conversations,
-    groups,
     loading,
     listError,
     retryConversations,
     activeConversationId: conversationId,
     sidebarVisible,
     fetchConversations,
+    refreshRenamedConversation,
     createNewChat,
     switchConversation,
     toggleSidebar,

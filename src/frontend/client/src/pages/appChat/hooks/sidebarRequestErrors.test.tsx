@@ -76,3 +76,28 @@ it('retries with the current conversation after failed initialization and a new 
   expect(result.current.conversations.map(c => c.id)).toEqual(['draft']);
   expect(result.current.listError).toBeNull();
 });
+
+it('refreshes a renamed row without removing a draft created while the refresh was pending', async () => {
+  mockParams.conversationId = 'old';
+  const getConversations = jest.mocked(getAppConversationsApi);
+  getConversations.mockResolvedValueOnce({ data: { list: [{ chat_id: 'old', name: 'Existing chat' }] } });
+  const { result } = renderHook(useAppSidebar, { wrapper });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  const updatedAt = '2026-11-25T03:10:00Z';
+  let finishRefresh!: () => void;
+  getConversations.mockImplementationOnce(() => new Promise((resolve) => {
+    finishRefresh = () => resolve({ data: { list: [{ chat_id: 'old', name: 'Renamed', update_time: updatedAt }] } });
+  }));
+
+  const refresh = result.current.refreshRenamedConversation('old', 'Renamed');
+  act(() => result.current.createNewChat());
+  await act(async () => {
+    finishRefresh();
+    await refresh;
+  });
+
+  expect(result.current.conversations).toHaveLength(2);
+  expect(result.current.conversations).toContainEqual(expect.objectContaining({ id: 'draft' }));
+  expect(result.current.conversations).toContainEqual(expect.objectContaining({ id: 'old', title: 'Renamed', updatedAt }));
+});
