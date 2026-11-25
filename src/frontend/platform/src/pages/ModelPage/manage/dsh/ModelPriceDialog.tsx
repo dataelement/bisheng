@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import type { CreditSettings, ModelPricing, ModelPricingRow } from '@/controllers/API/modelPricing'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { confirmPriceChanges } from '../ModelPriceConfirm'
 import { ModelPriceFields } from '../ModelPriceFields'
 import { draftTypicalCredits, isPricingValid, samePrices } from '../modelPricing'
 import { saveFailureMessage } from '../modelSavePayload'
@@ -50,8 +51,9 @@ function PriceEditor({ model, settings, onClose }: { model: PricedModel; setting
     const changed = !!draft && (!stored || !samePrices(draft, stored))
     const credits = draft && settings ? draftTypicalCredits(draft, settings) : null
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!draft || !changed || !isPricingValid(draft)) return
+        if (!(await confirmPriceChanges([{ before: stored, after: draft }]))) return
         setError(null)
         save.mutate({ modelId: model.id, pricing: { ...draft, revision: stored?.revision } }, {
             onSuccess: () => {
@@ -73,7 +75,7 @@ function PriceEditor({ model, settings, onClose }: { model: PricedModel; setting
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
             <Button variant="outlined" color="default" onClick={onClose}>{t('dsh.pricing.cancel')}</Button>
-            <Button loading={save.isLoading} disabled={!changed || !draft || !isPricingValid(draft)} onClick={handleSave}>
+            <Button loading={save.isLoading} disabled={!changed || !draft || !isPricingValid(draft)} onClick={() => void handleSave()}>
                 {t('dsh.pricing.save')}
             </Button>
         </DialogFooter>

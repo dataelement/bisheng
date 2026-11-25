@@ -3,7 +3,15 @@ import userEvent from '@testing-library/user-event'
 import { toast } from '@bisheng/ui'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { matchPriceCatalog, saveModelPricing, type ModelPricingRow } from '@/controllers/API/modelPricing'
+import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { ModelPriceDialog, type PricedModel } from './ModelPriceDialog'
+
+// The confirmation answers "确认保存" unless a test declines it.
+const confirmation = vi.hoisted(() => ({ accept: true }))
+vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({
+    bsConfirm: vi.fn((params: { onOk?: (close: () => void) => void; onClose?: () => void }) =>
+        confirmation.accept ? params.onOk?.(() => params.onClose?.()) : params.onClose?.()),
+}))
 
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
@@ -18,6 +26,7 @@ vi.mock('@/controllers/API/modelPricing', () => ({
     matchPriceCatalog: vi.fn(),
     saveModelPricing: vi.fn(),
     getModelPricingRows: vi.fn(async () => []),
+    getCreditSettings: vi.fn(async () => ({ version: 1, currency: 'CNY', credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: null })),
 }))
 
 const SETTINGS = { version: 1, currency: 'CNY' as const, credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: null }
@@ -38,6 +47,7 @@ const field = (name: string) => screen.getByRole('textbox', { name })
 
 beforeEach(() => {
     vi.clearAllMocks()
+    confirmation.accept = true
     vi.mocked(matchPriceCatalog).mockResolvedValue({ matched: false, via_name: false, catalog_version: 'v', entry: null })
     vi.mocked(saveModelPricing).mockImplementation(async (_id, pricing) => ({ ...pricing, revision: 4 }))
 })
@@ -100,4 +110,34 @@ it('blocks saving an invalid price', async () => {
     await user.type(field('model.pricing.input'), '-1')
     expect(screen.getByRole('button', { name: 'dsh.pricing.save' })).toBeDisabled()
     expect(saveModelPricing).not.toHaveBeenCalled()
+})
+
+it('asks before saving a changed price, listing the price before and after', async () => {
+    const user = userEvent.setup()
+    render(<ModelPriceDialog model={model()} settings={SETTINGS} onClose={vi.fn()} />)
+    await user.clear(field('model.pricing.output'))
+    await user.type(field('model.pricing.output'), '5')
+    await user.click(screen.getByRole('button', { name: 'dsh.pricing.save' }))
+    await waitFor(() => expect(saveModelPricing).toHaveBeenCalledOnce())
+    expect(bsConfirm).toHaveBeenCalledOnce()
+    const params = vi.mocked(bsConfirm).mock.calls[0][0]
+    // Reversible, so the primary tone rather than the red delete one.
+    expect(params.variant).toBe('default')
+    render(<>{params.desc}</>)
+    expect(screen.getByText('$3.75')).toBeVisible()
+    expect(screen.getByText('$5')).toBeVisible()
+})
+
+it('keeps the edited price unsaved when the confirmation is declined', async () => {
+    confirmation.accept = false
+    const user = userEvent.setup()
+    const close = vi.fn()
+    render(<ModelPriceDialog model={model()} settings={SETTINGS} onClose={close} />)
+    await user.clear(field('model.pricing.output'))
+    await user.type(field('model.pricing.output'), '5')
+    await user.click(screen.getByRole('button', { name: 'dsh.pricing.save' }))
+    await waitFor(() => expect(bsConfirm).toHaveBeenCalledOnce())
+    expect(saveModelPricing).not.toHaveBeenCalled()
+    expect(close).not.toHaveBeenCalled()
+    expect(field('model.pricing.output')).toHaveValue('5')
 })

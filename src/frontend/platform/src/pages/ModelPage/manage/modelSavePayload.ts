@@ -4,6 +4,7 @@ import { isPricingValid, samePrices } from "./modelPricing";
 
 type SavedModel = {
     id?: number | string;
+    name?: string;
     model_name?: string | null;
     model_type?: string;
     config?: { voice?: string; pricing?: ModelPricing } & Record<string, unknown>;
@@ -55,5 +56,17 @@ export function withChangedPricing<T extends SavedModel>(models: T[], loaded: Re
         const config = { ...model.config };
         delete config.pricing;
         return { ...model, config };
+    });
+}
+
+/** Saved models whose price the administrator changed, for the confirmation before saving. */
+export function changedPrices(models: SavedModel[], loaded: ReadonlyMap<string, ModelPricing>) {
+    return models.flatMap((model) => {
+        const after = model.config?.pricing;
+        const before = loaded.get(String(model.id));
+        if (!after || !before || samePrices(after, before)) return [];
+        const modelName = model.model_name ?? "";
+        const name = !model.name || model.name === modelName ? modelName : `${model.name} (${modelName})`;
+        return [{ name, before, after }];
     });
 }

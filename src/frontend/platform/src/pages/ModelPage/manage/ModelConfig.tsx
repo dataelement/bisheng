@@ -31,8 +31,10 @@ import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
 import { discoveredModelConfig } from "./modelDiscoveryState";
 import { ModelItem } from "./ModelItem";
-import { trimModelNames } from "./modelNameTrim";
+import { nextModelName, trimModelNames } from "./modelNameTrim";
+import { confirmPriceChanges } from "./ModelPriceConfirm";
 import {
+  changedPrices,
   findModelError,
   loadedPricing,
   providerNameErrorKey,
@@ -171,17 +173,9 @@ export default function ModelConfig({
   };
 
   const handleAddModel = () => {
-    const maxIndex = formData.models.reduce(
-      (max, el) =>
-        el.name.match(/model (\d+)/)
-          ? Math.max(max, +el.name.match(/model (\d+)/)[1])
-          : max,
-      0,
-    );
-
     const model = {
       id: generateUUID(32),
-      name: `model ${maxIndex + 1}`,
+      name: nextModelName(formData.models),
       model_name: "",
       model_type: "llm",
       voice: "",
@@ -254,6 +248,9 @@ export default function ModelConfig({
       const modelError = findModelError(normalizedModels);
       if (modelError) return toast.show({ type: "warning", message: t(modelError) });
 
+      setIsLoading(false); // waiting for the price confirmation is not a save in progress
+      if (!(await confirmPriceChanges(changedPrices(normalizedModels, pricingBaseline.current)))) return;
+      setIsLoading(true);
       const saveData = {
         ...formData,
         models: withChangedPricing(normalizedModels, pricingBaseline.current),

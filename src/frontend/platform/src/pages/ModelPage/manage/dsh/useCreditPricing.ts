@@ -21,6 +21,17 @@ function usePricingScope() {
 // Prices and ratios change from other pages (model configuration), so always read them fresh.
 const fresh = { retry: false, cacheTime: 0, staleTime: 0, refetchOnWindowFocus: false } as const
 
+/** The credit settings' USD/CNY rate for converting a model price between currencies (null until known). */
+export function useUsdCnyRate(): { rate: string | null; unavailable: boolean } {
+    const scope = usePricingScope()
+    const settings = useQuery({
+        queryKey: [...creditSettingsKey, ...scope],
+        queryFn: ({ signal }) => getCreditSettings(signal),
+        ...fresh,
+    })
+    return { rate: settings.data?.usd_cny_rate ?? null, unavailable: settings.isError }
+}
+
 export function useCreditSettings(enabled = true) {
     const client = useQueryClient()
     const scope = usePricingScope()

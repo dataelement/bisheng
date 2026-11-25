@@ -10,21 +10,18 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
     PRICE_FIELDS,
-    type PriceField,
+    PRICE_FIELD_LABELS,
     ZERO_PRICING,
+    convertPricing,
     isValidPrice,
     pricingFromCatalog,
     pricingStatus,
+    samePrices,
     withPrices,
 } from "./modelPricing";
+import { useUsdCnyRate } from "./dsh/useCreditPricing";
 
 const MATCH_DELAY_MS = 400;
-const FIELD_LABELS: Record<PriceField, string> = {
-    input: "model.pricing.input",
-    cache_read: "model.pricing.cacheRead",
-    cache_write: "model.pricing.cacheWrite",
-    output: "model.pricing.output",
-};
 
 interface ModelPriceFieldsProps {
     /** `config.pricing` of the model; absent until the catalog answers or the admin types. */
@@ -43,6 +40,10 @@ export function ModelPriceFields({ value, providerType, modelName, onChange }: M
     const latest = useRef({ value, onChange });
     latest.current = { value, onChange };
     const shown = value ?? ZERO_PRICING;
+    const { rate, unavailable } = useUsdCnyRate();
+    // Prices before the last currency switch: switching back without editing restores them exactly.
+    const conversion = useRef<{ before: ModelPricing; after: ModelPricing } | null>(null);
+    const converted = conversion.current && samePrices(conversion.current.after, shown) ? conversion.current : null;
 
     useEffect(() => {
         const name = modelName.trim();
@@ -73,6 +74,23 @@ export function ModelPriceFields({ value, providerType, modelName, onChange }: M
         touched.current = true;
         onChange(withPrices(value, { ...shown, ...changes }));
     };
+    // Switching currency converts the four prices at the credit settings' rate instead of relabelling them.
+    const handleCurrencyChange = (next: PricingCurrency) => {
+        if (next === shown.currency) return;
+        if (converted && converted.before.currency === next) {
+            conversion.current = null;
+            return handleEdit(converted.before);
+        }
+        if (!rate) return;
+        const after = convertPricing(shown, next, rate);
+        conversion.current = { before: shown, after };
+        handleEdit(after);
+    };
+    const handleRestore = (prices: ModelPricing) => {
+        conversion.current = null;
+        touched.current = true;
+        onChange(withPrices(value, prices));
+    };
 
     // Nothing to say until the catalog has answered for this name (or while no name is typed).
     const status = match ? pricingStatus(shown, match) : null;
@@ -87,14 +105,23 @@ export function ModelPriceFields({ value, providerType, modelName, onChange }: M
     return (
         <section aria-labelledby={`${controlId}-title`} className="space-y-2 rounded-md border bg-background p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <p id={`${controlId}-title`} className="text-sm font-medium">
-                    {t("model.pricing.title")}
-                </p>
+                <div className="flex items-center gap-3">
+                    <p id={`${controlId}-title`} className="text-sm font-medium">
+                        {t("model.pricing.title")}
+                    </p>
+                    {status === "edited" && entry && (
+                        <Button size="small" variant="link" className="h-auto px-0"
+                            onClick={() => handleRestore(pricingFromCatalog(entry))}>
+                            {t("model.pricing.restore")}
+                        </Button>
+                    )}
+                </div>
                 <Segmented
                     size="small"
                     aria-label={t("model.pricing.currency")}
                     value={shown.currency}
-                    onChange={(currency) => handleEdit({ currency: currency as PricingCurrency })}
+                    disabled={!rate && !converted}
+                    onChange={(currency) => handleCurrencyChange(currency as PricingCurrency)}
                     options={[
                         { value: "CNY", label: currencyName("CNY") },
                         { value: "USD", label: currencyName("USD") },
@@ -108,7 +135,7 @@ export function ModelPriceFields({ value, providerType, modelName, onChange }: M
                     return (
                         <div key={field} className="min-w-0 space-y-1">
                             <Label htmlFor={`${controlId}-${field}`} className="text-xs text-muted-foreground">
-                                {t(FIELD_LABELS[field])}
+                                {t(PRICE_FIELD_LABELS[field])}
                             </Label>
                             <Input
                                 id={`${controlId}-${field}`}
@@ -132,6 +159,18 @@ export function ModelPriceFields({ value, providerType, modelName, onChange }: M
                     {t("model.pricing.invalid")}
                 </p>
             )}
+            {unavailable && !converted && (
+                <p className="text-xs text-muted-foreground">{t("model.pricing.noRate")}</p>
+            )}
+            {converted && (
+                <p className="text-xs text-muted-foreground">
+                    {t("model.pricing.converted", {
+                        rate,
+                        from: currencyName(converted.before.currency),
+                        to: currencyName(shown.currency),
+                    })}
+                </p>
+            )}
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 {status === "catalog" && entry && (
                     <span>
@@ -142,28 +181,15 @@ export function ModelPriceFields({ value, providerType, modelName, onChange }: M
                     <span className="text-amber-600">{t("model.pricing.statusReview", { label: entry.label })}</span>
                 )}
                 {status === "edited" && entry && (
-                    <>
-                        <span>
-                            {t("model.pricing.statusEdited", {
-                                input: entry.input,
-                                cacheRead: entry.cache_read,
-                                cacheWrite: entry.cache_write ?? entry.input,
-                                output: entry.output,
-                                currency: currencyName(entry.currency),
-                            })}
-                        </span>
-                        <Button
-                            size="small"
-                            variant="link"
-                            className="h-auto px-0"
-                            onClick={() => {
-                                touched.current = true;
-                                onChange(withPrices(value, pricingFromCatalog(entry)));
-                            }}
-                        >
-                            {t("model.pricing.restore")}
-                        </Button>
-                    </>
+                    <span>
+                        {t("model.pricing.statusEdited", {
+                            input: entry.input,
+                            cacheRead: entry.cache_read,
+                            cacheWrite: entry.cache_write ?? entry.input,
+                            output: entry.output,
+                            currency: currencyName(entry.currency),
+                        })}
+                    </span>
                 )}
                 {status === "default" && (
                     <>
