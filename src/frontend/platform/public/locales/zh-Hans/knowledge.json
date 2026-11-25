@@ -687,7 +687,7 @@
         "source_knowledge": "知识",
         "source_model_default": "默认模型",
         "source_other": "其他来源",
-        "workflow_unlink": "这些工作流仍保存了对本知识空间的引用，因此无法删除。请打开对应工作流，在引用位置移除本空间并保存。未上线的工作流同样会阻止删除。保存后重新检查。",
+        "workflow_unlink": "这些工作流仍引用本知识空间，未上线的工作流也包含在内。删除后，相关功能可能无法运行。可打开对应工作流，在下列位置移除本空间并保存，再重新检查。",
         "workflow_locations": "引用位置：",
         "location_separator": "、",
         "location_workflow_knowledge_retriever": "知识库检索节点的「检索范围」",
