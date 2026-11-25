@@ -1,16 +1,35 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { fetchProjectConversations, fetchProjectSnapshot, performProjectAction, ProjectApiError } from '~/api/chatProjects';
 import type { ProjectOperation } from '~/api/chatProjects';
 import { readDesktopPresentation } from '~/utils/clientEnvironment';
 import { QueryKeys } from '~/types/chat';
+import type { TConversation } from '~/types/chat';
+import type { ProjectChatDraft } from '~/layouts/WorkbenchSidebar/projectChatCreation';
+import { cacheCreatedProjectConversation, updateProjectConversationTitle } from './projectConversationCache';
 
 const projectKey = (identity: string) => ['chat-projects', identity] as const;
 
 export function useProjectIdentity() {
   const { user, isAuthenticated } = useAuthContext();
   return isAuthenticated && user ? `${window.location.origin}:${user.tenant_id ?? 'pending'}:${user.id}` : '';
+}
+
+export function useProjectConversationCache() {
+  const identity = useProjectIdentity();
+  const currentIdentity = useRef(identity);
+  currentIdentity.current = identity;
+  const client = useQueryClient();
+  const created = useCallback((draft: ProjectChatDraft | undefined, conversation: TConversation) => {
+    if (draft && identity && currentIdentity.current === identity) {
+      cacheCreatedProjectConversation(client, identity, draft.projectId, conversation);
+    }
+  }, [client, identity]);
+  const titleChanged = useCallback((chatId: string, title: string) => {
+    if (identity && currentIdentity.current === identity) updateProjectConversationTitle(client, identity, chatId, title);
+  }, [client, identity]);
+  return { created, titleChanged };
 }
 
 /** Server state only. Another client's changes appear on focus, reconnect or the next mutation,

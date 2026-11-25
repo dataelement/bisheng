@@ -55,7 +55,7 @@ jest.mock("~/api/chatApi", () => ({
   getSessionName: (...args: unknown[]) => mockGetSessionName(...args),
   getSSEUrl: () => '/workstation/chat',
 }));
-jest.mock('~/api/request', () => ({ __esModule: true, default: {}, translateApiErrorMessage: () => '' }));
+jest.mock('~/api/request', () => ({ __esModule: true, default: {}, translateApiErrorMessage: () => '', prepareBrowserHeaders: jest.fn().mockResolvedValue({}) }));
 
 // Recoil atoms are read-only fixtures here: `~/store` hands out tagged objects
 // and the mocked `useRecoilState` unwraps whatever value each one carries.
