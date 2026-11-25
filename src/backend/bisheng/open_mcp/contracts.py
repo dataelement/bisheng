@@ -484,6 +484,83 @@ class QaDeleteInput(McpContract):
     )
 
 
+class MetadataFieldInput(McpContract):
+    field_name: str = Field(
+        max_length=255,
+        pattern=r"^[a-z][a-z0-9_]*$",
+        description="元数据字段名: 小写字母开头, 只含小写字母、数字、下划线。",
+    )
+    field_type: Literal["string", "number", "time"] = Field(
+        description="元数据值类型: string=字符串, number=数字, time=时间。",
+    )
+
+
+class MetadataFieldsAddInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+    metadata_fields: list[MetadataFieldInput] = Field(min_length=1)
+
+
+class MetadataFieldRename(McpContract):
+    old_field_name: str = Field(min_length=1, description="原字段名。")
+    new_field_name: str = Field(
+        max_length=255,
+        pattern=r"^[a-z][a-z0-9_]*$",
+        description="新字段名: 小写字母开头, 只含小写字母、数字、下划线。",
+    )
+
+
+class MetadataFieldsRenameInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+    metadata_fields: list[MetadataFieldRename] = Field(min_length=1)
+
+
+class MetadataFieldsDeleteInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+    field_names: list[str] = Field(min_length=1)
+
+
+class MetadataFieldsGetInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+
+
+class MetadataFieldsData(McpContract):
+    metadata_fields: list[MetadataField] = Field(description="该知识库定义的文件元数据字段。")
+
+
+class FileMetadataValue(McpContract):
+    field_name: str = Field(min_length=1, description="元数据字段名, 须已在知识库中定义。")
+    field_value: Any | None = Field(default=None, description="字段值, 类型须与字段定义一致。")
+
+
+class FileMetadataWriteItem(McpContract):
+    knowledge_file_id: int = Field(gt=0)
+    user_metadata_list: list[FileMetadataValue] = Field(min_length=1)
+
+
+class FileMetadataWriteInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+    items: list[FileMetadataWriteItem] = Field(min_length=1, max_length=200)
+
+
+class FileMetadataDeleteItem(McpContract):
+    knowledge_file_id: int = Field(gt=0)
+    field_names: list[str] = Field(min_length=1)
+
+
+class FileMetadataDeleteInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+    items: list[FileMetadataDeleteItem] = Field(min_length=1, max_length=200)
+
+
+class FileMetadataListInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+    knowledge_file_ids: list[int] = Field(min_length=1, max_length=200)
+
+
+class FileMetadataListData(McpContract):
+    items: dict[str, Any] = Field(description="键为文件 ID(字符串), 值为该文件的自定义元数据。")
+
+
 MCP_INPUT_MODELS = {
     "bisheng_knowledge_list": KnowledgeListInput,
     "bisheng_knowledge_create": KnowledgeCreateInput,
@@ -501,6 +578,14 @@ MCP_INPUT_MODELS = {
     "bisheng_knowledge_qa_add_relative": QaAddRelativeInput,
     "bisheng_knowledge_qa_update": QaUpdateInput,
     "bisheng_knowledge_qa_delete": QaDeleteInput,
+    "bisheng_knowledge_metadata_fields_add": MetadataFieldsAddInput,
+    "bisheng_knowledge_metadata_fields_rename": MetadataFieldsRenameInput,
+    "bisheng_knowledge_metadata_fields_delete": MetadataFieldsDeleteInput,
+    "bisheng_knowledge_metadata_fields_get": MetadataFieldsGetInput,
+    "bisheng_knowledge_file_metadata_add": FileMetadataWriteInput,
+    "bisheng_knowledge_file_metadata_modify": FileMetadataWriteInput,
+    "bisheng_knowledge_file_metadata_delete": FileMetadataDeleteInput,
+    "bisheng_knowledge_file_metadata_list": FileMetadataListInput,
 }
 
 
@@ -511,6 +596,8 @@ __all__ = [
     "FileRecord",
     "KnowledgeResource",
     "OperationResult",
+    "FileMetadataListData",
+    "MetadataFieldsData",
     "QaItem",
     "QaListData",
     "ResourceListData",

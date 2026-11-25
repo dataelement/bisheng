@@ -244,4 +244,4 @@ async def test_real_streamable_http_initialize_then_stateless_list(monkeypatch):
     assert initialized.status_code == 200
     assert initialized.json()["result"]["protocolVersion"] == "2025-11-25"
     assert listed.status_code == 200
-    assert len(listed.json()["result"]["tools"]) == 16
+    assert len(listed.json()["result"]["tools"]) == 24

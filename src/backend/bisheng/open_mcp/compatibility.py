@@ -9,8 +9,11 @@ from pydantic import BaseModel
 from bisheng.open_mcp.contracts import (
     FileItem,
     FileListData,
+    FileMetadataListData,
     FileRecord,
     KnowledgeResource,
+    MetadataField,
+    MetadataFieldsData,
     QaItem,
     QaListData,
     ResourceListData,
@@ -88,11 +91,23 @@ def map_qa_list_to_mcp(value: Any) -> QaListData:
     return QaListData(items=items, total=len(items))
 
 
+def map_metadata_fields_to_mcp(value: Any) -> MetadataFieldsData:
+    fields = [MetadataField.model_validate(_explicit_fields(MetadataField, item)) for item in (value or [])]
+    return MetadataFieldsData(metadata_fields=fields)
+
+
+def map_file_metadata_list_to_mcp(value: Any) -> FileMetadataListData:
+    source = value if isinstance(value, dict) else {}
+    return FileMetadataListData(items={str(key): item for key, item in source.items()})
+
+
 __all__ = [
     "map_file_item_to_mcp",
     "map_file_list_to_mcp",
     "map_file_record_to_mcp",
+    "map_file_metadata_list_to_mcp",
     "map_knowledge_resource_to_mcp",
+    "map_metadata_fields_to_mcp",
     "map_qa_item_to_mcp",
     "map_qa_list_to_mcp",
     "map_resource_list_to_mcp",

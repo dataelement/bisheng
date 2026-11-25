@@ -18,6 +18,14 @@ EXPECTED_SOURCES = {
     ("POST", "/api/v2/filelib/add_relative_qa"),
     ("POST", "/api/v2/filelib/update_qa"),
     ("DELETE", "/api/v2/filelib/qa/{qa_id}"),
+    ("POST", "/api/v2/knowledge/add_metadata_fields"),
+    ("PUT", "/api/v2/knowledge/modify_metadata_fields"),
+    ("DELETE", "/api/v2/knowledge/delete_metadata_fields"),
+    ("GET", "/api/v2/knowledge/get_metadata_fields/{knowledge_id}"),
+    ("POST", "/api/v2/knowledge/file/add_user_metadata"),
+    ("PUT", "/api/v2/knowledge/file/modify_user_metadata"),
+    ("DELETE", "/api/v2/knowledge/file/delete_user_metadata"),
+    ("POST", "/api/v2/knowledge/file/list_user_metadata"),
 }
 
 
@@ -37,8 +45,8 @@ def _principal(*, actor_kind="service_account", scopes=frozenset({"knowledge:rea
     )
 
 
-def test_allowlist_is_exactly_sixteen_and_bidirectional():
-    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 16
+def test_allowlist_is_exactly_twenty_four_and_bidirectional():
+    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 24
     assert SOURCE_ALLOWLIST == EXPECTED_SOURCES
 
 
@@ -55,5 +63,5 @@ def test_pat_only_discovers_the_read_tools():
 
 def test_service_account_discovery_obeys_scope():
     tools = list_tools_for(_principal(scopes=frozenset({"knowledge:write"})))
-    assert len(tools) == 11
+    assert len(tools) == 19
     assert all(TOOL_REGISTRY[tool.name].scope == "knowledge:write" for tool in tools)

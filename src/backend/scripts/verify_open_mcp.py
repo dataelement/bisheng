@@ -49,6 +49,14 @@ EXPECTED_TOOL_NAMES = frozenset(
         "bisheng_knowledge_qa_add_relative",
         "bisheng_knowledge_qa_update",
         "bisheng_knowledge_qa_delete",
+        "bisheng_knowledge_metadata_fields_add",
+        "bisheng_knowledge_metadata_fields_rename",
+        "bisheng_knowledge_metadata_fields_delete",
+        "bisheng_knowledge_metadata_fields_get",
+        "bisheng_knowledge_file_metadata_add",
+        "bisheng_knowledge_file_metadata_modify",
+        "bisheng_knowledge_file_metadata_delete",
+        "bisheng_knowledge_file_metadata_list",
     }
 )
 READ_ONLY_TOOL_NAMES = frozenset(
