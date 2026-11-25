@@ -182,6 +182,33 @@ async def test_direct_answer_row_shape_unchanged(store):
     assert persisted == [row]
 
 
+async def test_direct_takes_streamed_args_from_the_end_frame(store):
+    # A streamed tool call starts with empty params; the end frame carries them.
+    projector = _direct()
+    for event in [
+        _ev(run_events.RUN_STARTED),
+        _ev(run_events.TOOL_CALL, {"call_id": "w1", "name": "write_file", "status": "start", "params": {}}, ts=1000),
+        _ev(
+            run_events.TOOL_CALL,
+            {
+                "call_id": "w1",
+                "name": "write_file",
+                "status": "end",
+                "params": {"file_path": "output/a.md", "content": "# A"},
+                "output": "Updated file /output/a.md",
+            },
+            ts=1500,
+        ),
+        _ev(run_events.TEXT, {"text": "done"}, ts=1600),
+        _ev(run_events.RUN_FINISHED, ts=1700),
+    ]:
+        await projector.on_event(event)
+    await projector.aclose()
+
+    calls = [e for e in json.loads(store.rows[0].message)["events"] if e["type"] == "tool_call"]
+    assert calls[0]["args"] == {"file_path": "output/a.md", "content": "# A"}
+
+
 async def test_direct_partial_saved_on_stop(store):
     projector = _direct()
     for event in [

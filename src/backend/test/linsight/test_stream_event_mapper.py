@@ -736,6 +736,18 @@ class TestStreamedDelegationArgs:
             "the abandoned call's args must not close against the new call's fragment"
         )
 
+    def test_streamed_ordinary_tool_end_frame_carries_args(self, mapper: StreamEventMapper):
+        # An ordinary tool's start frame is built from the argless first delta;
+        # the end frame must carry the args reassembled from the later deltas.
+        start = self._steps(mapper, self._arg_delta("write_file", "", "call_w1"))
+        assert start and start[0].params == {}
+        assert self._steps(mapper, self._arg_delta("", '{"file_path": "output/a.md", ', "")) == []
+        assert self._steps(mapper, self._arg_delta("", '"content": "# A"}', "")) == []
+        end = self._steps(mapper, ToolMessage(content="Updated file /output/a.md", tool_call_id="call_w1"))
+        assert len(end) == 1 and end[0].status == "end"
+        assert end[0].call_id == start[0].call_id
+        assert end[0].params == {"file_path": "output/a.md", "content": "# A"}
+
     def test_complete_args_in_one_chunk_still_works(self, mapper: StreamEventMapper):
         # Backward-compat: a provider that ships full args in one AIMessage (no
         # streaming) gets the goal at the start frame and triggers no refresh.
