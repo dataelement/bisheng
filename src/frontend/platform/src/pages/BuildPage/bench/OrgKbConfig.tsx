@@ -121,9 +121,10 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                 <div className="flex w-1/2 min-w-0 max-w-[50%] border rounded-lg bg-white" style={{ minHeight: 280 }}>
                     <div className="flex-1 p-4 flex flex-col min-w-0">
                         {orgKbs.length > 0 && (
-                            <div className="flex items-center justify-between pb-2 text-xs text-muted-foreground">
-                                <span>{t("bench.knowledgeBaseCol")}</span>
-                                <span>{t("bench.showInComposer")}</span>
+                            <div className="flex items-center gap-2 border border-transparent px-3 pb-2 text-xs text-muted-foreground">
+                                <span className="min-w-0 flex-1">{t("bench.knowledgeBaseCol")}</span>
+                                <span className="w-28 shrink-0 text-center">{t("bench.showInComposer")}</span>
+                                <span className="w-8 shrink-0" aria-hidden />
                             </div>
                         )}
                         {orgKbs.length === 0 ? (
@@ -178,17 +179,20 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                                                     </span>
                                                                 </Tooltip>
                                                             </TooltipProvider>
-                                                            <Checkbox
-                                                                className="shrink-0"
-                                                                checked={kb.show_in_composer !== false}
-                                                                aria-label={`${t("bench.showInComposer")}: ${kb.name}`}
-                                                                onCheckedChange={(v) =>
-                                                                    handleShowInComposerChange(kb.id, !!v)
-                                                                }
-                                                            />
-                                                            <Button type="button" variant="text" onClick={() => handleRemove(kb.id)} className="shrink-0" title={t("bench.remove")} color="default">
-                                                                <Outlined.Delete className="w-4 h-4" />
-                                                            </Button>
+                                                            <div className="flex w-28 shrink-0 justify-center">
+                                                                <Checkbox
+                                                                    checked={kb.show_in_composer !== false}
+                                                                    aria-label={`${t("bench.showInComposer")}: ${kb.name}`}
+                                                                    onCheckedChange={(v) =>
+                                                                        handleShowInComposerChange(kb.id, !!v)
+                                                                    }
+                                                                />
+                                                            </div>
+                                                            <div className="flex w-8 shrink-0 justify-center">
+                                                                <Button type="button" variant="text" onClick={() => handleRemove(kb.id)} title={t("bench.remove")} color="default">
+                                                                    <Outlined.Delete className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </Draggable>

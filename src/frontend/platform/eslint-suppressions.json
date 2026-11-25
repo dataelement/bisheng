@@ -591,7 +591,7 @@
   },
   "src/controllers/API/department.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 7
     }
   },
   "src/controllers/API/evaluate.ts": {
@@ -2241,11 +2241,6 @@
   },
   "src/pages/Report/components/Word.tsx": {
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/SystemPage/components/Config.tsx": {
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
