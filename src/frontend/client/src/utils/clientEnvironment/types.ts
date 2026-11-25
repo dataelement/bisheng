@@ -29,6 +29,7 @@ export type DesktopPresentation = Readonly<{
   requestSettingsClose?: () => void;
   requestSettingsFocus?: (direction: "previous" | "next") => void;
   reportRunning?: (conversationIds: string[]) => void;
+  reportProjectConversationCreated?: (creation: { conversationId: string; projectId: string }) => void;
   onConversationRenamed?: (listener: (conversationId: string) => void) => (() => void);
 }>;
 
