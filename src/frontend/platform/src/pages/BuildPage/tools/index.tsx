@@ -12,8 +12,11 @@ import { Accordion } from "@/components/bs-ui/accordion";
 
 import { userContext } from "@/contexts/userContext";
 import { refreshMcpApi } from "@/controllers/API/assistant";
+import { getToolPricingApi } from "@/controllers/API/toolPricing";
 import { getToolsApi } from "@/controllers/API/tools";
 import { showApiError } from "@/controllers/request";
+import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CpuIcon,Sparkles,Star,User } from "lucide-react";
 import { useCallback,useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,6 +24,7 @@ import { useSearchParams } from "react-router-dom";
 import McpServerDialog from "./EditMcp";
 import EditTool from "./EditTool";
 import ToolItem from "./ToolItem";
+import { ToolPriceDialog, type PricedToolChild } from "./ToolPriceDialog";
 import ToolSet from "./ToolSet";
 import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
@@ -47,6 +51,21 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const { t } = useTranslation()
 
     const { user } = useContext(userContext)
+    const { config: dshConfig } = useDshBrowserConfig()
+    const queryClient = useQueryClient()
+    const showToolPricing = select === null && !!(dshConfig?.credit_billing_enabled ?? dshConfig?.enabled)
+    const canEditToolPricing = showToolPricing && canManageWorkbenchConfig(user)
+    const [priceTarget, setPriceTarget] = useState<PricedToolChild | null>(null)
+    const toolPricingQueryKey = ['dsh-tool-pricing', user?.user_id] as const
+    const { data: toolPricing } = useQuery({
+        queryKey: toolPricingQueryKey,
+        queryFn: ({ signal }) => getToolPricingApi(null, signal),
+        enabled: showToolPricing,
+        retry: false,
+        cacheTime: 0,
+        staleTime: 0,
+        refetchOnWindowFocus: false,
+    })
 
     const [type, setType] = useState("");
     const editRef = useRef(null);
@@ -67,27 +86,29 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         void loadToolActions(String(tool.id));
     }, [loadToolActions]);
 
-    const loadData = async (_type = "custom") => {
+    const loadData = useCallback(async (_type = "custom") => {
         await getToolsApi(_type, { action: 'visible' }).then((res) => {
             setAllData(res);
         });
+        void queryClient.invalidateQueries({ queryKey: ['dsh-tool-pricing'] });
         setLoading(false)
-    };
-    const loadMcpData = async () => {
+    }, [queryClient]);
+    const loadMcpData = useCallback(async () => {
         await getToolsApi('mcp', { action: 'visible' }).then((res) => {
             setAllData(res);
         });
+        void queryClient.invalidateQueries({ queryKey: ['dsh-tool-pricing'] });
         setLoading(false)
-    }
+    }, [queryClient]);
     useEffect(() => {
         if (type === 'skill') { setLoading(false); return; }
         setLoading(true)
         if (type === 'mcp') {
-            loadMcpData()
+            void loadMcpData()
         } else {
-            loadData(type === "" ? "default" : "custom");
+            void loadData(type === "" ? "default" : "custom");
         }
-    }, [type]);
+    }, [type, loadData, loadMcpData]);
 
     const options = useMemo(() => {
         return allData.filter((el) => {
@@ -204,6 +225,9 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                             ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
                                             : null}
                                         onHoverPermissions={handleHoverToolPermissions}
+                                        showPricing={showToolPricing}
+                                        pricingMap={toolPricing?.items ?? null}
+                                        onSetPrice={canEditToolPricing ? setPriceTarget : null}
                                     ></ToolItem>
                                 ))
                             ) : (
@@ -233,6 +257,15 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
             />
 
             <ToolSet ref={toolsetRef} onChange={() => loadData("default")} />
+
+            <ToolPriceDialog
+                tool={priceTarget}
+                item={priceTarget ? toolPricing?.items?.[String(priceTarget.id)] ?? null : null}
+                creditSetting={toolPricing?.credit_setting ?? null}
+                onClose={() => setPriceTarget(null)}
+                onSaved={() => void queryClient.invalidateQueries({ queryKey: toolPricingQueryKey })}
+                onConflict={() => void queryClient.invalidateQueries({ queryKey: toolPricingQueryKey })}
+            />
 
             {/* Permission management dialog */}
             {permTarget && (
@@ -278,15 +311,15 @@ const useToolType = (setType) => {
     const [searchParams, setSearchParams] = useSearchParams();
     useEffect(() => {
         const type = searchParams.get('c');
-        setSearchParams({})
         if (!type) return
+        setSearchParams({})
 
         if (type === 'skill') { setType('skill'); return; }
         setType(type === 'mcp' ? type : 'edit')
         setTimeout(() => {
             document.getElementById(type === 'mcp' ? 'create-mcptool' : 'create-apitool')?.click()
         }, 100)
-    }, [searchParams])
+    }, [searchParams, setSearchParams, setType])
 }
 
 export default TabTools;

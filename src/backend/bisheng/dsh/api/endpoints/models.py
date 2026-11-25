@@ -148,6 +148,26 @@ async def usage(
     snapshot = None
     model_id = int(model.removeprefix("bisheng:")) if model else None
     selected_limit = None
+    from bisheng.common.services.config_service import settings
+    from bisheng.dsh.domain.schemas.unified_policy import UNLIMITED_TOKEN_LIMIT
+
+    if not settings.credit_billing.enabled:
+        if model_id is not None:
+            from bisheng.dsh.domain.services.model_catalog import visible_workbench_models
+
+            visible = await visible_workbench_models(int(principal.user_id))
+            if not any(int(item["id"]) == model_id for item in visible):
+                raise DshModelNotAllowedError()
+        return {
+            **period,
+            "used": 0,
+            "limit": UNLIMITED_TOKEN_LIMIT,
+            "remaining": UNLIMITED_TOKEN_LIMIT,
+            "source": "disabled",
+            "as_of": rfc3339(datetime.now(UTC)),
+            "quota_state": "available",
+            "billing_enabled": False,
+        }
     with principal_scope(principal):
         try:
             policy = await read_policy(int(principal.user_id))

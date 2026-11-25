@@ -12,6 +12,7 @@ import appStore from "~/store";
 import { MessageCheckbox } from "~/components/Chat/MessageSelection";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useAuthContext } from "~/hooks";
+import { ChatErrorCard } from "~/components/ChatErrorCard";
 import { ClientMessageFooter } from "./components/ClientMessageFooter";
 import { ClientMessageAttachments } from "./components/ClientMessageAttachments";
 import { ClientUserActions } from "./components/ClientUserActions";
@@ -150,7 +151,9 @@ export default function ChatMessages({
                 logo
               ),
             content: (text, message) =>
-              ["divider", "separator"].includes(message.category) ? (
+              message.category === "credit_exhausted" ? (
+                <ChatErrorCard errorType="credit_exhausted" errorCode={26121} />
+              ) : ["divider", "separator"].includes(message.category) ? (
                 localize(text)
               ) : (
                 <ClientChatMarkdown
@@ -174,7 +177,7 @@ export default function ChatMessages({
                 />
               ) : undefined,
             footer: (message, contentRef) =>
-              message.kind === "user" ? (
+              message.category === "credit_exhausted" ? undefined : message.kind === "user" ? (
                 !readOnly && (
                   <ClientUserActions
                     createTime={displayText(message.raw.create_time)}

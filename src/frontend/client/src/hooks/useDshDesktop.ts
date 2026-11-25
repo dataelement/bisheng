@@ -9,5 +9,14 @@ export function useDshDesktop() {
     ...DSH_BROWSER_CONFIG_CACHE_OPTIONS,
   });
   const enabled = !query.isError && query.data?.enabled === true && query.data.management_enabled;
-  return { enabled, downloadUrl: query.data?.download_url ?? null, launchUrl: query.data?.launch_url ?? DEFAULT_DSH_LAUNCH_URL };
+  const creditBillingEnabled =
+    !query.isError &&
+    query.data?.management_enabled === true &&
+    (query.data?.credit_billing_enabled ?? query.data?.enabled) === true;
+  return {
+    enabled,
+    creditBillingEnabled,
+    downloadUrl: query.data?.download_url ?? null,
+    launchUrl: query.data?.launch_url ?? DEFAULT_DSH_LAUNCH_URL,
+  };
 }

@@ -22,7 +22,7 @@ from bisheng.common.errcode.dsh import (
 )
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
-from bisheng.dsh.domain.schemas.pricing import CreditSettingState
+from bisheng.dsh.domain.schemas.pricing import CreditSettingState, PricingSnapshot
 from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
 from bisheng.dsh.domain.schemas.usage import INT64_MAX, UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
@@ -80,6 +80,8 @@ class DshModelService:
         display_names_reader=None,
         credit_setting_reader=None,
         hint_context_reader=None,
+        visible_models_reader=None,
+        billing_enabled: bool | None = None,
     ):
         self.policy_reader, self.model_loader, self.llm_builder = policy_reader, model_loader, llm_builder
         self.capabilities_for, self.usage, self.now = capabilities_for, usage, now
@@ -91,14 +93,31 @@ class DshModelService:
         self.display_names_reader = display_names_reader
         self.credit_setting_reader = credit_setting_reader
         self.hint_context_reader = hint_context_reader
+        self.visible_models_reader = visible_models_reader
+        self.billing_enabled = billing_enabled
+
+    def _is_billing_enabled(self) -> bool:
+        if self.billing_enabled is not None:
+            return self.billing_enabled
+        from bisheng.common.services.config_service import settings
+
+        return bool(settings.credit_billing.enabled)
 
     async def list_models(self, principal: DshPrincipal) -> dict:
         with principal_scope(principal):
-            policy = await self.policy_reader(int(principal.user_id))
+            billed = self._is_billing_enabled()
             names = await self.display_names_reader() if self.display_names_reader else {}
-            hint_context = await self.hint_context_reader() if self.hint_context_reader else None
+            if not billed and self.visible_models_reader is not None:
+                model_ids = await self.visible_models_reader(int(principal.user_id))
+                hint_context = None
+            else:
+                policy = await self.policy_reader(int(principal.user_id))
+                model_ids = policy.allowed_model_ids if policy else []
+                hint_context = (
+                    await self.hint_context_reader() if (billed and self.hint_context_reader) else None
+                )
             result = []
-            for model_id in policy.allowed_model_ids if policy else []:
+            for model_id in model_ids:
                 try:
                     model, server = await self.model_loader(model_id)
                 except DshModelNotAllowedError:
@@ -154,18 +173,36 @@ class DshModelService:
     ):
         request_id = request_id or str(uuid4())
         with principal_scope(principal), request_trace(request_id):
-            policy = await self.policy_reader(int(principal.user_id))
-            if policy is None or request.model_id not in policy.allowed_model_ids:
-                raise DshModelNotAllowedError()
-            selected_policy = next(row for row in policy.rows if row.model_id == request.model_id)
-            if selected_policy.quota_sync_state != "READY":
-                raise DshQuotaUnavailableError()
+            billed = self._is_billing_enabled()
+            if not billed and self.visible_models_reader is not None:
+                visible_ids = await self.visible_models_reader(int(principal.user_id))
+                if request.model_id not in visible_ids:
+                    raise DshModelNotAllowedError()
+                policy = None
+                selected_policy = None
+            else:
+                policy = await self.policy_reader(int(principal.user_id))
+                if policy is None or request.model_id not in policy.allowed_model_ids:
+                    raise DshModelNotAllowedError()
+                selected_policy = next(row for row in policy.rows if row.model_id == request.model_id)
+                if billed and selected_policy.quota_sync_state != "READY":
+                    raise DshQuotaUnavailableError()
             model, server = await self.model_loader(request.model_id)
             if model.id != request.model_id:
                 raise DshModelNotAllowedError()
             # F016: the loaded model is read uncached, so its prices are current; freeze them now.
-            setting = await self.credit_setting_reader() if self.credit_setting_reader else CreditSettingState()
-            pricing = billing_snapshot((model.config or {}).get("pricing"), setting, model_id=model.id)
+            if billed:
+                setting = await self.credit_setting_reader() if self.credit_setting_reader else CreditSettingState()
+                pricing = billing_snapshot((model.config or {}).get("pricing"), setting, model_id=model.id)
+            else:
+                pricing = PricingSnapshot(
+                    currency="CNY",
+                    credit_value_micro=CreditSettingState().credit_value_micro,
+                    input_micro=0,
+                    cache_read_micro=0,
+                    cache_write_micro=0,
+                    output_micro=0,
+                )
             try:
                 capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
                 if isawaitable(capabilities):
@@ -197,24 +234,25 @@ class DshModelService:
                 pricing=pricing,
                 usage_month=started.astimezone(self.timezone).strftime("%Y-%m"),
                 billing_timezone=self.billing_timezone,
-                policy_version=selected_policy.version,
-                quota_epoch=policy.quota_epoch,
+                policy_version=selected_policy.version if selected_policy is not None else 1,
+                quota_epoch=policy.quota_epoch if policy is not None else 1,
                 event_version=1,
                 status="RUNNING",
                 started_at=started,
             )
-            try:
-                # Free models are recorded but never compared with the allowance (AC-11).
-                admission = {"mode": "unmetered"} if pricing.free else {}
-                event = await self.usage.check_and_start(
-                    event, monthly_token_limit=policy.monthly_token_limit, **admission
-                )
-            except QuotaRejected as error:
-                if error.reason == "quota_exceeded":
-                    raise DshMonthlyTokenLimitExceededError() from error
-                if error.reason == "model_not_allowed":
-                    raise DshModelNotAllowedError() from error
-                raise DshQuotaUnavailableError() from error
+            if billed:
+                try:
+                    # Free models are recorded but never compared with the allowance (AC-11).
+                    admission = {"mode": "unmetered"} if pricing.free else {}
+                    event = await self.usage.check_and_start(
+                        event, monthly_token_limit=policy.monthly_token_limit, **admission
+                    )
+                except QuotaRejected as error:
+                    if error.reason == "quota_exceeded":
+                        raise DshMonthlyTokenLimitExceededError() from error
+                    if error.reason == "model_not_allowed":
+                        raise DshModelNotAllowedError() from error
+                    raise DshQuotaUnavailableError() from error
             if self.audit_factory is not None:
                 try:
                     execution.capture = await self.audit_factory(
@@ -267,6 +305,8 @@ class DshModelService:
         return DshUpstreamErrorError()
 
     async def _settle(self, event, execution, status, error_code=None):
+        if not self._is_billing_enabled():
+            return
         try:
             terminal = await self.settle_usage(
                 event,

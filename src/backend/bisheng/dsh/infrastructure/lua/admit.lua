@@ -30,6 +30,19 @@ if dynamic and not used then
       total=add(total,values[i+1])
     end
   end
+  if #KEYS>=10 then
+    local tt=redis.call('TYPE',KEYS[9]).ok
+    if tt~='none' and tt~='hash' then return {'DENY','bad_counter'} end
+    if tt=='hash' then
+      local tvalues=redis.call('HGETALL',KEYS[9])
+      for i=1,#tvalues,2 do
+        if string.sub(tvalues[i],1,1)~='_' then
+          if not integer(tvalues[i+1]) or not integer(add(total,tvalues[i+1])) then return {'DENY','bad_counter'} end
+          total=add(total,tvalues[i+1])
+        end
+      end
+    end
+  end
   if not integer(redis.call('HGET',KEYS[2],'used')) or total~=redis.call('HGET',KEYS[2],'used') then return {'DENY','bad_counter'} end
   used='0'; initialize_model=true
 end

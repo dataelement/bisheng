@@ -9,7 +9,10 @@ import { resetDesktopConversationBridge, useDesktopConversationActivity } from '
 
 jest.mock('~/api/dsh', () => ({ getDshCredits: jest.fn() }));
 jest.mock('~/hooks', () => ({ useAuthContext: () => ({ user: { id: '20' } }) }));
-const dsh = { enabled: true };
+const dsh: { enabled: boolean; creditBillingEnabled?: boolean } = {
+  enabled: true,
+  creditBillingEnabled: true,
+};
 jest.mock('~/hooks/useDshDesktop', () => ({ useDshDesktop: () => dsh }));
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }) }));
 
@@ -34,6 +37,7 @@ function show() {
 
 beforeEach(() => {
   dsh.enabled = true;
+  dsh.creditBillingEnabled = true;
   resetDesktopConversationBridge();
   jest.mocked(getDshCredits).mockReset().mockResolvedValue(credits);
 });
@@ -75,9 +79,19 @@ it('F016: stays out of the sidebar when the balance is unreadable or the deploym
   await waitFor(() => expect(getDshCredits).toHaveBeenCalled());
   expect(screen.queryByRole('button')).toBeNull();
   dsh.enabled = false;
+  dsh.creditBillingEnabled = false;
   jest.mocked(getDshCredits).mockClear();
   show();
   expect(getDshCredits).not.toHaveBeenCalled();
+});
+
+it('hides sidebar credits when desktop stays enabled but credit_billing_enabled is false', () => {
+  dsh.enabled = true;
+  dsh.creditBillingEnabled = false;
+  jest.mocked(getDshCredits).mockClear();
+  show();
+  expect(getDshCredits).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button')).toBeNull();
 });
 
 it('F016: rereads the balance shortly after a chat turn finishes', async () => {

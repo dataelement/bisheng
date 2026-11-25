@@ -194,6 +194,15 @@ class RedisCallback(BaseCallback):
         )
 
     def parse_workflow_failed(self, status_info: dict) -> ChatResponse | None:
+        from bisheng.common.errcode.base import decode_workflow_error
+
+        decoded_error = decode_workflow_error(status_info.get("reason"))
+        if decoded_error is not None:
+            return self.build_chat_response(
+                WorkflowEventType.Error.value,
+                "over",
+                message=decoded_error,
+            )
         if status_info["reason"].find("-- has run more than the maximum number of times") != -1:
             return self.build_chat_response(
                 WorkflowEventType.Error.value,

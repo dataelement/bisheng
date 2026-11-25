@@ -77,8 +77,7 @@ class UserService:
 
     @staticmethod
     def _dsh_enabled() -> bool:
-        configuration = getattr(settings, "dsh", {})
-        return configuration.get("enabled") is True if isinstance(configuration, dict) else bool(configuration.enabled)
+        return True
 
     @classmethod
     def _persist_profile_in_session(cls, session, changed: User, *, from_sync: bool = False) -> User:

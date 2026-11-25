@@ -1,5 +1,6 @@
 """Optional DSH settings; construction never loads application secrets or IO."""
 
+import os
 from typing import Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -68,10 +69,6 @@ class DshSettings(BaseModel):
         description="Absolute lifetime in seconds of a phone refresh session. Rotation does not extend it.",
     )
 
-    enabled: bool = Field(
-        default=True,
-        description="Expose the desktop management module; enabled by default.",
-    )
     client_id: Literal["dsh-desktop"] = Field(
         default="dsh-desktop", description="Desktop OAuth client identifier fixed by the DSH contract."
     )
@@ -202,8 +199,24 @@ class DshSettings(BaseModel):
     def validate_enabled_capacity(self):
         if self.quota_memory_headroom_bytes >= self.quota_memory_budget_bytes:
             raise ValueError("Quota capacity requires positive settlement headroom below its finite memory budget")
-        if not self.enabled:
-            return self
         if self.backlog_stop_seconds <= self.projection_target_seconds:
             raise ValueError("Backlog threshold must exceed the projection target")
+        return self
+
+
+class CreditBillingConf(BaseModel):
+    """全局积分与计费总开关配置（独立于桌面端基础接入开关）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable credit billing, quota enforcement, and tool pricing across desktop and web platforms.",
+    )
+
+    @model_validator(mode="after")
+    def overlay_env(self):
+        raw = os.getenv("BS_CREDIT_BILLING__ENABLED")
+        if raw is not None:
+            object.__setattr__(self, "enabled", raw.strip().lower() in {"1", "true", "yes", "on"})
         return self

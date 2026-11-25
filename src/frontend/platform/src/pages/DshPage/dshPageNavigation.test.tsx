@@ -181,13 +181,16 @@ describe('DshPage navigation', () => {
         expect(resolveDshSection(search, [])).toBe('credits')
     })
 
-    it.each(['credits', 'models', 'content-safety', 'operations', 'unknown'])('keeps only access available when DSH is disabled: %s', section => {
+    it.each(['credits', 'usage'])('hides billing tab when credit billing is disabled and falls back to models: %s', section => {
         browserConfig.enabled = false
         renderPage(`/dsh?tab=${section}`)
-        expect(screen.getAllByRole('tab')).toHaveLength(1)
-        expect(screen.getByRole('tab', { name: 'dsh.accessSettings' })).toHaveAttribute('data-state', 'active')
-        expect(screen.getByTestId('dsh-section')).toHaveTextContent('access')
-        expect(screen.queryByRole('heading', { name: 'dsh.contentSafety.title' })).toBeNull()
+        expect(screen.getAllByRole('tab')).toHaveLength(5)
+        expect(screen.queryByRole('tab', { name: 'dsh.unified.credits' })).toBeNull()
+        expect(screen.queryByRole('tab', { name: 'dsh.unified.usage' })).toBeNull()
+        expect(screen.getByRole('tab', { name: 'dsh.unified.models' })).toHaveAttribute('data-state', 'active')
+        expect(screen.getByRole('tab', { name: 'dsh.auditTab' })).toBeInTheDocument()
+        expect(screen.getByRole('tab', { name: 'dsh.accessSettings' })).toBeInTheDocument()
+        expect(screen.getByTestId('dsh-section')).toHaveTextContent('models')
     })
 
     it('redirects ordinary users without exposing management tabs', () => {

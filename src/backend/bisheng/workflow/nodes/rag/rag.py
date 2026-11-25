@@ -51,6 +51,7 @@ class RagNode(RagUtils):
             app_name=self.workflow_name,
             app_type=ApplicationTypeEnum.WORKFLOW,
             user_id=self.user_id,
+            admin_selected=True,
         )
         self._minio_client = get_minio_storage_sync()
 
