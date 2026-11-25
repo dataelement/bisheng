@@ -15,8 +15,8 @@ interface IProps {
     rtClick?: () => void,
     onCreate: () => void,
 }
-export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: IProps) {
-    const { t } = useTranslation()
+export function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: IProps) {
+    const { t } = useTranslation("model")
     const selectLabels = useSelectLabels()
 
     const [type, setType] = useState('all')

@@ -108,6 +108,7 @@ dependencies = [
     "rsa>=4.9",
     "deepagents>=0.6.12,<0.7",
     "pypinyin>=0.55.0",
+    "paramiko>=3.5.1,<4",
 ]
 
 [project.optional-dependencies]

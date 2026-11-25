@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from pydantic import field_validator
 from sqlalchemy import Column, DateTime, Integer, delete, text
 from sqlmodel import Field, col, select
 
@@ -80,4 +81,9 @@ class ServerQuery(ServerBase):
 
 
 class ServerCreate(ServerBase):
-    pass
+    @field_validator("sft_endpoint")
+    @classmethod
+    def validate_ft_endpoint(cls, value):
+        from bisheng.finetune.utils import parse_server_host
+
+        return parse_server_host(value) if value else value

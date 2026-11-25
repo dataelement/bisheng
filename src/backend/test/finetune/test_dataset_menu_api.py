@@ -12,7 +12,9 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.llm_tenant import LLMModelSharedReadonlyError
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.finetune.api import dependencies
+from bisheng.finetune.domain.models.dataset import FinetuneDataset
 from bisheng.finetune.domain.models.preset_train import PresetTrainDao
+from bisheng.finetune.domain.repositories import dataset as dataset_repository
 from bisheng.finetune.domain.services import finetune_file as service
 from bisheng.knowledge.domain import upload_file_size
 from bisheng.knowledge.domain.models import knowledge as knowledge_model
@@ -74,6 +76,10 @@ async def web(datasets, monkeypatch):
         AsyncMock(side_effect=lambda _user, tenant: web.tenant_admin and tenant == web.user.tenant_id),
     )
     monkeypatch.setattr(type(upload_file_size.settings), "get_from_db", lambda *_args, **_kwargs: {})
+    # Training uploads also record an immutable dataset version (F025) beside the other finetune tables.
+    async with web.sessions() as session:
+        await session.run_sync(lambda session: FinetuneDataset.__table__.create(session.get_bind(), checkfirst=True))
+    monkeypatch.setattr(dataset_repository, "get_async_db_session", web.sessions)
 
     @web.app.exception_handler(BaseErrorCode)
     async def error(request, exc):
@@ -310,7 +316,7 @@ async def test_unknown_or_foreign_personal_uploads_are_not_signed(web, url):
 
 async def test_personal_model_uploads_stay_downloadable_only_in_their_original_scope(web):
     web.model_menu = True
-    uploaded = result(await web.client.post("/api/v1/finetune/job/file", files={"files": ("training.json", b"[]")}))[0]
+    uploaded = result(await web.client.post("/api/v1/finetune/job/file", files={"files": ("training.json", b'[{"instruction": "q", "output": "a"}]')}))[0]
     assert "/60/849/" in uploaded["url"]
     result(await web.client.get("/api/v1/finetune/job/file/download", params={"file_url": uploaded["url"]}))
     web.user.tenant_id = 70

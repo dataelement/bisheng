@@ -1,0 +1,15 @@
+# Use with docker-compose.yml to build the matching platform feature source.
+# Keep the customer's existing configuration, volumes, and middleware services.
+services:
+  backend:
+    image: ${BISHENG_MULTIMODAL_BACKEND_IMAGE:-bisheng-backend:multimodal-local}
+    build:
+      context: ../src/backend
+      dockerfile: Dockerfile
+  backend_worker:
+    image: ${BISHENG_MULTIMODAL_BACKEND_IMAGE:-bisheng-backend:multimodal-local}
+  frontend:
+    image: ${BISHENG_MULTIMODAL_FRONTEND_IMAGE:-bisheng-frontend:multimodal-local}
+    build:
+      context: ../src/frontend
+      dockerfile: Dockerfile

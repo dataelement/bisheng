@@ -11,8 +11,13 @@ def _revision():
     return _script_directory().get_revision("v310b1_f016_dsh_call_pricing").module
 
 
-def test_single_head_is_f016():
-    assert _script_directory().get_heads() == ["v310b1_f016_dsh_call_pricing"]
+def test_f016_is_on_the_single_head_lineage():
+    # Later revisions may land on top of F016; it only has to stay on the one head's chain.
+    script = _script_directory()
+    heads = script.get_heads()
+    assert len(heads) == 1
+    lineage = {rev.revision for rev in script.walk_revisions(base="base", head=heads[0])}
+    assert "v310b1_f016_dsh_call_pricing" in lineage
 
 
 def test_columns_match_the_model_on_mysql():

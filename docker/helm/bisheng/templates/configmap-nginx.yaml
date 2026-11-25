@@ -39,6 +39,18 @@ data:
 {{- else }}
       location /apps/ { proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }}; }
 {{- end }}
+      # F025 fine-tuning: 2 GiB dataset uploads, and job creation that may first push the package to FT.
+      location ~ ^/api/v1/finetune/job(/file)?$ {
+{{- if .Values.gateway.enabled }}
+        proxy_pass http://{{ include "bisheng.component" (list . "gateway") }}:{{ .Values.gateway.service.port }};
+{{- else }}
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+{{- end }}
+        client_max_body_size 2100m;
+        proxy_request_buffering off;
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+      }
       location ~ ^(/workspace)?/api(/|$) {
         rewrite ^/workspace(/.*)$ $1 break;
 {{- if .Values.gateway.enabled }}
