@@ -2,8 +2,8 @@
  * Core chat state hook — manages messages, submission, and SSE lifecycle.
  * Uses useState/useRef for local state, Recoil only for shared atoms (chatModel, kbs, searchType).
  */
-import { useCallback, useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChatBuckets } from "./useChatBuckets";
 import { useChatSend } from "./useChatSend";
 import { useChatAttachmentPoll } from "./useChatAttachmentPoll";
@@ -13,7 +13,9 @@ import store from "~/store";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import type { ChatMessage } from "~/api/chatApi";
-import { getAgentMessages, getSessionName } from "~/api/chatApi";
+import { ConversationUnavailableError, getAgentMessages, getSessionName } from "~/api/chatApi";
+import { QueryKeys } from "~/types/chat";
+import { isPlaceholderConversationTitle } from "~/utils/conversationTitle";
 import { openChatStream, type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
@@ -58,6 +60,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const { showToast } = useToastContext();
     const { messages, title, isStreaming, isLoading, isParsingMedia, conversationId, streamingByConvo, setConversationId, setMessagesFor, setTitleFor, setStreamingFor, setLoadingFor, setParsingMediaFor, promoteBucket, setMessages, setTitle, setIsStreaming, setIsLoading, setIsParsingMedia } = useChatBuckets(initialConversationId);
     const ownerIdRef = useRef(v4());
+    const [unavailableConversationId, setUnavailableConversationId] = useState<string>();
 
     // Refs for accessing latest state in callbacks
     const messagesRef = useRef<ChatMessage[]>([]);
@@ -245,47 +248,42 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             return;
         }
         setIsLoading(true);
+        let cancelled = false;
         // v2.5: use the native Agent-mode history endpoint.
         // Returns ChatMessage[] with category + structured fields (reasoning,
         // tool_calls, steps, thinking_segments) already expanded; legacy
         // regenerate siblings are pre-collapsed server-side.
         getAgentMessages(conversationId, shareToken || undefined)
             .then((msgs) => {
+                if (cancelled) return;
+                setUnavailableConversationId((current) => current === conversationId ? undefined : current);
                 setMessages(msgs);
                 setIsLoading(false);
             })
             .catch((err) => {
-                console.error("Failed to load messages:", err);
+                if (cancelled) return;
+                if (err instanceof ConversationUnavailableError) {
+                    setUnavailableConversationId(conversationId);
+                    setMessages([]);
+                    setTitle("");
+                } else {
+                    console.error("Failed to load messages:", err);
+                }
                 setIsLoading(false);
             });
+        return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
     }, [conversationId, shareToken]);
 
-    // Load the conversation's stored name. The history endpoints return messages
-    // only, so opening an existing conversation by URL (deep link or share link)
-    // left `title` empty and HeaderTitle fell back to "New Chat" — even though
-    // the sidebar list showed the real name.
-    //
-    // Guarded against clobbering a freshly generated title: skip while streaming
-    // (a brand-new conversation's row still says "New Chat" until gen_title
-    // lands) and never overwrite a title we already hold.
-    useEffect(() => {
-        if (isStreaming) return;
-        if (!conversationId || conversationId === "new") return;
-        let cancelled = false;
-        getSessionName(conversationId, shareToken || undefined)
-            .then((name) => {
-                if (cancelled || !name) return;
-                setTitle((prev) => (prev ? prev : name));
-            })
-            .catch(() => {
-                // Non-critical: the header keeps the "New Chat" fallback.
-            });
-        return () => {
-            cancelled = true;
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
-    }, [conversationId, shareToken]);
+    // Rename writes the same cache entry, so the active header updates even
+    // when neither the route nor the loaded messages change.
+    const { data: savedTitle } = useQuery({
+        queryKey: [QueryKeys.conversationName, conversationId, shareToken],
+        queryFn: () => getSessionName(conversationId, shareToken || undefined),
+        enabled: Boolean(conversationId && conversationId !== "new" && !isStreaming),
+        retry: false,
+        staleTime: 30_000,
+    });
 
     // v2.5 Module B: agent flow renders a flat list keyed by category;
     // messagesTree + buildMessageTree were only needed by the legacy
@@ -518,8 +516,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // without shipping tree-building on the hot path.
         messagesTree: null as unknown,
         conversationId,
-        title,
+        title: savedTitle && !isPlaceholderConversationTitle(savedTitle) ? savedTitle : title,
         isLoading,
+        isConversationUnavailable: unavailableConversationId === conversationId,
         isStreaming,
         isParsingMedia,
 

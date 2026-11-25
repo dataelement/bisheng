@@ -1,6 +1,7 @@
 import { DownloadIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components";
+import useLocalize from "~/hooks/useLocalize";
 import { cn } from "~/utils";
 
 /** 与 `public/assets/channel/grid-three.svg` 同形，描边用 currentColor 以便 active/hover 变色 */
@@ -67,6 +68,7 @@ export function TopBar({
     actions,
     trailingActions,
 }: TopBarProps) {
+    const localize = useLocalize();
     const [pageInput, setPageInput] = useState(String(currentPage));
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -203,7 +205,7 @@ export function TopBar({
                     {actions}
                     {onDownload && (
                         <Button
-                            aria-label="preview.download"
+                            aria-label={localize("com_knowledge.download_file")}
                             onClick={onDownload}
                             variant="outline" className="w-8 h-8 p-2">
                             <DownloadIcon />

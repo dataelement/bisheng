@@ -34,6 +34,8 @@ async def get_chat_message_public(*,
 async def get_chat_messages_by_conversation_id(*, conversationId: str,
                                                login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """API for getting chat messages by conversation id."""
+    if await ChatSessionService.get_active_session(conversationId) is None:
+        raise NotFoundError()
     messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
     if not messages:
         raise NotFoundError()

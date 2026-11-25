@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import bypass_tenant_filter_if
-from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.llm.domain.services.model_rate_limit import RecoveryAction, RecoveryCommand
 from bisheng.llm.domain.services.model_recovery_service import (
@@ -23,6 +22,7 @@ from bisheng.workstation.domain.services.chat_helpers import (
     _drop_legacy_sibling_branches,
     _format_new_message,
     _is_new_format,
+    load_workstation_history,
 )
 
 from ...domain.services.chat_service import (
@@ -70,13 +70,13 @@ async def get_chat_history(
     login_user=LoginUserDep,
     share_link: Union[ShareLink, None] = ShareLinkDep,
 ):
-    with bypass_tenant_filter_if(share_link is not None):
-        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
+    shared = share_link is not None and share_link.resource_id == conversationId
+    with bypass_tenant_filter_if(shared):
+        messages = await load_workstation_history(conversationId, login_user.user_id, shared=shared)
     if not messages:
         return resp_200([])
-    if login_user.user_id != messages[0].user_id:
-        if not share_link or share_link.resource_id != conversationId:
-            return UnAuthorizedError.return_resp()
+    if login_user.user_id != messages[0].user_id and not shared:
+        return UnAuthorizedError.return_resp()
     return resp_200([await WorkstationMessage.from_chat_message(message) for message in messages])
 
 
@@ -94,13 +94,13 @@ async def get_agent_chat_history(
       (thinking / web tool_calls extracted from `:::` markers).
     - New Agent-mode messages pass through.
     """
-    with bypass_tenant_filter_if(share_link is not None):
-        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
+    shared = share_link is not None and share_link.resource_id == conversationId
+    with bypass_tenant_filter_if(shared):
+        messages = await load_workstation_history(conversationId, login_user.user_id, shared=shared)
     if not messages:
         return resp_200([])
-    if login_user.user_id != messages[0].user_id:
-        if not share_link or share_link.resource_id != conversationId:
-            return UnAuthorizedError.return_resp()
+    if login_user.user_id != messages[0].user_id and not shared:
+        return UnAuthorizedError.return_resp()
 
     # 1. Drop legacy sibling branches (keep only latest per parentMessageId)
     messages = _drop_legacy_sibling_branches(messages)

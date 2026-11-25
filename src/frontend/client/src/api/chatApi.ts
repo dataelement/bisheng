@@ -53,6 +53,8 @@ function canUseCachedCitationDetail(detail?: ChatCitation | null) {
 // and persists an array of them inside agent_answer messages).
 // --- API Functions ---
 
+export class ConversationUnavailableError extends Error {}
+
 /** Fetch messages for a conversation. When rendered from /share/:token the
  *  caller must pass shareToken so the backend auth middleware lets the
  *  anonymous request through. */
@@ -65,6 +67,9 @@ export async function getMessages(
     }
     const headers = shareToken ? { 'share-token': shareToken } : undefined;
     const res = await http.get(API.messages(conversationId), headers ? { headers } : undefined);
+    if (res?.status_code === 12041) {
+        throw new ConversationUnavailableError();
+    }
     return res?.data ?? res ?? [];
 }
 
@@ -92,6 +97,9 @@ export async function getAgentMessages(
     // the backend's tenant/auth middleware lets the request through.
     const headers = shareToken ? { 'share-token': shareToken } : undefined;
     const res = await http.get(API.agentMessages(conversationId), headers ? { headers } : undefined);
+    if (res?.status_code === 12041) {
+        throw new ConversationUnavailableError();
+    }
     const rows: any[] = res?.data ?? res ?? [];
     // Agent history is linear and does not persist parent IDs. Restore the
     // question/answer links that the retry action uses to find its input.

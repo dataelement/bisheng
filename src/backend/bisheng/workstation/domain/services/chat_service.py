@@ -350,7 +350,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         )
 
     conversation = await MessageSessionDao.async_get_one(conversation_id)
-    if conversation is None:
+    if conversation is None or conversation.is_delete:
         raise ConversationNotFoundError()
 
     if not is_new_conversation:
@@ -1432,7 +1432,7 @@ async def _agent_initialize_chat(
         if session_subject is not None
         else await MessageSessionDao.async_get_one(conversation_id)
     )
-    if conversation is None:
+    if conversation is None or conversation.is_delete:
         raise ConversationNotFoundError()
     if not is_new_conversation:
         await MessageSessionDao.touch_session(conversation_id)

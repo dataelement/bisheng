@@ -12,6 +12,8 @@ from pydantic import BaseModel
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.chat.utils import SourceType, process_source_document
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.workstation import ConversationNotFoundError
 from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -20,6 +22,17 @@ from bisheng.utils import get_request_ip
 from bisheng.workstation.domain.schemas import WorkstationConversation, WorkstationMessage
 
 _background_tasks: set[asyncio.Task] = set()
+
+
+async def load_workstation_history(
+    conversation_id: str, user_id: int, *, shared: bool
+) -> list[ChatMessage]:
+    session = await MessageSessionDao.async_get_one(conversation_id)
+    if session is not None and session.is_delete:
+        if session.user_id != user_id and not shared:
+            raise UnAuthorizedError()
+        raise ConversationNotFoundError()
+    return await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversation_id, limit=1000)
 
 
 def custom_json_serializer(obj):
@@ -127,7 +140,7 @@ async def gen_title(
     title = await generate_conversation_title_async(question=human, llm=llm)
     session = await MessageSessionDao.async_get_one(conversation_id)
     if session:
-        await MessageSessionDao.update_session_name(chat_id=session.chat_id, name=title)
+        await MessageSessionDao.update_session_name(chat_id=session.chat_id, name=title, only_if_placeholder=True)
         await AuditLogService.create_chat_message(
             user=login_user,
             ip_address=get_request_ip(request),

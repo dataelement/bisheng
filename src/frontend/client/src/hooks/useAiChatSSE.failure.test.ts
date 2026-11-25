@@ -77,6 +77,22 @@ describe('daily transport failure boundary', () => {
         expect(submission.onEnd).toHaveBeenCalledTimes(1);
     });
 
+    it('ignores queued callbacks from a stopped stream after a new turn starts', () => {
+        const stopped = open();
+        stopped.handle.close();
+        const current = open();
+        stopped.stream.emit('open');
+        stopped.stream.emit('message', { data: JSON.stringify({ category: 'agent_answer', type: 'stream', message: { msg: 'Old answer' } }) });
+        stopped.stream.emit('message', { data: JSON.stringify({ final: true }) });
+        current.stream.emit('message', { data: JSON.stringify({ category: 'agent_answer', type: 'stream', message: { msg: 'New answer' } }) });
+
+        expect(stopped.submission.onStart).toHaveBeenCalledTimes(1);
+        expect(stopped.submission.onMessage).not.toHaveBeenCalled();
+        expect(stopped.submission.onAgentUpdate).not.toHaveBeenCalled();
+        expect(stopped.submission.onFinal).not.toHaveBeenCalled();
+        expect(current.submission.onAgentUpdate).toHaveBeenCalledWith(expect.objectContaining({ text: 'New answer' }));
+    });
+
     it('leaves an unclassified HTTP 401 response unclassified', () => {
         const { stream, submission } = open();
         stream.emit('error', { data: JSON.stringify({ status_code: 401, data: {} }) });

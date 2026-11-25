@@ -74,6 +74,7 @@ def _make_session(
     user_id: int = 1,
     name: str = 'New Chat',
     flow_name: str = '',
+    is_delete: bool = False,
 ) -> MessageSession:
     return MessageSession(
         chat_id=chat_id,
@@ -83,6 +84,7 @@ def _make_session(
         user_id=user_id,
         name=name,
         tenant_id=1,
+        is_delete=is_delete,
     )
 
 
@@ -112,8 +114,16 @@ def patch_daos(monkeypatch: pytest.MonkeyPatch):
             if m.id in message_ids and m.user_id == user_id and m.chat_id == chat_id
         ]
 
+    async def _fake_aget_messages_by_chat_id(_cls, chat_id, category_list=None, limit=10):  # type: ignore[no-untyped-def]
+        rows = [
+            m for m in state['messages']
+            if m.chat_id == chat_id and (not category_list or m.category in category_list)
+        ]
+        return rows[-limit:]
+
     monkeypatch.setattr(MessageSessionDao, 'async_get_one', classmethod(_fake_async_get_one))
     monkeypatch.setattr(ChatMessageDao, 'aget_messages_by_ids', classmethod(_fake_aget_messages_by_ids))
+    monkeypatch.setattr(ChatMessageDao, 'aget_messages_by_chat_id', classmethod(_fake_aget_messages_by_chat_id))
 
     class _Registry:
         @staticmethod
@@ -215,6 +225,16 @@ async def test_load_session_not_found(patch_daos):
     with pytest.raises(ConversationMessageNotOwnedError):
         await ConversationExportService._load_and_validate_messages(
             chat_id='ghost', message_ids=[1], user_id=1,
+        )
+
+
+async def test_load_deleted_session_rejected_even_with_matching_messages(patch_daos):
+    patch_daos.set_session(_make_session(is_delete=True))
+    patch_daos.set_messages([_make_chat_message(1, 'question', 'Example question')])
+
+    with pytest.raises(ConversationMessageNotOwnedError):
+        await ConversationExportService._load_and_validate_messages(
+            chat_id='chat-1', message_ids=[1], user_id=1,
         )
 
 

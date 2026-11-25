@@ -380,12 +380,17 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     @retry_on_transient_db_conflict()
-    async def update_session_name(cls, chat_id: str, name: str):
+    async def update_session_name(cls, chat_id: str, name: str, *, only_if_placeholder: bool = False):
         statement = (
             update(MessageSession)
             .where(col(MessageSession.chat_id) == chat_id)
             .values(name=name, update_time=datetime.now())
         )
+        if only_if_placeholder:
+            statement = statement.where(
+                col(MessageSession.is_delete) == False,  # noqa: E712
+                col(MessageSession.name).is_(None) | col(MessageSession.name).in_(["", "New Chat"]),
+            )
         async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()

@@ -10,7 +10,7 @@ import { KnowledgeSpace, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, ge
 import { Button } from "~/components/ui/Button";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import KnowledgeSpaceCardItem from "./KnowledgeSpaceCardItem";
-import { SectionHeader } from "./SectionHeader";
+import { KnowledgeSpaceSection } from "./KnowledgeSpaceSection";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { useAiAccessUiEnabled, usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
@@ -194,33 +194,31 @@ export function KnowledgeSpaceSidebar({
     });
 
     // Fetch "joined" space list
-    const { data: joinedSpaces = [], isLoading: isJoinedLoading } = useQuery({
+    const joinedQuery = useQuery({
         queryKey: ["knowledgeSpaces", "joined", joinedSortBy],
         queryFn: () => getJoinedSpacesApi({ order_by: joinedSortBy }),
         placeholderData: (prev) => prev,
     });
 
     // Fetch department space list
-    const { data: departmentSpaces = [], isLoading: isDepartmentLoading } = useQuery({
+    const departmentQuery = useQuery({
         queryKey: ["knowledgeSpaces", "department", departmentSortBy],
         queryFn: () => getDepartmentSpacesApi({ order_by: departmentSortBy }),
         placeholderData: (prev) => prev,
     });
 
-    // Filter department spaces out of other sections to avoid duplication
+    const departmentSpaces = departmentQuery.data ?? [];
+    const departmentReady = departmentQuery.data !== undefined;
+    const joinedReady = joinedQuery.data !== undefined;
+    const departmentFailed = !departmentReady && departmentQuery.isError && !departmentQuery.isFetching;
+    const joinedFailed = !joinedReady && joinedQuery.isError && !joinedQuery.isFetching;
+    // A joined response can include department spaces. Wait for the department snapshot before classifying it.
     const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
     const filteredCreatedSpaces = createdSpaces.filter(s => !departmentSpaceIds.has(s.id));
-    const filteredJoinedSpaces = joinedSpaces.filter(s => !departmentSpaceIds.has(s.id));
-    // The list fills its scroll viewport and the LAST section ("joined") absorbs all
-    // leftover height. Sections above it therefore keep a fixed empty-state height and
-    // never move when a sibling is collapsed or gains data — collapsing a section only
-    // ever pulls the content below it upwards. Compact dropdown keeps natural heights —
-    // it is a popover sized to content.
-    const departmentEmpty = !departmentSpaces.length;
-    const createdEmpty = !filteredCreatedSpaces.length;
-    const joinedEmpty = !filteredJoinedSpaces.length;
+    const filteredJoinedSpaces = departmentReady
+        ? (joinedQuery.data ?? []).filter(s => !departmentSpaceIds.has(s.id))
+        : [];
     const fillListHeight = !compactMode;
-    const stretchJoined = fillListHeight && !joinedCollapsed;
     const permissionSpaceIds = useMemo(
         () => Array.from(new Set([
             ...departmentSpaces.map(s => s.id),
@@ -281,7 +279,7 @@ export function KnowledgeSpaceSidebar({
         // link for one space landed on a different one entirely.
         if (suppressAutoSelect) return;
         if (!activeSpaceId) {
-            if (isCreatedLoading || isJoinedLoading || isDepartmentLoading) return;
+            if (isCreatedLoading || joinedQuery.isLoading || departmentQuery.isLoading) return;
 
             if (departmentSpaces.length > 0) {
                 onSpaceSelect(departmentSpaces[0]);
@@ -291,7 +289,7 @@ export function KnowledgeSpaceSidebar({
                 onSpaceSelect(filteredJoinedSpaces[0]);
             }
         }
-    }, [activeSpaceId, suppressAutoSelect, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
+    }, [activeSpaceId, suppressAutoSelect, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, joinedQuery.isLoading, departmentQuery.isLoading, mobilePageMode, onSpaceSelect]);
 
     // Set a section's sort field to a specific value (chosen from the sort dropdown).
     const setSort = (type: "created" | "joined" | "department", value: SpaceSortType) => {
@@ -352,15 +350,6 @@ export function KnowledgeSpaceSidebar({
             />
         );
 
-    // Mobile list area: 8px top/bottom, 16px left/right. Item rows carry their own 12px
-    // vertical padding so no inter-item gap is needed.
-    // w-[100cqi] pins the area to the scroll container's visible inline width (it has
-    // container-type:inline-size) even inside the shared w-max wrapper, so card rows
-    // truncate instead of overflowing horizontally — preserving the v1 vertical scroll.
-    const listRowClassName = mobilePageMode ? "w-[100cqi] px-4 py-2" : "space-y-0.5 px-3";
-    // Mobile: 8px gap above each section group.
-    const sectionWrapClassName = mobilePageMode ? "pt-2" : "pb-4";
-
     // ─── Compact dropdown: tree-style list (mirrors the PC sidebar). Each
     // section keeps its own collapse + sort state; per-row "..." menu is
     // hidden because the dropdown is a navigation surface, not a manager.
@@ -385,26 +374,13 @@ export function KnowledgeSpaceSidebar({
         />
     );
 
-    // Empty-state block. Sections with a fixed slot keep a constant 96px height so their
-    // neighbours never shift; the section absorbing the leftover height centers its text
-    // in whatever space is left.
-    // pinnedEmptyClassName sizes the row to the scroll container's visible inline width
-    // (100cqi, same trick as SectionHeader) instead of the shared w-max wrapper's scroll
-    // width, so the text centers on the sidebar rather than on the widest folder name, and
-    // sticky left-0 keeps it there while the tree scrolls sideways. -mx-3 cancels the
-    // list row's own px-3 so the centering is exact. mobilePageMode rows are already
-    // w-[100cqi] px-4, so they opt out.
-    const pinnedEmptyClassName = "sticky left-0 -mx-3 w-[100cqi]";
-
-    const renderEmptyState = (stretch: boolean) => (
-        <div className={cn(
-            "flex items-center justify-center text-center text-sm text-text-3",
-            !mobilePageMode && pinnedEmptyClassName,
-            stretch ? "flex-1 py-6" : "h-24",
-        )}>
-            {localize("com_knowledge.no_data")}
-        </div>
-    );
+    const renderItem = compactMode ? renderCompactItem : renderSpaceItem;
+    const sectionHeaderProps = {
+        sortOptions,
+        sortFieldLabel: localize("com_knowledge.sort_field"),
+        compact: compactMode,
+        mobile: mobilePageMode,
+    };
 
     const handleListScroll = () => {
         setIsListScrolling(true);
@@ -513,148 +489,46 @@ export function KnowledgeSpaceSidebar({
                             keep them pinned to the viewport edges even while items
                             horizontally overflow. */}
                         <div className={cn("w-max min-w-full", fillListHeight && "flex min-h-full flex-col")}>
-                            {compactMode ? (
-                                /* File-page title dropdown: same 3-section tree as the PC sidebar,
-                                   ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden
-                                   via renderCompactItem so the dropdown only navigates. */
-                                <>
-                                    {/* Shown even with nothing in it, like the two sections below —
-                                        the category is part of how the page is organised, not a
-                                        result that appears once you happen to have a space. */}
-                                    <div className="pb-4">
-                                        <SectionHeader
-                                            title={localize("com_knowledge.department_spaces")}
-                                            collapsed={departmentCollapsed}
-                                            onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
-                                            sortValue={departmentSortBy}
-                                            sortOptions={sortOptions}
-                                            sortFieldLabel={localize("com_knowledge.sort_field")}
-                                            onSortChange={(v) => setSort("department", v as SpaceSortType)}
-                                            compact
-                                        />
-                                        {!departmentCollapsed && (
-                                            <div className="space-y-1 px-3">
-                                                {departmentSpaces.map(s => renderCompactItem(s, "department"))}
-                                                {!departmentSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="pb-4">
-                                        <SectionHeader
-                                            title={localize("com_knowledge.created_by_me")}
-                                            collapsed={createdCollapsed}
-                                            onToggle={() => setCreatedCollapsed(!createdCollapsed)}
-                                            sortValue={createdSortBy}
-                                            sortOptions={sortOptions}
-                                            sortFieldLabel={localize("com_knowledge.sort_field")}
-                                            onSortChange={(v) => setSort("created", v as SpaceSortType)}
-                                            onAdd={onCreateSpace}
-                                            addLabel={localize("com_knowledge.create")}
-                                            compact
-                                        />
-                                        {!createdCollapsed && (
-                                            <div className="space-y-1 px-3">
-                                                {filteredCreatedSpaces.map(s => renderCompactItem(s, "created"))}
-                                                {!filteredCreatedSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="pb-4">
-                                        <SectionHeader
-                                            title={localize("com_knowledge.joined_by_me")}
-                                            collapsed={joinedCollapsed}
-                                            onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
-                                            sortValue={joinedSortBy}
-                                            sortOptions={sortOptions}
-                                            sortFieldLabel={localize("com_knowledge.sort_field")}
-                                            onSortChange={(v) => setSort("joined", v as SpaceSortType)}
-                                            onSquare={() => onKnowledgeSquare?.()}
-                                            squareLabel={localize("com_knowledge.go_to_square")}
-                                            compact
-                                        />
-                                        {!joinedCollapsed && (
-                                            <div className="space-y-1 px-3">
-                                                {filteredJoinedSpaces.map(s => renderCompactItem(s, "joined"))}
-                                                {!filteredJoinedSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </>
-                            ) : (
-                            <>
-                            {/* Department spaces — always on top per PRD, and always present:
-                                the category is part of how the page is organised, so it shows
-                                its empty state like 我创建的 / 我加入的 rather than disappearing. */}
-                            <div className="pt-0 pb-4">
-                                <SectionHeader
-                                    title={localize("com_knowledge.department_spaces")}
-                                    collapsed={departmentCollapsed}
-                                    onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
-                                    sortValue={departmentSortBy}
-                                    sortOptions={sortOptions}
-                                    sortFieldLabel={localize("com_knowledge.sort_field")}
-                                    onSortChange={(v) => setSort("department", v as SpaceSortType)}
-                                    mobile={mobilePageMode}
-                                />
-                                {!departmentCollapsed && (
-                                    <div className={listRowClassName}>
-                                        {departmentSpaces.map(s => renderSpaceItem(s, "department"))}
-                                        {departmentEmpty && renderEmptyState(false)}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* My created */}
-                            <div className="pb-4">
-                                <SectionHeader
-                                    title={localize("com_knowledge.created_by_me")}
-                                    collapsed={createdCollapsed}
-                                    onToggle={() => setCreatedCollapsed(!createdCollapsed)}
-                                    sortValue={createdSortBy}
-                                    sortOptions={sortOptions}
-                                    sortFieldLabel={localize("com_knowledge.sort_field")}
-                                    onSortChange={(v) => setSort("created", v as SpaceSortType)}
-                                    onAdd={onCreateSpace}
-                                    addLabel={localize("com_knowledge.create")}
-                                    mobile={mobilePageMode}
-                                />
-                                {!createdCollapsed && (
-                                    <div className={listRowClassName}>
-                                        {filteredCreatedSpaces.map(s => renderSpaceItem(s, "created"))}
-                                        {createdEmpty && renderEmptyState(false)}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Joined — last section, so it absorbs the list's leftover height.
-                                `flex-1` here keeps its automatic min-height, so a long list still
-                                grows past the viewport and scrolls instead of being squeezed. */}
-                            <div className={cn("pb-4", stretchJoined && "flex flex-1 flex-col")}>
-                                <SectionHeader
-                                    title={localize("com_knowledge.joined_by_me")}
-                                    collapsed={joinedCollapsed}
-                                    onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
-                                    sortValue={joinedSortBy}
-                                    sortOptions={sortOptions}
-                                    sortFieldLabel={localize("com_knowledge.sort_field")}
-                                    onSortChange={(v) => setSort("joined", v as SpaceSortType)}
-                                    mobile={mobilePageMode}
-                                />
-                                {!joinedCollapsed && (
-                                    <div className={cn(listRowClassName, stretchJoined && "flex flex-1 flex-col")}>
-                                        {filteredJoinedSpaces.map(s => renderSpaceItem(s, "joined"))}
-                                        {joinedEmpty && renderEmptyState(stretchJoined)}
-                                    </div>
-                                )}
-                            </div>
-                            </>
-                            )}
+                            <KnowledgeSpaceSection
+                                {...sectionHeaderProps}
+                                title={localize("com_knowledge.department_spaces")}
+                                collapsed={departmentCollapsed}
+                                onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
+                                sortValue={departmentSortBy}
+                                onSortChange={(value) => setSort("department", value as SpaceSortType)}
+                                loading={!departmentReady && !departmentFailed}
+                                onRetry={departmentFailed ? () => void departmentQuery.refetch() : undefined}
+                            >
+                                {departmentSpaces.map(space => renderItem(space, "department"))}
+                            </KnowledgeSpaceSection>
+                            <KnowledgeSpaceSection
+                                {...sectionHeaderProps}
+                                title={localize("com_knowledge.created_by_me")}
+                                collapsed={createdCollapsed}
+                                onToggle={() => setCreatedCollapsed(!createdCollapsed)}
+                                sortValue={createdSortBy}
+                                onSortChange={(value) => setSort("created", value as SpaceSortType)}
+                                onAdd={onCreateSpace}
+                                addLabel={localize("com_knowledge.create")}
+                            >
+                                {filteredCreatedSpaces.map(space => renderItem(space, "created"))}
+                            </KnowledgeSpaceSection>
+                            <KnowledgeSpaceSection
+                                {...sectionHeaderProps}
+                                title={localize("com_knowledge.joined_by_me")}
+                                collapsed={joinedCollapsed}
+                                onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
+                                sortValue={joinedSortBy}
+                                onSortChange={(value) => setSort("joined", value as SpaceSortType)}
+                                onSquare={compactMode ? onKnowledgeSquare : undefined}
+                                squareLabel={localize("com_knowledge.go_to_square")}
+                                stretch={fillListHeight}
+                                loading={departmentReady ? !joinedReady && !joinedFailed : !departmentFailed}
+                                onRetry={departmentFailed ? () => void departmentQuery.refetch()
+                                    : departmentReady && joinedFailed ? () => void joinedQuery.refetch() : undefined}
+                            >
+                                {filteredJoinedSpaces.map(space => renderItem(space, "joined"))}
+                            </KnowledgeSpaceSection>
                         </div>
                     </div>
                 </div>

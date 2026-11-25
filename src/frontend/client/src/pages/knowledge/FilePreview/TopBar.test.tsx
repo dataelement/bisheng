@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import request from "~/api/request";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import mockZhHans from "~/locales/zh-Hans/translation.json";
 import { TopBar } from "./TopBar";
 
 jest.mock("~/api/request", () => ({
@@ -10,6 +11,11 @@ jest.mock("~/api/request", () => ({
   default: {
     get: jest.fn(),
   },
+}));
+jest.mock("~/hooks/useLocalize", () => ({
+  __esModule: true,
+  default: () => (key: string) =>
+    key === "com_knowledge.download_file" ? mockZhHans.com_knowledge.download_file : key,
 }));
 
 const mockedRequest = request as jest.Mocked<typeof request>;
@@ -42,7 +48,7 @@ describe("F048 file preview and download boundary", () => {
 
     expect(mockedRequest.get).not.toHaveBeenCalled();
     fireEvent.click(
-      screen.getByRole("button", { name: "preview.download" }),
+      screen.getByRole("button", { name: mockZhHans.com_knowledge.download_file }),
     );
     expect(onDownload).toHaveBeenCalledTimes(1);
   });

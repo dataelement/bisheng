@@ -46,7 +46,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
-    const { fid: flowId, type: flowType, conversationId: currentConvoId } = useParams();
+    const { fid: flowId, type: flowType } = useParams();
 
     const [isPopoverActive, setIsPopoverActive] = useState(false);
     const [renaming, setRenaming] = useState(false);
@@ -56,7 +56,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
     const inputRef = useRef<HTMLInputElement>(null);
     const deleteButtonRef = useRef<HTMLButtonElement>(null);
 
-    const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
+    const updateConvoMutation = useUpdateConversationMutation();
     const setChats = useSetRecoilState(chatsState);
     const setRunning = useSetRecoilState(runningState);
     

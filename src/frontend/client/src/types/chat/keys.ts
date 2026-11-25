@@ -6,6 +6,7 @@ export enum QueryKeys {
   archivedConversations = 'archivedConversations',
   searchConversations = 'searchConversations',
   conversation = 'conversation',
+  conversationName = 'conversationName',
   searchEnabled = 'searchEnabled',
   user = 'user',
   name = 'name', // user key name

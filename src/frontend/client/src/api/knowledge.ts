@@ -1656,6 +1656,9 @@ export async function getSpaceChildrenApi(params: {
             paramsSerializer: request.paramsSerializer,
         }
     );
+    if (res?.status_code != null && res.status_code !== 200) {
+        throw createApiStatusError(res);
+    }
     const payload: any = res?.data ?? {};
     const list = extractList<RawSpaceChild>(payload);
     return {
@@ -1706,6 +1709,9 @@ export async function searchSpaceChildrenApi(params: {
         }
     );
 
+    if (res?.status_code != null && res.status_code !== 200) {
+        throw createApiStatusError(res);
+    }
     const payload: any = res?.data ?? {};
     const list = extractList<RawSpaceChild>(payload);
     return {

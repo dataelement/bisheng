@@ -38,16 +38,22 @@ export function FilePreviewDrawer({
     fileName,
 }: FilePreviewDrawerProps) {
     const localize = useLocalize();
+    const isPreviewOpen = open && Boolean(fileId || changeRequestId);
 
     // FilePreview drives document.title (it was built for a full-page route).
     // In a drawer the page never changed, so put the title back on close.
     useEffect(() => {
-        if (!open) return;
+        if (!isPreviewOpen) return;
         const previousTitle = document.title;
         return () => {
             document.title = previousTitle;
         };
-    }, [open]);
+    }, [isPreviewOpen]);
+
+    // The Sheet portal animates its overlay and panel out independently. If
+    // reopened during that exit, the overlay can remount above the retained
+    // panel at the same z-index. Remove both layers together on close.
+    if (!isPreviewOpen) return null;
 
     // Close sits in the TopBar action slot, right of the More menu.
     const closeAction = (
@@ -62,7 +68,7 @@ export function FilePreviewDrawer({
     );
 
     return (
-        <Sheet open={open && !!(fileId || changeRequestId)} onOpenChange={onOpenChange}>
+        <Sheet open onOpenChange={onOpenChange}>
             <SheetContent
                 data-preview-file-drawer
                 side="right"

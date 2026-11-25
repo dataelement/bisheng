@@ -183,7 +183,7 @@ class ConversationExportService:
             raise ConversationMessageBatchTooLargeError()
 
         session = await MessageSessionDao.async_get_one(chat_id)
-        if session is None or session.user_id != user_id:
+        if session is None or session.is_delete or session.user_id != user_id:
             # Either the chat does not exist or belongs to someone else;
             # do not leak which one — both become NotOwned (12062).
             raise ConversationMessageNotOwnedError()

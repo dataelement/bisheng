@@ -15,6 +15,7 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { useLocalize } from "~/hooks";
+import { extractApiStatusCode } from "~/utils/apiStatusError";
 import type { FolderDeletionObservation, FolderDeletionSnapshot } from "./useFolderDeletion";
 import { isKnowledgeItemPending, isKnowledgeItemUnderReview } from "../knowledgeUtils";
 
@@ -31,6 +32,8 @@ interface UseFileManagerOptions {
 }
 
 export const KNOWLEDGE_SPACE_FILES_REFRESH_EVENT = "knowledge-space-files:refresh";
+
+type FolderReadState = "ready" | "missing" | "denied" | "failed";
 
 function mergeFilesById(existing: KnowledgeFile[], incoming: KnowledgeFile[]) {
     const seenIds = new Set(existing.map((file) => String(file.id)));
@@ -66,7 +69,10 @@ export function dispatchKnowledgeSpaceFilesRefresh(spaceId?: number | string): v
 export function useFileManager({ activeSpace, initialFolderId, enabled = true, onFilesLoaded, onDeletionSnapshot, onDeletionReadStarted, identityKey }: UseFileManagerOptions) {
     const localize = useLocalize();
     const locationRef = useRef("");
-    locationRef.current = `${identityKey}:${activeSpace?.id}:${initialFolderId ?? ""}`;
+    const locationKey = `${identityKey}:${activeSpace?.id}:${initialFolderId ?? ""}`;
+    locationRef.current = locationKey;
+    const [folderRead, setFolderRead] = useState<{ location: string; state: FolderReadState }>();
+    const folderReadState = folderRead?.location === locationKey ? folderRead.state : undefined;
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize] = useState(SPACE_CHILDREN_DEFAULT_PAGE_SIZE);
@@ -135,6 +141,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true, o
             const observation = onDeletionReadStarted?.();
             const reqId = ++loadRequestIdRef.current;
             const isAppending = page > 1;
+            const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+            const readsCurrentFolder = Boolean(currentFolderId && (!isSearching || searchScope === "current"));
             setLoading(true);
             if (isAppending) {
                 setLoadMoreError(false);
@@ -149,7 +157,6 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true, o
                 setCurrentPage(1);
             }
             try {
-                const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
                 // No implicit status filter: the server hides other people's parse failures
                 // (uploader and space managers still see them), so the client asks for
                 // everything and lets that rule apply uniformly.
@@ -191,6 +198,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true, o
                 // filter). Drop this result entirely — don't touch any state.
                 if (reqId !== loadRequestIdRef.current || requestLocation !== locationRef.current) return [];
 
+                if (readsCurrentFolder) setFolderRead({ location: requestLocation, state: "ready" });
                 const incomingData = res.data;
 
                 // Filter out rows that the user has optimistically deleted but
@@ -235,8 +243,21 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true, o
                 setCurrentPage(page);
                 return nextFiles;
             } catch (error) {
-                console.error("Failed to load knowledge space files:", error);
                 if (reqId === loadRequestIdRef.current && requestLocation === locationRef.current) {
+                    if (readsCurrentFolder) {
+                        const code = extractApiStatusCode(error);
+                        const state = code === 18010 ? "missing" : code === 18040 ? "denied" : "failed";
+                        if (!isAppending || state !== "failed") {
+                            setFolderRead({ location: requestLocation, state });
+                        }
+                        if (state !== "failed") {
+                            filesRef.current = [];
+                            setFiles([]);
+                            setHasMore(false);
+                            return [];
+                        }
+                    }
+                    console.error("Failed to load knowledge space files:", error);
                     if (isAppending) {
                         setLoadMoreError(true);
                     } else {
@@ -502,7 +523,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true, o
         // `hasMore` to decide whether to render the infinite-scroll loader.
         nextCursor,
         hasMore,
-        loading,
+        loading: loading || Boolean(enabled && activeSpace?.role && initialFolderId && !folderReadState),
+        folderReadState,
         loadError,
         loadMoreError,
         searchQuery,

@@ -16,13 +16,14 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   TooltipAnchor,
 } from "~/components/ui";
 import { useConfirm } from "~/Providers/ConfirmContext";
 import { useToastContext } from "~/Providers/ToastContext";
-import { useLocalize } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
 
 export interface PersonalTokenDialogProps {
@@ -96,9 +97,64 @@ function TokenRevealDialog({ issued, baseUrl, onClose, onCopy }: TokenRevealDial
   );
 }
 
+interface SecurityPledgeDialogProps {
+  signerName?: string;
+  onClose: () => void;
+  onAccept: () => void;
+}
+
+function SecurityPledgeDialog({ signerName, onClose, onAccept }: SecurityPledgeDialogProps) {
+  const localize = useLocalize();
+  const [acknowledged, setAcknowledged] = useState(false);
+  return (
+    <Dialog open onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent
+        overlayClassName="z-[110]"
+        className="z-[110] flex max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[600px] flex-col gap-4 rounded-2xl p-6 shadow-modal"
+      >
+        <DialogHeader className="shrink-0 pr-8 text-left">
+          <DialogTitle>{localize("com_ai_access.pledge_title")}</DialogTitle>
+        </DialogHeader>
+        <div className="min-h-0 space-y-4 overflow-y-auto text-body text-text-1">
+          <DialogDescription className="text-body text-text-1">
+            {localize("com_ai_access.pledge_risk")}
+          </DialogDescription>
+          <div className="space-y-3 border-t border-border-base pt-4">
+            <p>{localize("com_ai_access.pledge_statement")}</p>
+            <p className="whitespace-pre-line">{localize("com_ai_access.pledge_terms")}</p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 text-body-sm text-text-3">
+            {signerName ? <span>{localize("com_ai_access.pledge_signer")} <span className="text-text-1">{signerName}</span></span> : null}
+            <span>
+              {localize("com_ai_access.pledge_date")}{" "}
+              <span className="text-text-1">
+                {localize("com_ai_access.pledge_date_value", {
+                  date: new Date(),
+                  formatParams: { date: { year: "numeric", month: "long", day: "numeric" } },
+                })}
+              </span>
+            </span>
+          </div>
+        </div>
+        <label className="flex shrink-0 items-start gap-2 text-body-sm text-text-1">
+          <Checkbox className="mt-0.5" checked={acknowledged} onCheckedChange={(checked) => setAcknowledged(checked === true)} />
+          {localize("com_ai_access.pledge_check")}
+        </label>
+        <DialogFooter className="shrink-0 gap-2">
+          <Button color="default" variant="outlined" onClick={onClose}>{localize("com_ui_cancel")}</Button>
+          <Button color="default" variant="solid" disabled={!acknowledged} onClick={onAccept}>
+            {localize("com_ai_access.pledge_submit")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** "AI assistant access" dialog: install-instruction step + personal key step. */
 export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogProps) {
   const localize = useLocalize();
+  const { user } = useAuthContext();
   const confirm = useConfirm();
   const { showToast } = useToastContext();
   const [status, setStatus] = useState<PersonalTokenStatus | null>(null);
@@ -108,6 +164,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
   const [loadFailed, setLoadFailed] = useState(false);
   const [reload, setReload] = useState(0);
   const [actionFailed, setActionFailed] = useState(false);
+  const [pledgeOpen, setPledgeOpen] = useState(false);
   // Inline pre-issue confirmation for administrator holders (AC-P17): the
   // acknowledge checkbox gates the actual issuance.
   const [adminConfirm, setAdminConfirm] = useState(false);
@@ -123,6 +180,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
     setIssued(null);
     setLoadFailed(false);
     setActionFailed(false);
+    setPledgeOpen(false);
     setAdminConfirm(false);
     setAdminAcknowledged(false);
     setPackOrigin(null);
@@ -190,6 +248,12 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
       description: localize("com_ai_access.regenerate_confirmation"),
       confirmText: localize("com_ai_access.regenerate"),
     })) return;
+    setPledgeOpen(true);
+  };
+
+  const handleAcceptPledge = async () => {
+    if (!open || !pledgeOpen || busy || unavailable) return;
+    setPledgeOpen(false);
     if (adminWideScope) {
       setAdminConfirm(true);
       setAdminAcknowledged(false);
@@ -236,6 +300,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
     if (!nextOpen) {
       setIssued(null);
       setStatus(null);
+      setPledgeOpen(false);
       setAdminConfirm(false);
     }
     onOpenChange(nextOpen);
@@ -396,6 +461,13 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
         </div>
       </DialogContent>
     </Dialog>
+    {open && pledgeOpen ? (
+      <SecurityPledgeDialog
+        signerName={user?.name || user?.username}
+        onClose={() => setPledgeOpen(false)}
+        onAccept={() => void handleAcceptPledge()}
+      />
+    ) : null}
     <TokenRevealDialog issued={issued} baseUrl={window.location.origin} onClose={() => setIssued(null)} onCopy={handleCopy} />
     </>
   );

@@ -39,6 +39,11 @@ class ChatSessionService:
     """Chat session lifecycle services."""
 
     @staticmethod
+    async def get_active_session(chat_id: str) -> MessageSession | None:
+        session = await MessageSessionDao.async_get_one(chat_id)
+        return session if session is not None and not session.is_delete else None
+
+    @staticmethod
     async def get_chat_history(
         chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20
     ) -> list["ChatMessageHistoryResponse"]:
@@ -47,7 +52,7 @@ class ChatSessionService:
 
         if not chat_id or not flow_id:
             return []
-        session_info = await MessageSessionDao.async_get_one(chat_id=chat_id)
+        session_info = await ChatSessionService.get_active_session(chat_id)
         if not session_info or session_info.flow_id != flow_id:
             return []
 
@@ -65,7 +70,7 @@ class ChatSessionService:
         subject: SessionSubject | None = None,
     ) -> MessageSession | None:
         """Get session details with logo URL resolved."""
-        res = await MessageSessionDao.async_get_one(chat_id)
+        res = await ChatSessionService.get_active_session(chat_id)
         if subject is not None and (res is None or not subject.matches(res)):
             raise NotFoundError.http_exception()
         if res:

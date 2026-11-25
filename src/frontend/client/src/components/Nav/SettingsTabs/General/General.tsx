@@ -1,5 +1,4 @@
 import { useRecoilState } from 'recoil';
-import Cookies from 'js-cookie';
 import React, { useContext, useCallback } from 'react';
 import UserMsgMarkdownSwitch from './UserMsgMarkdownSwitch';
 import HideSidePanelSwitch from './HideSidePanelSwitch';
@@ -110,11 +109,7 @@ function General() {
         userLang = navigator.language || navigator.languages[0];
       }
 
-      requestAnimationFrame(() => {
-        document.documentElement.lang = userLang;
-      });
       setLangcode(userLang);
-      Cookies.set('lang', userLang, { expires: 365 });
     },
     [setLangcode],
   );

@@ -154,6 +154,7 @@ export function openChatStream(
     // stay stuck in "stop" state. Guarantee a single onEnd().
     let endCalled = false;
     let expectedClose = false;
+    let closedByCaller = false;
     let failureReported = false;
     let networkFailure: FailureInfo | undefined;
     const handleOffline = () => {
@@ -176,7 +177,9 @@ export function openChatStream(
         onEnd();
     };
 
-    sse.addEventListener("open", () => onStart());
+    sse.addEventListener("open", () => {
+        if (!endCalled && !closedByCaller) onStart();
+    });
 
     sse.addEventListener("readystatechange", (e: any) => {
         // sse.js exposes readyState: 0=connecting, 1=open, 2=closed.
@@ -187,6 +190,8 @@ export function openChatStream(
     });
 
     sse.addEventListener("message", (e: MessageEvent) => {
+        // A stopped turn must not update the active answer if another turn has started.
+        if (endCalled || closedByCaller) return;
         try {
             const data = JSON.parse(e.data);
             console.log("[SSE] raw event:", data);
@@ -448,7 +453,7 @@ export function openChatStream(
     });
 
     sse.addEventListener("error", (e: MessageEvent) => {
-        if (endCalled || failureReported) return;
+        if (endCalled || closedByCaller || failureReported) return;
         try {
             const data = JSON.parse(e.data);
             // Resolve the SSE error envelope ({ status_code, status_message,
@@ -500,6 +505,7 @@ export function openChatStream(
             // routes it through the same single-shot watchdog as a natural end,
             // so the caller's streaming flag can never get stuck on.
             const isCancelled = sse.readyState <= 1;
+            closedByCaller = true;
             expectedClose = true;
             sse.close();
             if (isCancelled) sse.dispatchEvent(new Event("cancel"));

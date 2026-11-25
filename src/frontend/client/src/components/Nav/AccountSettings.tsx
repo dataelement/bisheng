@@ -1,4 +1,3 @@
-import Cookies from 'js-cookie';
 import { Check, FileText, GanttChartIcon, Globe, LogOut } from 'lucide-react';
 import { memo, useCallback, useState } from 'react';
 import { useRecoilState } from 'recoil';
@@ -24,11 +23,7 @@ function AccountSettings() {
         userLang = navigator.language || navigator.languages[0];
       }
 
-      requestAnimationFrame(() => {
-        document.documentElement.lang = userLang;
-      });
       setLangcode(userLang);
-      Cookies.set('lang', userLang, { expires: 365 });
     },
     [setLangcode],
   );

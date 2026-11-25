@@ -15,7 +15,10 @@ import { PersonalTokenDialog } from "./PersonalTokenDialog";
 const mockI18n = createInstance();
 const mockToast = jest.fn();
 const mockConfirm = jest.fn();
-jest.mock("~/hooks", () => ({ useLocalize: () => mockI18n.t.bind(mockI18n) }));
+jest.mock("~/hooks", () => ({
+  useAuthContext: () => ({ user: { name: "Test User" } }),
+  useLocalize: () => mockI18n.t.bind(mockI18n),
+}));
 jest.mock("~/Providers/ToastContext", () => ({ useToastContext: () => ({ showToast: mockToast }) }));
 jest.mock("~/Providers/ConfirmContext", () => ({ useConfirm: () => mockConfirm }));
 jest.mock("~/utils", () => ({ copyText: jest.fn(), cn: (...parts: string[]) => parts.filter(Boolean).join(" ") }));
@@ -54,6 +57,15 @@ function statusOf(overrides: Partial<PersonalTokenStatus> = {}): PersonalTokenSt
 
 function findRevealDialog() {
   return screen.findByRole("dialog", { name: mockI18n.t("com_ai_access.reveal_title") });
+}
+
+async function acceptSecurityPledge() {
+  const pledge = await screen.findByRole("dialog", { name: mockI18n.t("com_ai_access.pledge_title") });
+  const submit = within(pledge).getByRole("button", { name: mockI18n.t("com_ai_access.pledge_submit") });
+  expect(submit).toBeDisabled();
+  expect(issuePersonalTokenApi).not.toHaveBeenCalled();
+  await userEvent.click(within(pledge).getByRole("checkbox"));
+  await userEvent.click(submit);
 }
 
 beforeAll(async () => {
@@ -98,6 +110,7 @@ it("reveals the issued key in a stacked dialog and masks it once dismissed", asy
   render(<PersonalTokenDialog open onOpenChange={onOpenChange} />);
   await waitFor(() => expect(screen.getByRole("button", { name: "Generate my key" })).toBeEnabled());
   await userEvent.click(screen.getByRole("button", { name: "Generate my key" }));
+  await acceptSecurityPledge();
 
   // The plaintext lives only inside the stacked reveal dialog; no save gate.
   const reveal = await findRevealDialog();
@@ -129,6 +142,7 @@ it.each(["en", "zh-Hans", "ja"])("bundles the key and the browser address into t
   await mockI18n.changeLanguage(language);
   render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   await userEvent.click(await screen.findByRole("button", { name: mockI18n.t("com_ai_access.get_key") }));
+  await acceptSecurityPledge();
   const reveal = await findRevealDialog();
   await userEvent.click(within(reveal).getByRole("button", { name: mockI18n.t("com_ai_access.copy_send_all") }));
   const expected = mockI18n.t("com_ai_access.copy_send_all_body", { key: plaintext, baseUrl: window.location.origin });
@@ -166,6 +180,7 @@ it("can regenerate a key and return to the empty card after deletion", async () 
   jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ token }));
   render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   await userEvent.click(await screen.findByRole("button", { name: "Get a new key" }));
+  await acceptSecurityPledge();
   await findRevealDialog();
   await userEvent.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByText(plaintext)).not.toBeInTheDocument());
@@ -182,6 +197,7 @@ it("gates an administrator issuance behind the acknowledge step", async () => {
   // The wide-scope admin banner carries the effective (capped) lifetime.
   expect(await screen.findByText(mockI18n.t("com_ai_access.admin_banner", { days: "7" }))).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Generate my key" }));
+  await acceptSecurityPledge();
 
   expect(issuePersonalTokenApi).not.toHaveBeenCalled();
   expect(screen.getByText(mockI18n.t("com_ai_access.admin_confirm_title"))).toBeInTheDocument();
@@ -203,6 +219,7 @@ it("skips the admin ceremony and shows the narrowed scope once the tenant restri
   expect(await screen.findByText(mockI18n.t("com_ai_access.scope_own_only"))).toBeInTheDocument();
   expect(screen.queryByText(mockI18n.t("com_ai_access.admin_banner", { days: "30" }))).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Generate my key" }));
+  await acceptSecurityPledge();
   await waitFor(() => expect(issuePersonalTokenApi).toHaveBeenCalledTimes(1));
 });
 

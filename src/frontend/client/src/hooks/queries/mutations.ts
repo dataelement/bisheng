@@ -16,7 +16,6 @@ import {
   addConversation,
   deleteConversation,
   logger,
-  updateConversation,
   updateConvoFields,
 } from '~/utils';
 import { normalizeData } from '~/utils/collection';
@@ -59,9 +58,7 @@ export const useGenTitleMutation = (): TGenTitleMutation => {
   });
 };
 
-export const useUpdateConversationMutation = (
-  id: string,
-): UseMutationResult<
+export const useUpdateConversationMutation = (): UseMutationResult<
   t.TUpdateConversationResponse,
   unknown,
   t.TUpdateConversationRequest,
@@ -71,39 +68,16 @@ export const useUpdateConversationMutation = (
   return useMutation(
     (payload: t.TUpdateConversationRequest) => dataService.updateConversation(payload),
     {
-      onSuccess: (updatedConvo, payload) => {
-        const convo = {
-          ...payload,
-          "_id": "67f7b0911047906c64090ac9",
-          "user": "",
-          "__v": 0,
-          "createdAt": "2025-04-10T11:50:41.882Z",
-          "endpoint": "Deepseek",
-          "endpointType": "custom",
-          "expiredAt": null,
-          "files": [],
-          "isArchived": false,
-          "messages": [
-            "67f7b0911047906c64090ac8",
-            "67f7b0951047906c64090aca",
-            "67f7cf011047906c64090ad3",
-            "67f7cf091047906c64090ad4",
-            "67f7cf0e1047906c64090ad5",
-            "67f7cfea1047906c64090ad8",
-            "67f7cff01047906c64090ad9"
-          ],
-          "model": "deepseek-chat",
-          "resendFiles": true,
-          "tags": [],
-          "updatedAt": "2025-04-11T06:15:00.445Z"
-        }
-        queryClient.setQueryData([QueryKeys.conversation, id], convo);
-        queryClient.setQueryData<t.ConversationData>([QueryKeys.allConversations], (convoData) => {
-          if (!convoData) {
-            return convoData;
-          }
-          return updateConversation(convoData, convo);
-        });
+      onSuccess: async (_updatedConvo, { conversationId, title }) => {
+        const titleKey = [QueryKeys.conversationName, conversationId, ''];
+        await queryClient.cancelQueries({ queryKey: titleKey, exact: true });
+        queryClient.setQueryData(titleKey, title);
+        queryClient.setQueryData<t.TConversation>([QueryKeys.conversation, conversationId], (convo) =>
+          convo ? { ...convo, title } : convo,
+        );
+        queryClient.setQueryData<t.ConversationData>([QueryKeys.allConversations], (convoData) =>
+          convoData ? updateConvoFields(convoData, { conversationId, title }) : convoData,
+        );
       },
     },
   );

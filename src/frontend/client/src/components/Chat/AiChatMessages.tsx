@@ -241,7 +241,7 @@ export default function AiChatMessages({
     }, [queryClient, conversationId, messages.length]);
 
     const headerTitleText = useMemo(() => {
-        const raw = tree[0]?.flow_name || title || cachedConversationTitle;
+        const raw = title || tree[0]?.flow_name || cachedConversationTitle;
         if (raw != null && String(raw).trim() !== "") return String(raw).trim();
         return localize("com_ui_new_chat");
     }, [tree, title, cachedConversationTitle, localize]);

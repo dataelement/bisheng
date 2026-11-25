@@ -9,7 +9,11 @@
  * conversation neither closes its stream nor refetches over its live bucket.
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createElement, type PropsWithChildren } from "react";
 
+import { ConversationUnavailableError } from "~/api/chatApi";
+import { QueryKeys } from "~/types/chat";
 import type { SSESubmission } from "./useAiChatSSE";
 
 /** Every SSE turn opened during a test, in order. */
@@ -26,6 +30,7 @@ jest.mock("./useAiChatSSE", () => ({
 const mockGetAgentMessages = jest.fn();
 const mockGetSessionName = jest.fn();
 jest.mock("~/api/chatApi", () => ({
+    ConversationUnavailableError: class ConversationUnavailableError extends Error {},
     getAgentMessages: (...args: unknown[]) => mockGetAgentMessages(...args),
     getSessionName: (...args: unknown[]) => mockGetSessionName(...args),
 }));
@@ -67,15 +72,12 @@ jest.mock("~/api/linsight", () => ({
     getLinsightSessionVersionList: jest.fn().mockResolvedValue([]),
 }));
 jest.mock("~/types/chat", () => ({
-    QueryKeys: { allConversations: "allConversations" },
+    QueryKeys: { allConversations: "allConversations", conversationName: "conversationName" },
     dataService: { genTitle: jest.fn().mockResolvedValue({}) },
 }));
 jest.mock("~/utils", () => ({
     addConversation: (data: unknown) => data,
     updateConvoFields: (data: unknown) => data,
-}));
-jest.mock("@tanstack/react-query", () => ({
-    useQueryClient: () => ({ setQueryData: jest.fn(), getQueryData: jest.fn() }),
 }));
 
 // Imported after the jest.mock calls above on purpose — the hook pulls those
@@ -95,9 +97,10 @@ const historyOf = (conversationId: string) => [
     },
 ];
 
-const renderChat = (conversationId: string) =>
+const renderChat = (conversationId: string, client = new QueryClient({ defaultOptions: { queries: { cacheTime: 0 } } })) =>
     renderHook(({ cid }: { cid: string }) => useAiChat(cid), {
         initialProps: { cid: conversationId },
+        wrapper: ({ children }: PropsWithChildren) => createElement(QueryClientProvider, { client }, children),
     });
 
 /** The most recently opened turn's SSE callbacks. */
@@ -108,6 +111,37 @@ beforeEach(() => {
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
     mockGetSessionName.mockResolvedValue("");
     (store.chatModel as unknown as { __testValue: { id: number; name: string } }).__testValue = { id: 1, name: 'test-model' };
+});
+
+it("keeps a saved title when the active turn finishes with an older title", async () => {
+    mockGetSessionName.mockResolvedValue("Original title");
+    const client = new QueryClient({ defaultOptions: { queries: { cacheTime: 0 } } });
+    const { result } = renderChat("c1", client);
+    await waitFor(() => expect(result.current.title).toBe("Original title"));
+
+    act(() => result.current.sendMessage("Continue"));
+    act(() => {
+        client.setQueryData([QueryKeys.conversationName, "c1", ""], "Renamed title");
+    });
+    await waitFor(() => expect(result.current.title).toBe("Renamed title"));
+
+    act(() => latestStream().submission.onFinal({
+        final: true, conversation: { conversationId: "c1", title: "Original title" },
+    }));
+    expect(result.current.title).toBe("Renamed title");
+});
+
+it("clears cached history when a conversation becomes unavailable", async () => {
+    const { result, rerender } = renderChat("c1");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+
+    rerender({ cid: "c2" });
+    await waitFor(() => expect(result.current.messages[0]?.conversationId).toBe("c2"));
+    mockGetAgentMessages.mockRejectedValueOnce(new ConversationUnavailableError());
+    rerender({ cid: "c1" });
+
+    await waitFor(() => expect(result.current.isConversationUnavailable).toBe(true));
+    expect(result.current.messages).toEqual([]);
 });
 
 describe('daily retry', () => {

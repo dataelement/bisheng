@@ -12,6 +12,7 @@ import {
 import { useSyncExternalStore, useState } from "react";
 import { Radio, RadioGroup } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
+import { normalizeWorkspaceLanguage } from "~/locales/workspaceLanguage";
 import store from "~/store";
 import {
     FONT_SIZE_LEVELS,
@@ -58,18 +59,6 @@ export function SettingSelect({ value, options, onValueChange }: SettingSelectPr
     );
 }
 
-
-/**
- * store.lang can hold legacy un-normalized values (e.g. "zh-CN" restored from
- * localStorage, bypassing defaultLang's normalization) — map them onto the
- * three offered options so the Select never renders an empty value.
- */
-function normalizeLang(lang: string | undefined): string {
-    const lower = (lang ?? "").toLowerCase();
-    if (lower.startsWith("zh")) return "zh-Hans";
-    if (lower.startsWith("ja") && !window.APP_CONFIG?.disableJa) return "ja";
-    return "en";
-}
 
 /** App-wide preferences: page font size (desktop only) and display language. */
 export function GeneralSection() {
@@ -132,7 +121,7 @@ export function GeneralSection() {
             <div className="flex items-center justify-between gap-4">
                 <span className="text-[14px] text-[#1d2129]">{localize("com_nav_language")}</span>
                 <div className="w-[160px] shrink-0">
-                    <SettingSelect value={normalizeLang(langcode)} options={languages} onValueChange={setLangcode} />
+                    <SettingSelect value={normalizeWorkspaceLanguage(langcode) || "en"} options={languages} onValueChange={setLangcode} />
                 </div>
             </div>
         </section>

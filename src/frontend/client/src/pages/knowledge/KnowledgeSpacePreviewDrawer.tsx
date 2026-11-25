@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { EmptyStateIllustration, NoPermissionIllustration } from "~/components/illustrations";
+import { NoPermissionIllustration } from "~/components/illustrations";
 import { ChevronRight, X } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { Button } from "~/components/ui/Button";
+import { Sheet, SheetContent } from "~/components/ui/Sheet";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { FileCard } from "./SpaceDetail/FileCard";
+import { PreviewFolderListState, PreviewSpaceHeader } from "./KnowledgeSpacePreviewParts";
 import {
     KnowledgeFile,
     KnowledgeSpace,
@@ -56,12 +55,10 @@ export function KnowledgeSpacePreviewDrawer({
     // effect would not re-run and the cleared list would never reload. This token forces a
     // fresh fetch on each open.
     const [filesReloadKey, setFilesReloadKey] = useState(0);
-    const [childrenPage, setChildrenPage] = useState(1);
     const [childrenTotal, setChildrenTotal] = useState(0);
     const [loadingChildrenMore, setLoadingChildrenMore] = useState(false);
-    // True while the FIRST page of the file list is in flight, so the empty
-    // state is not flashed before data arrives.
-    const [loadingFiles, setLoadingFiles] = useState(false);
+    // Track the first page separately from pagination, so failures never look empty.
+    const [filesLoadState, setFilesLoadState] = useState<"loading" | "ready" | "error">("loading");
     // Guards against out-of-order responses when the effect re-fires (space /
     // folder switch) while a previous first-page request is still pending.
     const filesRequestSeqRef = useRef(0);
@@ -154,10 +151,10 @@ export function KnowledgeSpacePreviewDrawer({
         const fallbackSpace = initialSpaceRef.current;
 
         setLoadingSpace(true);
+        setFilesLoadState("loading");
         setSpace(fallbackSpace ?? null);
         setStatus("none");
         setFilesPreview([]);
-        setChildrenPage(1);
         setChildrenTotal(0);
         setCanViewApprovalContent(null);
         setParentStack([]);
@@ -203,22 +200,20 @@ export function KnowledgeSpacePreviewDrawer({
 
     // Load file preview list for spaces that are visible to the current user
     useEffect(() => {
-        if (!space || !canViewFiles) {
+        if (!open || !space || !canViewFiles) {
             filesRequestSeqRef.current += 1;
             setFilesPreview([]);
             setChildrenTotal(0);
-            setChildrenPage(1);
-            setLoadingFiles(false);
+            setFilesLoadState("loading");
             return;
         }
 
         // Reset + initial load
         const requestSeq = ++filesRequestSeqRef.current;
         setFilesPreview([]);
-        setChildrenPage(1);
         setChildrenTotal(0);
         setLoadingChildrenMore(false);
-        setLoadingFiles(true);
+        setFilesLoadState("loading");
         // F027: reset cursor so the first request after a parent/space switch
         // fetches page 1 (cursor=null) instead of inheriting a stale token.
         preview_next_cursor_ref.current = null;
@@ -238,27 +233,24 @@ export function KnowledgeSpacePreviewDrawer({
                 // is gone (used only to decide "load more" visibility).
                 setChildrenTotal(res.has_more ? res.data.length + 1 : res.data.length);
                 preview_next_cursor_ref.current = res.next_cursor ?? null;
+                setFilesLoadState("ready");
             })
             .catch(() => {
                 if (requestSeq !== filesRequestSeqRef.current) return;
                 setFilesPreview([]);
                 setChildrenTotal(0);
-            })
-            .finally(() => {
-                if (requestSeq !== filesRequestSeqRef.current) return;
-                setLoadingFiles(false);
+                setFilesLoadState("error");
             });
         // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
         // canViewApprovalContent is resolved asynchronously (visible) for APPROVAL spaces; without it as a
         // dependency the effect would have already bailed (canViewFiles=false) and never refetch once access is granted.
-    }, [space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status, filesReloadKey, canViewApprovalContent]);
+    }, [open, space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status, filesReloadKey, canViewApprovalContent]);
 
     const loadMoreChildren = async () => {
         if (!space || !canViewFiles) return;
         if (loadingChildrenMore) return;
         if (filesPreview.length >= childrenTotal) return;
 
-        const nextPage = childrenPage + 1;
         setLoadingChildrenMore(true);
         try {
             const fileStatusFilter = getPreviewFileStatusFilter(space);
@@ -276,7 +268,6 @@ export function KnowledgeSpacePreviewDrawer({
             const newRowCount = filesPreview.length + res.data.length;
             setChildrenTotal(res.has_more ? newRowCount + 1 : newRowCount);
             preview_next_cursor_ref.current = res.next_cursor ?? null;
-            setChildrenPage(nextPage);
         } catch {
             // ignore
         } finally {
@@ -473,50 +464,7 @@ export function KnowledgeSpacePreviewDrawer({
                 )}
                 {space ? (
                     <>
-                        <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
-                            <SheetTitle className="mb-1 text-text-1 leading-tight font-semibold touch-mobile:pr-10">
-                                {space.name}
-                            </SheetTitle>
-                            {space.description && (
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <p className="text-sm text-text-3 leading-relaxed line-clamp-2 cursor-default text-left">
-                                            {space.description}
-                                        </p>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="shadow-lg py-2 max-w-md text-sm">
-                                        {space.description}
-                                    </TooltipContent>
-                                </Tooltip>
-                            )}
-
-                            <div className="flex items-center gap-1.5 mb-3 mt-4">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs">
-                                    {space.creator?.[0] || "?"}
-                                </span>
-                                <span className="text-sm text-text-3">{space.creator}</span>
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center text-sm text-text-3">
-                                    <span className="mr-3">{space.fileCount ?? 0} {localize("com_knowledge.articles_count")}</span>
-                                    <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
-                                </div>
-                                <Button
-                                    variant={btn.variant}
-                                    className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
-                                        ? "bg-fill-2 text-text-3 border-border-base"
-                                        : status === "pending"
-                                            ? "bg-fill-2 text-text-4 border-border-base"
-                                            : ""
-                                        }`}
-                                    disabled={btn.disabled}
-                                    onClick={handleClickAction}
-                                >
-                                    {btn.label}
-                                </Button>
-                            </div>
-                        </SheetHeader>
+                        <PreviewSpaceHeader space={space} status={status} action={btn} onAction={handleClickAction} />
 
                         <div
                             ref={spacePreviewScrollRevealRef}
@@ -536,7 +484,7 @@ export function KnowledgeSpacePreviewDrawer({
                                             className="text-blue-500 hover:underline"
                                             onClick={() => goToParentDepth(0)}
                                         >
-                                            {localize("com_knowledge.all_files")}</button>
+                                            {localize("com_knowledge.square_preview_root_directory")}</button>
                                         {parentNameStack.map((name, idx) => {
                                             const depth = idx + 1;
                                             return (
@@ -554,17 +502,12 @@ export function KnowledgeSpacePreviewDrawer({
                                             );
                                         })}
                                     </div>
-                                    {loadingFiles ? (
-                                        <div className="flex flex-1 items-center justify-center">
-                                            <LoadingIcon className="size-20 text-primary" />
-                                        </div>
-                                    ) : filesPreview.length === 0 ? (
-                                        <div className="flex flex-1 flex-col items-center justify-center text-center">
-                                            <EmptyStateIllustration className="size-[120px] mb-4" />
-                                            <p className="text-[14px] font-normal text-text-3">
-                                                {localize("com_knowledge.no_files")}
-                                            </p>
-                                        </div>
+                                    {filesLoadState !== "ready" || filesPreview.length === 0 ? (
+                                        <PreviewFolderListState
+                                            state={filesLoadState}
+                                            hasParsedContent={(space.fileCount ?? 0) > 0}
+                                            onRetry={() => setFilesReloadKey(key => key + 1)}
+                                        />
                                     ) : (
                                         <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
                                             {filesPreview.map((f) => (

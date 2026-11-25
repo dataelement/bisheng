@@ -22,6 +22,8 @@ import { findPendingUserInput, splitSessionPseudoTask } from '~/components/Linsi
 import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtils';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
+import { SystemErrorIllustration } from '~/components/illustrations';
+import { Button } from '~/components/ui/Button';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
 import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
@@ -275,6 +277,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     conversationId: activeConvoId,
     title: chatTitle,
     isLoading,
+    isConversationUnavailable,
     isStreaming,
     isParsingMedia,
     sendMessage,
@@ -714,6 +717,18 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     }
     stopGenerating();
   }, [taskRunning, latestTaskVersionId, updateLinsight, stopGenerating]);
+
+  if (isConversationUnavailable) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-4 text-center">
+        <SystemErrorIllustration className="size-[120px]" />
+        <p className="text-body font-medium text-text-1" role="status">{t('api_errors.12041')}</p>
+        <Button color="default" variant="solid" onClick={() => navigate('/c/new', { replace: true })}>
+          {t('com_ui_new_chat')}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <Presentation isLingsi={false}>

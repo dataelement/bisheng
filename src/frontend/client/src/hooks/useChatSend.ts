@@ -9,6 +9,7 @@ import { startLinsight } from '~/api/linsight';
 import { SopStatus } from '~/store/linsight';
 import { isMediaAttachmentFile, type MediaParsingState } from '~/utils/mediaAttachmentUtils';
 import { requestFailureMetadata } from '~/utils/failureInfo';
+import { isPlaceholderConversationTitle } from '~/utils/conversationTitle';
 import type { SSESubmission } from './useAiChatSSE';
 import type { useLocalize } from '~/hooks';
 import type { useToastContext } from '~/Providers';
@@ -63,8 +64,17 @@ export function useChatSend({ conversationId, isStreaming, chatModel, selectedOr
             const turn = { cid: conversationId };
             const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
                 setMessagesFor(turn.cid, updater);
-            const setTitle = (updater: string | ((prev: string) => string)) =>
-                setTitleFor(turn.cid, updater);
+            const syncResponseTitle = (id: string, incomingTitle?: string) => {
+                if (!incomingTitle || isPlaceholderConversationTitle(incomingTitle)) return;
+                // A turn may have captured its title before the user renamed the chat.
+                const savedTitle = queryClient.getQueryData<string>([QueryKeys.conversationName, id, '']);
+                const title = savedTitle && !isPlaceholderConversationTitle(savedTitle) ? savedTitle : incomingTitle;
+                setTitleFor(id, title);
+                queryClient.setQueryData<ConversationData>(
+                    [QueryKeys.allConversations],
+                    (data) => data ? updateConvoFields(data, { conversationId: id, title }) : data,
+                );
+            };
             const setIsStreaming = (value: boolean) => setStreamingFor(turn.cid, value);
             const setIsParsingMedia = (value: boolean) => setParsingMediaFor(turn.cid, value);
 
@@ -367,20 +377,7 @@ export function useChatSend({ conversationId, isStreaming, chatModel, selectedOr
                     // so this no longer races slow models.
                     if (wasNewConvo && chat_id) {
                         dataService.genTitle({ conversationId: chat_id })
-                            .then((res: { title?: string }) => {
-                                if (!res?.title) return;
-                                setTitle(res.title);
-                                queryClient.setQueryData<ConversationData>(
-                                    [QueryKeys.allConversations],
-                                    (convoData) =>
-                                        convoData
-                                            ? updateConvoFields(convoData, {
-                                                  conversationId: chat_id,
-                                                  title: res.title,
-                                              } as TConversation)
-                                            : convoData,
-                                );
-                            })
+                            .then((res: { title?: string }) => syncResponseTitle(chat_id, res?.title))
                             .catch(() => { /* non-critical */ });
                     }
                 },
@@ -499,20 +496,7 @@ export function useChatSend({ conversationId, isStreaming, chatModel, selectedOr
                     const finalConvoId = data.conversation?.conversationId || internalConvoIdRef.current;
                     if (wasNewConvo && finalConvoId && finalConvoId !== 'new') {
                         dataService.genTitle({ conversationId: finalConvoId })
-                            .then((res: { title?: string }) => {
-                                if (!res?.title) return;
-                                setTitle(res.title);
-                                queryClient.setQueryData<ConversationData>(
-                                    [QueryKeys.allConversations],
-                                    (convoData) => {
-                                        if (!convoData) return convoData;
-                                        return updateConvoFields(convoData, {
-                                            conversationId: finalConvoId,
-                                            title: res.title,
-                                        } as TConversation);
-                                    }
-                                );
-                            })
+                            .then((res: { title?: string }) => syncResponseTitle(finalConvoId, res?.title))
                             .catch(() => {
                                 // genTitle failure is non-critical — keep 'New Chat' title
                             });
@@ -520,17 +504,7 @@ export function useChatSend({ conversationId, isStreaming, chatModel, selectedOr
                         // For existing conversations, hot-update title if returned in SSE final
                         const sseTitle = data.conversation?.title || data.conversation?.flow_name;
                         if (sseTitle && finalConvoId && finalConvoId !== 'new') {
-                            setTitle(sseTitle);
-                            queryClient.setQueryData<ConversationData>(
-                                [QueryKeys.allConversations],
-                                (convoData) => {
-                                    if (!convoData) return convoData;
-                                    return updateConvoFields(convoData, {
-                                        conversationId: finalConvoId,
-                                        title: sseTitle,
-                                    } as TConversation);
-                                }
-                            );
+                            syncResponseTitle(finalConvoId, sseTitle);
                         }
                     }
                 },

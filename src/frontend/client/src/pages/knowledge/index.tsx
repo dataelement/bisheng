@@ -33,6 +33,7 @@ import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent, type SelectedContentItem } from "./SpaceDetail";
+import { FolderUnavailableState } from "./FolderUnavailableState";
 import { knowledgeSelectedFilesState } from "./selectionStore";
 import {
     quickQaLocationKey,
@@ -259,6 +260,11 @@ export default function Knowledge() {
         identityKey: deletionIdentity,
         enabled: !showKnowledgeSquare,
     });
+    const folderReadState = activeSpace?.id === detailSpaceId ? fileManager.folderReadState : undefined;
+    const folderPath = fileManager.currentPath;
+    const unavailableFolderParentId = folderPath[folderPath.length - 1]?.id === urlFolderId
+        ? folderPath[folderPath.length - 2]?.id
+        : undefined;
 
     const visibleFiles = useMemo(() => activeSpace
         ? folderDeletion.mergeFiles(activeSpace.id, fileManager.currentFolderId, fileManager.files, fileManager.currentPath)
@@ -875,7 +881,9 @@ export default function Knowledge() {
                 )
                 : null}
 
-            {activeSpace ? (
+            {activeSpace && urlFolderId && (folderReadState === "missing" || folderReadState === "denied") ? (
+                <FolderUnavailableState key={`${activeSpace.id}:${urlFolderId}`} spaceId={activeSpace.id} parentId={unavailableFolderParentId} reason={folderReadState} />
+            ) : activeSpace ? (
                 <div
                     className={cn(
                         "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",

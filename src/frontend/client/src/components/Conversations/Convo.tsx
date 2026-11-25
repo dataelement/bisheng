@@ -39,9 +39,7 @@ export default function Conversation({
     () => params.conversationId,
     [params.conversationId]
   );
-  const updateConvoMutation = useUpdateConversationMutation(
-    currentConvoId ?? ""
-  );
+  const updateConvoMutation = useUpdateConversationMutation();
   const activeConvos = useRecoilValue(store.allConversationsSelector);
   const { data: endpointsConfig } = useGetEndpointsQuery();
   const { navigateWithLastTools } = useNavigateToConvo();
