@@ -2415,9 +2415,6 @@
     }
   },
   "src/pages/appChat/useWebsocket.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
     "no-console": {
       "count": 4
     },

@@ -14,6 +14,7 @@ from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
 from bisheng.dsh.domain.models.subject_policy import DshSubjectPolicy, DshSubjectPolicyAudit
+from bisheng.dsh.domain.models.tool_call import DshToolCall
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository
 from bisheng.dsh.domain.services.automatic_quota_recovery import AutomaticQuotaRecovery
@@ -38,6 +39,7 @@ def recovery_db(tmp_path, request):
         DshSubjectPolicy.__table__,
         DshSubjectPolicyAudit.__table__,
         DshModelCall.__table__,
+        DshToolCall.__table__,
         DshMonthlyUsage.__table__,
         DshAdminOperation.__table__,
     ]

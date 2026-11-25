@@ -46,7 +46,7 @@ async def inspect_managed_tenant(tenant_id, user_ids=(), limit=100):
                 item["quotas"] = {"state": "VERIFIED", "items": [row.model_dump() for row in quotas]}
             except Exception as exc:
                 item["quotas"] = {"state": "UNKNOWN", "error_type": type(exc).__name__}
-            if settings.dsh.enabled:
+            if settings.credit_billing.enabled:
                 try:
                     from bisheng.dsh.runtime import read_policy
 

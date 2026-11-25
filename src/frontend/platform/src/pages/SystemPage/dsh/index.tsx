@@ -25,7 +25,8 @@ export function DshManagement({ section = 'credits' }: DshManagementProps) {
     const { config, failed } = useDshBrowserConfig()
     if (!config) return failed ? <div role="alert">{t('dsh.unavailable')}</div> : <LoadingState size="page" label={t('dsh.loading')} className="h-full" />
     if (!config.management_enabled) return <p>{t('dsh.managementUnavailable')}</p>
-    const activeSection = config.enabled ? section : 'access'
+    const billingEnabled = config.credit_billing_enabled ?? config.enabled
+    const activeSection = !billingEnabled && (section === 'credits' || section === 'usage') ? 'access' : section
     return <div className="flex h-full min-h-0 flex-col px-2 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}

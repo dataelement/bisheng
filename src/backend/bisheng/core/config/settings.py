@@ -8,11 +8,12 @@ from urllib.parse import quote, urlparse, urlunparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from celery.schedules import crontab
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy.engine.url import make_url
 
 from bisheng.core.config.app_runtime import AppRuntimeConf
-from bisheng.core.config.dsh import DshSettings
+from bisheng.core.config.dsh import CreditBillingConf, DshSettings
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.open_platform import OpenApiConf, OpenMcpConf, OpenPlatformConf
@@ -1116,6 +1117,10 @@ class Settings(BaseModel):
         default_factory=DshSettings,
         description="BS Client deployment settings, native Desktop access and quota/audit bounds.",
     )
+    credit_billing: CreditBillingConf = Field(
+        default_factory=CreditBillingConf,
+        description="Global master switch for credit billing, quota checks and tool pricing.",
+    )
     database_url: str | None = Field(default=None, repr=False, validate_default=True)
     redis_url: Union[str, dict] | None = Field(default=None, repr=False)
     celery_redis_url: Union[str, dict] | None = Field(default=None, repr=False)
@@ -1230,11 +1235,22 @@ class Settings(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_client_settings(cls, values):
-        if isinstance(values, dict) and "dsh" in values:
+        if isinstance(values, dict):
             values = dict(values)
-            legacy = values.pop("dsh")
-            if "bs_client" not in values:
-                values["bs_client"] = legacy
+            if "dsh" in values:
+                legacy = values.pop("dsh")
+                if "bs_client" not in values:
+                    values["bs_client"] = legacy
+            for key in ("bs_client",):
+                raw_client = values.get(key)
+                if isinstance(raw_client, dict) and "enabled" in raw_client:
+                    cleaned = dict(raw_client)
+                    cleaned.pop("enabled", None)
+                    values[key] = cleaned
+                    logger.warning(
+                        "Deprecated configuration key 'bs_client.enabled'/'dsh.enabled' is ignored; "
+                        "desktop access is always enabled and billing is controlled by 'credit_billing.enabled'"
+                    )
         return values
 
     @property

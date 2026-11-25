@@ -126,8 +126,18 @@ def restore_execution_context(snapshot_data: dict | None):
             data_scope=data_scope,
         )
     )
+    from contextlib import nullcontext
+
+    from bisheng.dsh.domain.services import chat_credits
+
+    billing_scope = (
+        chat_credits.billing_context(open_api_unbilled=True)
+        if snapshot.channel == "open_api_v2" and snapshot.actor_kind != "hosted_app"
+        else nullcontext()
+    )
     try:
-        yield snapshot
+        with billing_scope:
+            yield snapshot
     finally:
         reset_current_permission_actor(actor_token)
         visible_tenant_ids.reset(visible_token)

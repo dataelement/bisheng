@@ -25,7 +25,7 @@ export const AppLostMessage = "11111";
 const unavailableCodes = new Set(["10421", "13002", "13010", AppLostMessage]);
 const wsMap = new Map<string, WebSocket>();
 // 会话运行时信息
-const sessionInfoMap = new Map<string, any>();
+const sessionInfoMap = new Map<string, { node_id?: string; message_id?: string | number }>();
 const restartCallbacks = new Map<string, () => void>();
 
 /**
@@ -284,14 +284,27 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
     if (data.category === "error" || data.type === "error") {
       let code = 0,
         message = "";
+      let errorData: Record<string, unknown> | undefined;
       if (typeof data.message === "string") {
         // 兼容助手错误信息
         const _data = JSON.parse(data.message);
         code = _data.status_code;
         message = _data.status_message;
+        errorData = _data.data;
       } else {
-        code = data.message.status_code;
-        message = data.message.status_message;
+        code = data.message?.status_code;
+        message = data.message?.status_message;
+        errorData = data.message?.data;
+      }
+      if (Number(code) === 26121 || errorData?.error_type === "credit_exhausted") {
+        helpers.stopShow(false);
+        helpers.message.closeAllLogMsg?.(helpers.chatId);
+        helpers.message.closeAllMsg(helpers.chatId);
+        helpers.message.appendCreditExhaustedMsg?.(helpers.chatId, {
+          statusCode: Number(code) || 26121,
+          message,
+        });
+        return;
       }
       if (unavailableCodes.has(String(code))) {
         unavailableRef.current[helpers.chatId] = String(code);
@@ -414,9 +427,10 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
           _websocket.send(JSON.stringify(msg));
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error ?? "");
       showToast({
-        message: error.message,
+        message: msg,
         severity: NotificationSeverity.WARNING,
       });
     }

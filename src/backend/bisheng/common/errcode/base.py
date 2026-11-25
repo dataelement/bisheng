@@ -101,3 +101,23 @@ class BaseErrorCode(Exception):
         await websocket.send_json({"category": "error", "type": "end", "message": reason})
         if close_ws:
             await websocket.close(reason=self.message[:10])
+
+
+WORKFLOW_ERROR_PREFIX = "__bisheng_error__:"
+
+
+def encode_workflow_error(exc: BaseErrorCode) -> str:
+    """Serialize a structured BaseErrorCode into workflow failure reason."""
+    return f"{WORKFLOW_ERROR_PREFIX}{exc.to_json_str()}"
+
+
+def decode_workflow_error(reason: str | None) -> dict | None:
+    """Decode structured workflow failure reason back into BaseErrorCode dict payload."""
+    if not reason or not reason.startswith(WORKFLOW_ERROR_PREFIX):
+        return None
+    raw = reason[len(WORKFLOW_ERROR_PREFIX) :]
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) and "status_code" in parsed else None

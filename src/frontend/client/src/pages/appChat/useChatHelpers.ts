@@ -456,7 +456,27 @@ export default function useChatHelpers(flowLeaseId?: string | null) {
                     return updatedMessages
                 }),
             )
-        }
+        },
+        appendCreditExhaustedMsg: (chatid: string, info?: { statusCode?: number; message?: string }) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatid, (messages) => [
+                    ...messages,
+                    {
+                        ...baseMsgItem,
+                        category: "credit_exhausted",
+                        is_bot: true,
+                        end: true,
+                        id: 'credit-' + generateUUID(8),
+                        message: info?.message ?? "",
+                        extra: {
+                            status_code: info?.statusCode ?? 26121,
+                            error_type: "credit_exhausted",
+                        },
+                        create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
+                    },
+                ]),
+            )
+        },
     }
 
     return {

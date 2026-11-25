@@ -30,7 +30,7 @@ async def workbench_models_for_display(operator, config=None):
     verified = await read_workbench_metadata()
     from bisheng.common.services.config_service import settings
 
-    if not settings.dsh.enabled:
+    if not settings.credit_billing.enabled:
         candidates = await LLMService.aget_online_chat_models()
         return await _project_visible_models(config or verified, candidates, {model.id for model, _ in candidates})
     return await _project_models(config or verified, [int(model.id) for model in verified.models or []])
@@ -121,10 +121,10 @@ async def _project_visible_models(config, candidates, visible):
 
 
 async def user_workbench_models(user_id: int, config=None):
-    """The models a user may pick in the workbench, in either deployment mode."""
+    """The models a user may pick in the workbench, depending on whether credit billing is active."""
     from bisheng.common.services.config_service import settings
 
-    if settings.dsh.enabled:
+    if settings.credit_billing.enabled:
         return await authorized_workbench_models(user_id, config)
     return await visible_workbench_models(user_id, config)
 

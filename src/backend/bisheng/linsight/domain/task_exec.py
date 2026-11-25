@@ -525,61 +525,77 @@ class LinsightWorkflowTask:
             finally:
                 await self._cleanup_resources()
 
+    @staticmethod
+    def _billing_scope(session_model: LinsightSessionVersion):
+        from bisheng.dsh.domain.services import chat_credits
+        from bisheng.linsight.domain.services.unattended_run import OPEN_API_CHANNEL
+
+        api_meta = getattr(session_model, "api_meta", None) or {}
+        is_open_api = isinstance(api_meta, dict) and api_meta.get("channel") == OPEN_API_CHANNEL
+        return chat_credits.billing_context(
+            source_type="linsight",
+            source_id=str(getattr(session_model, "id", "") or ""),
+            open_api_unbilled=is_open_api,
+        )
+
     async def _resume_workflow(self, session_model: LinsightSessionVersion, user_input) -> None:
         """Rebuild the agent on the same thread (Redis checkpointer) and drive resume."""
+        from bisheng.dsh.domain.services import chat_credits
         from bisheng.linsight.domain.services.checkpointer import make_checkpointer
 
-        # The task was parked as WAITING_FOR_USER_INPUT; resuming means it is
-        # actively running again. Flip it back to IN_PROGRESS so status reflects
-        # reality (and the worker-startup crash sweep, which scans IN_PROGRESS,
-        # again covers it while a worker is genuinely driving it).
-        await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
-        # F132: an ask_user resume continues the round that parked (same turn id).
-        await self._begin_memory_round(session_model, resume=True)
+        with self._billing_scope(session_model), chat_credits.unmetered():
+            # The task was parked as WAITING_FOR_USER_INPUT; resuming means it is
+            # actively running again. Flip it back to IN_PROGRESS so status reflects
+            # reality (and the worker-startup crash sweep, which scans IN_PROGRESS,
+            # again covers it while a worker is genuinely driving it).
+            await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+            # F132: an ask_user resume continues the round that parked (same turn id).
+            await self._begin_memory_round(session_model, resume=True)
 
-        self.llm = await self._get_round_llm(session_model)
-        # The previous round deleted file_dir. Put this session's output/ back
-        # before the code interpreter copies the directory into the sandbox.
-        await self._sync_workspace_originals(session_model)
-        # Before the code interpreter snapshots file_dir into the E2B file_list.
-        await self._provision_session_skills(session_model)
-        tools = await self._generate_tools(session_model)
-        try:
-            # Rebuild the SAME tool set the parked graph had — INCLUDING the C4
-            # knowledge whitelist. The fresh/continue paths gate SearchKnowledgeBase
-            # with allowed_knowledge_ids; resume MUST pass the same set, otherwise
-            # (a) the resumed graph's tool topology diverges from the parked one, and
-            # (b) the knowledge tool is rebuilt UNGATED (allowed_knowledge_ids=None),
-            # bypassing the C4 whitelist — which since design #1 also leaks into the
-            # researcher subagent's tool subset.
-            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
-            linsight_tools = await ToolServices.init_linsight_tools(
-                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
-            )
-            tools.extend(linsight_tools)
-            # Rebuild on the SAME thread_id with a durable checkpointer so the
-            # parked interrupt checkpoint is located (design §4.4).
-            agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
-            self._check_termination()
-            await self._drive_resume(agent, session_model, user_input)
-            # F035 reload parity: the resume re-stream above may have rewritten the
-            # session pseudo task's history, dropping the is_completed/user_input
-            # stamp on the answered clarify steps. Re-apply the persisted answers
-            # (task_data.clarify_answers) so a refreshed turn still shows the
-            # answered "已明确用户意图" rows. This is the last history write of the
-            # turn, so it wins over anything the re-stream did.
-            await self._state_manager.restamp_clarify_answers(session_model.id)
-            # Finalize the resumed turn. Without this the resumed task never
-            # pushes FINAL_RESULT (the frontend keeps spinning on the answered
-            # ask_user) — the fresh/continue paths finalize, the resume path
-            # historically did not. _handle_task_completion no-ops if the agent
-            # parked AGAIN (another ask_user this round) via _waiting_for_input.
-            await self._handle_task_completion(session_model)
-        finally:
-            for one in tools:
-                if one.name == "bisheng_code_interpreter":
-                    one.close()
-                    break
+            # Single-lifecycle exemption: ask_user resume never performs a secondary quota probe.
+            self.llm = await self._get_llm(session_model)
+            # The previous round deleted file_dir. Put this session's output/ back
+            # before the code interpreter copies the directory into the sandbox.
+            await self._sync_workspace_originals(session_model)
+            # Before the code interpreter snapshots file_dir into the E2B file_list.
+            await self._provision_session_skills(session_model)
+            tools = await self._generate_tools(session_model)
+            try:
+                # Rebuild the SAME tool set the parked graph had — INCLUDING the C4
+                # knowledge whitelist. The fresh/continue paths gate SearchKnowledgeBase
+                # with allowed_knowledge_ids; resume MUST pass the same set, otherwise
+                # (a) the resumed graph's tool topology diverges from the parked one, and
+                # (b) the knowledge tool is rebuilt UNGATED (allowed_knowledge_ids=None),
+                # bypassing the C4 whitelist — which since design #1 also leaks into the
+                # researcher subagent's tool subset.
+                allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+                linsight_tools = await ToolServices.init_linsight_tools(
+                    root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                )
+                tools.extend(linsight_tools)
+                # Rebuild on the SAME thread_id with a durable checkpointer so the
+                # parked interrupt checkpoint is located (design §4.4).
+                agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
+                self._check_termination()
+                await self._drive_resume(agent, session_model, user_input)
+                # F035 reload parity: the resume re-stream above may have rewritten the
+                # session pseudo task's history, dropping the is_completed/user_input
+                # stamp on the answered clarify steps. Re-apply the persisted answers
+                # (task_data.clarify_answers) so a refreshed turn still shows the
+                # answered "已明确用户意图" rows. This is the last history write of the
+                # turn, so it wins over anything the re-stream did.
+                await self._state_manager.restamp_clarify_answers(session_model.id)
+                # Finalize the resumed turn. Without this the resumed task never
+                # pushes FINAL_RESULT (the frontend keeps spinning on the answered
+                # ask_user) — the fresh/continue paths finalize, the resume path
+                # historically did not. _handle_task_completion no-ops if the agent
+                # parked AGAIN (another ask_user this round) via _waiting_for_input.
+                await self._handle_task_completion(session_model)
+            finally:
+                for one in tools:
+                    if one.name == "bisheng_code_interpreter":
+                        one.close()
+                        break
 
     async def _drive_resume(self, agent, session_model: LinsightSessionVersion, user_input) -> None:
         """Resume driver — reuses the Track-A astream + StreamEventMapper pipeline.
@@ -665,34 +681,35 @@ class LinsightWorkflowTask:
         """Rebuild the agent on the same thread and drive a new user turn."""
         from bisheng.linsight.domain.services.checkpointer import make_checkpointer
 
-        # A continued round starts from COMPLETED; flip back to IN_PROGRESS so the
-        # frontend leaves the "done" state and re-opens the WS event stream.
-        await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
-        # F132: a /continue follow-up is a new round, never auto-consolidated (P-01 option C).
-        await self._begin_memory_round(session_model, follow_up=True)
+        with self._billing_scope(session_model):
+            # A continued round starts from COMPLETED; flip back to IN_PROGRESS so the
+            # frontend leaves the "done" state and re-opens the WS event stream.
+            await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+            # F132: a /continue follow-up is a new round, never auto-consolidated (P-01 option C).
+            await self._begin_memory_round(session_model, follow_up=True)
 
-        self.llm = await self._get_round_llm(session_model)
-        # Same session workspace, new local dir: output/ from the previous round
-        # is still in MinIO and must be back in file_dir before copy-in.
-        await self._sync_workspace_originals(session_model)
-        # Before the code interpreter snapshots file_dir into the E2B file_list.
-        await self._provision_session_skills(session_model)
-        tools = await self._generate_tools(session_model)
-        try:
-            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
-            linsight_tools = await ToolServices.init_linsight_tools(
-                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
-            )
-            tools.extend(linsight_tools)
-            agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
-            self._check_termination()
-            await self._drive_continue(agent, session_model, question)
-            await self._handle_task_completion(session_model)
-        finally:
-            for one in tools:
-                if one.name == "bisheng_code_interpreter":
-                    one.close()
-                    break
+            self.llm = await self._get_round_llm(session_model)
+            # Same session workspace, new local dir: output/ from the previous round
+            # is still in MinIO and must be back in file_dir before copy-in.
+            await self._sync_workspace_originals(session_model)
+            # Before the code interpreter snapshots file_dir into the E2B file_list.
+            await self._provision_session_skills(session_model)
+            tools = await self._generate_tools(session_model)
+            try:
+                allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+                linsight_tools = await ToolServices.init_linsight_tools(
+                    root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                )
+                tools.extend(linsight_tools)
+                agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
+                self._check_termination()
+                await self._drive_continue(agent, session_model, question)
+                await self._handle_task_completion(session_model)
+            finally:
+                for one in tools:
+                    if one.name == "bisheng_code_interpreter":
+                        one.close()
+                        break
 
     async def _drive_continue(self, agent, session_model: LinsightSessionVersion, question: str) -> None:
         """Continue driver — feeds a new HumanMessage into the same thread.
@@ -732,73 +749,73 @@ class LinsightWorkflowTask:
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion):
         """Execute the core logic of the workflow"""
+        from bisheng.linsight.domain.services.checkpointer import make_checkpointer
 
-        # Update session status to in progress
-        await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+        with self._billing_scope(session_model):
+            # Update session status to in progress
+            await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-        # F035 Track J: write a placeholder task turn at start so a refresh
-        # mid-execution (incl. parked HITL) still sees the in-flight turn in the
-        # unified conversation stream; completion upserts the same row with the
-        # final answer. The live state (running / waiting_for_user_input) is read
-        # by SV from the linsight detail endpoints on reload.
-        await linsight_execute_utils.persist_task_turn_message(session_model)
-        # F132: the round starts once its task message row exists (summary row bound to it).
-        await self._begin_memory_round(session_model)
+            # F035 Track J: write a placeholder task turn at start so a refresh
+            # mid-execution (incl. parked HITL) still sees the in-flight turn in the
+            # unified conversation stream; completion upserts the same row with the
+            # final answer. The live state (running / waiting_for_user_input) is read
+            # by SV from the linsight detail endpoints on reload.
+            await linsight_execute_utils.persist_task_turn_message(session_model)
+            # F132: the round starts once its task message row exists (summary row bound to it).
+            await self._begin_memory_round(session_model)
 
-        # Cross-turn continuity: seed this turn's workspace from the previous turn
-        # so a follow-up (e.g. "convert the report to HTML") can read and build on
-        # the prior turn's deliverables. New-turn path only (resume reuses the same
-        # svid workspace). Best-effort — never blocks the turn.
-        await self._seed_workspace_from_previous(session_model)
-        # Must run between the seed and tool construction: the code interpreter's
-        # file list is snapshotted from file_dir when the tool is built.
-        await self._sync_workspace_originals(session_model)
-        # Skill bundles land in that same directory before the snapshot, so the
-        # E2B file_list includes /skills/. _create_agent provisions again and
-        # skips any directory this call already recorded.
-        await self._provision_session_skills(session_model)
+            # Cross-turn continuity: seed this turn's workspace from the previous turn
+            # so a follow-up (e.g. "convert the report to HTML") can read and build on
+            # the prior turn's deliverables. New-turn path only (resume reuses the same
+            # svid workspace). Best-effort — never blocks the turn.
+            await self._seed_workspace_from_previous(session_model)
+            # Must run between the seed and tool construction: the code interpreter's
+            # file list is snapshotted from file_dir when the tool is built.
+            await self._sync_workspace_originals(session_model)
+            # Skill bundles land in that same directory before the snapshot, so the
+            # E2B file_list includes /skills/. _create_agent provisions again and
+            # skips any directory this call already recorded.
+            await self._provision_session_skills(session_model)
 
-        # Initialization Execution Component
-        self.llm = await self._get_round_llm(session_model)
-        tools = await self._generate_tools(session_model)
-        try:
-            # Build Tool List. The knowledge tool is gated by the user's
-            # accessible-KB whitelist (C4) so the model cannot search a KB/file
-            # it has no access to.
-            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
-            linsight_tools = await ToolServices.init_linsight_tools(
-                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
-            )
-            tools.extend(linsight_tools)
-            # Create agent (deepagents CompiledStateGraph, F035 §2.1).
-            # Durable Redis checkpointer (same as the resume path) so a HITL
-            # interrupt parked here is locatable on resume — which rebuilds the
-            # agent on the same thread_id in a possibly different worker process.
-            from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+            # Initialization Execution Component
+            self.llm = await self._get_round_llm(session_model)
+            tools = await self._generate_tools(session_model)
+            try:
+                # Build Tool List. The knowledge tool is gated by the user's
+                # accessible-KB whitelist (C4) so the model cannot search a KB/file
+                # it has no access to.
+                allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+                linsight_tools = await ToolServices.init_linsight_tools(
+                    root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                )
+                tools.extend(linsight_tools)
+                # Create agent (deepagents CompiledStateGraph, F035 §2.1).
+                # Durable Redis checkpointer (same as the resume path) so a HITL
+                # interrupt parked here is locatable on resume — which rebuilds the
+                # agent on the same thread_id in a possibly different worker process.
+                agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
 
-            agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
+                # Check if terminated during initialization
+                self._check_termination()
 
-            # Check if terminated during initialization
-            self._check_termination()
+                # F035: the legacy `agent.generate_task` precall is removed. With the
+                # deepagents kernel the task清单 is produced by the planner during
+                # `astream` (write_todos) and emitted as GenerateSubTask by the
+                # StreamEventMapper -> _handle_generate_subtask -> _save_task_info
+                # (design §3.3 row 2). Tasks are no longer pre-generated/saved here.
+                success = await self._execute_agent_tasks(agent, session_model)
+            finally:
+                # Clean the sandbox of the code interpreter
+                for one in tools:
+                    if one.name == "bisheng_code_interpreter":
+                        one.close()
+                        break
 
-            # F035: the legacy `agent.generate_task` precall is removed. With the
-            # deepagents kernel the task清单 is produced by the planner during
-            # `astream` (write_todos) and emitted as GenerateSubTask by the
-            # StreamEventMapper -> _handle_generate_subtask -> _save_task_info
-            # (design §3.3 row 2). Tasks are no longer pre-generated/saved here.
-            success = await self._execute_agent_tasks(agent, session_model)
-        finally:
-            # Clean the sandbox of the code interpreter
-            for one in tools:
-                if one.name == "bisheng_code_interpreter":
-                    one.close()
-                    break
-
-        if success:
-            await self._handle_task_completion(session_model)
-        else:
-            await self._handle_user_termination(session_model)
-            raise UserTerminationError("Task terminated by user")
+            if success:
+                await self._handle_task_completion(session_model)
+            else:
+                await self._handle_user_termination(session_model)
+                raise UserTerminationError("Task terminated by user")
 
     # ==================== Long-term memory (F132) ====================
 

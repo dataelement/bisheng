@@ -306,7 +306,7 @@ export default function WorkbenchModel({ data, onBack }) {
       <UserSelectableModels
         data={data}
         configuredModels={form.models}
-        enterpriseEnabled={!!enterpriseConfig?.enabled}
+        enterpriseEnabled={!!(enterpriseConfig?.credit_billing_enabled ?? enterpriseConfig?.enabled)}
         disabled={saveload || !linsightConfig}
         onMetadataChange={(model, changes) =>
           setForm((prev) => ({

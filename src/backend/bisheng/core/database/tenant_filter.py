@@ -176,6 +176,9 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.model_audit_setting",
     "bisheng.dsh.domain.models.model_audit_request",
     "bisheng.dsh.domain.models.model_audit_content",
+    # F001 credit billing extension.
+    "bisheng.dsh.domain.models.tool_pricing",
+    "bisheng.dsh.domain.models.tool_call",
 )
 
 

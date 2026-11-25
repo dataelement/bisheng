@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.errcode.dsh import DshMonthlyTokenLimitExceededError
 from bisheng.common.errcode.model_face import (
     ModelFaceCapabilityUndeclaredError,
     ModelFaceError,
@@ -60,8 +61,11 @@ from bisheng.open_api.domain.schemas.model_gateway import (
     ModelObject,
     new_request_id,
 )
+from bisheng.dsh.domain.services import chat_credits
 from bisheng.open_api.domain.services.model_call_record_writer import model_call_record_writer
 from bisheng.open_api.domain.services.model_range_policy import (
+    HOSTED_APP_ACTOR_KIND,
+    SUBJECT_KIND_USER,
     ResolvedSubject,
     assert_hosted_model_binding,
     resolve_range_and_subject,
@@ -171,36 +175,47 @@ class ModelGatewayService:
             raise
         cls._attach_model(record, resolved)
 
-        try:
-            await assert_hosted_model_binding(principal, req.model, resolved)
-            llm = await cls._instantiate(principal, resolved, req)
-        except ModelFaceError as exc:
-            # The name resolved a moment ago, so a failure here is either "the
-            # row went away inside the catalog's cache window" (26512 / 26513 —
-            # the model was withdrawn) or the provider client refusing to
-            # initialise. They are different rows in the ledger, not one.
-            cls._finish_record(
-                record,
-                started,
-                result=RESULT_MODEL_UNAVAILABLE if isinstance(exc, _WITHDRAWN_ERRORS) else RESULT_UPSTREAM_FAILED,
-                error=exc,
+        is_hosted_app = principal.actor_kind == HOSTED_APP_ACTOR_KIND
+        billing_ctx = (
+            chat_credits.billing_context(
+                source_type="hosted_app",
+                source_id=str(subject.app_id or principal.subject_ref or ""),
+                open_api_unbilled=False,
             )
-            raise
+            if is_hosted_app
+            else chat_credits.billing_context(open_api_unbilled=True)
+        )
+        with billing_ctx:
+            try:
+                await assert_hosted_model_binding(principal, req.model, resolved)
+                llm = await cls._instantiate(principal, resolved, req, subject)
+            except ModelFaceError as exc:
+                # The name resolved a moment ago, so a failure here is either "the
+                # row went away inside the catalog's cache window" (26512 / 26513 —
+                # the model was withdrawn) or the provider client refusing to
+                # initialise. They are different rows in the ledger, not one.
+                cls._finish_record(
+                    record,
+                    started,
+                    result=RESULT_MODEL_UNAVAILABLE if isinstance(exc, _WITHDRAWN_ERRORS) else RESULT_UPSTREAM_FAILED,
+                    error=exc,
+                )
+                raise
 
-        messages = to_langchain_messages(req.messages)
-        kwargs = req.forwarded_kwargs()
-        runnable: Any = llm
-        if req.tools:
-            # Already OpenAI-shaped dicts: ``bind`` forwards them untouched,
-            # while ``bind_tools`` would re-convert them.
-            bind_kwargs: dict[str, Any] = {"tools": req.tools}
-            if req.tool_choice is not None:
-                bind_kwargs["tool_choice"] = req.tool_choice
-            runnable = llm.bind(**bind_kwargs)
+            messages = to_langchain_messages(req.messages)
+            kwargs = req.forwarded_kwargs()
+            runnable: Any = llm
+            if req.tools:
+                # Already OpenAI-shaped dicts: ``bind`` forwards them untouched,
+                # while ``bind_tools`` would re-convert them.
+                bind_kwargs: dict[str, Any] = {"tools": req.tools}
+                if req.tool_choice is not None:
+                    bind_kwargs["tool_choice"] = req.tool_choice
+                runnable = llm.bind(**bind_kwargs)
 
-        if req.stream:
-            return await cls._stream(record, started, runnable, messages, kwargs, req, request)
-        return await cls._invoke(record, started, runnable, messages, kwargs, req)
+            if req.stream:
+                return await cls._stream(record, started, runnable, messages, kwargs, req, request)
+            return await cls._invoke(record, started, runnable, messages, kwargs, req)
 
     # --- call paths ----------------------------------------------------------
 
@@ -216,6 +231,9 @@ class ModelGatewayService:
     ) -> ChatCompletionResponse:
         try:
             message = await runnable.ainvoke(messages, **kwargs)
+        except DshMonthlyTokenLimitExceededError as exc:
+            cls._finish_record(record, started, result=RESULT_LIMIT_EXCEEDED, error=exc)
+            raise
         except LlmProviderDailyLimitExceededError as exc:
             error = ModelFaceProviderLimitExceededError(msg=redact_secrets(str(exc)))
             cls._finish_record(record, started, result=RESULT_LIMIT_EXCEEDED, error=error)
@@ -251,6 +269,9 @@ class ModelGatewayService:
             first_chunk = await anext(agen)
         except StopAsyncIteration:
             first_chunk = None
+        except DshMonthlyTokenLimitExceededError as exc:
+            cls._finish_record(record, started, result=RESULT_LIMIT_EXCEEDED, error=exc)
+            raise
         except LlmProviderDailyLimitExceededError as exc:
             error = ModelFaceProviderLimitExceededError(msg=redact_secrets(str(exc)))
             cls._finish_record(record, started, result=RESULT_LIMIT_EXCEEDED, error=error)
@@ -319,8 +340,20 @@ class ModelGatewayService:
         principal: OpenApiPrincipal,
         resolved: ResolvedModel,
         req: ChatCompletionRequest,
+        subject: ResolvedSubject | None = None,
     ):
         from bisheng.llm.domain.services.llm import LLMService
+
+        is_hosted_app = principal.actor_kind == HOSTED_APP_ACTOR_KIND
+        if is_hosted_app:
+            if principal.preview_session_id:
+                billing_user_id = principal.preview_capability_user_id or principal.resource_owner_user_id or 0
+            elif subject is not None and subject.subject_kind == SUBJECT_KIND_USER and subject.subject_id:
+                billing_user_id = int(subject.subject_id)
+            else:
+                billing_user_id = principal.resource_owner_user_id or 0
+        else:
+            billing_user_id = principal.effective_user_id or principal.resource_owner_user_id or 0
 
         try:
             return await LLMService.get_bisheng_llm(
@@ -328,9 +361,8 @@ class ModelGatewayService:
                 app_id=MODEL_GATEWAY_APP_ID,
                 app_type=ApplicationTypeEnum.MODEL_GATEWAY,
                 app_name=f"{MODEL_GATEWAY_APP_ID}:{principal.actor_kind}:{principal.actor_id}",
-                # Telemetry is per person; a service account borrows its
-                # resource owner so the ledger stays traceable to a human.
-                user_id=principal.effective_user_id or principal.resource_owner_user_id or 0,
+                user_id=billing_user_id,
+                admin_selected=is_hosted_app,
                 streaming=req.stream,
                 temperature=req.temperature,
             )
@@ -394,7 +426,7 @@ class ModelGatewayService:
         record.ttft_ms = ttft_ms
         if error is not None:
             record.error_code = error.code
-            record.http_status = error.http_status
+            record.http_status = getattr(error, "http_status", getattr(error, "HttpStatus", None))
         if usage is not None:
             record.prompt_tokens = usage.prompt_tokens
             record.completion_tokens = usage.completion_tokens

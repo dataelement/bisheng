@@ -36,9 +36,13 @@ export function DshPage() {
   const [marketToolbarTarget, setMarketToolbarTarget] = useState<HTMLDivElement | null>(null);
   const canManageDsh = user?.role === "admin" || !!user?.is_global_super || !!user?.is_child_admin;
   const canManageSafety = canManageDsh && appConfig.isPro === true;
-  const sections = DSH_SECTIONS.filter(({ value }) =>
-    config?.enabled === false ? value === "access" : value !== "content-safety" || canManageSafety,
-  );
+  const creditBillingEnabled = config?.credit_billing_enabled ?? config?.enabled ?? true;
+  const sections = DSH_SECTIONS.filter(({ value }) => {
+    if (!creditBillingEnabled && (value === "credits" || value === "usage")) {
+      return false;
+    }
+    return value !== "content-safety" || canManageSafety;
+  });
   const section = resolveDshSection(
     location.search,
     sections.map(({ value }) => value satisfies DshSection),
@@ -48,12 +52,11 @@ export function DshPage() {
   useEffect(() => {
     if (
       !canManageSafety ||
-      config?.enabled === false ||
       config?.management_enabled === false
     )
       setSafetyVisited(false);
     else if (section === "content-safety") setSafetyVisited(true);
-  }, [section, canManageSafety, config?.enabled, config?.management_enabled]);
+  }, [section, canManageSafety, config?.management_enabled]);
 
   if (!canManageDsh) return <Navigate to="/403" replace />;
   if (
@@ -77,8 +80,7 @@ export function DshPage() {
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
           {canManageSafety &&
-            (section === "content-safety" || safetyVisited) &&
-            config?.enabled !== false && (
+            (section === "content-safety" || safetyVisited) && (
               <div
                 hidden={section !== "content-safety"}
                 className="h-full min-h-0 overflow-y-auto px-6 py-5"

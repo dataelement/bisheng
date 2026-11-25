@@ -28,8 +28,6 @@ class AuthorizeRequest(DshContract):
 
 @router.get("/dsh/config")
 async def config(settings: DshSettings = Depends(get_settings)):
-    if not settings.enabled:
-        return {"enabled": False}
     if not (await DshSettingsService().read()).enabled:
         return {"enabled": False}
     return {

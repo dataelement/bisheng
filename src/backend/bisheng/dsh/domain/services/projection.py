@@ -12,7 +12,7 @@ from redis.exceptions import ResponseError
 
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository
-from bisheng.dsh.domain.schemas.usage import UsageEvent
+from bisheng.dsh.domain.schemas.usage import parse_stream_usage_event, parse_usage_event_json
 from bisheng.dsh.infrastructure.quota_redis import QuotaRedis, QuotaRejected
 
 
@@ -77,7 +77,7 @@ class DshProjectionService:
             return 0
         events = []
         for _, fields in records:
-            event = UsageEvent.model_validate_json(fields["event"])
+            event = parse_stream_usage_event(fields)
             if event.tenant_id != tenant_id or event.user_id != user_id:
                 await redis.hset(base + ":gate", "state", "FROZEN")
                 raise ValueError("Stream event ownership does not match its user partition")
@@ -137,7 +137,7 @@ class DshProjectionService:
         for value in values:
             if value is None:
                 raise QuotaRejected("missing_request_ledger")
-            event = UsageEvent.model_validate_json(value)
+            event = parse_usage_event_json(value)
             if event.tenant_id != tenant_id or event.user_id != user_id:
                 raise ValueError("Request ownership mismatch during inspection")
             started = event.started_at.replace(tzinfo=UTC) if event.started_at.tzinfo is None else event.started_at
@@ -172,7 +172,7 @@ class DshProjectionService:
             script = (Path(__file__).parents[2] / "infrastructure/lua/cleanup.lua").read_text()
             deleted = 0
             for stream_id, fields in records:
-                event = UsageEvent.model_validate_json(fields["event"])
+                event = parse_stream_usage_event(fields)
                 if event.tenant_id != tenant_id or event.user_id != user_id:
                     raise QuotaRejected("cleanup_ownership_mismatch")
                 key = base + ":request:" + event.request_id

@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, Response
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.dsh import DshDshDisabledError
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh.api.dependencies import get_settings
 from bisheng.dsh.api.responses import DshRoute
@@ -20,8 +19,6 @@ def settings_service() -> DshSettingsService:
 
 
 def require_deployment(config: DshSettings = Depends(get_settings)) -> DshSettings:
-    if not config.enabled:
-        raise DshDshDisabledError()
     return config
 
 
@@ -31,11 +28,17 @@ async def browser_config(
     config: DshSettings = Depends(get_settings),
     service: DshSettingsService = Depends(settings_service),
 ):
+    from bisheng.common.services.config_service import settings
+
     response.headers["Cache-Control"] = "no-store"
-    if not config.enabled:
-        return resp_200(data={**DshManagementSettings().model_dump(), "management_enabled": False, "enabled": False})
     current = await service.read()
-    return resp_200(data={"management_enabled": True, **current.model_dump()})
+    return resp_200(
+        data={
+            "management_enabled": True,
+            "credit_billing_enabled": bool(settings.credit_billing.enabled),
+            **current.model_dump(),
+        }
+    )
 
 
 @router.get("/dsh/admin/settings")

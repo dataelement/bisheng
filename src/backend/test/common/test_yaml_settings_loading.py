@@ -121,19 +121,21 @@ def test_invalid_yaml_still_blocks_startup(tmp_path, loader):
 
 
 @pytest.mark.parametrize(
-    "document,enabled",
+    "document,billing_enabled,warns",
     [
-        ("bs_client: {}", True),
-        ("dsh: {enabled: false}", False),
-        ("bs_client: {}\ndsh: {enabled: false, obsolete: true}", True),
+        ("bs_client: {}", True, False),
+        ("dsh: {enabled: false}", True, True),
+        ("bs_client: {}\ndsh: {enabled: false, obsolete: true}", True, False),
+        ("credit_billing: {enabled: false}", False, False),
     ],
 )
-def test_client_keys_survive_yaml_filter(tmp_path, loader, document, enabled):
+def test_client_keys_survive_yaml_filter(tmp_path, loader, document, billing_enabled, warns):
     """覆盖 AC: AC-06, AC-08."""
     service, logger = loader
     loaded = service.load_settings_from_yaml(_config(tmp_path, document + "\n"))
-    assert loaded.bs_client.enabled is enabled
-    logger.warning.assert_not_called()
+    assert loaded.credit_billing.enabled is billing_enabled
+    if not warns:
+        logger.warning.assert_not_called()
 
 
 def test_shipped_compose_settings_connect_runtime_and_client(tmp_path, monkeypatch, loader):
@@ -154,7 +156,7 @@ def test_shipped_compose_settings_connect_runtime_and_client(tmp_path, monkeypat
     rendered = tmp_path / "config.yaml"
     rendered.write_text(text)
     loaded = service.load_settings_from_yaml(str(rendered))
-    assert loaded.bs_client.enabled and loaded.bs_client.platform_public_url is None
+    assert loaded.credit_billing.enabled and loaded.bs_client.platform_public_url is None
     assert loaded.app_runtime.enabled
     assert loaded.app_runtime.manager_base_url == "http://runtime-manager:8091"
     assert loaded.app_runtime.manager_hmac_secret == "test-deployment-value"

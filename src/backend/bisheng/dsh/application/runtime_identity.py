@@ -16,8 +16,6 @@ async def resolve_desktop_runtime_identity(reference):
     except (KeyError, TypeError, ValueError) as exc:
         raise PermissionDeniedError(reason="runtime_desktop_identity_invalid") from exc
     config = get_settings()
-    if not config.enabled:
-        raise PermissionDeniedError(reason="runtime_desktop_disabled")
     await DshSettingsService().require_enabled()
     runtime = await build_runtime(config)
     try:

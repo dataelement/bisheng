@@ -29,3 +29,18 @@ it('shares configuration across consumers and does not poll every 30 seconds', a
     view.unmount(); client.clear(); jest.useRealTimers();
   }
 });
+
+it('keeps desktop enabled while exposing creditBillingEnabled false when billing switch is off', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  jest.mocked(getDshBrowserConfig).mockResolvedValue({
+    management_enabled: true,
+    enabled: true,
+    credit_billing_enabled: false,
+    download_url: null,
+    launch_url: 'dsh-desktop://login',
+  });
+  const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const { result } = renderHook(useDshDesktop, { wrapper });
+  await waitFor(() => expect(result.current.enabled).toBe(true));
+  expect(result.current.creditBillingEnabled).toBe(false);
+});

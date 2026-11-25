@@ -7,6 +7,7 @@ from langgraph.graph import StateGraph
 from loguru import logger
 from typing_extensions import TypedDict
 
+from bisheng.common.errcode.base import BaseErrorCode, encode_workflow_error
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import UserInputData
@@ -307,6 +308,10 @@ class GraphEngine:
             logger.warning(f"graph ignore error: {e}")
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
+        except BaseErrorCode as e:
+            logger.warning(f"graph error code {e.code}: {e.message}")
+            self.status = WorkflowStatus.FAILED.value
+            self.reason = encode_workflow_error(e)
         except Exception as e:
             logger.exception("graph run error")
             self.status = WorkflowStatus.FAILED.value
@@ -322,6 +327,10 @@ class GraphEngine:
             logger.warning(f"graph ignore error: {e}")
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
+        except BaseErrorCode as e:
+            logger.warning(f"graph async error code {e.code}: {e.message}")
+            self.status = WorkflowStatus.FAILED.value
+            self.reason = encode_workflow_error(e)
         except Exception as e:
             logger.exception("graph arun error")
             self.status = WorkflowStatus.FAILED.value

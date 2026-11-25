@@ -9,13 +9,17 @@ import { useDshDesktop } from "~/hooks/useDshDesktop";
  * than an entry that cannot launch.
  */
 export function DshDesktopPane() {
-  const { enabled, downloadUrl, launchUrl } = useDshDesktop();
+  const { enabled, creditBillingEnabled, downloadUrl, launchUrl } = useDshDesktop();
   if (!enabled) {
     return null;
   }
   return (
     <div className="flex flex-col gap-4">
-      <DshDesktopPanel downloadUrl={downloadUrl} launchUrl={launchUrl} />
+      <DshDesktopPanel
+        downloadUrl={downloadUrl}
+        launchUrl={launchUrl}
+        creditBillingEnabled={creditBillingEnabled ?? enabled}
+      />
     </div>
   );
 }

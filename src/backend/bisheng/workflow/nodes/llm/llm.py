@@ -42,7 +42,8 @@ class LLMNode(BaseNode):
                                                     app_id=self.workflow_id,
                                                     app_name=self.workflow_name,
                                                     app_type=ApplicationTypeEnum.WORKFLOW,
-                                                    user_id=self.user_id)
+                                                    user_id=self.user_id,
+                                                    admin_selected=True)
 
     def _run(self, unique_id: str):
         self._system_prompt_list = []

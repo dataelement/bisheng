@@ -279,9 +279,11 @@ def test_external_sql_first_configuration_race(dsh_database_url, monkeypatch):
 def test_new_user_proof_requires_current_owner_fence_and_empty_history(sql_store):
     from bisheng.dsh.domain.models.model_call import DshModelCall
     from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
+    from bisheng.dsh.domain.models.tool_call import DshToolCall
 
     DshMonthlyUsage.__table__.create(sql_store, checkfirst=True)
     DshModelCall.__table__.create(sql_store, checkfirst=True)
+    DshToolCall.__table__.create(sql_store, checkfirst=True)
     with Session(sql_store) as session, session.begin():
         register(session)
         generation = DshOperationRepository(session).claim("a", now=NOW).lease_generation

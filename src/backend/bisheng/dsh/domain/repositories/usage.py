@@ -11,11 +11,12 @@ from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_fil
 from bisheng.database.models.tenant import UserTenant
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
+from bisheng.dsh.domain.models.tool_call import DshToolCall
 from bisheng.dsh.domain.models.unified_policy import PersonalLedgerState
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
 from bisheng.dsh.domain.schemas.model_policy import model_configs_payload
-from bisheng.dsh.domain.schemas.usage import UsageEvent
+from bisheng.dsh.domain.schemas.usage import ToolUsageEvent, UsageEvent
 
 
 def _pricing_json(value) -> str | None:
@@ -31,18 +32,23 @@ class DshUsageRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def project_batch(self, events: list[UsageEvent]) -> int:
+    def project_batch(self, events: list[UsageEvent | ToolUsageEvent]) -> int:
         if not self.session.in_transaction():
             raise RuntimeError("Projection requires an explicit transaction")
         if len(events) > 500:
             raise ValueError("Projection batches are bounded to 500 events")
         tenant = get_current_tenant_id()
-        merged = {}
+        merged: dict[str, UsageEvent | ToolUsageEvent] = {}
         for raw in events:
-            event = UsageEvent.model_validate(raw.model_dump())
+            if isinstance(raw, ToolUsageEvent) or getattr(raw, "event_kind", None) == "tool":
+                event: UsageEvent | ToolUsageEvent = ToolUsageEvent.model_validate(raw.model_dump())
+            else:
+                event = UsageEvent.model_validate(raw.model_dump())
             if event.tenant_id != tenant:
                 raise ValueError("Event tenant does not match trusted worker context")
             previous = merged.get(event.request_id)
+            if previous is not None and type(previous) is not type(event):
+                raise ValueError("Conflicting event kind for one request")
             if previous and previous.event_version == event.event_version and previous != event:
                 raise ValueError("Conflicting event payload for one version")
             if previous is None or previous.event_version < event.event_version:
@@ -76,6 +82,56 @@ class DshUsageRepository:
                     if membership is None:
                         raise ValueError("Projection requires a retained tenant membership")
             for request_id, event in sorted(merged.items()):
+                if isinstance(event, ToolUsageEvent):
+                    existing = self.session.scalar(
+                        select(DshToolCall).where(DshToolCall.request_id == request_id).with_for_update()
+                    )
+                    if existing is not None:
+                        tool_immutable = (
+                            "tenant_id",
+                            "user_id",
+                            "tool_id",
+                            "tool_key",
+                            "usage_month",
+                            "billed_tokens",
+                        )
+                        if any(getattr(existing, k) != getattr(event, k) for k in tool_immutable):
+                            raise ValueError("Tool call ownership and billed amount are immutable")
+                        if _pricing_json(existing.pricing_snapshot) != _pricing_json(event.pricing_snapshot):
+                            raise ValueError("Tool pricing snapshot is immutable")
+                        continue
+                    snapshot_data = (
+                        event.pricing_snapshot.model_dump(mode="json")
+                        if hasattr(event.pricing_snapshot, "model_dump")
+                        else event.pricing_snapshot
+                    )
+                    self.session.add(
+                        DshToolCall(
+                            request_id=event.request_id,
+                            tenant_id=event.tenant_id,
+                            user_id=event.user_id,
+                            usage_month=event.usage_month,
+                            tool_group_id=event.tool_group_id,
+                            tool_group_name=event.tool_group_name,
+                            tool_id=event.tool_id,
+                            tool_key=event.tool_key,
+                            engine=event.engine,
+                            pricing_snapshot=snapshot_data,
+                            billed_tokens=event.billed_tokens,
+                            cost_micro=event.cost_micro,
+                            currency=event.currency,
+                            result=event.result,
+                            source_type=event.source_type,
+                            source_id=event.source_id,
+                            started_at=event.started_at,
+                            ended_at=event.ended_at,
+                        )
+                    )
+                    key = ("TOOL", event.user_id, event.usage_month, event.tool_id)
+                    deltas[key] += event.billed_tokens
+                    timezones[key] = event.billing_timezone
+                    changed += 1
+                    continue
                 current = self.session.scalar(
                     select(DshModelCall).where(DshModelCall.request_id == request_id).with_for_update()
                 )
@@ -125,6 +181,8 @@ class DshUsageRepository:
                 payload["billed_tokens"] = event.billed_tokens
                 payload["cost_micro"] = event.cost_micro
                 payload["currency"] = event.currency
+                payload["source_type"] = event.source_type
+                payload["source_id"] = event.source_id
                 if current is None:
                     current = DshModelCall(**payload)
                     self.session.add(current)
@@ -132,17 +190,18 @@ class DshUsageRepository:
                     for key, value in payload.items():
                         setattr(current, key, value)
                 if event.total_tokens is not None:
-                    key = (event.user_id, event.usage_month, event.model_id)
+                    key = ("MODEL", event.user_id, event.usage_month, event.model_id)
                     deltas[key] += event.billed_tokens
                     timezones[key] = event.billing_timezone
                 changed += 1
-            for (user_id, month, model_id), delta in sorted(deltas.items()):
+            for (usage_type, user_id, month, model_id), delta in sorted(deltas.items()):
                 rows = list(
                     self.session.scalars(
                         select(DshMonthlyUsage)
                         .where(
                             DshMonthlyUsage.user_id == user_id,
                             DshMonthlyUsage.usage_month == month,
+                            DshMonthlyUsage.usage_type == usage_type,
                             DshMonthlyUsage.model_id == model_id,
                         )
                         .with_for_update()
@@ -154,8 +213,9 @@ class DshUsageRepository:
                         tenant_id=tenant,
                         user_id=user_id,
                         usage_month=month,
+                        usage_type=usage_type,
                         model_id=model_id,
-                        billing_timezone=timezones[(user_id, month, model_id)],
+                        billing_timezone=timezones[(usage_type, user_id, month, model_id)],
                     )
                     self.session.add(row)
                 row.used_tokens += delta
@@ -201,14 +261,33 @@ class DshUsageRepository:
                     break
                 calls.extend(page)
                 after_id = page[-1].request_id
+            tool_calls = []
+            after_tool_id = ""
+            while True:
+                tpage = list(
+                    self.session.scalars(
+                        select(DshToolCall)
+                        .where(
+                            DshToolCall.tenant_id == tenant,
+                            DshToolCall.user_id == user_id,
+                            DshToolCall.request_id > after_tool_id,
+                        )
+                        .order_by(DshToolCall.request_id)
+                        .limit(500)
+                    )
+                )
+                if not tpage:
+                    break
+                tool_calls.extend(tpage)
+                after_tool_id = tpage[-1].request_id
             totals = [
                 row
                 for row in self.session.scalars(select(DshMonthlyUsage).where(DshMonthlyUsage.user_id == user_id))
                 if row.tenant_id == tenant
             ]
-        sql_totals = {(row.usage_month, row.model_id): row.used_tokens for row in totals}
+        sql_totals = {(row.usage_month, row.usage_type, row.model_id): row.used_tokens for row in totals}
         calculated = {}
-        events = []
+        events: list[UsageEvent | ToolUsageEvent] = []
         for row in calls:
             data = {key: value for key, value in row.model_dump().items() if key in UsageEvent.model_fields}
             data["billing_timezone"] = next(
@@ -218,9 +297,18 @@ class DshUsageRepository:
             event = UsageEvent.model_validate_json(json.dumps(data))
             # Rebuild through the event so F016 price snapshots and pre-F016 multipliers both apply.
             if event.billed_tokens is not None:
-                key = (row.usage_month, row.model_id)
+                key = (row.usage_month, "MODEL", row.model_id)
                 calculated[key] = calculated.get(key, 0) + event.billed_tokens
             events.append(event)
+        for trow in tool_calls:
+            tdata = {key: value for key, value in trow.model_dump().items() if key in ToolUsageEvent.model_fields}
+            tdata["billing_timezone"] = next(
+                (item.billing_timezone for item in totals if item.usage_month == trow.usage_month), billing_timezone
+            )
+            tevent = ToolUsageEvent.model_validate_json(json.dumps(tdata))
+            key = (trow.usage_month, "TOOL", trow.tool_id)
+            calculated[key] = calculated.get(key, 0) + tevent.billed_tokens
+            events.append(tevent)
         if calculated != sql_totals:
             raise ValueError("SQL summary cannot be reconstructed from retained request evidence")
         return events, policy.recovery_payload()
@@ -294,7 +382,8 @@ class DshUsageRepository:
             "unknown_pending": unknown_pending,
             "as_of": max(row.projected_at for row in rows),
             "quota_state": "unavailable",
-            "models": {str(row.model_id): row.used_tokens for row in rows},
+            "models": {str(row.model_id): row.used_tokens for row in rows if row.usage_type == "MODEL"},
+            "tools": {str(row.model_id): row.used_tokens for row in rows if row.usage_type == "TOOL"},
         }
 
     def new_month_proof(self, user_id: int, usage_month: str) -> dict:
@@ -309,6 +398,15 @@ class DshUsageRepository:
                 )
                 if row.tenant_id == tenant
             ]
+            tool_calls = [
+                row
+                for row in self.session.scalars(
+                    select(DshToolCall)
+                    .where(DshToolCall.user_id == user_id, DshToolCall.usage_month == usage_month)
+                    .limit(1)
+                )
+                if row.tenant_id == tenant
+            ]
             totals = [
                 row
                 for row in self.session.scalars(
@@ -319,7 +417,7 @@ class DshUsageRepository:
                 if row.tenant_id == tenant
             ]
             policy = UnifiedPolicyRepository(self.session).effective(user_id)
-        if calls or totals or policy is None:
+        if calls or tool_calls or totals or policy is None:
             raise ValueError("Month history is not proven empty")
         return {
             "tenant_id": tenant,
