@@ -21,9 +21,11 @@ describe('conversation attachment collection', () => {
     const copied = { file_id: 'copy-1', workspace_file_id: 'live-1', file_name: 'a.md', path: 'output/a.md', object_name: 'chat/7/answers/r1/live-1.md' };
     expect(toChatArtifact(copied, 'c1')).toMatchObject({ file_id: 'copy-1', attachment: { conversationId: 'c1', fileId: 'copy-1' } });
     expect(toChatArtifact(copied, 'c1')?.attachment).not.toHaveProperty('run');
+    expect(toChatArtifact(copied, 'c1')?.workspaceFileId).toBe('live-1');
     // The copy failed on the backend: the row keeps the event id and still resolves.
     const kept = { file_id: 'live-2', file_name: 'b.md', path: 'output/b.md', object_name: 'workspace/c1/output/b.md' };
     expect(toChatArtifact(kept, 'c1')).toMatchObject({ file_id: 'live-2', attachment: { conversationId: 'c1', fileId: 'live-2' } });
+    expect(toChatArtifact(kept, 'c1')).not.toHaveProperty('workspaceFileId');
   });
   it('keeps the original document format for uploaded chat files', () => {
     expect(toChatArtifact({ filename: 'notes.docx', path: '/tmp-dir/notes.docx' })).toEqual({
