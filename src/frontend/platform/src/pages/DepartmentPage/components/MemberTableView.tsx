@@ -79,7 +79,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
     isArchived || member.department?.status === "archived";
   const canEditMember = (member: DepartmentMember) =>
     !isArchivedMember(member) && member.enabled &&
-    user?.user_id !== member.user_id && !member.roles.some(role => role.id === 1);
+    !member.roles.some(role => role.id === 1);
   const canResetPassword = user?.role === "admin";
   const memberTypeHeader = mrc.getThProps(2);
   return (
