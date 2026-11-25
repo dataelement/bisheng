@@ -38,8 +38,8 @@ class OAuth2TokenResponse(BaseModel):
 
 class OAuth2UserInfoResponse(BaseModel):
     sub: str
-    preferred_username: str
-    name: str
+    preferred_username: str | None = None
+    name: str | None = None
     email: str | None = None
     tenant_id: str
     tenant_name: str

@@ -26,7 +26,7 @@ async def lookup_user_identity(tenant_id: int, user_id: int) -> OAuth2UserIdenti
     def _query() -> OAuth2UserIdentity | None:
         from sqlmodel import select
 
-        from bisheng.database.models.tenant import Tenant
+        from bisheng.database.models.tenant import Tenant, UserTenant
         from bisheng.user.domain.models.user import User
 
         with bypass_tenant_filter():
@@ -34,13 +34,25 @@ async def lookup_user_identity(tenant_id: int, user_id: int) -> OAuth2UserIdenti
                 user = db.exec(select(User).where(User.user_id == user_id)).first()
                 if user is None:
                     return None
+                # User rows are natural people; service accounts have a separate table.
+                # Visibility of Root/shared resources does not imply tenant membership.
+                membership = db.exec(
+                    select(UserTenant).where(
+                        UserTenant.user_id == user_id,
+                        UserTenant.tenant_id == tenant_id,
+                        UserTenant.is_active == 1,
+                        UserTenant.status == "active",
+                    )
+                ).first()
+                if membership is None:
+                    return None
                 tenant = db.exec(select(Tenant).where(Tenant.id == tenant_id)).first()
                 user_active = int(getattr(user, "delete", 0) or 0) == 0
                 tenant_active = tenant is not None and getattr(tenant, "status", "active") == "active"
                 username = getattr(user, "user_name", "") or ""
                 display_name = (getattr(user, "nickname", None) or "").strip() or username
                 email = getattr(user, "email", None)
-                tenant_name = (getattr(tenant, "name", None) or "").strip() if tenant else f"Tenant {tenant_id}"
+                tenant_name = (getattr(tenant, "tenant_name", None) or "").strip() if tenant else f"Tenant {tenant_id}"
                 return OAuth2UserIdentity(
                     user_id=int(user.user_id),
                     tenant_id=int(tenant_id),

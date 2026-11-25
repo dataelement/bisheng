@@ -5,6 +5,7 @@ import {
     submitOAuth2ConsentDecision,
 } from '@/controllers/API/oauth2'
 import type { OAuth2ConsentDetails } from '@/types/oauth2'
+import { rememberOAuthConsentLoginReturnTo } from '@/utils/loginReturnTo'
 import { Button } from '@bisheng/ui'
 import { Outlined } from 'bisheng-icons'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
@@ -70,8 +71,8 @@ export function OAuthConsent() {
     }, [requestId, submitDecision, user?.user_id])
 
     function handleGoLogin() {
-        const returnTo = `${location.pathname}${location.search}`
-        location.assign(`${homeUrl}?return_to=${encodeURIComponent(returnTo)}`)
+        rememberOAuthConsentLoginReturnTo()
+        location.assign(homeUrl)
     }
 
     return (

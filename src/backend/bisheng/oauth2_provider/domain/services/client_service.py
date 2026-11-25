@@ -65,7 +65,11 @@ def verify_client_secret(secret: str, stored_hash: str | None) -> bool:
 
 def validate_registered_redirect_uri(uri: str) -> str:
     cleaned = uri.strip()
-    parsed = urlsplit(cleaned)
+    try:
+        parsed = urlsplit(cleaned)
+        _ = parsed.port  # Validate non-integer and out-of-range ports, even on exact matches.
+    except ValueError as exc:
+        raise OAuth2InvalidRedirectUriError(msg=f"Invalid redirect_uri: {uri}") from exc
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.hostname
@@ -83,7 +87,11 @@ def validate_registered_redirect_uri(uri: str) -> str:
 def match_redirect_uri(candidate: str, registered_uris: list[str], *, allow_loopback_port: bool) -> bool:
     if not candidate:
         return False
-    parsed = urlsplit(candidate)
+    try:
+        parsed = urlsplit(candidate)
+        port = parsed.port
+    except ValueError:
+        return False
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.hostname
@@ -96,14 +104,18 @@ def match_redirect_uri(candidate: str, registered_uris: list[str], *, allow_loop
         return True
     if not allow_loopback_port or parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
         return False
-    if not parsed.port or parsed.query:
+    if not port or parsed.query:
         return False
     for reg in registered_uris:
-        reg_parsed = urlsplit(reg)
+        try:
+            reg_parsed = urlsplit(reg)
+            registered_port = reg_parsed.port
+        except ValueError:
+            continue
         if (
             reg_parsed.scheme == "http"
             and reg_parsed.hostname == parsed.hostname
-            and reg_parsed.port is None
+            and registered_port is None
             and reg_parsed.path == parsed.path
             and not reg_parsed.query
         ):

@@ -3,7 +3,7 @@ import { notification } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
-import { hasDesktopLoginReturnTo } from "@/utils/loginReturnTo";
+import { hasDesktopLoginReturnTo, hasOAuthConsentLoginReturnTo, isOAuthConsentPath } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
 import { ReactNode, createContext, useCallback, useLayoutEffect, useState } from "react";
@@ -172,6 +172,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
             if (/^(\/\w+)?\/chat/.test(location.pathname)) return
             // Desktop consent is available to ordinary platform identities.
             if (location.pathname === '/desktop-login' || hasDesktopLoginReturnTo()) return
+            // OAuth consent authenticates ordinary users without granting admin access.
+            if (isOAuthConsentPath() || hasOAuthConsentLoginReturnTo()) return
 
             const BASE_URL = __APP_ENV__.BASE_URL
 

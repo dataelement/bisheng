@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from uuid import uuid4
 
+from sqlalchemy import case, update
 from sqlmodel import Session, select
 
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -24,11 +25,14 @@ class OAuth2SessionRepository:
         scope: str,
         refresh_token_hash: str | None,
         refresh_ttl_seconds: int,
+        access_ttl_seconds: int,
         device_name: str | None = None,
         now: datetime | None = None,
     ) -> OAuth2Session:
         ts = now or datetime.utcnow()
-        expires_at = ts + timedelta(seconds=refresh_ttl_seconds)
+        refresh_expires_at = ts + timedelta(seconds=refresh_ttl_seconds)
+        session_ttl = max(access_ttl_seconds, refresh_ttl_seconds if refresh_token_hash else 0)
+        expires_at = ts + timedelta(seconds=session_ttl)
         record = OAuth2Session(
             session_id=str(uuid4()),
             client_id=client_id,
@@ -53,7 +57,7 @@ class OAuth2SessionRepository:
                         generation=1,
                         state="ACTIVE",
                         used_at=None,
-                        expires_at=expires_at,
+                        expires_at=refresh_expires_at,
                     )
                 )
             self.session.flush()
@@ -75,21 +79,50 @@ class OAuth2SessionRepository:
         old_token: OAuth2RefreshToken,
         new_token_hash: str,
         refresh_ttl_seconds: int,
+        access_ttl_seconds: int,
         now: datetime | None = None,
-    ) -> tuple[OAuth2Session, OAuth2RefreshToken]:
+    ) -> tuple[OAuth2Session, OAuth2RefreshToken] | None:
         ts = now or datetime.utcnow()
+        new_expires_at = ts + timedelta(seconds=refresh_ttl_seconds)
+        session_expires_at = ts + timedelta(seconds=max(access_ttl_seconds, refresh_ttl_seconds))
+        # Every mutation locks the family row first. Conditional UPDATE is a
+        # current read on both MySQL and DM8, including under repeatable read.
+        # A revoked/expired family cannot be resurrected by a stale ORM object.
+        locked = self.session.execute(
+            update(OAuth2Session)
+            .where(
+                OAuth2Session.session_id == old_token.session_id,
+                OAuth2Session.state == "ACTIVE",
+                OAuth2Session.expires_at > ts,
+            )
+            .values(
+                expires_at=case(
+                    (OAuth2Session.expires_at > session_expires_at, OAuth2Session.expires_at),
+                    else_=session_expires_at,
+                )
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if locked.rowcount != 1:
+            return None
+        consumed = self.session.execute(
+            update(OAuth2RefreshToken)
+            .where(
+                OAuth2RefreshToken.token_hash == old_token.token_hash,
+                OAuth2RefreshToken.session_id == old_token.session_id,
+                OAuth2RefreshToken.state == "ACTIVE",
+                OAuth2RefreshToken.expires_at > ts,
+            )
+            .values(state="USED", used_at=ts)
+            .execution_options(synchronize_session=False)
+        )
+        if consumed.rowcount != 1:
+            # A concurrent winner may have committed a successor already.
+            # Persist family revocation before the service raises invalid_grant.
+            self.revoke_session(old_token.session_id, now=ts)
+            return None
         with bypass_tenant_filter():
-            session_row = self.session.exec(
-                select(OAuth2Session).where(OAuth2Session.session_id == old_token.session_id)
-            ).first()
-            if session_row is None:
-                raise ValueError("OAuth2 session missing")
-            old_token.state = "USED"
-            old_token.used_at = ts
-            self.session.add(old_token)
-            new_expires_at = ts + timedelta(seconds=refresh_ttl_seconds)
-            session_row.expires_at = new_expires_at
-            self.session.add(session_row)
+            session_row = self.get_session(old_token.session_id)
             successor = OAuth2RefreshToken(
                 token_hash=new_token_hash,
                 session_id=session_row.session_id,
@@ -106,45 +139,34 @@ class OAuth2SessionRepository:
 
     def revoke_session(self, session_id: str, *, now: datetime | None = None) -> bool:
         ts = now or datetime.utcnow()
-        with bypass_tenant_filter():
-            session_row = self.session.exec(select(OAuth2Session).where(OAuth2Session.session_id == session_id)).first()
-            if session_row is None:
-                return False
-            session_row.state = "REVOKED"
-            session_row.revoked_at = ts
-            self.session.add(session_row)
-            tokens = self.session.exec(
-                select(OAuth2RefreshToken).where(OAuth2RefreshToken.session_id == session_id)
-            ).all()
-            for token in tokens:
-                token.state = "REVOKED"
-                self.session.add(token)
-            self.session.flush()
-            return True
+        result = self.session.execute(
+            update(OAuth2Session)
+            .where(OAuth2Session.session_id == session_id)
+            .values(state="REVOKED", revoked_at=ts)
+            .execution_options(synchronize_session=False)
+        )
+        self.session.execute(
+            update(OAuth2RefreshToken)
+            .where(OAuth2RefreshToken.session_id == session_id)
+            .values(state="REVOKED")
+            .execution_options(synchronize_session=False)
+        )
+        self.session.flush()
+        return result.rowcount == 1
 
     def revoke_by_client_id(self, client_id: str, *, now: datetime | None = None) -> int:
         ts = now or datetime.utcnow()
-        with bypass_tenant_filter():
-            sessions = list(
-                self.session.exec(
-                    select(OAuth2Session).where(
-                        OAuth2Session.client_id == client_id,
-                        OAuth2Session.state == "ACTIVE",
-                    )
-                ).all()
-            )
-            for row in sessions:
-                row.state = "REVOKED"
-                row.revoked_at = ts
-                self.session.add(row)
-            tokens = self.session.exec(
-                select(OAuth2RefreshToken).where(
-                    OAuth2RefreshToken.client_id == client_id,
-                    OAuth2RefreshToken.state == "ACTIVE",
-                )
-            ).all()
-            for token in tokens:
-                token.state = "REVOKED"
-                self.session.add(token)
-            self.session.flush()
-            return len(sessions)
+        result = self.session.execute(
+            update(OAuth2Session)
+            .where(OAuth2Session.client_id == client_id)
+            .values(state="REVOKED", revoked_at=ts)
+            .execution_options(synchronize_session=False)
+        )
+        self.session.execute(
+            update(OAuth2RefreshToken)
+            .where(OAuth2RefreshToken.client_id == client_id)
+            .values(state="REVOKED")
+            .execution_options(synchronize_session=False)
+        )
+        self.session.flush()
+        return result.rowcount

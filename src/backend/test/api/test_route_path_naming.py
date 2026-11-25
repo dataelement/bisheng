@@ -55,7 +55,9 @@ def _config_routes():
 
 
 def test_no_new_route_contains_config():
-    assert _config_routes() - LEGACY_CONFIG_ROUTES == set()
+    # OIDC Discovery 1.0 fixes this external protocol URL; it cannot be renamed.
+    protocol_routes = {("GET", "/.well-known/openid-configuration")}
+    assert _config_routes() - LEGACY_CONFIG_ROUTES - protocol_routes == set()
 
 
 def test_legacy_config_routes_only_shrink():

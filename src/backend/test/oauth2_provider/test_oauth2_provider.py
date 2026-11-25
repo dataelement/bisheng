@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 from contextlib import contextmanager
@@ -11,7 +12,6 @@ import jwt
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -85,11 +85,11 @@ def _make_pkce(verifier: str = "a" * 64) -> tuple[str, str]:
 
 
 @pytest.fixture
-def oauth2_env():
+def oauth2_env(tmp_path):
+    # Separate connections exercise committed CAS state, unlike StaticPool.
     engine = create_engine(
-        "sqlite://",
+        f"sqlite:///{tmp_path / 'oauth2.sqlite'}",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
     )
     SQLModel.metadata.create_all(
         engine,
@@ -433,7 +433,8 @@ def test_http_endpoints_discovery_jwks_and_admin_api(oauth2_env):
 
     client = TestClient(app)
 
-    meta = client.get("/.well-known/oauth-authorization-server")
+    meta = client.get("/.well-known/openid-configuration")
+    assert client.get("/.well-known/oauth-authorization-server").json() == meta.json()
     assert meta.status_code == 200
     body = meta.json()
     assert body["authorization_endpoint"].endswith("/api/v1/oauth2/authorize")
@@ -448,3 +449,350 @@ def test_http_endpoints_discovery_jwks_and_admin_api(oauth2_env):
     assert listed.status_code == 200
     assert listed.json()["data"]["total"] == 1
     assert listed.json()["data"]["data"][0]["client_id"] == BUILTIN_DSH_CLIENT_ID
+
+
+async def _issue_security_tokens(runtime, *, scope="openid offline_access", client_type="public"):
+    created = await runtime.clients.create_client(
+        OAuth2ClientCreate(
+            client_id="security-client",
+            client_name="Security",
+            client_type=client_type,
+            redirect_uris=["https://security.example/cb"],
+        )
+    )
+    verifier, challenge = _make_pkce()
+    request_id, _, _ = await runtime.auth.start_authorization(
+        client_id=created.client.client_id,
+        redirect_uri="https://security.example/cb",
+        response_type="code",
+        scope=scope,
+        state=None,
+        code_challenge=challenge,
+        code_challenge_method="S256",
+        nonce=None,
+    )
+    result = await runtime.auth.submit_consent(request_id=request_id, user_id=42, tenant_id=7, decision="approve")
+    code = parse_qs(urlsplit(result.redirect_uri).query)["code"][0]
+    tokens = await runtime.auth.exchange_code(
+        origin="https://bisheng.example",
+        code=code,
+        client_id=created.client.client_id,
+        redirect_uri="https://security.example/cb",
+        code_verifier=verifier,
+        client_secret=created.client_secret,
+    )
+    return tokens, created.client_secret
+
+
+@pytest.mark.parametrize(
+    "scope,profile,email", [("openid", False, False), ("openid profile", True, False), ("openid email", False, True)]
+)
+async def test_userinfo_respects_granted_scopes(oauth2_env, scope, profile, email):
+    runtime, _ = oauth2_env
+    tokens, _ = await _issue_security_tokens(runtime, scope=scope)
+    body = (await runtime.auth.userinfo(f"Bearer {tokens.access_token}")).model_dump(exclude_none=True)
+    assert ("name" in body) is profile
+    assert ("preferred_username" in body) is profile
+    assert ("email" in body) is email
+    assert body["sub"] == "42"
+
+
+@pytest.mark.parametrize("kind", ["access_token", "refresh_token"])
+async def test_confidential_revocation_authenticates_and_matches_owner(oauth2_env, kind):
+    runtime, _ = oauth2_env
+    tokens, secret = await _issue_security_tokens(runtime, client_type="confidential")
+    token = getattr(tokens, kind)
+    for credentials in [
+        {},
+        {"client_id": "security-client"},
+        {"client_id": "security-client", "client_secret": "wrong"},
+        {"client_id": BUILTIN_DSH_CLIENT_ID},
+    ]:
+        with pytest.raises(OAuth2InvalidClientAuthError):
+            await runtime.auth.revoke_token(token=token, **credentials)
+        assert (await runtime.auth.userinfo(f"Bearer {tokens.access_token}")).sub == "42"
+    await runtime.auth.revoke_token(token=token, client_id="security-client", client_secret=secret)
+    with pytest.raises(OAuth2InvalidGrantError):
+        await runtime.auth.refresh_access_token(
+            origin="https://bisheng.example",
+            refresh_token=tokens.refresh_token,
+            client_id="security-client",
+            client_secret=secret,
+        )
+
+
+async def test_concurrent_refresh_replay_revokes_winner_family(oauth2_env, monkeypatch):
+    from sqlmodel import select
+
+    from bisheng.oauth2_provider.domain.repositories.session import OAuth2SessionRepository
+
+    runtime, _ = oauth2_env
+    tokens, _ = await _issue_security_tokens(runtime)
+    original = runtime.auth._identity_lookup
+    ready = asyncio.Event()
+    arrivals = 0
+
+    async def both_loaded(tenant_id, user_id):
+        nonlocal arrivals
+        arrivals += 1
+        if arrivals == 2:
+            ready.set()
+        await asyncio.wait_for(ready.wait(), 5)
+        return await original(tenant_id, user_id)
+
+    monkeypatch.setattr(runtime.auth, "_identity_lookup", both_loaded)
+    results = await asyncio.gather(
+        *[
+            runtime.auth.refresh_access_token(
+                origin="https://bisheng.example",
+                refresh_token=tokens.refresh_token,
+                client_id="security-client",
+                client_secret=None,
+            )
+            for _ in range(2)
+        ],
+        return_exceptions=True,
+    )
+    assert sum(isinstance(r, OAuth2InvalidGrantError) for r in results) == 1, results
+    assert sum(not isinstance(r, Exception) for r in results) == 1, results
+    with runtime.auth._session_factory() as db:
+        repo = OAuth2SessionRepository(db)
+        assert repo.get_session(tokens.session_id).state == "REVOKED"
+        family = db.exec(select(OAuth2RefreshToken).where(OAuth2RefreshToken.session_id == tokens.session_id)).all()
+        assert len(family) == 2
+        assert all(row.state == "REVOKED" for row in family)
+
+
+async def test_revoke_between_refresh_lookup_and_cas_cannot_resurrect(oauth2_env, monkeypatch):
+    from bisheng.oauth2_provider.domain.repositories.session import OAuth2SessionRepository
+
+    runtime, _ = oauth2_env
+    tokens, _ = await _issue_security_tokens(runtime)
+    original = runtime.auth._identity_lookup
+
+    async def revoked_after_lookup(tenant_id, user_id):
+        await runtime.auth.revoke_token(token=tokens.refresh_token, client_id="security-client")
+        return await original(tenant_id, user_id)
+
+    monkeypatch.setattr(runtime.auth, "_identity_lookup", revoked_after_lookup)
+    with pytest.raises(OAuth2InvalidGrantError):
+        await runtime.auth.refresh_access_token(
+            origin="https://bisheng.example",
+            refresh_token=tokens.refresh_token,
+            client_id="security-client",
+            client_secret=None,
+        )
+    with runtime.auth._session_factory() as db:
+        assert OAuth2SessionRepository(db).get_session(tokens.session_id).state == "REVOKED"
+
+
+@pytest.fixture
+def real_person_identity(oauth2_env, monkeypatch):
+    import bisheng.oauth2_provider.runtime as provider_runtime
+    from bisheng.database.models.tenant import Tenant, UserTenant
+    from bisheng.user.domain.models.user import User
+
+    runtime, _ = oauth2_env
+    with runtime.auth._session_factory() as db:
+        SQLModel.metadata.create_all(db.get_bind(), tables=[User.__table__, Tenant.__table__, UserTenant.__table__])
+        db.add(User(user_id=42, user_name="ordinary", password="unused", token_version=3))
+        db.add(Tenant(id=7, tenant_code="acme", tenant_name="Acme"))
+        db.add(UserTenant(user_id=42, tenant_id=7, status="active", is_active=1))
+    monkeypatch.setattr(provider_runtime, "oauth2_db_session", runtime.auth._session_factory)
+    monkeypatch.setattr(runtime.auth, "_identity_lookup", provider_runtime.lookup_user_identity)
+    return runtime
+
+
+@pytest.mark.parametrize(
+    "change", ["removed", "disabled_membership", "historical", "disabled_tenant", "disabled_user", "missing_human"]
+)
+async def test_real_identity_rejects_removed_or_inactive_person(real_person_identity, change):
+    from sqlalchemy import delete, update
+
+    from bisheng.common.errcode.oauth2_provider import OAuth2UserInactiveError
+    from bisheng.database.models.tenant import Tenant, UserTenant
+    from bisheng.user.domain.models.user import User
+
+    runtime = real_person_identity
+    tokens, _ = await _issue_security_tokens(runtime)
+    identity = await runtime.auth._identity_lookup(7, 42)
+    assert identity.active and identity.tenant_name == "Acme"
+    assert await runtime.auth._identity_lookup(1, 42) is None
+    with runtime.auth._session_factory() as db:
+        if change == "removed":
+            db.execute(delete(UserTenant))
+        elif change == "disabled_membership":
+            db.execute(update(UserTenant).values(status="disabled"))
+        elif change == "historical":
+            db.execute(update(UserTenant).values(is_active=None))
+        elif change == "disabled_tenant":
+            db.execute(update(Tenant).values(status="disabled"))
+        elif change == "disabled_user":
+            db.execute(update(User).values(delete=1))
+        else:
+            # A membership alone, including a service-account ID, is not a person.
+            db.execute(delete(User))
+    with pytest.raises(OAuth2UserInactiveError):
+        await runtime.auth.refresh_access_token(
+            origin="https://bisheng.example",
+            refresh_token=tokens.refresh_token,
+            client_id="security-client",
+            client_secret=None,
+        )
+
+
+@pytest.mark.parametrize("version,expected", [(3, True), (2, False), (None, False)])
+async def test_autoapproval_uses_full_browser_validation(real_person_identity, monkeypatch, version, expected):
+    from starlette.requests import Request
+
+    import bisheng.user.domain.services.jwt_secret as jwt_secrets
+    import bisheng.utils.http_middleware as middleware
+    from bisheng.oauth2_provider.api.endpoints.oidc import _try_browser_user
+    from bisheng.user.domain.models.user import UserDao
+    from bisheng.user.domain.services.auth import AuthJwt
+
+    monkeypatch.setattr(jwt_secrets, "resolve_jwt_secret", lambda: "test-only-oauth-browser-signing-secret")
+    auth = AuthJwt()
+    subject = {"user_id": 42, "user_name": "ordinary", "tenant_id": 7}
+    if version is not None:
+        subject["token_version"] = version
+    token = auth.create_access_token(subject)
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "scheme": "https",
+            "path": "/api/v1/oauth2/authorize",
+            "query_string": b"",
+            "headers": [(b"authorization", f"Bearer {token}".encode())],
+        }
+    )
+
+    async def current_version(*args):
+        return 3
+
+    async def current_session(*args):
+        return True
+
+    async def ordinary_user(*args):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(delete=0)
+
+    async def ordinary_login(**kwargs):
+        return UserPayload(
+            user_id=42, user_name="ordinary", user_role=[], tenant_id=7, token_version=3, is_global_super=False
+        )
+
+    async def not_super(*args):
+        return False
+
+    monkeypatch.setattr(UserDao, "aget_token_version", current_version)
+    monkeypatch.setattr(UserDao, "aget_user", ordinary_user)
+    monkeypatch.setattr(middleware, "_validate_current_session_token", current_session)
+    monkeypatch.setattr(middleware, "_check_is_global_super", not_super)
+    monkeypatch.setattr(UserPayload, "init_login_user", ordinary_login)
+    result = await _try_browser_user(request)
+    assert result == ((7, 42) if expected else None)
+
+
+async def test_revoke_waits_for_rotation_and_revokes_committed_successor(oauth2_env, monkeypatch):
+    from threading import Event
+
+    from sqlmodel import select
+
+    from bisheng.oauth2_provider.domain.repositories.session import OAuth2SessionRepository
+
+    runtime, _ = oauth2_env
+    tokens, _ = await _issue_security_tokens(runtime)
+    rotated = Event()
+    revoking = Event()
+    original_rotate = OAuth2SessionRepository.rotate_refresh_token
+    original_revoke = OAuth2SessionRepository.revoke_session
+
+    def held_rotation(self, **kwargs):
+        result = original_rotate(self, **kwargs)
+        rotated.set()
+        assert revoking.wait(5), "revocation did not reach the locked family"
+        return result  # The session context commits only after this return.
+
+    def waiting_revoke(self, *args, **kwargs):
+        revoking.set()
+        return original_revoke(self, *args, **kwargs)
+
+    monkeypatch.setattr(OAuth2SessionRepository, "rotate_refresh_token", held_rotation)
+    monkeypatch.setattr(OAuth2SessionRepository, "revoke_session", waiting_revoke)
+    refresh = asyncio.create_task(
+        runtime.auth.refresh_access_token(
+            origin="https://bisheng.example",
+            refresh_token=tokens.refresh_token,
+            client_id="security-client",
+            client_secret=None,
+        )
+    )
+    assert await asyncio.to_thread(rotated.wait, 5)
+    await runtime.auth.revoke_token(token=tokens.refresh_token, client_id="security-client")
+    await refresh
+    with runtime.auth._session_factory() as db:
+        assert OAuth2SessionRepository(db).get_session(tokens.session_id).state == "REVOKED"
+        family = db.exec(select(OAuth2RefreshToken).where(OAuth2RefreshToken.session_id == tokens.session_id)).all()
+        assert len(family) == 2 and all(row.state == "REVOKED" for row in family)
+
+
+async def test_failed_successor_write_rolls_back_consumption(oauth2_env, monkeypatch):
+    from bisheng.oauth2_provider.domain.repositories.session import OAuth2SessionRepository
+    from bisheng.oauth2_provider.domain.services.auth_service import _sha256_hex
+
+    runtime, _ = oauth2_env
+    tokens, _ = await _issue_security_tokens(runtime)
+    original_add = Session.add
+
+    def reject_successor(self, instance, *args, **kwargs):
+        if isinstance(instance, OAuth2RefreshToken) and instance.generation == 2:
+            raise RuntimeError("successor write failure")
+        return original_add(self, instance, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "add", reject_successor)
+    with pytest.raises(RuntimeError, match="successor write failure"):
+        await runtime.auth.refresh_access_token(
+            origin="https://bisheng.example",
+            refresh_token=tokens.refresh_token,
+            client_id="security-client",
+            client_secret=None,
+        )
+    with runtime.auth._session_factory() as db:
+        repo = OAuth2SessionRepository(db)
+        assert repo.get_refresh_token(_sha256_hex(tokens.refresh_token)).state == "ACTIVE"
+        assert repo.get_session(tokens.session_id).state == "ACTIVE"
+
+
+async def test_tenant_removal_between_consent_and_exchange_blocks_token(real_person_identity):
+    from sqlalchemy import delete
+
+    from bisheng.common.errcode.oauth2_provider import OAuth2UserInactiveError
+    from bisheng.database.models.tenant import UserTenant
+
+    runtime = real_person_identity
+    await runtime.clients.get_active_client_model(BUILTIN_DSH_CLIENT_ID)
+    await runtime.auth.code_store.save_code(
+        "before-removal",
+        {
+            "client_id": BUILTIN_DSH_CLIENT_ID,
+            "redirect_uri": "http://127.0.0.1/dsh/callback",
+            "tenant_id": 7,
+            "user_id": 42,
+            "scopes": ["openid"],
+            "code_challenge": _make_pkce()[1],
+        },
+    )
+    with runtime.auth._session_factory() as db:
+        db.execute(delete(UserTenant))
+    with pytest.raises(OAuth2UserInactiveError):
+        await runtime.auth.exchange_code(
+            origin="https://bisheng.example",
+            code="before-removal",
+            client_id=BUILTIN_DSH_CLIENT_ID,
+            redirect_uri="http://127.0.0.1/dsh/callback",
+            code_verifier=_make_pkce()[0],
+            client_secret=None,
+        )

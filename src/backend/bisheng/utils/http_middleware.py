@@ -68,6 +68,7 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # behind a credential on a different path.
     "/api/v1/dev-toolkit",
     "/.well-known/oauth-authorization-server",
+    "/.well-known/openid-configuration",
     "/api/v1/oauth2/openid-metadata",
     "/api/v1/oauth2/jwks",
     "/api/v1/oauth2/authorize",

@@ -15,6 +15,7 @@ from bisheng.common.errcode.oauth2_provider import (
     OAuth2UnsupportedGrantTypeError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
+from bisheng.oauth2_provider.api.protocol import OAuth2ProtocolRoute
 from bisheng.oauth2_provider.domain.schemas.auth import (
     OAuth2ConsentDecision,
     OAuth2ConsentDecisionResponse,
@@ -24,7 +25,7 @@ from bisheng.oauth2_provider.domain.schemas.auth import (
 )
 from bisheng.oauth2_provider.runtime import OAuth2ProviderRuntime, get_oauth2_runtime
 
-public_router = APIRouter(prefix="/oauth2", tags=["OAuth2 Provider"])
+public_router = APIRouter(prefix="/oauth2", tags=["OAuth2 Provider"], route_class=OAuth2ProtocolRoute)
 consent_router = APIRouter(prefix="/oauth2", tags=["OAuth2 Provider"])
 
 
@@ -71,26 +72,30 @@ async def _parse_form_or_json(request: Request) -> dict[str, str]:
 
 
 async def _try_browser_user(request: Request):
-    """Best-effort decode of an existing BiSheng browser session for auto-approve flows."""
-    token = request.cookies.get("access_token_cookie")
-    if not token:
-        auth = request.headers.get("authorization", "")
-        if auth.lower().startswith("bearer "):
-            token = auth.split(" ", 1)[1].strip()
+    """Use the ordinary browser admission checks even on this public endpoint."""
+    from loguru import logger
+    from starlette.exceptions import HTTPException
+
+    from bisheng.common.errcode.base import BaseErrorCode
+    from bisheng.common.exceptions.auth import AuthJWTException
+    from bisheng.user.domain.services.auth import AuthJwt
+    from bisheng.utils.http_middleware import _apply_token_version_and_visible
+
+    auth = AuthJwt(req=request)
+    token = auth.request_access_token()
     if not token:
         return None
     try:
-        from bisheng.user.domain.services.auth import AuthJwt
-
-        payload = AuthJwt().decode_jwt_token(token)
-        user_id = payload.get("user_id")
-        tenant_id = payload.get("tenant_id") or 1
-        if user_id:
-            return int(tenant_id), int(user_id)
-    except Exception:
-        # Unauthenticated or expired browser session falls back to the consent/login page.
+        subject = auth.get_subject(token=token)
+        denial = await _apply_token_version_and_visible(request, token, decoded_subject=subject)
+        if denial is not None:
+            return None
+        user = await UserPayload.get_login_user(auth)
+        return int(user.tenant_id), int(user.user_id)
+    except (AuthJWTException, BaseErrorCode, HTTPException):
+        # Invalid credentials fall back to interactive login, without granting a code.
+        logger.debug("OAuth auto-approval requires a current browser identity")
         return None
-    return None
 
 
 @public_router.get("/openid-metadata")

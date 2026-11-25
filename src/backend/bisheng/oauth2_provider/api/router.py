@@ -14,6 +14,7 @@ from bisheng.oauth2_provider.api.endpoints.oidc import (
 )
 
 well_known_router = APIRouter(tags=["OAuth2 Provider"])
+well_known_router.add_api_route("/.well-known/openid-configuration", openid_metadata, methods=["GET"])
 well_known_router.add_api_route("/.well-known/oauth-authorization-server", openid_metadata, methods=["GET"])
 
 __all__ = [

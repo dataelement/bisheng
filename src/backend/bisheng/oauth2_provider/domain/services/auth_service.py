@@ -333,6 +333,7 @@ class OAuth2AuthService:
                     scope=scope_str,
                     refresh_token_hash=refresh_hash,
                     refresh_ttl_seconds=int(client.refresh_token_ttl),
+                    access_ttl_seconds=int(client.access_token_ttl),
                     device_name=code_data.get("device_name"),
                 )
                 return str(row.session_id)
@@ -423,21 +424,28 @@ class OAuth2AuthService:
         if identity is None or not identity.active:
             raise OAuth2UserInactiveError()
 
-        def _rotate() -> tuple[str, str]:
+        def _rotate() -> tuple[str, str] | None:
             with self._session_factory() as db:
                 repo = OAuth2SessionRepository(db)
                 live_rt = repo.get_refresh_token(token_hash)
-                if live_rt is None or live_rt.state != "ACTIVE":
-                    raise OAuth2InvalidGrantError()
-                updated_sess, _ = repo.rotate_refresh_token(
+                if live_rt is None:
+                    return None
+                rotated = repo.rotate_refresh_token(
                     old_token=live_rt,
                     new_token_hash=new_hash,
                     refresh_ttl_seconds=int(client.refresh_token_ttl),
+                    access_ttl_seconds=int(client.access_token_ttl),
                     now=now,
                 )
+                if rotated is None:
+                    return None
+                updated_sess, _ = rotated
                 return str(updated_sess.session_id), str(updated_sess.scope)
 
-        updated_session_id, updated_scope = await asyncio.to_thread(_rotate)
+        rotated = await asyncio.to_thread(_rotate)
+        if rotated is None:
+            raise OAuth2InvalidGrantError()
+        updated_session_id, updated_scope = rotated
         scopes = [s for s in updated_scope.split() if s]
         access_token, id_token = await self._sign_tokens(
             origin=origin,
@@ -487,6 +495,7 @@ class OAuth2AuthService:
                     return None
                 return {
                     "state": sess.state,
+                    "scope": sess.scope,
                     "expires_at": sess.expires_at,
                     "client_id": sess.client_id,
                     "tenant_id": int(sess.tenant_id),
@@ -508,53 +517,58 @@ class OAuth2AuthService:
         if identity is None or not identity.active:
             raise OAuth2InvalidAccessTokenError()
 
+        scopes = set(str(claims.get("scope", "")).split()) & set(sess["scope"].split())
         return OAuth2UserInfoResponse(
             sub=str(identity.user_id),
-            preferred_username=identity.username,
-            name=identity.display_name,
-            email=identity.email,
+            preferred_username=identity.username if "profile" in scopes else None,
+            name=identity.display_name if "profile" in scopes else None,
+            email=identity.email if "email" in scopes else None,
             tenant_id=str(identity.tenant_id),
             tenant_name=identity.tenant_name,
         )
 
     async def revoke_token(self, *, token: str, client_id: str | None = None, client_secret: str | None = None) -> None:
+        # Authenticate supplied credentials even for an unknown token (RFC 7009).
+        if client_id:
+            client = await self.clients.get_active_client_model(client_id)
+            self.clients.authenticate_client(client, client_secret)
         if not token:
             return
         token_hash = _sha256_hex(token)
 
-        def _revoke_refresh():
+        def _lookup_refresh():
             with self._session_factory() as db:
-                repo = OAuth2SessionRepository(db)
-                rt = repo.get_refresh_token(token_hash)
-                if rt is None:
-                    return None
-                return rt.client_id, rt.session_id
+                rt = OAuth2SessionRepository(db).get_refresh_token(token_hash)
+                return (rt.client_id, rt.session_id) if rt is not None else None
 
-        match = await asyncio.to_thread(_revoke_refresh)
-        if match is not None:
-            owner_client_id, session_id = match
-            if client_id and client_id != owner_client_id:
-                raise OAuth2InvalidClientAuthError()
-            if client_id:
-                client = await self.clients.get_active_client_model(client_id)
-                self.clients.authenticate_client(client, client_secret)
+        match = await asyncio.to_thread(_lookup_refresh)
+        if match is None:
+            try:
+                claims = await self.decode_access_token(f"Bearer {token}")
+            except OAuth2InvalidAccessTokenError:
+                return  # Unknown token: RFC 7009 idempotent success.
+            session_id = str(claims["session_id"])
 
-            def _do_revoke():
+            def _lookup_session():
                 with self._session_factory() as db:
-                    OAuth2SessionRepository(db).revoke_session(session_id)
+                    sess = OAuth2SessionRepository(db).get_session(session_id)
+                    return (sess.client_id, sess.session_id) if sess is not None else None
 
-            await asyncio.to_thread(_do_revoke)
+            match = await asyncio.to_thread(_lookup_session)
+        if match is None:
             return
+        owner_client_id, session_id = match
+        if client_id is not None and client_id != owner_client_id:
+            raise OAuth2InvalidClientAuthError()
+        if client_id is None:
+            owner = await self.clients.get_active_client_model(owner_client_id)
+            # Public clients remain compatible; confidential clients must identify
+            # themselves and authenticate for either access or refresh revocation.
+            if owner.client_type == "confidential":
+                raise OAuth2InvalidClientAuthError()
 
-        # Try revoking by access token JWT (RFC 7009 idempotent behavior: ignore invalid token).
-        try:
-            claims = await self.decode_access_token(f"Bearer {token}")
-        except OAuth2InvalidAccessTokenError:
-            return
-        session_id = str(claims["session_id"])
-
-        def _do_revoke_access():
+        def _do_revoke():
             with self._session_factory() as db:
                 OAuth2SessionRepository(db).revoke_session(session_id)
 
-        await asyncio.to_thread(_do_revoke_access)
+        await asyncio.to_thread(_do_revoke)
