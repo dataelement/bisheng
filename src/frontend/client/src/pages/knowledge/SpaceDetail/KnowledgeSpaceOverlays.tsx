@@ -206,7 +206,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
             documentTitle={versionHistoryFile?.name}
             canManage={canEditSpace}
             onPreview={(versionFileId, fileName) =>
-              handlePreviewFile(String(versionFileId), fileName)
+              handlePreviewFile(String(versionFileId), fileName, true)
             }
             onDownload={async (versionFileId, fileName, signal) => {
               try {

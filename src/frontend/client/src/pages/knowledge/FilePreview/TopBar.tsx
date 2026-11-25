@@ -28,6 +28,7 @@ function SidebarToggleIcon({ className }: { className?: string }) {
 
 interface TopBarProps {
     fileName: string;
+    hideFileName?: boolean;
     /** Show sidebar toggle */
     showSidebar?: boolean;
     sidebarOpen?: boolean;
@@ -50,6 +51,7 @@ interface TopBarProps {
 
 export function TopBar({
     fileName,
+    hideFileName = false,
     showSidebar = false,
     sidebarOpen = false,
     onToggleSidebar,
@@ -100,7 +102,7 @@ export function TopBar({
     return (
         <div className="border-b border-border-base bg-bg-page shrink-0 select-none z-50">
             {/* ===== PC-narrow top row: filename only (PC <768px; hidden on mobile devices) ===== */}
-            {!isMobileDevice && (
+            {!hideFileName && !isMobileDevice && (
                 <div className="flex md:hidden items-center justify-center px-4 py-3 pb-0">
                     <span
                         className="block min-w-0 truncate text-sm font-semibold text-gray-800 text-center"
@@ -112,7 +114,7 @@ export function TopBar({
             )}
 
             {/* ===== Main row ===== */}
-            <div className="flex items-center justify-between px-4 py-4">
+            <div data-slot="file-preview-toolbar" className="flex items-center justify-between px-4 py-4">
                 {/* ===== Left: TOC toggle + filename ===== */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                     {showSidebar && (
@@ -138,7 +140,7 @@ export function TopBar({
                     )}
                     {/* Title in main row: PC ≥md only.
                         Mobile devices hide it; PC <md uses the dedicated top row above. */}
-                    {!isMobileDevice && (
+                    {!hideFileName && !isMobileDevice && (
                         <span
                             className="hidden md:block min-w-0 flex-1 truncate text-xl font-semibold text-gray-800"
                             title={fileName}

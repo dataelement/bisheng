@@ -35,6 +35,8 @@ function extractExtFromUrl(url: string, fallback: string): string {
     return fallback;
 }
 
+const EMBEDDED_REQUEST_OPTIONS = { skip403Redirect: true, showError: false };
+
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
 
@@ -52,14 +54,34 @@ function isRichPreviewData(data: KnowledgeFilePreview | null): boolean {
     );
 }
 
+interface KnowledgeFileReaderProps {
+    fileId?: string;
+    spaceId: string;
+    fileName: string;
+    embedded?: "desktop" | "mobile-app";
+}
+
 export default function FilePreviewPage() {
     const localize = useLocalize();
     const { fileId } = useParams<{ fileId: string }>();
     const [searchParams] = useSearchParams();
     const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
     const spaceId = searchParams.get("spaceId") || "";
+    return <KnowledgeFileReader fileId={fileId} fileName={fileName} spaceId={spaceId} />;
+}
+
+export function KnowledgeFileReader(props: KnowledgeFileReaderProps) {
     const { user } = useAuthContext();
     const identity = JSON.stringify([user?.id, user?.role, user?.tenant_id]);
+    // Embedded readers start a fresh session when the account or file changes.
+    const key = props.embedded ? JSON.stringify([identity, props.spaceId, props.fileId]) : undefined;
+    return <KnowledgeFileReaderSession key={key} identity={identity} {...props} />;
+}
+
+function KnowledgeFileReaderSession({
+    fileId, spaceId, fileName, embedded, identity,
+}: KnowledgeFileReaderProps & { identity: string }) {
+    const localize = useLocalize();
     const [permissionRevision, setPermissionRevision] = useState(0);
     const permissionTarget = useMemo(() => ({ fileId, spaceId, identity, permissionRevision }),
         [fileId, spaceId, identity, permissionRevision]);
@@ -108,7 +130,10 @@ export default function FilePreviewPage() {
         setLoading(true);
         setConversionFailed(false);
         setPreviewData(null);
-        getFilePreviewApi(spaceId, fileId)
+        const request = embedded
+            ? getFilePreviewApi(spaceId, fileId, EMBEDDED_REQUEST_OPTIONS)
+            : getFilePreviewApi(spaceId, fileId);
+        request
             .then((data) => {
                 if (cancelled) return;
                 const resolvedPreview = {
@@ -150,12 +175,14 @@ export default function FilePreviewPage() {
             .catch((err) => { if (!cancelled) console.error("Failed to load preview URL:", err); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [fileId, spaceId, identity]);
+    }, [fileId, spaceId, identity, embedded]);
 
     const handleDownloadFile = useCallback(async () => {
         if (!canDownload || !fileId || !spaceId) return;
         try {
-            const downloadData = await getFileDownloadApi(spaceId, fileId);
+            const downloadData = embedded
+                ? await getFileDownloadApi(spaceId, fileId, undefined, EMBEDDED_REQUEST_OPTIONS)
+                : await getFileDownloadApi(spaceId, fileId);
             if (currentTarget.current !== permissionTarget) return;
             const downloadUrl = downloadData.original_url || downloadData.preview_url;
             if (!downloadUrl) return;
@@ -170,7 +197,7 @@ export default function FilePreviewPage() {
         } catch (err) {
             console.error("Failed to download file:", err);
         }
-    }, [canDownload, fileId, fileName, spaceId, permissionTarget]);
+    }, [canDownload, fileId, fileName, spaceId, permissionTarget, embedded]);
 
     // Mobile layout (<md = 768px): keep a bare preview + floating download (no TopBar).
     const [isMobile, setIsMobile] = useState(false);
@@ -182,17 +209,19 @@ export default function FilePreviewPage() {
         return () => mq.removeEventListener("change", update);
     }, []);
 
-    // Mobile only: drive the browser tab title to the file name, restoring the
-    // previous title on unmount so navigating back doesn't leave it stuck.
-    // (Desktop keeps FilePreview/index's own title sync.)
+    const mobileLayout = isMobile && embedded !== "desktop";
+    const height = embedded ? "h-full" : "h-screen";
+
+    // Embedded readers and the knowledge list share a document, so only
+    // the standalone preview takes over the tab title.
     useEffect(() => {
-        if (!isMobile) return;
+        if (!mobileLayout || embedded) return;
         const previousTitle = document.title;
         document.title = fileName;
         return () => {
             document.title = previousTitle;
         };
-    }, [isMobile, fileName]);
+    }, [mobileLayout, embedded, fileName]);
 
     const renderPreview = (compactMode = false) => {
         if (previewData && isRichPreviewData(previewData)) {
@@ -203,6 +232,7 @@ export default function FilePreviewPage() {
                     allowDownload={canDownload}
                     onDownloadFile={handleDownloadFile}
                     compactMode={compactMode}
+                    hideFileName={Boolean(embedded)}
                 />
             );
         }
@@ -216,6 +246,8 @@ export default function FilePreviewPage() {
                 onDownloadFile={handleDownloadFile}
                 hideHeader={compactMode}
                 hideSidebar={compactMode}
+                hideFileName={Boolean(embedded)}
+                manageDocumentTitle={!embedded}
             />
         );
     };
@@ -223,7 +255,7 @@ export default function FilePreviewPage() {
     // Loading state while fetching preview URL
     if (loading) {
         return (
-            <div className="h-screen flex items-center justify-center bg-bg-page">
+            <div className={`${height} flex items-center justify-center bg-bg-page`}>
                 <div className="text-text-3">{localize("com_knowledge.loading")}</div>
             </div>
         );
@@ -232,7 +264,7 @@ export default function FilePreviewPage() {
     // No URL available (skip this guard for pptx conversion failure — handled by FilePreview)
     if (!fileUrl && !conversionFailed && !isRichPreviewData(previewData)) {
         return (
-            <div className="h-screen flex items-center justify-center bg-bg-page">
+            <div className={`${height} flex items-center justify-center bg-bg-page`}>
                 <div className="text-text-3">{localize("com_knowledge.fetch_preview_link_failed")}</div>
             </div>
         );
@@ -241,9 +273,9 @@ export default function FilePreviewPage() {
     // === Mobile: bare preview + floating download button + bottom AI dock ===
     // Mirrors the channel ArticlePage H5 layout. No TopBar/header; the preview fills
     // the screen, controls float, and the file-chat dock pins to the bottom.
-    if (isMobile) {
+    if (mobileLayout) {
         return (
-            <div className="relative h-screen w-screen overflow-hidden bg-bg-page">
+            <div className={`relative ${height} ${embedded ? "w-full" : "w-screen"} overflow-hidden bg-bg-page`}>
                 {/* Bare preview — header hidden, viewer fills the container. */}
                 <div className="absolute inset-0">
                     {renderPreview(true)}
@@ -255,7 +287,7 @@ export default function FilePreviewPage() {
                         type="button"
                         onClick={handleDownloadFile}
                         aria-label={localize("com_knowledge.download_file")}
-                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-bg-page/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-bg-page/85"
+                        className={`${embedded ? "absolute top-3" : "fixed top-[calc(env(safe-area-inset-top,0px)+12px)]"} right-4 z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-bg-page/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-bg-page/85`}
                     >
                         <Outlined.Download className="size-5" />
                     </button>
@@ -269,7 +301,7 @@ export default function FilePreviewPage() {
 
     // ─── Desktop layout: TopBar + viewer with a bottom-anchored AI dock overlay.
     return (
-        <div className="relative h-screen flex flex-col bg-bg-page overflow-hidden">
+        <div className={`relative ${height} flex flex-col bg-bg-page overflow-hidden`}>
             <div className="min-h-0 flex-1">
                 {renderPreview(false)}
             </div>

@@ -30,6 +30,8 @@ export interface FilePreviewProps {
     manageDocumentTitle?: boolean;
     /** File display name (with extension) */
     fileName: string;
+    /** The enclosing reader already displays the file name. */
+    hideFileName?: boolean;
     /** File extension, e.g. "pdf", "docx" */
     fileType: string;
     /** Full URL to the file */
@@ -68,6 +70,7 @@ export interface FilePreviewProps {
 export default function FilePreview({
     manageDocumentTitle = true,
     fileName,
+    hideFileName = false,
     fileType,
     fileUrl,
     actions,
@@ -156,7 +159,7 @@ export default function FilePreview({
     if (viewerType === "unsupported") {
         return (
             <div className="w-full h-full flex flex-col">
-                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
+                {showHeader && <TopBar fileName={fileName} hideFileName={hideFileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-fill-1">
                     <div className="flex flex-col items-center gap-4 text-text-3">
                         <div className="text-5xl">📄</div>
@@ -181,6 +184,7 @@ export default function FilePreview({
                 {showHeader && (
                     <TopBar
                         fileName={fileName}
+                        hideFileName={hideFileName}
                         showZoom={true}
                         zoomLevel={zoomLevel}
                         onZoomIn={handleZoomIn}
@@ -203,7 +207,7 @@ export default function FilePreview({
     if (error) {
         return (
             <div className="w-full h-full flex flex-col">
-                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
+                {showHeader && <TopBar fileName={fileName} hideFileName={hideFileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-fill-1">
                     <div className="flex flex-col items-center gap-3 text-text-3">
                         <div className="text-4xl">📄</div>
@@ -275,6 +279,7 @@ export default function FilePreview({
             {showHeader && (
                 <TopBar
                     fileName={fileName}
+                    hideFileName={hideFileName}
                     showSidebar={hasSidebar}
                     sidebarOpen={sidebarOpen}
                     onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
