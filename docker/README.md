@@ -144,6 +144,8 @@ docker compose logs gateway
 
 `up -d` 返回表示已执行后台启动，服务是否就绪需查看状态和日志。默认入口为 `http://服务器IP:3001`。
 
+`backend_worker` 等待 `backend` 健康后启动，确保首次建表和迁移已完成。旧部署若在首次启动时出现 `permission_catalog_release` 表不存在，随后文件处理报 `knowledge_model_read_runtime_unconfigured`，应先确认 `backend` 已健康，再执行 `docker compose restart backend_worker`。仅容器显示运行不能证明 Worker 初始化成功。
+
 ## 其他部署方式
 
 - Vibe App 的 `app-runtime` profile 在全新部署默认启用。宿主隔离、基础运行镜像和容量等实际运行前提见[应用工场部署说明](../docs/architecture/14-app-factory-deployment.md)与[宿主隔离说明](../deploy/runtime-manager/README.md)。这些条件尚未满足时操作会明确失败，默认开关不替代运行准入。
