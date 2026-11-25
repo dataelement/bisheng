@@ -687,7 +687,7 @@
         "source_knowledge": "Knowledge",
         "source_model_default": "Default model",
         "source_other": "Other source",
-        "workflow_unlink": "These workflows still reference this knowledge space, so it cannot be deleted. Open each workflow, remove this space from the listed place, and save. Offline workflows block deletion too. Check again after saving.",
+        "workflow_unlink": "These workflows still reference this knowledge space, including offline workflows. Deleting it may prevent the related features from working. You can open each workflow, remove this space from the listed settings, save, and check again.",
         "workflow_locations": "Referenced in: ",
         "location_separator": ", ",
         "location_workflow_knowledge_retriever": "Knowledge retrieval node, Search scope",

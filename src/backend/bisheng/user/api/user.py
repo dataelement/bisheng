@@ -833,7 +833,6 @@ async def user_addrole(
                 page=1,
                 limit=0,
                 login_user=login_user,
-                include_global_for_binding=True,
             )
             admin_roles.update(one.id for one in visible_roles["data"])
         if tenant_admin:

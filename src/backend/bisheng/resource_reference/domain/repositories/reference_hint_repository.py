@@ -28,7 +28,8 @@ class ReferenceHintRepository:
                         select(KnowledgeFile.id).where(
                             KnowledgeFile.tenant_id == tenant,
                             KnowledgeFile.knowledge_id == space_id,
-                            cast(KnowledgeFile.id, String(64)) == Ref.target_id,
+                            # Both casts use the connection collation, including on mixed-collation MySQL schemas.
+                            cast(KnowledgeFile.id, String(64)) == cast(Ref.target_id, String(64)),
                         )
                     ),
                 )
