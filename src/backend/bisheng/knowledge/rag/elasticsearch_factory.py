@@ -43,8 +43,8 @@ def generate_metadata_mappings(metadata_schemas: list[RagMetadataFieldSchema] | 
 
 class ElasticsearchFactory:
     @staticmethod
-    def init_vectorstore_sync(index_name: str, **kwargs) -> ElasticsearchStore:
-        """Initialize an ElasticsearchStore vectorstore for keywords."""
+    def init_vectorstore_sync(index_name: str, strategy: BM25Strategy | None = None, **kwargs) -> ElasticsearchStore:
+        """Initialize an ElasticsearchStore vectorstore for keywords (plain BM25 unless ``strategy`` is given)."""
         es_conf = settings.get_vectors_conf().elasticsearch
 
         metadata_schemas: list[RagMetadataFieldSchema] | None = kwargs.pop("metadata_schemas", None)
@@ -53,7 +53,7 @@ class ElasticsearchFactory:
 
         es_client = ElasticsearchStore(
             index_name=index_name,
-            strategy=BM25Strategy(),
+            strategy=strategy or BM25Strategy(),
             # langchain-elasticsearch 1.0 renamed `es_connection` -> `client`.
             client=Elasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify),
             metadata_mappings=metadata_mappings,
@@ -62,8 +62,10 @@ class ElasticsearchFactory:
         return es_client
 
     @staticmethod
-    def init_vectorstore(index_name: str, **kwargs) -> AsyncElasticsearchStore:
-        """Asynchronously initialize an ElasticsearchStore vectorstore for keywords."""
+    def init_vectorstore(
+        index_name: str, strategy: AsyncBM25Strategy | None = None, **kwargs
+    ) -> AsyncElasticsearchStore:
+        """Asynchronously initialize an ElasticsearchStore vectorstore (plain BM25 unless ``strategy`` is given)."""
         es_conf = settings.get_vectors_conf().elasticsearch
 
         metadata_schemas: list[RagMetadataFieldSchema] | None = kwargs.pop("metadata_schemas", None)
@@ -72,7 +74,7 @@ class ElasticsearchFactory:
 
         es_client = AsyncElasticsearchStore(
             index_name=index_name,
-            strategy=AsyncBM25Strategy(),
+            strategy=strategy or AsyncBM25Strategy(),
             # langchain-elasticsearch 1.0 renamed `es_connection` -> `client`.
             client=AsyncElasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify),
             metadata_mappings=metadata_mappings,
