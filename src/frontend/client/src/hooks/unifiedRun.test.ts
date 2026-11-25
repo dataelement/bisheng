@@ -166,6 +166,21 @@ describe('live row', () => {
     });
 });
 
+describe('answered question in the live row', () => {
+    it('the ask_user call is no longer in flight and carries the question and the answer', () => {
+        const question = { call_id: 'k1', questions: [{ question: 'which?' }] };
+        const run = runOf([
+            { type: 'run_started' },
+            { type: 'tool_call', data: { call_id: 'k1', name: 'ask_user', status: 'start' } },
+            { type: 'ask_user', data: question },
+            { type: 'ask_user_answered', data: { call_id: 'k1', answer: 'A' } },
+        ]);
+        expect(agentEventsOfRun(run)).toEqual([
+            expect.objectContaining({ type: 'tool_call', tool_name: 'ask_user', args: question, results: 'A', inflight: false }),
+        ]);
+    });
+});
+
 describe('reconcileSentMessages', () => {
     const refs = { userMessageId: 'tmp', sender: 'Model' };
 
@@ -190,6 +205,12 @@ describe('reconcileSentMessages', () => {
         expect(next.map((m) => m.messageId)).toEqual(['q', 'run:r1', 'm1']);
         const stored = reconcileSentMessages([user('q'), bot('task'), user('tmp')], started(), { ...refs, runKnown: true });
         expect(stored.map((m) => m.messageId)).toEqual(['q', 'task', 'm1']);
+    });
+
+    it('an answer to the pending question leaves the list: the answer row shows it', () => {
+        const list = [user('q'), bot('run:r1', { liveRunId: 'r1' }), user('tmp')];
+        const next = reconcileSentMessages(list, started(), { ...refs, runKnown: true, answered: true });
+        expect(next.map((m) => m.messageId)).toEqual(['q', 'run:r1']);
     });
 
     it('started for a new run without a waiting row puts the live row after the question', () => {
@@ -289,6 +310,7 @@ describe('queued marks against the stored rows', () => {
     it('reads the "queued" mark of a history row', () => {
         expect(runRowMarks({ run_id: 'r1', steer_message_id: 'm1', queued: true })).toEqual({ steerMessageId: 'm1', steerQueued: true });
         expect(runRowMarks({ run_id: 'r1', steer_message_id: 'm1' })).toEqual({ steerMessageId: 'm1', steerQueued: false });
+        expect(runRowMarks({ run_id: 'r1', ask_user: { call_id: 'c1', questions: [] } })).toEqual({ answersQuestion: true });
         expect(runRowMarks({})).toEqual({});
     });
 

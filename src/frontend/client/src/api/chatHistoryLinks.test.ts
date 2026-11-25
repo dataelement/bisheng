@@ -39,3 +39,21 @@ it('maps the stored row of a failed direct run to the fields of the live failure
     });
     expect(answer.errorText).toBeUndefined();
 });
+
+// The answer to a question of a run is shown inside that run's answer row
+// (its `ask_user` tool call), so its own row is not listed.
+it('leaves out the row of an answer to a question of the run', async () => {
+    (request.get as jest.Mock).mockResolvedValue({ data: [
+        { message_id: 1, category: 'question', is_bot: false, message: { query: 'Make a page' } },
+        {
+            message_id: 2, category: 'question', is_bot: false, message: { query: 'Event page' },
+            extra: { run_id: 'r1', ask_user: { call_id: 'c1', questions: [{ question: 'Which page?' }] } },
+        },
+        { message_id: 3, category: 'agent_answer', is_bot: true, message: { msg: 'OK', events: [] }, extra: { run_id: 'r1' } },
+    ] });
+
+    const messages = await getAgentMessages('chat');
+
+    expect(messages.map((message) => message.messageId)).toEqual(['1', '3']);
+    expect(messages[1].parentMessageId).toBe('1');
+});

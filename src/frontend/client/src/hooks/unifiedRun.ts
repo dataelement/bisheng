@@ -191,7 +191,8 @@ export function stoppedFieldsOfRun(run: RunState): Partial<ChatMessage> {
  * Marks the unified runtime stores in a history row's `extra`: a stopped
  * answer (`status: "stopped"`, no `error`), the inbox id of a message sent
  * into a run (`steer_message_id`) and whether that message still waits in the
- * inbox (`queued`; the backend removes it when the run reads the message).
+ * inbox (`queued`; the backend removes it when the run reads the message),
+ * and the question a message answered (`ask_user`; the answer row shows it).
  */
 export function runRowMarks(extra: unknown): Partial<ChatMessage> {
     const record = asRecord(extra);
@@ -199,6 +200,7 @@ export function runRowMarks(extra: unknown): Partial<ChatMessage> {
     const steerId = record.steer_message_id;
     return {
         ...(record.status === 'stopped' && !record.error ? { stopped: true } : {}),
+        ...(asRecord(record.ask_user) ? { answersQuestion: true } : {}),
         ...(typeof steerId === 'string' && steerId
             ? { steerMessageId: steerId, steerQueued: record.queued === true }
             : {}),
@@ -400,6 +402,12 @@ export interface SentMessageRefs {
      * was deliberately left without one, so none is created here.
      */
     runKnown?: boolean;
+    /**
+     * The message answered the question the run was waiting on. Its row leaves
+     * the list: the answer row shows the question with this answer, as the
+     * history does (the stored row of an answer is not listed).
+     */
+    answered?: boolean;
 }
 
 /**
@@ -428,6 +436,9 @@ export function reconcileSentMessages(
     });
     if (outcome.kind === 'queued') {
         return next.filter((m) => m.liveRunId !== '');
+    }
+    if (refs.answered) {
+        return next.filter((m) => m.messageId !== serverId && m.liveRunId !== '');
     }
     const alreadyLive = next.some((m) => m.liveRunId === result.run_id);
     const pendingIndex = next.findIndex((m) => m.liveRunId === '');

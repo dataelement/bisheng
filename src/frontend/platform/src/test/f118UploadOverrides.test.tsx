@@ -176,6 +176,51 @@ it("enables comparison next once the preview is on screen", async () => {
   await screen.findByText("original chunk");
   expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled();
 });
+it("confirms a batch after previewing one file and preserves its edited revision", async () => {
+  mocks.post.mockImplementation(async (url: string, body: FormData) => {
+    if (url.endsWith("/uploads")) {
+      const name = (body.get("file") as File).name;
+      return {
+        file_path: `tmp/${name}`,
+        upload_id: (name === "report.md" ? "a" : "c").repeat(32),
+        repeat: false,
+      };
+    }
+    if (url.endsWith("/previews")) return { preview_id: "b".repeat(32) };
+    if (url.endsWith("/files"))
+      return [{ id: 81, knowledge_id: 7, file_name: "report.md", status: 2 }];
+    throw new Error(`unexpected write ${url}`);
+  });
+  mount();
+  await act(async () =>
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
+      target: { files: [new File(["first"], "report.md"), new File(["second"], "other.md")] },
+    }),
+  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.change(await screen.findByRole("spinbutton", { name: "splitLength" }), { target: { value: "456" } });
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.click(await screen.findByRole("button", { name: "edit-chunk" }));
+  await screen.findByText("edited chunk");
+  await waitFor(() => expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  await waitFor(() => expect(registers()).toHaveLength(2));
+  expect(previews()).toHaveLength(1);
+  const items = registers().flatMap(([, body]) => {
+    expect(body.upload_context.mode).toBe("previewed");
+    expect(body.overrides.document.chunk_size).toBe(456);
+    return body.upload_context.items;
+  });
+  expect(items.find((item) => item.upload_id === "a".repeat(32))).toMatchObject({
+    preview_id: "b".repeat(32), expected_revision: 1,
+  });
+  const unviewed = items.find((item) => item.upload_id === "c".repeat(32));
+  expect(unviewed).toMatchObject({ file_path: "tmp/other.md" });
+  expect(unviewed).not.toHaveProperty("preview_id");
+  expect(unviewed).not.toHaveProperty("expected_revision");
+  expect(items.every((item) => item.overrides.document.chunk_size === 456)).toBe(true);
+});
 it("submits the same manual rule and edited preview revision only after comparison confirmation", async () => {
   const onBack = vi.fn();
   mount(onBack);
