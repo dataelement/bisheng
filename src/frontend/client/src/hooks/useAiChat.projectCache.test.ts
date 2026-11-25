@@ -9,6 +9,21 @@ const mockQueryClient = new (jest.requireActual('@tanstack/react-query').QueryCl
 let mockProjectAccount = { id: 'test-user', tenant_id: 1 };
 const mockOpenedStreams: Array<{ submission: SSESubmission }> = [];
 const mockAddConversation = jest.fn((data: unknown) => data);
+const mockReportProjectCreated = jest.fn();
+let mockDesktop = false;
+jest.mock('~/utils/clientEnvironment', () => {
+  const actual = jest.requireActual('~/utils/clientEnvironment');
+  const snapshots = new Map();
+  return { ...actual,
+    getClientEnvironment: () => {
+      const base = actual.getClientEnvironment();
+      const channel = mockDesktop ? 'desktop' : 'web';
+      if (snapshots.get(channel)?.base !== base) snapshots.set(channel, { base, value: { ...base, channel } });
+      return snapshots.get(channel).value;
+    },
+    readDesktopPresentation: () => ({ reportProjectConversationCreated: mockReportProjectCreated }),
+  };
+});
 jest.mock('react-activation', () => ({ useActivate: jest.fn() }));
 jest.mock('recoil', () => ({ useRecoilState: (atom: { value?: unknown }) => [atom?.value, jest.fn()] }));
 jest.mock('~/store', () => ({ __esModule: true, default: {
@@ -47,6 +62,7 @@ beforeEach(() => {
   mockProjectAccount = { id: 'test-user', tenant_id: 1 };
   mockOpenedStreams.length = 0;
   localStorage.clear();
+  mockDesktop = false;
 });
 
 describe('project sidebar during creation', () => {
@@ -62,7 +78,8 @@ describe('project sidebar during creation', () => {
     mockQueryClient.setQueryData(['allConversations'], { pages: [{ conversations: [] }], pageParams: [undefined] });
   };
 
-  it('publishes the created conversation in its original project before any answer finishes', async () => {
+  it.each([false, true])('publishes the created conversation before any answer finishes, desktop=%s', async desktop => {
+    mockDesktop = desktop;
     seed();
     const { result, rerender } = renderChat('new');
     await act(async () => { await result.current.sendMessage('Project question'); });
@@ -74,6 +91,7 @@ describe('project sidebar during creation', () => {
     expect(mockQueryClient.getQueryData(listKey).pages[0].data).toEqual([expect.objectContaining({ conversationId: 'project-chat', title: 'com_ui_new_chat' })]);
     expect(mockQueryClient.getQueryData(['allConversations']).pages[0].conversations).toEqual([]);
     expect(mockAddConversation).not.toHaveBeenCalled();
+    expect(mockReportProjectCreated.mock.calls).toEqual(desktop ? [[{ conversationId: 'project-chat', projectId }]] : []);
     act(() => turn.onEnd());
   });
 
@@ -89,6 +107,7 @@ describe('project sidebar during creation', () => {
   });
 
   it('publishes task-mode conversations at handoff without waiting for task completion', async () => {
+    mockDesktop = true;
     seed();
     const { result } = renderChat('new');
     await act(async () => { await result.current.sendMessage('Project task', null, { taskMode: true }); });
@@ -96,6 +115,7 @@ describe('project sidebar during creation', () => {
     act(() => turn.onTaskHandoff?.({ session_version_id: 'sv-project', chat_id: 'project-task' }));
     expect(mockQueryClient.getQueryData(listKey).pages[0].data[0].conversationId).toBe('project-task');
     expect(mockQueryClient.getQueryData(snapshotKey).memberships).toEqual([{ chat_id: 'project-task', project_id: projectId }]);
+    expect(mockReportProjectCreated).toHaveBeenCalledWith({ conversationId: 'project-task', projectId });
     act(() => turn.onEnd());
   });
 

@@ -8,6 +8,7 @@ import { QueryKeys } from '~/types/chat';
 import type { TConversation } from '~/types/chat';
 import type { ProjectChatDraft } from '~/layouts/WorkbenchSidebar/projectChatCreation';
 import { cacheCreatedProjectConversation, updateProjectConversationTitle } from './projectConversationCache';
+import { reportProjectConversationCreated } from '~/components/Chat/desktopConversationBridge';
 
 const projectKey = (identity: string) => ['chat-projects', identity] as const;
 
@@ -24,6 +25,7 @@ export function useProjectConversationCache() {
   const created = useCallback((draft: ProjectChatDraft | undefined, conversation: TConversation) => {
     if (draft && identity && currentIdentity.current === identity) {
       cacheCreatedProjectConversation(client, identity, draft.projectId, conversation);
+      reportProjectConversationCreated(conversation.conversationId ?? '', draft.projectId);
     }
   }, [client, identity]);
   const titleChanged = useCallback((chatId: string, title: string) => {
