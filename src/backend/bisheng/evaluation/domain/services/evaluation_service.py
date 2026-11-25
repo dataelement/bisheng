@@ -82,6 +82,22 @@ class EvaluationService:
         return evaluation
 
     @classmethod
+    async def get_download_url(cls, file_url: str, login_user: UserPayload) -> str:
+        from bisheng.common.errcode.http_error import UnAuthorizedError
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.core.storage.minio.minio_manager import get_minio_storage
+
+        # Exact stored-key resolution, never a prefix-based signing oracle.
+        if not file_url.startswith(("evaluation/dataset/", "evaluation/result/")):
+            raise UnAuthorizedError()
+        record = await asyncio.to_thread(EvaluationRepository.find_download_owner, file_url)
+        tenant_id = get_current_tenant_id() or login_user.tenant_id
+        if record is None or record.tenant_id != tenant_id or record.user_id != login_user.user_id or record.is_delete:
+            raise UnAuthorizedError()
+        minio = await get_minio_storage()
+        return await minio.get_share_link(file_url)
+
+    @classmethod
     def get_evaluation(
         cls, user: UserPayload, page: int = 1, limit: int = 20
     ) -> UnifiedResponseModel[list[Evaluation]]:

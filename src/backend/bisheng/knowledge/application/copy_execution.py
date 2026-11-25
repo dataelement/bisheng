@@ -18,7 +18,13 @@ def copy_execution_scope(tenant_id):
 
 
 def claim_copy(tenant_id, source_id, target_id, actor_id):
-    source, _target = CopyRepository.inspect(tenant_id, source_id, target_id)
+    source, target = CopyRepository.inspect(tenant_id, source_id, target_id)
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeState
+
+    if target.user_id != actor_id:
+        raise KnowledgeCPError()
+    if target.state in {KnowledgeState.PUBLISHED.value, KnowledgeState.FAILED.value}:
+        return None
     assert_copy_actor(tenant_id, source, actor_id)
     return CopyRepository.claim(tenant_id, source_id, target_id, actor_id)
 

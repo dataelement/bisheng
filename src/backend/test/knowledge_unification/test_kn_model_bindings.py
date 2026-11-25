@@ -19,8 +19,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
     KnowledgeNoEmbeddingError,
     KnowledgeOperationPlanConflictError,
-    KnowledgeProcessingConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -35,6 +33,7 @@ from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
 from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.resource_reference.application.source_sync import refresh_root
 from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
@@ -102,9 +101,20 @@ async def business(store, monkeypatch):
     owner = ModelReferenceTargetOwner(sharing=Sharing(), legacy_evidence=KnowledgeLegacyReferenceEvidence())
     verifier = ReferenceTargetVerifier({"model": owner})
     runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
-    monkeypatch.setattr(app_module, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
-    monkeypatch.setattr(app_module, "get_reference_binding_runtime_sync", lambda: runtime)
+    monkeypatch.setattr(app_module, "get_reference_binding_runtime", AsyncMock(return_value=runtime), raising=False)
+    monkeypatch.setattr(app_module, "get_reference_binding_runtime_sync", lambda: runtime, raising=False)
     monkeypatch.setattr(app_module, "require_business_action", AsyncMock())
+    from bisheng.llm.application import model_selection
+
+    class SelectionSharing:
+        async def list_resource_ids(self, **kwargs):
+            return tuple(str(v) for v in sharing.allowed)
+
+        def list_resource_ids_sync(self, **kwargs):
+            return tuple(str(v) for v in sharing.allowed)
+
+    monkeypatch.setattr(model_selection, "get_permission_relation_api", AsyncMock(return_value=SelectionSharing()))
+    monkeypatch.setattr(model_selection, "get_permission_relation_api_sync", lambda: SelectionSharing())
     user = UserPayload(user_id=7, tenant_id=101, user_role=[])
     token = set_current_permission_actor(PermissionActor(tenant_id=101, user_id=7))
 
@@ -169,6 +179,8 @@ async def test_model_switch_keeps_current_model_and_old_binding_until_finalize(b
         "pending_model_id": "12",
     }
     assert row["model_config_revision"] == 1 and row["state"] == 3
+    assert not state(business)["business_resource_reference"]
+    await refresh_root(101, "knowledge", "40", session_factory=business.sessions)
     refs = state(business)["business_resource_reference"]
     assert {(row["slot_key"], row["target_id"]) for row in refs} == {
         ("model", "11"),
@@ -244,10 +256,12 @@ async def test_explicit_repair_releases_invalid_current_slot_so_strict_worker_ca
         await session.commit()
     row = next(row for row in state(business)["knowledge"] if row["id"] == 40)
     assert row["model"] == "12" and row["model_transition"]["current_model_id"] == "12"
+    assert not state(business)["business_resource_reference"]
+    await refresh_root(101, "knowledge", "40", session_factory=business.sessions)
     assert {row["target_id"] for row in state(business)["business_resource_reference"]} == {"12"}
 
 
-async def test_deleting_current_target_freezes_even_explicit_repair(business):
+async def test_auxiliary_model_deletion_marker_does_not_block_explicit_repair(business):
     await seed(business)
     async with business.sessions() as session, session.begin():
         session.add(
@@ -263,34 +277,38 @@ async def test_deleting_current_target_freezes_even_explicit_repair(business):
                 actor_id="7",
             )
         )
-    before = state(business)
     async with business.sessions() as session:
-        with pytest.raises(KnowledgeProcessingConflictError):
-            await KnowledgeModelReferenceApplication.aprepare_model_change(session, 40, 12, login_user=business.user)
-        await session.rollback()
-    assert state(business) == before
+        plan = await KnowledgeModelReferenceApplication.aprepare_model_change(session, 40, 12, login_user=business.user)
+        await KnowledgeModelReferenceApplication.aapply_model_change(session, plan)
+        await session.commit()
+    row = next(row for row in state(business)["knowledge"] if row["id"] == 40)
+    assert row["model"] == "11" and row["model_transition"]["pending_model_id"] == "12"
 
 
-async def test_apply_failure_rolls_back_model_transition_and_refs_together(business, monkeypatch):
+async def test_model_change_does_not_call_legacy_reference_writer(business, monkeypatch):
     await seed(business)
-    before = state(business)
-    monkeypatch.setattr(
-        business.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("reference failed"))
-    )
+    binding = AsyncMock(side_effect=RuntimeError("reference failed"))
+    monkeypatch.setattr(business.runtime, "aapply_source_bindings", binding)
     async with business.sessions() as session:
         prepared = await KnowledgeModelReferenceApplication.aprepare_model_change(
             session, 40, 12, login_user=business.user
         )
-        with pytest.raises(RuntimeError, match="reference failed"):
-            await KnowledgeModelReferenceApplication.aapply_model_change(session, prepared)
-        await session.rollback()
-    assert state(business) == before
+        await KnowledgeModelReferenceApplication.aapply_model_change(session, prepared)
+        await session.commit()
+    row = next(row for row in state(business)["knowledge"] if row["id"] == 40)
+    assert row["model_transition"]["pending_model_id"] == "12"
+    assert not state(business)["business_resource_reference"]
+    binding.assert_not_awaited()
 
 
-async def test_existing_unindexed_model_config_cannot_be_bootstrapped_by_save(business):
+async def test_existing_unindexed_model_config_can_be_changed_without_bootstrap(business):
     async with business.sessions() as session:
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await KnowledgeModelReferenceApplication.aprepare_model_change(session, 10, 12, login_user=business.user)
+        plan = await KnowledgeModelReferenceApplication.aprepare_model_change(session, 10, 12, login_user=business.user)
+        await KnowledgeModelReferenceApplication.aapply_model_change(session, plan)
+        await session.commit()
+    assert not state(business)["business_resource_reference"]
+    row = next(row for row in state(business)["knowledge"] if row["id"] == 10)
+    assert row["model"] == "11" and row["model_transition"]["pending_model_id"] == "12"
 
 
 async def test_prepared_business_model_command_cannot_be_cloned_or_used_in_another_session(business):
@@ -344,13 +362,15 @@ async def test_stale_expected_configuration_and_config_index_drift_fail_without_
         )
     before = state(business)
     async with business.sessions() as session:
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await KnowledgeModelReferenceApplication.aprepare_model_change(session, 40, 11, login_user=business.user)
+        plan = await KnowledgeModelReferenceApplication.aprepare_model_change(session, 40, 11, login_user=business.user)
+        assert plan.model == "12" and plan.transition["pending_model_id"] == "11"
         await session.rollback()
     assert state(business) == before
 
 
-@pytest.mark.parametrize("field", ["model", "new_generation", "bindings", "runtime", "knowledge_id", "changed"])
+@pytest.mark.parametrize(
+    "field", ["model", "new_generation", "expected_revision", "purpose", "knowledge_id", "changed"]
+)
 async def test_original_prepared_object_cannot_authorize_reflected_plan_mutation(business, field):
     await seed(business)
     before = state(business)
@@ -361,8 +381,8 @@ async def test_original_prepared_object_cannot_authorize_reflected_plan_mutation
         values = {
             "model": "33",
             "new_generation": "forged-generation",
-            "bindings": replace(prepared.bindings, verified=replace(prepared.bindings.verified, references=())),
-            "runtime": SimpleNamespace(),
+            "expected_revision": 999,
+            "purpose": "finalize",
             "knowledge_id": 999,
             "changed": False,
         }

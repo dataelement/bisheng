@@ -133,3 +133,16 @@ def extract_workflow_version_references(data: Mapping[str, object] | None) -> tu
         node_ids.add(node_id)
         references.extend(ReferenceSpec(f"node:{node_id}.{slot}", target) for slot, target in slots)
     return normalize_references(tuple(references))
+
+
+def unextractable_workflow_configuration(data_json, *, flow_type, is_delete):
+    """Read-only migration classification; ordinary extraction/writes stay strict."""
+    import json
+
+    if flow_type not in (None, 1, 10) or is_delete not in (None, 0):
+        return False
+    try:
+        extract_workflow_version_references(json.loads(data_json))
+    except (TypeError, ValueError):
+        return True
+    return False

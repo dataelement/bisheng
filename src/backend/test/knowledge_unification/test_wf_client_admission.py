@@ -43,7 +43,7 @@ def client(monkeypatch):
         async_set_workflow_status=AsyncMock(side_effect=lambda _status: value.test_order.append("waiting")),
     )
 
-    def create_redis(*_args):
+    def create_redis(*_args, **_kwargs):
         value.test_order.append("redis")
         return redis
 

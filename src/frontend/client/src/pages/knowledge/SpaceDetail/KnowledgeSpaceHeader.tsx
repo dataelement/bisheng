@@ -61,7 +61,7 @@ interface KnowledgeSpaceHeaderProps {
   hasSimilarSelected?: boolean;
   /** Opens the similar-document processing dialog (restricted to the current selection). */
   onProcessSimilar?: () => void;
-  /** Whether the current user can manage members (gates the process-similar entry). */
+  /** Whether the current user can manage space permissions. */
   canManageMembers?: boolean;
 
   // ── Space-level actions (breadcrumb menu; available at every folder depth) ──
@@ -131,7 +131,7 @@ export function KnowledgeSpaceHeader({
   const showSpaceSettingsButton = currentPath.length === 0 && getSpaceActionFlags(spaceActions).hasAny;
   const showAddMenu = canCreateFolder || canUploadFile;
   const showProcessSimilar = Boolean(
-    versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar,
+    versionManagementEnabled && hasSimilarSelected && onProcessSimilar,
   );
   const showBatchMove = Boolean(onBatchMove) && canBatchMove;
   const hasBatchMenu =

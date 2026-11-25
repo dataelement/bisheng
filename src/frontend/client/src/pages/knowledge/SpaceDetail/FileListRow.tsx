@@ -146,8 +146,6 @@ export interface FileListRowProps {
   versionManagementEnabled?: boolean;
   onOpenVersionManagement?: (file: KnowledgeFile) => void;
   onOpenVersionHistory?: (file: KnowledgeFile) => void;
-  /** Whether the current user can manage members (gates the "similar" pill). */
-  canManageMembers?: boolean;
   /** Space edit permission. Version mutations require it. */
   canManageVersions?: boolean;
   /** Shougang: file encoding is appended to the meta line instead of its own column. */
@@ -192,7 +190,6 @@ export function FileListRow({
   versionManagementEnabled = false,
   onOpenVersionManagement,
   onOpenVersionHistory,
-  canManageMembers = false,
   canManageVersions = false,
   shougangEnabled = false,
   canEditEncoding = false,
@@ -472,7 +469,7 @@ export function FileListRow({
                 {renderHighlightedName(file.name, highlightKeyword)}
               </span>
               {versionManagementEnabled &&
-                canManageMembers &&
+                canManageVersions &&
                 file.has_similar &&
                 !file.is_multi_version &&
                 file.status === FileStatus.SUCCESS && (

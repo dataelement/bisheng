@@ -181,8 +181,8 @@ def _assert_storage_untouched(env: dict) -> None:
 
 @pytest.fixture
 def queue_env(monkeypatch: pytest.MonkeyPatch):
-    """Stub the worker queue behind the unified task-mode entry; hand back ``put``."""
-    from bisheng.workstation.domain.services import chat_service
+    """Stub the worker queue behind the task submit core; hand back ``put``."""
+    from bisheng.workstation.domain.services import task_submit_service
 
     put = AsyncMock()
     # LinsightQueue / encode_queue_item are imported function-locally from
@@ -200,13 +200,8 @@ def queue_env(monkeypatch: pytest.MonkeyPatch):
     # through and the call reaches the DB.
     monkeypatch.setattr(linsight_execute_utils, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
     monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
-    monkeypatch.setattr(chat_service.LLMService, "get_bisheng_llm", AsyncMock(return_value=MagicMock()))
-    monkeypatch.setattr(
-        chat_service.SensitiveWordPolicyService,
-        "evaluate_workbench_user_text",
-        staticmethod(lambda *_a, **_k: None),
-    )
-    return chat_service, put
+    monkeypatch.setattr(task_submit_service, "_consume_task_invite", AsyncMock(return_value=False))
+    return task_submit_service, put
 
 
 def _task_mode_request(files: list[dict] | None) -> APIChatCompletion:
@@ -272,12 +267,12 @@ async def test_task_mode_submit_enqueues_once_carrying_the_tenant(submit_env, qu
     browser ever coming back — the two halves that together replace the old
     "parse inline, then wait for start-execute".
     """
-    chat_service, put = queue_env
+    task_submit_service, put = queue_env
     data = _task_mode_request(
         [{"file_id": "d1", "filename": "report.pdf", "filepath": "/tmp-dir/d1.pdf?X-Amz-Algorithm=AWS4"}]
     )
 
-    await chat_service._task_mode_stream_completion(MagicMock(), data, _login_user())
+    await task_submit_service.submit_task_turn(data, _login_user(), strict_enqueue=True)
 
     _assert_storage_untouched(submit_env)
     assert submit_env["version"].files is None
@@ -357,14 +352,14 @@ async def test_a_rejected_batch_never_reaches_the_worker_queue(submit_env, queue
     refused batch would be a ghost task nobody asked for, and the user has
     already been told the upload was rejected.
     """
-    chat_service, put = queue_env
+    task_submit_service, put = queue_env
     over_count = [
         {"file_id": f"f{i}", "filename": f"{i}.pdf", "relative_path": f"docs/{i}.pdf"}
         for i in range(LinsightWorkbenchImpl._FOLDER_MAX_FILES + 1)
     ]
 
     with pytest.raises(LinsightFolderFileCountExceededError):
-        await chat_service._task_mode_stream_completion(MagicMock(), _task_mode_request(over_count), _login_user())
+        await task_submit_service.submit_task_turn(_task_mode_request(over_count), _login_user(), strict_enqueue=True)
 
     put.assert_not_awaited()
     _assert_storage_untouched(submit_env)

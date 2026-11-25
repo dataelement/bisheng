@@ -13,8 +13,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
-    KnowledgeProcessingConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
@@ -49,7 +47,7 @@ async def business(model_owner_tenant, monkeypatch):
         session.add(LLMModel(id=12, tenant_id=101, server_id=1, model_name="other", model_type="llm"))
     verifier = ReferenceTargetVerifier({"model": ModelReferenceTargetOwner()})
     runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
-    monkeypatch.setattr(application, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    monkeypatch.setattr(application, "get_reference_binding_runtime", AsyncMock(return_value=runtime), raising=False)
 
     async def actor(user):
         return PermissionActor(
@@ -75,7 +73,7 @@ async def business(model_owner_tenant, monkeypatch):
         ("linsight_llm", {"models": [{"id": "11", "name": "one"}], "chat_default_model_id": "11"}, 2),
     ],
 )
-async def test_five_original_defaults_write_business_and_index_in_same_session(business, key, payload, count):
+async def test_five_original_defaults_write_business_without_synchronous_index(business, key, payload, count):
     async with AsyncSession(business.engine) as session:
         await ModelDefaultApplication.asave(session, key, payload, login_user=business.user)
         own = await ModelDefaultRepository().aget_own(session, key)
@@ -84,7 +82,7 @@ async def test_five_original_defaults_write_business_and_index_in_same_session(b
             .scalars()
             .all()
         )
-        assert own.tenant_id == 101 and len(refs) == count
+        assert own.tenant_id == 101 and not refs
         assert all(ref.source_type == "model_default" and ref.source_version == "current" for ref in refs)
         assert session.in_transaction()
         await session.rollback()
@@ -103,18 +101,17 @@ async def test_bind_failure_never_saves_a_default_or_zero_ready_placeholder(busi
         assert not (await check.execute(select(BusinessReferenceSet))).all()
 
 
-async def test_existing_raw_default_missing_index_is_not_treated_as_new(business):
+async def test_existing_raw_default_can_be_saved_without_index(business):
     async with AsyncSession(business.engine) as session, session.begin():
         session.add(TenantSystemModelConfig(tenant_id=101, key="evaluation_llm", value='{"model_id":11}'))
     async with AsyncSession(business.engine) as session:
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 12}, login_user=business.user)
+        await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 12}, login_user=business.user)
         await session.rollback()
     async with AsyncSession(business.engine) as check:
         assert (await ModelDefaultRepository().aget_own(check, "evaluation_llm")).value == '{"model_id":11}'
 
 
-async def test_actual_config_index_drift_is_rejected_before_replacement(business):
+async def test_stale_auxiliary_index_does_not_block_default_replacement(business):
     async with AsyncSession(business.engine) as session, session.begin():
         await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 11}, login_user=business.user)
         await session.execute(
@@ -123,13 +120,12 @@ async def test_actual_config_index_drift_is_rejected_before_replacement(business
             .values(value='{"model_id":12}')
         )
     async with AsyncSession(business.engine) as session:
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 12}, login_user=business.user)
+        await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 12}, login_user=business.user)
         await session.rollback()
 
 
 @pytest.mark.parametrize("stage", ["deleted", "deleting"])
-async def test_original_tombstone_can_be_repaired_but_deleting_fences_all_writes(business, stage):
+async def test_auxiliary_model_deletion_marker_does_not_block_default_repair(business, stage):
     async with AsyncSession(business.engine) as session, session.begin():
         await ModelDefaultApplication.asave(session, "knowledge_llm", {"source_model_id": 11}, login_user=business.user)
         session.add(
@@ -148,47 +144,24 @@ async def test_original_tombstone_can_be_repaired_but_deleting_fences_all_writes
         if stage == "deleted":
             await session.execute(delete(LLMModel).where(LLMModel.tenant_id == 101, LLMModel.id == 11))
     async with AsyncSession(business.engine) as session:
-        if stage == "deleting":
-            with pytest.raises(KnowledgeProcessingConflictError):
-                await ModelDefaultApplication.asave(
-                    session,
-                    "knowledge_llm",
-                    {"source_model_id": 11, "extract_title_model_id": 12},
-                    login_user=business.user,
-                )
-            await session.rollback()
-        else:
-            await ModelDefaultApplication.asave(
-                session,
-                "knowledge_llm",
-                {"source_model_id": 11, "extract_title_model_id": 12},
-                login_user=business.user,
-            )
-            assert (
-                len(
-                    await business.runtime.repository.alist_source_references(
-                        session, SourceKey(101, "model_default", "knowledge_llm", "current")
-                    )
-                )
-                == 2
-            )
-            await session.rollback()
+        await ModelDefaultApplication.asave(
+            session, "knowledge_llm", {"source_model_id": 11, "extract_title_model_id": 12}, login_user=business.user
+        )
+        assert not await business.runtime.repository.alist_source_references(
+            session, SourceKey(101, "model_default", "knowledge_llm", "current")
+        )
+        await session.rollback()
 
 
-async def test_r2_failure_after_rows_changed_rolls_back_config_and_revisions(business, monkeypatch):
-    original = business.runtime.aapply_source_bindings
-
-    async def fail(session, prepared):
-        await original(session, prepared)
-        raise RuntimeError("reference write failed after SQL")
-
-    monkeypatch.setattr(business.runtime, "aapply_source_bindings", fail)
-    with pytest.raises(RuntimeError):
-        async with AsyncSession(business.engine) as session, session.begin():
-            await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 11}, login_user=business.user)
+async def test_default_save_does_not_call_legacy_reference_writer(business, monkeypatch):
+    binding = AsyncMock(side_effect=RuntimeError("reference write failed"))
+    monkeypatch.setattr(business.runtime, "aapply_source_bindings", binding)
+    async with AsyncSession(business.engine) as session, session.begin():
+        await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 11}, login_user=business.user)
     async with AsyncSession(business.engine) as check:
-        assert await ModelDefaultRepository().aget_own(check, "evaluation_llm") is None
+        assert (await ModelDefaultRepository().aget_own(check, "evaluation_llm")).value == '{"model_id":11}'
         assert not (await check.execute(select(BusinessReferenceSet))).all()
+    binding.assert_not_awaited()
 
 
 @pytest.mark.parametrize("case", ["ordinary", "no_identity"])
@@ -303,7 +276,7 @@ async def test_workbench_partial_post_keeps_saved_models_in_same_atomic_writer(b
                     check, SourceKey(101, "model_default", "linsight_llm", "current")
                 )
             )
-            == 2
+            == 0
         )
 
 
@@ -378,5 +351,5 @@ async def test_native_evaluation_post_checks_locked_type_and_online_before_writi
         own = await ModelDefaultRepository().aget_own(session, "evaluation_llm")
         assert (own is not None) is allowed
         references = (await session.execute(select(BusinessResourceReference))).scalars().all()
-        assert bool(references) is allowed
+        assert references == []
     assert bool(audit.await_count) is allowed

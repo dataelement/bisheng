@@ -743,3 +743,95 @@ class TestStreamedDelegationArgs:
         events = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)]
         assert len(events) == 1  # exactly one start frame, no duplicate refresh
         assert events[0].extra_info.get("delegate_goal") == "调研"
+
+
+# --------------------------------------------------------------------------
+# plan edits made mid-run (F004 AC-09 / AC-10): unchanged rows keep their id
+# --------------------------------------------------------------------------
+
+
+class TestPlanEditAlignment:
+    BASE = [
+        {"content": "1. 收集资料", "status": "completed"},
+        {"content": "2. 写报告", "status": "in_progress"},
+        {"content": "3. 校对", "status": "pending"},
+    ]
+
+    @staticmethod
+    def _ids(mapper: StreamEventMapper) -> dict[str, str]:
+        return {p.content: p.task_id for p in mapper.ctx.todos}
+
+    @staticmethod
+    def _statuses(mapper: StreamEventMapper) -> dict[str, str]:
+        return {p.content: p.status for p in mapper.ctx.todos}
+
+    def _seed(self, mapper: StreamEventMapper) -> dict[str, str]:
+        mapper.normalize("updates", {"tools": {"todos": self.BASE}})
+        return self._ids(mapper)
+
+    def test_diff_reword_keeps_ids(self, mapper: StreamEventMapper):
+        before = self._seed(mapper)
+        edited = [self.BASE[0], {"content": "2. 写 PPT", "status": "in_progress"}, self.BASE[2]]
+        mapper.normalize("updates", {"tools": {"todos": edited}})
+        after = self._ids(mapper)
+        assert after["1. 收集资料"] == before["1. 收集资料"]
+        assert after["3. 校对"] == before["3. 校对"]
+        assert after["2. 写 PPT"] == before["2. 写报告"]
+        assert self._statuses(mapper) == {"1. 收集资料": "completed", "2. 写 PPT": "in_progress", "3. 校对": "pending"}
+
+    def test_diff_append_keeps_ids(self, mapper: StreamEventMapper):
+        before = self._seed(mapper)
+        edited = [*self.BASE, {"content": "4. 发邮件", "status": "pending"}]
+        events = mapper.normalize("updates", {"tools": {"todos": edited}})
+        after = self._ids(mapper)
+        assert {k: after[k] for k in before} == before
+        gen = [e for e in events if isinstance(e, GenerateSubTask)]
+        assert [t["name"] for t in gen[0].subtask] == ["4. 发邮件"]
+
+    def test_diff_insert_in_middle_keeps_ids(self, mapper: StreamEventMapper):
+        before = self._seed(mapper)
+        edited = [
+            self.BASE[0],
+            {"content": "1.5 访谈用户", "status": "pending"},
+            self.BASE[1],
+            self.BASE[2],
+        ]
+        events = mapper.normalize("updates", {"tools": {"todos": edited}})
+        after = self._ids(mapper)
+        assert {k: after[k] for k in before} == before
+        assert after["1.5 访谈用户"] not in before.values()
+        # Only the inserted row is announced; no unchanged row is re-announced,
+        # started, ended or terminated.
+        gen = [e for e in events if isinstance(e, GenerateSubTask)]
+        assert [t["name"] for t in gen[0].subtask] == ["1.5 访谈用户"]
+        assert not [e for e in events if isinstance(e, (TaskStart, TaskEnd))]
+        assert self._statuses(mapper)["2. 写报告"] == "in_progress"
+
+    def test_diff_delete_marks_terminated(self, mapper: StreamEventMapper):
+        before = self._seed(mapper)
+        events = mapper.normalize("updates", {"tools": {"todos": [self.BASE[0], self.BASE[2]]}})
+        after = self._ids(mapper)
+        assert after == {"1. 收集资料": before["1. 收集资料"], "3. 校对": before["3. 校对"]}
+        ends = [e for e in events if isinstance(e, TaskEnd)]
+        assert [(e.task_id, e.status) for e in ends] == [(before["2. 写报告"], "terminated")]
+
+    def test_diff_reword_carries_previous_content(self, mapper: StreamEventMapper):
+        before = self._seed(mapper)
+        edited = [self.BASE[0], {"content": "2. 写 PPT", "status": "in_progress"}, self.BASE[2]]
+        events = mapper.normalize("updates", {"tools": {"todos": edited}})
+        gen = [e for e in events if isinstance(e, GenerateSubTask)]
+        assert len(gen) == 1
+        assert gen[0].subtask == [
+            {
+                "id": before["2. 写报告"],
+                "task_id": before["2. 写报告"],
+                "name": "2. 写 PPT",
+                "status": "in_progress",
+                "previous_name": "2. 写报告",
+            }
+        ]
+
+    def test_new_rows_carry_no_previous_name(self, mapper: StreamEventMapper):
+        events = mapper.normalize("updates", {"tools": {"todos": self.BASE}})
+        gen = [e for e in events if isinstance(e, GenerateSubTask)]
+        assert all("previous_name" not in t for t in gen[0].subtask)

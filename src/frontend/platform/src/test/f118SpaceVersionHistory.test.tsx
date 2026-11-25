@@ -15,12 +15,11 @@ import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 
 const mocks = vi.hoisted(() => ({ error: vi.fn() }));
 vi.mock("@/controllers/request", () => ({
-  default: { get: vi.fn() },
+  default: {
+    get: vi.fn(),
+    post: vi.fn().mockResolvedValue({ check_complete: true, valid_items: [] }),
+  },
   showApiError: mocks.error,
-}));
-// Advanced processing tools have their own entry tests; keep history reads isolated.
-vi.mock("@/pages/KnowledgePage/components/SpaceFileTools", () => ({
-  SpaceFileTools: ({ children }: { children?: (items: React.ReactNode) => React.ReactNode }) => children?.(null) ?? null,
 }));
 const scope: KnowledgeQueryScope = {
   identityKey: "user:7",
@@ -106,7 +105,8 @@ afterEach(() => {
 
 it("renders only actual visible history facts without synthesizing hidden primary or nullable metadata", async () => {
   const view = mount();
-  const dialog = await screen.findByRole("dialog", { name: "knowledge.version.history.title" });
+  const dialog = await screen.findByRole("dialog", { name: "history.title" });
+  expect(dialog).toHaveClass("left-1/2", "top-1/2", "max-w-[min(860px,90vw)]");
   expect(await within(dialog).findByText("Visible history")).toBeVisible();
   const table = within(dialog).getByRole("table");
   expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
@@ -120,11 +120,10 @@ it("renders only actual visible history facts without synthesizing hidden primar
     11,
     expect.any(AbortSignal),
   );
-  expect(
-    within(dialog).queryByRole("button", {
-      name: /delete|download|preview|setPrimary/,
-    }),
-  ).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "history.actions.preview" })).toBeVisible();
+  for (const action of ["primary", "delete", "download"]) {
+    expect(within(dialog).queryByRole("button", { name: `history.actions.${action}` })).not.toBeInTheDocument();
+  }
 });
 
 it("keeps actual primary, uploader and document codes when the server makes them visible", async () => {
@@ -150,7 +149,7 @@ it("renders an empty visible list without filling it from old row data", async (
   const data = history();
   data.versions = [];
   mount({ api: { getSpaceFileVersions: vi.fn().mockResolvedValue(data) } });
-  expect(await screen.findByText("f118.no_visible_versions")).toBeVisible();
+  expect(await screen.findByText("history.empty")).toBeVisible();
   expect(screen.queryByText("visible.md")).not.toBeInTheDocument();
 });
 
@@ -268,9 +267,9 @@ it("unmount cancels only this opening, preserving a concurrent reader", async ()
   expect(await screen.findByText("Other reader")).toBeVisible();
 });
 
-it("notifies the controlled parent only for an explicit close", async () => {
+it.each(["close", "btn_close"])("notifies the controlled parent when activating %s", async (closeLabel) => {
   const view = mount();
   await screen.findByText("Visible history");
-  fireEvent.click(screen.getByRole("button", { name: "close" }));
+  fireEvent.click(screen.getByRole("button", { name: closeLabel }));
   expect(view.props.onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
 });

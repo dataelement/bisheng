@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useState } from 'react';
 import { getAttachmentUrl } from '~/api/chatApi';
+import { FileAttachmentResourceCard } from '~/components/Chat/attachments/AttachmentResourceCards';
 import DialogImage from './DialogImage';
 import { InvalidImagePlaceholder } from './InvalidImagePlaceholder';
 
@@ -18,12 +19,14 @@ export function MessageImage({
   fileId,
   altText,
   initialUrl,
+  variant,
 }: {
   conversationId?: string;
   fileId?: string;
   altText?: string;
   /** Link the client already holds from the upload, if any. */
   initialUrl?: string;
+  variant?: 'resource';
 }) {
   // Stored links carry the internal storage host, which the browser can't
   // reach — same swap the download card does.
@@ -32,6 +35,7 @@ export function MessageImage({
 
   const [url, setUrl] = useState<string | null>(toReachable(initialUrl));
   const [failed, setFailed] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +57,9 @@ export function MessageImage({
         return;
       }
       if (fresh) {
-        setUrl(toReachable(fresh));
+        const nextUrl = toReachable(fresh);
+        if (nextUrl !== toReachable(initialUrl)) setFailed(false);
+        setUrl(nextUrl);
       } else if (!initialUrl) {
         setFailed(true);
       }
@@ -71,6 +77,28 @@ export function MessageImage({
     'data-file-id': fileId,
     'data-attachment-url': url ?? undefined,
   };
+
+  if (variant === 'resource') {
+    const unavailable = failed || (!url && !(conversationId && fileId));
+    const canPreview = !unavailable && !!url;
+
+    return (
+      <Dialog.Root open={previewOpen} onOpenChange={setPreviewOpen}>
+        <FileAttachmentResourceCard
+          name={altText || 'File'}
+          thumbnail={unavailable ? (
+            <InvalidImagePlaceholder {...debugAttrs} className="size-full rounded-none pt-0" />
+          ) : url ? (
+            <img {...debugAttrs} src={url} alt="" onError={() => setFailed(true)} />
+          ) : (
+            <span {...debugAttrs} className="size-full animate-pulse bg-fill-1" />
+          )}
+          onClick={canPreview ? () => setPreviewOpen(true) : undefined}
+        />
+        {canPreview && <DialogImage src={url} />}
+      </Dialog.Root>
+    );
+  }
 
   if (failed) {
     return <InvalidImagePlaceholder {...debugAttrs} />;

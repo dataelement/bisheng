@@ -6,9 +6,8 @@ import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import ShareChat from '../Share/ShareChat';
-import { Skeleton } from '../ui';
 
-export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId, versions, onOpenWorkspace }) => {
+export const Header = ({ chatId, isSharePage, setVersionId, versionId, versions, onOpenWorkspace }) => {
     const { getLinsight } = useLinsightManager()
     const localize = useLocalize()
     const linsight = useMemo(() => {
@@ -27,15 +26,11 @@ export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId
 
     return (
         <div className="flex items-center justify-between p-4">
-            {isLoading ?
-                <Skeleton className="h-7 w-[250px] rounded-lg bg-gray-100 opacity-100" />
-                : <div className="flex items-center gap-3">
-                    {/* <FileText className="size-4" /> */}
-                    <span className="text-base font-medium text-gray-900">
-                        {title || linsight?.title}
-                    </span>
-                </div>
-            }
+            <div className="flex items-center gap-3">
+                <span className="text-base font-medium text-gray-900">
+                    {title || linsight?.title}
+                </span>
+            </div>
 
             <div className="flex items-center gap-2">
                 {!isSharePage && linsight?.session_id && (

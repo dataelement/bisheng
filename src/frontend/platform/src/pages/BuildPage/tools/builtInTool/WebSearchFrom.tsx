@@ -189,10 +189,6 @@ const WebSearchForm = ({ isApi = false, toolId, onSaved, onSavingChange }: WebSe
             const custom = allToolsConfig.custom;
             const operation = custom?.operation;
             const mapping = custom?.mapping;
-            if (!custom?.proof?.key_id || !custom?.proof?.ciphertext) {
-                notification.open({ type: 'error', title: String(t('failed')), description: String(t('chatConfig.webSearch.proofRequired')) });
-                return;
-            }
             if (!operation?.server || !operation?.method || !operation?.path || (operation?.version === 2 ? typeof operation.request !== "object" || operation.request === null : !operation?.query_parameter?.name || !mapping?.title || !mapping?.url || !mapping?.snippet) || (operation?.auth?.location !== 'none' && (!operation?.auth?.name || (secret.action !== 'replace' && !secretConfigured)))) {
                 notification.open({ type: 'error', title: String(t('failed')), description: String(t('chatConfig.webSearch.requiredFields')) });
                 return;

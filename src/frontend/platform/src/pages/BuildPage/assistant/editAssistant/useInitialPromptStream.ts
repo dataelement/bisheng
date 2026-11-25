@@ -1,3 +1,4 @@
+import { workflowReferenceErrorMessage } from '@/controllers/workflowReferenceErrors';
 import { notification } from '@bisheng/ui';
 
 import { getAssistantOptimizeTaskApi } from "@/controllers/API/assistant";
@@ -13,6 +14,8 @@ interface StreamEndEvent {
 
 // Business errors carry a code: show its localized copy, fall back to the raw message
 export function streamErrorMessage(event: StreamEndEvent): string {
+    const referenceMessage = workflowReferenceErrorMessage({ status_code: event.code, data: event.data });
+    if (referenceMessage) return referenceMessage;
     if (!event.code) return event.message || ''
     return t(`api_errors:${event.code}`, { ...(event.data || {}), defaultValue: event.message })
 }

@@ -82,10 +82,12 @@ class UnificationMinio:
         finally:
             try:
                 await adapter.aclose()
-            except Exception:
+            except Exception as cleanup_error:
                 if primary is None:
                     raise
-                logger.opt(exception=True).warning("M2 private storage close failed after a primary error")
+                logger.warning(
+                    "F118 maintenance reason=storage_close_failed error_type={}", type(cleanup_error).__name__
+                )
 
     def _alive(self):
         if self._closed:

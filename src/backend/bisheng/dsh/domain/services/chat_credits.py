@@ -88,25 +88,39 @@ async def start(model, *, mode: str = ""):
     )
     from bisheng.common.services.config_service import settings
     from bisheng.core.context.tenant import get_current_tenant_id
-    from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
     from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
     from bisheng.dsh.domain.schemas.usage import UsageEvent
+    from bisheng.dsh.domain.services.model_access import require_model_operator
     from bisheng.dsh.domain.services.pricing import billing_snapshot
     from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
-    from bisheng.dsh.runtime import get_model_runtime, read_credit_setting, read_model_pricing, read_policy
+    from bisheng.dsh.runtime import (
+        get_model_runtime,
+        read_credit_setting,
+        read_ledger_policy,
+        read_model_pricing,
+        read_policy,
+    )
 
     tenant = get_current_tenant_id()
     if tenant is None:
         raise DshUserDisabledError()
-    identity = await CurrentIdentityRecords().get(str(tenant), str(model.user_id))
-    if not identity or not identity.active or not identity.tenant_active or not identity.natural_person:
-        raise DshUserDisabledError()
-    policy = await read_policy(model.user_id)
+    administrator = await require_model_operator(model.user_id)
     # Chat accepts string IDs; the loaded record provides the canonical ledger ID.
     model_id = model.model_info.id
+    if administrator:
+        from bisheng.llm.domain.services.llm import LLMService
+
+        # Revalidate actual ownership/sharing and online state at invocation.
+        # Super-admin qualification never grants access to a sibling's provider.
+        snapshots = await LLMService.get_dsh_model_catalog_snapshots([model_id])
+        if model_id not in snapshots:
+            raise DshModelNotAllowedError()
+        policy = await read_ledger_policy(model.user_id)
+    else:
+        policy = await read_policy(model.user_id)
     # Helper models chosen by administrators (traceability, image view) are not limited to the
     # user's selectable models; the user's own conversation model always is.
-    if model_id not in policy.allowed_model_ids and not getattr(model, "admin_selected", False):
+    if not administrator and model_id not in policy.allowed_model_ids and not getattr(model, "admin_selected", False):
         raise DshModelNotAllowedError()
     # F016: read prices fresh (never from the cached model_info) and freeze them for this call.
     # A model without a usable price is billed as free (never refused).
@@ -115,11 +129,12 @@ async def start(model, *, mode: str = ""):
     runtime = _runtimes.setdefault(loop, SimpleNamespace(settings=settings.dsh))
     service = await get_model_runtime(runtime)
     await service.activate()
-    if pricing.free:
+    if pricing.free or administrator:
         if mode == "probe":
-            # A free model never compares the allowance; nothing is written for a round probe.
+            # Free/admin probes do not compare a personal allowance or write a call.
             return service.model, None, None
-        # Free calls are still recorded, just never compared with the allowance (AC-11).
+        # Free/admin calls are recorded under the selected tenant and real user;
+        # a management operator does not consume a tenant member's allowance.
         mode = "unmetered"
     now = datetime.now(UTC)
     request_id = str(uuid4())

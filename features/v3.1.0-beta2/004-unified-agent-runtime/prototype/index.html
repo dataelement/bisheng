@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>统一会话交互原型 · F004</title>
+<style>
+  /* 取值与 src/frontend/packages/ui/src/styles/tokens.css 一致 */
+  :root {
+    --text-1: #1d2129; --text-2: #525865; --text-3: #898f9c; --text-4: #cacdd4;
+    --fill-1: #f8f8f8; --fill-2: #f3f3f4; --fill-3: #e5e6e9;
+    --border: #e5e6e9; --border-deep: #cacdd4; --bg: #fff;
+    --brand: #165dff; --brand-press: #024de3; --brand-50: #e8f3ff; --brand-100: #beddff;
+    --success: #00b42a; --success-tint: #e8ffea; --warning: #ff7d00; --warning-tint: #fff7e8;
+    --radius-s: 6px; --radius-m: 10px; --radius-l: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text-1); display: flex; flex-direction: column; overflow: hidden;
+    font: 14px/22px "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif; }
+  button { font: inherit; color: inherit; cursor: pointer; background: none; border: 0; padding: 0; }
+  button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  /* 原型自身的场景切换条（不属于产品界面） */
+  .proto-bar { flex: none; display: flex; gap: 4px; align-items: center; padding: 8px 16px; background: var(--text-1); color: #fff; overflow-x: auto; }
+  .proto-bar span { font-size: 12px; opacity: .6; margin-right: 8px; white-space: nowrap; }
+  .proto-bar button { color: #fff; opacity: .65; padding: 4px 12px; border-radius: 99px; white-space: nowrap; font-size: 13px; }
+  .proto-bar button[aria-pressed="true"] { opacity: 1; background: rgba(255,255,255,.18); }
+
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; }
+  .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .stream { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 16px 12px; }
+  .col { max-width: 720px; margin: 0 auto; }
+
+  .msg-user { display: flex; flex-direction: column; align-items: flex-end; margin: 0 0 20px; }
+  .bubble { background: var(--fill-2); border-radius: var(--radius-l) var(--radius-l) 4px var(--radius-l); padding: 10px 14px; max-width: 80%; }
+  .delivery { font-size: 12px; line-height: 20px; color: var(--text-3); margin-top: 4px; display: flex; gap: 6px; align-items: center; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .delivery.waiting .dot { animation: pulse 1.2s ease-in-out infinite; }
+
+  .msg-ai { margin: 0 0 24px; }
+  .msg-ai p { margin: 0 0 10px; max-width: 64ch; }
+  .step { display: flex; gap: 8px; align-items: baseline; color: var(--text-2); font-size: 13px; line-height: 21px; padding: 3px 0; }
+  .step .mark { width: 14px; flex: none; text-align: center; color: var(--success); }
+  .step.running .mark { color: var(--brand); animation: pulse 1.2s ease-in-out infinite; }
+  .step button { color: var(--text-3); text-decoration: underline; text-underline-offset: 3px; }
+  .code { display: none; margin: 6px 0 8px 22px; background: var(--fill-1); border: 1px solid var(--border); border-radius: var(--radius-s);
+    padding: 10px 12px; font: 12px/19px ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; color: var(--text-2); }
+  .code.open { display: block; }
+
+  .file { display: inline-flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-m); padding: 8px 12px; margin: 4px 8px 4px 0; background: var(--bg); }
+  .file .ext { width: 32px; height: 32px; border-radius: var(--radius-s); display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 600; }
+  .ext.xlsx { background: #00a870; } .ext.pptx { background: #e8590c; } .ext.docx { background: var(--brand); } .ext.md { background: var(--text-2); }
+  .file small { display: block; color: var(--text-3); font-size: 12px; line-height: 18px; }
+  .file .acts { display: flex; gap: 10px; margin-left: 8px; }
+  .file .acts button { color: var(--brand); font-size: 13px; }
+  .file.fresh { animation: arrive .5s ease-out; }
+
+  .clarify { border: 1px solid var(--brand-100); background: var(--brand-50); border-radius: var(--radius-m); padding: 14px 16px; max-width: 520px; }
+  .clarify h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+  .clarify .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .clarify .opts button { background: var(--bg); border: 1px solid var(--border-deep); border-radius: var(--radius-s); padding: 5px 12px; }
+  .clarify .opts button:hover { border-color: var(--brand); color: var(--brand); }
+  .clarify .opts button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+  /* 计划面板：固定在输入框上方，是本设计唯一的强调元素 */
+  .dock { padding: 0 16px 16px; }
+  .plan { border: 1px solid var(--border); border-bottom: 0; border-radius: var(--radius-m) var(--radius-m) 0 0; background: var(--fill-1); margin: 0 12px; }
+  .plan-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 14px; text-align: left; font-size: 13px; }
+  .plan-head b { font-weight: 600; }
+  .plan-head .count { margin-left: auto; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .plan-head .chev { color: var(--text-3); transition: transform .15s; }
+  .plan.collapsed .chev { transform: rotate(-90deg); }
+  .plan.collapsed ol { display: none; }
+  .plan ol { list-style: none; margin: 0; padding: 0 14px 10px; }
+  .plan li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; padding: 3px 0; font-size: 13px; line-height: 21px; color: var(--text-2); }
+  .plan li .box { width: 14px; height: 14px; margin-top: 4px; border: 1.5px solid var(--border-deep); border-radius: 50%; }
+  .plan li.done { color: var(--text-3); }
+  .plan li.done .box { background: var(--success); border-color: var(--success);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.5 7.2l2.3 2.3 4.7-5' fill='none' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E"); }
+  .plan li.doing { color: var(--text-1); font-weight: 500; }
+  .plan li.doing .box { border-color: var(--brand); border-top-color: transparent; animation: spin .9s linear infinite; }
+  .plan li.paused .box { border-color: var(--warning); background: var(--warning-tint); }
+  .plan del { color: var(--text-4); margin-right: 6px; }
+  .plan li.changed { animation: flash 1.6s ease-out; }
+  .plan-note { margin: 0; padding: 0 14px 10px 40px; font-size: 12px; line-height: 20px; color: var(--text-3); }
+
+  .composer { border: 1px solid var(--border-deep); border-radius: var(--radius-l); background: var(--bg); padding: 10px 12px 8px; box-shadow: 0 2px 10px rgba(29,33,41,.06); }
+  .composer:focus-within { border-color: var(--brand); }
+  .composer textarea { width: 100%; border: 0; resize: none; outline: 0; font: inherit; color: inherit; min-height: 44px; background: transparent; }
+  .composer textarea::placeholder { color: var(--text-3); }
+  .tools { display: flex; align-items: center; gap: 8px; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-2); font-size: 13px; }
+  .toggle[aria-pressed="true"] { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand); }
+  .toggle i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; }
+  .toggle[aria-pressed="true"] i { background: currentColor; }
+  .send, .stop { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; }
+  .send:hover { background: var(--brand-press); }
+  .stop { margin-left: 0; background: var(--bg); color: var(--text-2); border: 1px solid var(--border-deep); }
+  .stop span { width: 10px; height: 10px; background: currentColor; border-radius: 2px; }
+  .quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 12px 8px; }
+  .quick button { font-size: 13px; color: var(--text-2); border: 1px dashed var(--border-deep); border-radius: 99px; padding: 2px 12px; background: var(--bg); }
+  .quick button:hover { color: var(--brand); border-color: var(--brand); }
+
+  .ws { border-left: 1px solid var(--border); background: var(--fill-1); padding: 20px 16px; overflow-y: auto; }
+  .ws h2 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+  .ws .sub { color: var(--text-3); font-size: 12px; line-height: 20px; margin: 0 0 14px; }
+  .ws .file { display: flex; margin: 0 0 8px; }
+  .ws .file .acts { margin-left: auto; }
+  .ws .empty { color: var(--text-3); font-size: 13px; border: 1px dashed var(--border-deep); border-radius: var(--radius-m); padding: 16px; }
+  .ws h3 { font-size: 12px; font-weight: 400; color: var(--text-3); margin: 16px 0 6px; }
+  .ws-toggle { display: none; }
+
+  @keyframes pulse { 50% { opacity: .35; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes flash { 0% { background: var(--brand-50); } 100% { background: transparent; } }
+  @keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    .ws { display: none; position: fixed; inset: 38px 0 0 0; z-index: 5; border: 0; }
+    .ws.open { display: block; }
+    .ws-toggle { display: inline-flex; margin-left: 8px; }
+    .bubble { max-width: 92%; }
+  }
+</style>
+</head>
+<body>
+<nav class="proto-bar" aria-label="原型场景">
+  <span>原型场景</span>
+  <button data-scene="direct">1 直接回答</button>
+  <button data-scene="plan">2 深度研究：出计划即执行</button>
+  <button data-scene="steer">3 执行中插话改计划</button>
+  <button data-scene="clarify">4 agent 提问</button>
+  <button data-scene="done">5 完成</button>
+</nav>
+
+<div class="app">
+  <main class="chat">
+    <div class="stream" id="stream"><div class="col" id="col"></div></div>
+    <div class="dock"><div class="col">
+      <div class="quick" id="quick"></div>
+      <section class="plan" id="plan" hidden aria-label="执行计划"></section>
+      <form class="composer" id="composer">
+        <textarea id="input" rows="2" aria-label="输入消息"></textarea>
+        <div class="tools">
+          <button type="button" class="toggle" id="research" aria-pressed="false"><i></i>深度研究</button>
+          <button type="button" class="toggle ws-toggle" id="wsToggle">工作区</button>
+          <button type="button" class="stop" id="stop" hidden aria-label="停止"><span></span></button>
+          <button type="submit" class="send" aria-label="发送">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg>
+          </button>
+        </div>
+      </form>
+    </div></div>
+  </main>
+  <aside class="ws" id="ws" aria-label="工作区"></aside>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const FILES = {
+  xlsx: { ext: 'xlsx', name: '区域销售汇总.xlsx', meta: '18 KB' },
+  quote: { ext: 'xlsx', name: '三家报价对比.xlsx', meta: '24 KB' },
+  pptx: { ext: 'pptx', name: '采购建议.pptx', meta: '12 页' },
+  up1: { ext: 'docx', name: '供应商报价单-华辰.docx', meta: '你上传的' },
+};
+const fileChip = (f, fresh) => `<span class="file${fresh ? ' fresh' : ''}"><span class="ext ${f.ext}">${f.ext}</span>
+  <span>${f.name}<small>${f.meta}</small></span><span class="acts"><button type="button">预览</button><button type="button">下载</button></span></span>`;
+const step = (text, running, code) => `<div class="step${running ? ' running' : ''}"><span class="mark">${running ? '●' : '✓'}</span>
+  <span>${text}${code ? ` <button type="button" data-code>查看代码和输出</button>` : ''}</span></div>${code ? `<pre class="code">${code}</pre>` : ''}`;
+const user = (text, delivery) => `<div class="msg-user"><div class="bubble">${text}</div>${delivery || ''}</div>`;
+
+const PLAN = [
+  { t: '读取三份报价单，提取单价、交期、付款条件' },
+  { t: '到知识库查近两年这三家的履约记录' },
+  { t: '写一份 Word 采购建议' },
+  { t: '核对数字并交付' },
+];
+function planHtml(states, opts = {}) {
+  const done = states.filter((s) => s === 'done').length;
+  const items = PLAN.map((p, i) => {
+    let text = p.t;
+    if (i === 2 && opts.rewritten) text = `<del>写一份 Word 采购建议</del>做一份 10 页以内的采购建议 PPT`;
+    return `<li class="${states[i]}${i === 2 && opts.flash ? ' changed' : ''}"><span class="box"></span><span>${text}</span></li>`;
+  }).join('');
+  const head = opts.paused ? '等你回答后继续' : done === PLAN.length ? '全部完成' : '正在执行';
+  return `<button type="button" class="plan-head" id="planHead"><b>计划</b><span>${head}</span>
+    <span class="count">${done}/${PLAN.length}</span><span class="chev">▾</span></button><ol>${items}</ol>
+    ${opts.note ? `<p class="plan-note">${opts.note}</p>` : ''}`;
+}
+function workspace(out, uploads) {
+  $('ws').innerHTML = `<h2>工作区</h2><p class="sub">这次对话里上传和生成的文件都在这里。</p>
+    <h3>生成的文件</h3>${out.length ? out.map((f) => fileChip(f.f, f.fresh)).join('') : '<div class="empty">还没有生成文件。agent 每写出一个文件，这里立刻出现。</div>'}
+    ${uploads ? `<h3>你上传的</h3>${uploads.map((f) => fileChip(f)).join('')}` : ''}`;
+}
+const ASK = '对比华辰、力拓、中晟三家的报价，给我一份采购建议。';
+
+const SCENES = {
+  direct() {
+    $('col').innerHTML = user('把这份销售数据按区域汇总成 Excel。') + `<div class="msg-ai">
+      ${step('运行代码，用时 3.2 秒', false, 'import pandas as pd\ndf = pd.read_csv("uploads/sales.csv")\ndf.groupby("区域")["金额"].sum().to_excel("output/区域销售汇总.xlsx")\n\n输出：已写入 output/区域销售汇总.xlsx，共 6 个区域')}
+      <p>已按 6 个区域汇总。华东最高，占全年的 38%；西北最低，占 4%。</p>${fileChip(FILES.xlsx, true)}</div>`;
+    setPlan(null); workspace([{ f: FILES.xlsx, fresh: true }]);
+    setComposer({ research: false, running: false, ph: '问点什么，或者交代一件事' });
+  },
+  plan() {
+    $('col').innerHTML = user(ASK) + `<div class="msg-ai"><p>我按下面的计划做，已经开始第 1 步。想调整，随时在输入框里说。</p>
+      ${step('正在读取 供应商报价单-华辰.docx', true)}</div>`;
+    setPlan(planHtml(['doing', '', '', '']));
+    workspace([], [FILES.up1]);
+    setComposer({ research: true, running: true, ph: '可以随时补充要求或修改计划' });
+  },
+  steer() {
+    $('col').innerHTML = user(ASK) + `<div class="msg-ai"><p>我按下面的计划做，已经开始第 1 步。想调整，随时在输入框里说。</p>
+      ${step('读取了 3 份报价单')}${step('运行代码，生成报价对比表', false, 'output/三家报价对比.xlsx 已写入')}
+      ${fileChip(FILES.quote)}${step('正在检索知识库：履约记录', true)}</div>`;
+    setPlan(planHtml(['done', 'doing', '', '']));
+    workspace([{ f: FILES.quote }], [FILES.up1]);
+    setComposer({ research: true, running: true, ph: '试试发一句“第 3 步改成做 PPT”', quick: ['第 3 步改成做 PPT，10 页以内', '付款条件要单独列一页'] });
+  },
+  clarify() {
+    $('col').innerHTML = user(ASK) + `<div class="msg-ai">${step('读取了 3 份报价单')}${step('检索了知识库：履约记录')}
+      <div class="clarify"><h3>力拓的报价单没写交期。按哪个算？</h3><div class="opts">
+        <button type="button">按合同惯例 30 天</button><button type="button">标成“待确认”</button><button type="button">我来填</button></div></div></div>`;
+    setPlan(planHtml(['done', 'done', 'paused', ''], { paused: true }));
+    workspace([{ f: FILES.quote }], [FILES.up1]);
+    setComposer({ research: true, running: false, ph: '点上面的选项，或者直接输入你的回答' });
+  },
+  done() {
+    $('col').innerHTML = user(ASK) + `<div class="msg-ai">${step('读取了 3 份报价单')}${step('检索了知识库：履约记录')}${step('制作了 PPT，共 9 页')}${step('核对了 14 处数字，全部一致')}
+      <p>建议选中晟。中晟的总价比华辰高 2.1%，但近两年 11 次交付全部准时；华辰有 3 次延期，力拓的交期还没有确认。</p>
+      ${fileChip(FILES.pptx, true)}${fileChip(FILES.quote)}</div>`;
+    setPlan(planHtml(['done', 'done', 'done', 'done'], { rewritten: true }), true);
+    workspace([{ f: FILES.pptx, fresh: true }, { f: FILES.quote }], [FILES.up1]);
+    setComposer({ research: true, running: false, ph: '继续追问，或者让它改一改' });
+  },
+};
+
+function setPlan(html, collapsed) {
+  const el = $('plan'); el.hidden = !html; el.innerHTML = html || '';
+  el.classList.toggle('collapsed', !!collapsed);
+}
+let state = { scene: 'direct', running: false };
+function setComposer({ research, running, ph, quick }) {
+  $('research').setAttribute('aria-pressed', research); $('stop').hidden = !running;
+  $('input').placeholder = ph; $('input').value = ''; state.running = running;
+  $('quick').innerHTML = (quick || []).map((q) => `<button type="button" data-quick>${q}</button>`).join('');
+}
+function show(name) {
+  state.scene = name; SCENES[name]();
+  document.querySelectorAll('.proto-bar button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.scene === name));
+  $('stream').scrollTop = 0;
+}
+
+/* 插话：显示“已发送，排队处理中” → agent 读取后该文字消失 → 计划被改写 */
+function interject(text) {
+  const id = 'd' + Date.now();
+  $('col').insertAdjacentHTML('beforeend', user(text, `<div class="delivery waiting" id="${id}"><span class="dot"></span>已发送，排队处理中</div>`));
+  $('stream').scrollTop = $('stream').scrollHeight;
+  setTimeout(() => {
+    $(id).remove();
+    const isPpt = /ppt/i.test(text);
+    $('col').insertAdjacentHTML('beforeend', `<div class="msg-ai"><p>${isPpt ? '收到，第 3 步改成做 PPT。第 2 步不受影响，继续进行。' : '收到，我会在后面的步骤里照这个要求做。'}</p></div>`);
+    if (isPpt) setPlan(planHtml(['done', 'doing', '', ''], { rewritten: true, flash: true }));
+    $('stream').scrollTop = $('stream').scrollHeight;
+  }, 1800);
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.scene) show(t.dataset.scene);
+  else if (t.hasAttribute('data-code')) { const pre = t.closest('.step').nextElementSibling; pre.classList.toggle('open'); t.textContent = pre.classList.contains('open') ? '收起' : '查看代码和输出'; }
+  else if (t.hasAttribute('data-quick')) { $('input').value = t.textContent; $('input').focus(); }
+  else if (t.id === 'planHead' || t.closest('#planHead')) $('plan').classList.toggle('collapsed');
+  else if (t.id === 'research') t.setAttribute('aria-pressed', t.getAttribute('aria-pressed') !== 'true');
+  else if (t.id === 'wsToggle') $('ws').classList.toggle('open');
+  else if (t.id === 'stop') { setComposer({ research: true, running: false, ph: '已停止。说一句话就能接着做' }); setPlan(planHtml(['done', 'paused', '', ''], { paused: true, note: '已停止，做完的步骤和文件都保留着。' })); }
+  else if (t.closest('.clarify')) { t.closest('.opts').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b === t)); setTimeout(() => show('done'), 900); }
+});
+$('ws').addEventListener('click', (e) => { if (e.target === $('ws')) $('ws').classList.remove('open'); });
+$('composer').addEventListener('submit', (e) => {
+  e.preventDefault(); const text = $('input').value.trim(); if (!text) return; $('input').value = '';
+  if (state.running) return interject(text);
+  $('col').insertAdjacentHTML('beforeend', user(text)); $('stream').scrollTop = $('stream').scrollHeight;
+});
+$('input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('composer').requestSubmit(); } });
+show('direct');
+</script>
+</body>
+</html>

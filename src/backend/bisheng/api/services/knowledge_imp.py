@@ -59,7 +59,7 @@ def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
 
     minio_client = get_minio_storage_sync()
 
-    files = [f for f in os.listdir(local_image_dir)]
+    files = list(os.listdir(local_image_dir))
     for file_name in files:
         local_file_name = f"{local_image_dir}/{file_name}"
         object_name = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{file_name}"
@@ -73,7 +73,7 @@ async def async_images_to_minio(local_image_dir, knowledge_id, doc_id):
 
     minio_client = await get_minio_storage()
 
-    files = [f for f in os.listdir(local_image_dir)]
+    files = list(os.listdir(local_image_dir))
     for file_name in files:
         local_file_name = f"{local_image_dir}/{file_name}"
         object_name = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{file_name}"
@@ -86,8 +86,8 @@ async def async_images_to_minio(local_image_dir, knowledge_id, doc_id):
 def process_file_task(
     knowledge: Knowledge,
     db_files: list[KnowledgeFile],
-    preview_cache_keys: list[str] = None,
-    callback_url: str = None,
+    preview_cache_keys: list[str] | None = None,
+    callback_url: str | None = None,
     enable_auto_tags: bool = False,
 ):
     """Working with Knowledge Files Tasks"""
@@ -216,8 +216,8 @@ def delete_knowledge_file_vectors(file_ids: list[int], clear_minio: bool = True)
 def addEmbedding(
     knowledge_id: int,
     knowledge_files: list[KnowledgeFile],
-    callback: str = None,
-    preview_cache_keys: list[str] = None,
+    callback: str | None = None,
+    preview_cache_keys: list[str] | None = None,
     enable_auto_tags: bool = False,
 ):
     """Adding Files to Vector SumsesCunene"""

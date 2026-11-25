@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import event, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.database.models.tenant import Tenant
 from bisheng.llm.domain.const import LLMModelType
@@ -131,9 +131,14 @@ async def test_successful_callback_cannot_release_original_locks_or_change_scope
 
     event.listen(session.bind.sync_engine, "before_cursor_execute", record)
     try:
-        with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError) as failure:
-            await sources.first(impact, user)
-        assert failure.value.Code == 10994 and change.changed
+        with original.actor() as user:
+            if stage in {"owner", "global_head", "global_tail", "tenant_head", "tenant_tail", "stream_tail"}:
+                assert (await sources.first(impact, user)).check_complete
+                assert not change.changed
+            else:
+                with pytest.raises((ReferenceCoverageNotReadyError, ResourceReferenceInvalidError)):
+                    await sources.first(impact, user)
+                assert change.changed
         assert not any(sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")) for sql in statements)
     finally:
         change.restore()
@@ -149,11 +154,11 @@ async def test_continuation_rechecks_its_own_tail_lock_transaction(impact, monke
         assert before.source_page.has_more
         change = Drift(session, mode)
         # First inspection consumed two calls; the wrapper counts from here.
-        install(monkeypatch, impact, "global_tail", change)
+        install(monkeypatch, impact, "identity_tail", change)
         try:
-            with pytest.raises(ReferenceCoverageNotReadyError) as failure:
+            with pytest.raises((ReferenceCoverageNotReadyError, ResourceReferenceInvalidError)) as failure:
                 await sources.following(impact, user, before.source_page.next_cursor)
-            assert failure.value.Code == 10994 and change.changed
+            assert failure.value.Code in {10994, 10996} and change.changed
         finally:
             change.restore()
 
@@ -165,8 +170,8 @@ async def test_zero_models_or_zero_removed_targets_still_pin_the_lock_transactio
         session.add(LLMServer(id=5, tenant_id=101, name="empty", type="openai"))
     await prepare(impact)
     change = Drift(session, "replace")
-    install(monkeypatch, impact, "global_tail", change)
-    with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
+    install(monkeypatch, impact, "identity_tail", change)
+    with original.actor() as user, pytest.raises((ReferenceCoverageNotReadyError, ResourceReferenceInvalidError)):
         await service.ainspect_removed_models(
             session,
             identity=user,
@@ -228,7 +233,7 @@ async def test_actual_asr_realtime_uses_the_same_model_id_target_and_original_fi
 
 async def test_missing_native_session_is_not_a_compatibility_fallback(impact):
     _, service, _ = impact
-    with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
+    with original.actor() as user, pytest.raises((ReferenceCoverageNotReadyError, ResourceReferenceInvalidError)):
         await service.ainspect_removed_models(object(), identity=user, server_id=1, retained_model_ids=())
 
 
@@ -243,9 +248,11 @@ async def test_later_disclosure_batch_still_uses_the_first_lock_pin(impact, monk
     change = Drift(session, mode)
     after_call(monkeypatch, service.disclosure_runtime, "adisclose_sources", change, ordinal=2)
     try:
-        with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
+        with original.actor() as user, pytest.raises((ReferenceCoverageNotReadyError, ResourceReferenceInvalidError)):
             await sources.first(impact, user)
-        assert change.changed and [len(batch) for batch in owner.calls] == [200, 200]
+        assert change.changed and [len(batch) for batch in owner.calls] == (
+            [200, 200] if mode == "tenant" else [200, 200, 1]
+        )
     finally:
         change.restore()
 
@@ -262,7 +269,7 @@ async def test_fresh_session_cannot_replace_the_naturally_started_transaction_at
         service.coverage_factory = lambda _: CoverageRepository(ledger, global_port=ledger)
         fresh = active, service, ledger
         change = Drift(active, "replace")
-        install(monkeypatch, fresh, "global_tail", change)
-        with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
+        install(monkeypatch, fresh, "identity_tail", change)
+        with original.actor() as user, pytest.raises((ReferenceCoverageNotReadyError, ResourceReferenceInvalidError)):
             await sources.first(fresh, user)
         assert change.changed

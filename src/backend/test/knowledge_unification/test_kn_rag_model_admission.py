@@ -225,7 +225,7 @@ async def test_stored_chunk_index_opens_when_saved_model_is_legacy_missing(rag):
                 legacy_evidence_key="proof",
             )
         )
-        assert updated.rowcount == 1
+        assert updated.rowcount == 0
         await session.execute(sa.delete(LLMModel).where(LLMModel.id == 11, LLMModel.tenant_id == 101))
     with pytest.raises(ResourceReferenceInvalidError):
         await asyncio.to_thread(

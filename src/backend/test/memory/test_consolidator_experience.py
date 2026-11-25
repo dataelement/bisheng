@@ -11,6 +11,7 @@ from bisheng.memory.domain.services.consolidation_content import ConsolidationCo
 from bisheng.memory.domain.services.consolidation_linsight import LinsightRoundConsolidation
 from bisheng.memory.domain.services.consolidation_prompt import LINSIGHT_INSTRUCTIONS
 from bisheng.memory.domain.services.resident import ResidentService
+from bisheng.memory.domain.services.search import SearchService
 from test.memory.conftest import TENANT_A, USER_1
 from test.memory.test_consolidator_linsight import _add_round, _seed_chat
 
@@ -27,9 +28,19 @@ async def _run_round(memory_db, service, llm, answer):
     await step(TENANT_A, USER_1)
 
 
-async def test_ac50_round_uses_experience_prompt_and_yields_experience_item(memory_db, service, llm, make_ctx, kv):
+async def test_ac50_round_uses_experience_prompt_and_yields_experience_item(
+    memory_db, service, llm, make_ctx, kv, index, details
+):
     answer = json.dumps(
-        {"candidates": [{"content": "做选型调研时先列评估维度再填数据，用户认可这样效果好", "type": "experience", "pinned": True}]},
+        {
+            "candidates": [
+                {
+                    "content": "做选型调研时先列评估维度再填数据，用户认可这样效果好",
+                    "type": "experience",
+                    "pinned": True,
+                }
+            ]
+        },
         ensure_ascii=False,
     )
     await _run_round(memory_db, service, llm, answer)
@@ -40,7 +51,9 @@ async def test_ac50_round_uses_experience_prompt_and_yields_experience_item(memo
 
     resident = ResidentService(kv=kv, metrics=m.MemoryMetrics(kv))
     ctx = make_ctx()
-    assert "先列评估维度" in (await resident.experience(ctx)).text  # AC-55: next deep-research task
+    search = SearchService(index=index, details=details, metrics=m.MemoryMetrics(kv))
+    related = await resident.related(ctx, "调研 RAG 选型的评估维度", [], search=search)
+    assert "先列评估维度" in related.text  # AC-55: next deep-research task finds it by the task question
     assert "先列评估维度" not in (await resident.resident(ctx, "chat")).text  # AC-54
 
 

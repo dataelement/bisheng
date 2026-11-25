@@ -92,7 +92,7 @@ function ToastRow({ item, closeLabel }: { item: ToastItem; closeLabel: string })
   const textRef = React.useRef<HTMLSpanElement>(null);
   const boxRef = React.useRef<HTMLDivElement>(null);
   const meta = TYPE_META[item.type];
-  const { Icon } = meta;
+  const Icon = item.loading ? Outlined.Loading : meta.Icon;
 
   // §4: a single line is exactly 40px tall with no vertical padding; once the
   // text wraps it switches to 12px top/bottom and grows. An inline span reports
@@ -168,7 +168,7 @@ function ToastRow({ item, closeLabel }: { item: ToastItem; closeLabel: string })
                 multiline && 'h-[var(--leading-body)] items-center self-start',
               )}
             >
-              <Icon aria-hidden className={cn('size-4', meta.iconColor)} />
+              <Icon aria-hidden className={cn('size-4', meta.iconColor, item.loading && 'motion-safe:animate-spin')} />
             </span>
             {/* 主文字色, not the semantic color — a whole sentence in orange or
                 green is hard to read on a tinted surface (§4). */}

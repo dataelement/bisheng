@@ -1,0 +1,307 @@
+[
+  {
+    "server_id": 1,
+    "http": 200,
+    "status_code": 200,
+    "check_complete": true,
+    "coverage_epoch": 1,
+    "blocked_by_references": false,
+    "source_counts": [
+      [
+        "workflow_version",
+        0
+      ],
+      [
+        "assistant",
+        0
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        0
+      ],
+      [
+        "model_default",
+        0
+      ]
+    ],
+    "slot_counts": [
+      [
+        "workflow_version",
+        0
+      ],
+      [
+        "assistant",
+        0
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        0
+      ],
+      [
+        "model_default",
+        0
+      ]
+    ],
+    "confirmation_created": true
+  },
+  {
+    "server_id": 2,
+    "http": 200,
+    "status_code": 200,
+    "check_complete": true,
+    "coverage_epoch": 1,
+    "blocked_by_references": true,
+    "source_counts": [
+      [
+        "workflow_version",
+        0
+      ],
+      [
+        "assistant",
+        0
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        4
+      ],
+      [
+        "model_default",
+        1
+      ]
+    ],
+    "slot_counts": [
+      [
+        "workflow_version",
+        0
+      ],
+      [
+        "assistant",
+        0
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        4
+      ],
+      [
+        "model_default",
+        1
+      ]
+    ],
+    "confirmation_created": true
+  },
+  {
+    "server_id": 3,
+    "http": 200,
+    "status_code": 200,
+    "check_complete": true,
+    "coverage_epoch": 1,
+    "blocked_by_references": true,
+    "source_counts": [
+      [
+        "workflow_version",
+        2
+      ],
+      [
+        "assistant",
+        1
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        1
+      ],
+      [
+        "model_default",
+        5
+      ]
+    ],
+    "slot_counts": [
+      [
+        "workflow_version",
+        6
+      ],
+      [
+        "assistant",
+        1
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        1
+      ],
+      [
+        "model_default",
+        13
+      ]
+    ],
+    "confirmation_created": true
+  },
+  {
+    "server_id": 4,
+    "http": 200,
+    "status_code": 200,
+    "check_complete": true,
+    "coverage_epoch": 1,
+    "blocked_by_references": false,
+    "source_counts": [
+      [
+        "workflow_version",
+        0
+      ],
+      [
+        "assistant",
+        0
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        0
+      ],
+      [
+        "model_default",
+        0
+      ]
+    ],
+    "slot_counts": [
+      [
+        "workflow_version",
+        0
+      ],
+      [
+        "assistant",
+        0
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        0
+      ],
+      [
+        "model_default",
+        0
+      ]
+    ],
+    "confirmation_created": true
+  },
+  {
+    "server_id": 5,
+    "http": 200,
+    "status_code": 200,
+    "check_complete": true,
+    "coverage_epoch": 1,
+    "blocked_by_references": true,
+    "source_counts": [
+      [
+        "workflow_version",
+        0
+      ],
+      [
+        "assistant",
+        0
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        0
+      ],
+      [
+        "model_default",
+        2
+      ]
+    ],
+    "slot_counts": [
+      [
+        "workflow_version",
+        0
+      ],
+      [
+        "assistant",
+        0
+      ],
+      [
+        "hosted_app_version",
+        0
+      ],
+      [
+        "channel_sync",
+        0
+      ],
+      [
+        "knowledge",
+        0
+      ],
+      [
+        "model_default",
+        2
+      ]
+    ],
+    "confirmation_created": true
+  }
+]

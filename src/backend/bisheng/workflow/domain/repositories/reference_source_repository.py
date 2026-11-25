@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
 from bisheng.database.models.flow import Flow, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersion
@@ -198,6 +199,8 @@ class WorkflowReferenceSourceRepository:
             query = query.with_for_update()
         with session.no_autoflush:
             kind = await session.scalar(query)
+        if kind is None:
+            raise SpaceNotFoundError(space_id=target_id)
         if kind not in {0, 1, 3}:
             raise ResourceReferenceInvalidError(reason="preview_knowledge_unavailable")
         return "knowledge_space" if kind == 3 else "knowledge_library"

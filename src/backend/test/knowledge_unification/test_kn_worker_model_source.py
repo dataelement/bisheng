@@ -197,7 +197,7 @@ def assert_finalized(rebuild, *, document_path=True):
     assert row["index_generation"] == rebuild.arguments["expected_index_generation"]
     if document_path:
         assert row["collection_name"] != "col40"
-    assert [(item["slot_key"], item["target_id"]) for item in state["business_resource_reference"]] == [("model", "12")]
+    assert [(item["slot_key"], item["target_id"]) for item in state["business_resource_reference"]] == []
 
 
 @pytest.mark.parametrize("kind", ["document", "qa"])
@@ -285,14 +285,18 @@ def test_full_source_or_stage_failure_precedes_files_vectors_and_provider(rebuil
     error = (
         KnowledgeOperationPlanConflictError
         if damage == "no_stage"
-        else ResourceReferenceInvalidError
-        if damage == "deleted_current"
         else ReferenceCoverageNotReadyError
+        if damage == "drift"
+        else ResourceReferenceInvalidError
     )
-    with pytest.raises(error):
+    if damage == "missing_index":
         execute(rebuild, kind)
-    assert rebuild.events == []
-    assert business_fixtures.state(rebuild.context) == before
+        assert_finalized(rebuild, document_path=kind == "document")
+    else:
+        with pytest.raises(error):
+            execute(rebuild, kind)
+        assert rebuild.events == []
+        assert business_fixtures.state(rebuild.context) == before
 
 
 @pytest.mark.parametrize("kind", ["document", "qa"])
@@ -388,7 +392,7 @@ def test_obsolete_after_processing_cannot_publish_or_release_current_stage(rebui
     row = next(item for item in state["knowledge"] if item["id"] == 40)
     assert row["model"] == "12" and row["state"] == 3
     assert row["model_transition"]["operation_id"] == "new-build"
-    assert {item["target_id"] for item in state["business_resource_reference"]} == {"12"}
+    assert {item["target_id"] for item in state["business_resource_reference"]} == set()
 
 
 def test_expired_actual_background_lifecycle_cannot_finalize_successful_io(rebuild, monkeypatch):

@@ -294,30 +294,46 @@ it("mounts visible-only child content when root info fails and never enters lega
   expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
 
-it("shows an initializing copy after a fresh page load without reading its files", async () => {
-  mocks.copies.mockResolvedValue([
-    {
-      id: 7,
-      name: "Background copy",
-      user_id: 7,
-      state: 0,
-      job_id: "original-copy",
-      job_state: "running",
-      phase: "initializing",
-      total_count: 10,
-      succeeded_count: 0,
-      failed_count: 0,
-    },
-  ]);
-  mount();
-  expect(
-    await screen.findByRole("heading", { name: "Background copy" }),
-  ).toBeVisible();
-  expect(screen.getByText("space_copy_ui.phase_initializing")).toBeVisible();
-  expect(screen.getByText("space_copy_ui.background_notice")).toBeVisible();
-  expect(mocks.info).not.toHaveBeenCalled();
-  expect(mocks.children).not.toHaveBeenCalled();
-});
+it.each(["preparing", "initializing", "copying"] as const)(
+  "shows a themed loading indicator for a %s copy without reading its files",
+  async (phase) => {
+    mocks.copies.mockResolvedValue([
+      {
+        id: 7,
+        name: "Background copy",
+        user_id: 7,
+        state: phase === "copying" ? 2 : 0,
+        job_id: "original-copy",
+        job_state: phase === "preparing" ? "accepted" : "running",
+        phase,
+        total_count: 10,
+        succeeded_count: 0,
+        failed_count: 0,
+      },
+    ]);
+    if (phase === "copying") {
+      const read = mocks.get.getMockImplementation()!;
+      mocks.get.mockImplementation((url: string, ...args: unknown[]) => {
+        if (url.endsWith("/processing-jobs/original-copy"))
+          return new Promise(() => undefined);
+        if (url.endsWith("/processing-jobs/original-copy/items"))
+          return { data: [], total: 0 };
+        return read(url, ...args);
+      });
+    }
+    mount();
+    const title = await screen.findByRole("heading", { name: "Background copy" });
+    expect(title).toBeVisible();
+    const copyPage = title.closest("section")!;
+    expect(within(copyPage).getByRole("status")).toHaveTextContent(`space_copy_ui.phase_${phase}`);
+    const spinners = copyPage.querySelectorAll(".bs-tick-spinner.text-primary");
+    expect(spinners).toHaveLength(1);
+    expect(spinners[0]).toBeVisible();
+    expect(within(copyPage).getByText("space_copy_ui.background_notice")).toBeVisible();
+    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.children).not.toHaveBeenCalled();
+  },
+);
 
 it("opens a failed copy directly and retries the same job before returning to its files", async () => {
   mocks.copies.mockResolvedValue([
@@ -347,6 +363,7 @@ it("opens a failed copy directly and retries the same job before returning to it
     pending_count: 0,
     hidden_item_count: 10,
     retryable: true,
+    error_code: 10996,
   };
   mocks.get.mockImplementation(
     (url: string, options?: { params?: unknown }) => {
@@ -365,13 +382,28 @@ it("opens a failed copy directly and retries the same job before returning to it
     return { job_id: job.id, state: "accepted", accepted: true, reused: false };
   });
   mount();
-  await screen.findByText("space_copy_ui.phase_failed");
+  const failureTitle = await screen.findByText("space_copy_ui.failed");
+  expect(failureTitle).toBeVisible();
+  expect(
+    failureTitle.closest("section")?.querySelector("[aria-hidden] > .brand-illustration"),
+  ).toBeVisible();
+  expect(
+    screen.queryByText("space_copy_ui.background_notice"),
+  ).not.toBeInTheDocument();
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "f118.failure_copy_details_missing",
+  );
+  expect(screen.getByText("f118.processing_hidden")).toBeVisible();
+  expect(screen.getByText("f118.processing_task_id")).toBeVisible();
+  const failure = within(failureTitle.closest("section")!);
+  const retry = failure.getByRole("button", { name: "retry" });
+  expect(failure.getAllByRole("button")).toEqual([retry]);
   expect(mocks.children).not.toHaveBeenCalled();
-  fireEvent.click(await screen.findByRole("button", { name: "retry" }));
+  fireEvent.click(retry);
   await waitFor(() =>
     expect(mocks.post).toHaveBeenCalledWith(
       "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
-      { expected_job_revision: 1, idempotency_key: expect.any(String) },
+      { expected_job_revision: 1, idempotency_key: expect.any(String), refresh_source: true },
       { params: { kind: "space_copy" } },
     ),
   );
@@ -426,7 +458,7 @@ it("recovers the original copy from a detail page whose target permissions are n
   expect(screen.getByText("space_copy_ui.recovery_notice")).toBeVisible();
   const recovery = within(heading.closest("section")!);
   fireEvent.click(
-    await recovery.findByRole("button", {
+    await recovery.findByRole("link", {
       name: "f118.processing_kind_space_copy · f118.processing_state_failed",
     }),
   );
@@ -828,9 +860,11 @@ it("does not turn a forged management URL into an admin scope for an ordinary us
   expect(keys).not.toContain('"admin"');
 });
 
-it.each(["running", "failed"])(
+it.each(["accepted", "running", "failed", "partial_failed"])(
   "keeps ready copied space usable while file copy is %s",
   async (state) => {
+    const failed = state === "failed" || state === "partial_failed";
+    const phase = failed ? "failed" : state === "accepted" ? "preparing" : "copying";
     mocks.copies.mockResolvedValue([
       {
         id: 7,
@@ -839,16 +873,38 @@ it.each(["running", "failed"])(
         state: 1,
         job_id: "background-files",
         job_state: state,
-        phase: state === "failed" ? "failed" : "copying",
+        phase,
         total_count: 10,
         succeeded_count: 4,
-        failed_count: state === "failed" ? 6 : 0,
+        failed_count: failed ? 6 : 0,
       },
     ]);
+    const itemsUrl = "/api/v1/knowledge/space/7/processing-jobs/background-files/items";
+    const failedItem = {
+      id: "failed-copy-item",
+      file_id: 61,
+      file_name: "Failed copy.pdf",
+      state: "failed",
+      failure_reason: "copy_input_failed",
+    };
+    const copiedItem = {
+      id: "succeeded-copy-item",
+      file_id: 62,
+      file_name: "Completed copy.pdf",
+      state: "succeeded",
+    };
+    const pendingItem = {
+      id: "pending-copy-item",
+      file_id: 63,
+      file_name: "Pending copy.pdf",
+      state: "pending",
+    };
     const get = mocks.get.getMockImplementation()!;
-    mocks.get.mockImplementation((url: string, ...args) => {
-      if (url.endsWith("/processing-jobs/background-files/items"))
-        return { data: [], total: 0 };
+    mocks.get.mockImplementation((url: string, options?: { params?: { state?: string } }) => {
+      if (url === itemsUrl) {
+        const data = options?.params?.state === "failed" ? [failedItem] : [copiedItem, pendingItem];
+        return { data, total: data.length };
+      }
       if (url.endsWith("/processing-jobs/background-files"))
         return {
           id: "background-files",
@@ -858,24 +914,72 @@ it.each(["running", "failed"])(
           revision: 1,
           total_count: 10,
           succeeded_count: 4,
-          failed_count: state === "failed" ? 6 : 0,
-          pending_count: state === "failed" ? 0 : 6,
+          failed_count: failed ? 6 : 0,
+          pending_count: failed ? 0 : 6,
           hidden_item_count: 0,
-          retryable: state === "failed",
+          retryable: failed,
         };
-      return get(url, ...args);
+      return get(url, options);
     });
     mount();
     expect(await screen.findByText("report.pdf")).toBeVisible();
     expect(screen.getByText("Folder")).toBeVisible();
     expect(screen.getByText("Server 7")).toBeVisible();
     expect(mocks.children).toHaveBeenCalled();
-    expect(
-      screen.getByText(
-        state === "failed"
-          ? "space_copy_ui.phase_failed"
-          : "space_copy_ui.phase_copying",
-      ),
-    ).toBeVisible();
+    const statusLabel =
+      state === "partial_failed"
+        ? "space_copy_ui.partial_failed"
+        : failed
+          ? "space_copy_ui.failed"
+          : `space_copy_ui.phase_${phase}`;
+    expect(screen.getByText(statusLabel)).toBeVisible();
+    expect(mocks.get.mock.calls.some(([url]) => url === itemsUrl)).toBe(false);
+    expect(screen.queryByRole("table", { name: "space_copy_ui.failure_details" })).not.toBeInTheDocument();
+    if (state === "accepted") {
+      expect(screen.queryByRole("button", { name: "space_copy_ui.view_details" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "space_copy_ui.tasks" })).not.toBeInTheDocument();
+      return;
+    }
+    const disclosure = screen.getByRole("button", { name: "space_copy_ui.view_details" });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+
+    const interaction = userEvent.setup();
+    if (!failed) {
+      await interaction.click(disclosure);
+      const details = within(screen.getByRole("region", { name: "space_copy_ui.tasks" }));
+      const table = await details.findByRole("table", { name: "f118.processing_items" });
+      expect(await within(table).findByRole("rowheader", { name: "Pending copy.pdf" })).toBeVisible();
+      expect(details.queryByText(`f118.processing_state_${state}`)).not.toBeInTheDocument();
+      expect(details.queryByText("f118.processing_counts")).not.toBeInTheDocument();
+      expect(screen.getByText(statusLabel)).toBeVisible();
+      return;
+    }
+    if (state !== "partial_failed") return;
+
+    const retry = await screen.findByRole("button", { name: "retry" });
+    expect(retry).toBeVisible();
+    expect(disclosure).not.toContainElement(retry);
+    await interaction.click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    const details = within(screen.getByRole("region", { name: "space_copy_ui.tasks" }));
+    const table = await details.findByRole("table", { name: "space_copy_ui.failure_details" });
+    expect(details.getByRole("heading", { name: "space_copy_ui.failure_details" })).toBeVisible();
+    expect(details.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(await within(table).findByRole("rowheader", { name: "Failed copy.pdf" })).toBeVisible();
+    expect(within(table).getByRole("cell", { name: "f118.failure_copy_input_failed" })).toBeVisible();
+    expect(within(table).getByText("f118.processing_item_failed").parentElement).toHaveClass("text-danger");
+    expect(within(table).queryByRole("rowheader", { name: "Completed copy.pdf" })).not.toBeInTheDocument();
+    expect(mocks.get.mock.calls.filter(([url]) => url === itemsUrl)).toEqual([
+      [itemsUrl, { params: { kind: "space_copy", page: 1, page_size: 20, state: "failed" } }],
+    ]);
+    expect(details.queryByRole("button", { name: "retry" })).not.toBeInTheDocument();
+    const detailsRegion = screen.getByRole("region", { name: "space_copy_ui.tasks" });
+    expect(detailsRegion.querySelector(".brand-illustration")).not.toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "report.pdf" })).toBeVisible();
+    await interaction.click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(table).not.toBeInTheDocument();
+    expect(retry).toBeVisible();
   },
 );

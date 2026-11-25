@@ -135,12 +135,13 @@ class SpaceCopyOwner:
         return tuple(pairs)
 
     @asynccontextmanager
-    async def _logical_target(self, source_id, target_id):
+    async def _logical_target(self, source_id, target_id, *, require_source=True):
         async with self.sessions() as session:
             context = authority_context()
             # Match acceptance's source-before-target order. The lock is scoped
             # to one projection, not a potentially large whole-space copy.
-            await self.rows.aroot(session, source_id, lock=True)
+            if require_source:
+                await self.rows.aroot(session, source_id, lock=True)
             root = await self.rows.aroot(session, target_id, lock=True)
             if root.state not in {0, 1, 2} or root.model_transition is not None:
                 raise KnowledgeOperationPlanChangedError()
@@ -157,24 +158,37 @@ class SpaceCopyOwner:
                     if header.space_id != target_id:
                         raise KnowledgeOperationPlanChangedError()
                 return
-        _, payload, mapping, reference = await self._logical(target_id, job_id)
+        root, payload, mapping, reference = await self._logical(target_id, job_id)
         scope = SpaceCopyScope(**payload["scope"])
         async with admission.identity(
             reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
         ) as (actual, _):
             authority = authority_context()
-            await self.app.authorize(actual, scope.source, frozen=False)
             actor = get_current_permission_actor()
+            if actor is None or (actor.subject_type, actor.subject_id) != ("user", root.user_id):
+                raise PermissionDeniedError(reason="space_copy_actual_creator_required")
             pairs = self._pairs(payload, mapping, target_id, actor)
+            independent = await self.app.projection.ahas_completed_copies(pairs=pairs)
+
+            async def authorize(current):
+                if independent:
+                    await require_business_action(
+                        current, resource_type="knowledge_space", resource_id=target_id, action="upload_file"
+                    )
+                else:
+                    await self.app.authorize(current, scope.source, frozen=False)
+
+            await authorize(actual)
             # Children first, root last. Each original copy key is durable.
-            for source, after, mode, operator in (*pairs[1:], pairs[0]):
+            pending_pairs = () if independent else (*pairs[1:], pairs[0])
+            for source, after, mode, operator in pending_pairs:
                 # API, worker and retries share the same SQL exclusion. Never
                 # reconcile a live STAGING operation from another executor.
-                async with self._logical_target(scope.source["id"], target_id):
+                async with self._logical_target(scope.source["id"], target_id, require_source=not independent):
                     async with admission.identity(
                         reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
                     ) as (current, _):
-                        await self.app.authorize(current, scope.source, frozen=False)
+                        await authorize(current)
                         await self.app.projection.aexecute_or_resume(
                             source=source,
                             target=after,
@@ -182,9 +196,15 @@ class SpaceCopyOwner:
                             owner_user_id=scope.source["user_id"],
                             mode=mode,
                         )
-            await self.app.authorize(actual, scope.source, frozen=False)
-            async with self._logical_target(scope.source["id"], target_id) as (session, actual_root):
-                await self.app.projection.arequire_completed(session, pairs=pairs)
+            await authorize(actual)
+            async with self._logical_target(scope.source["id"], target_id, require_source=not independent) as (
+                session,
+                actual_root,
+            ):
+                if independent:
+                    await self.app.projection.arequire_independent(session, pairs=pairs, owner_user_id=root.user_id)
+                else:
+                    await self.app.projection.arequire_completed(session, pairs=pairs)
                 # A waiter must use the state read after acquiring the lock,
                 # rather than the pre-lock snapshot returned by _logical.
                 if actual_root.state in {0, 2}:
@@ -232,9 +252,16 @@ class SpaceCopyOwner:
                 root = await self.rows.aroot(session, job.space_id)
                 clean(session, context)
             if root.state == 0:
-                async with self.sessions() as session:
-                    source = await self.rows.aroot(session, reference["space_id"])
-                await self.app.authorize(identity, root_facts(source), frozen=False)
+                _, payload, mapping, _ = await self._logical(root.id, job_id)
+                pairs = self._pairs(payload, mapping, root.id, get_current_permission_actor())
+                if await self.app.projection.ahas_completed_copies(pairs=pairs):
+                    await require_business_action(
+                        identity, resource_type="knowledge_space", resource_id=root.id, action="upload_file"
+                    )
+                else:
+                    async with self.sessions() as session:
+                        source = await self.rows.aroot(session, reference["space_id"])
+                    await self.app.authorize(identity, root_facts(source), frozen=False)
             else:
                 await require_business_action(
                     identity, resource_type="knowledge_space", resource_id=root.id, action="upload_file"

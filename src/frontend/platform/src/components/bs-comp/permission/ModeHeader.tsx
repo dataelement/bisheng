@@ -188,14 +188,16 @@ export function ModeHeader({
           {draft && (
             <div className="space-y-3">
               <div className="rounded-lg border bg-muted/30 p-3">
-                <p className="text-xs text-muted-foreground">
-                  {t("mode.affectedAssignees")}
-                </p>
                 <p
                   data-testid="mode-affected-assignees"
-                  className="mt-1 text-xl font-semibold tabular-nums"
+                  className="flex items-baseline gap-2"
                 >
-                  {draft.affected_assignees}
+                  <span className="text-xs text-muted-foreground">
+                    {t("mode.affectedAssignees")}
+                  </span>
+                  <span className="text-xl font-semibold tabular-nums">
+                    {draft.affected_assignees}
+                  </span>
                 </p>
               </div>
               {expired && (

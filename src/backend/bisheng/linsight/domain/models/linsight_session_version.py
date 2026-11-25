@@ -15,6 +15,38 @@ from bisheng.database.base import uuid_hex
 
 logger = logging.getLogger(__name__)
 
+# F004 decision 7: the LangGraph thread a run uses is stored on the run record,
+# inside the existing ``api_meta`` JSON column (no schema change). The key sits
+# next to the Open API keys; ``is_unattended_run`` only looks at ``channel``, so a
+# workbench run that carries just this key stays an attended run.
+RUN_THREAD_ID_KEY = "thread_id"
+
+
+def get_run_thread_id(version) -> str:
+    """The LangGraph thread id of this run record.
+
+    Records written before F004 (and records written while a tenant had the
+    unified runtime switched off, before the switch was removed) store nothing:
+    their thread id is the session version id.
+    """
+    meta = getattr(version, "api_meta", None)
+    stored = meta.get(RUN_THREAD_ID_KEY) if isinstance(meta, dict) else None
+    if isinstance(stored, str) and stored.strip():
+        return stored
+    return str(version.id)
+
+
+def has_stored_run_thread_id(version) -> bool:
+    meta = getattr(version, "api_meta", None)
+    stored = meta.get(RUN_THREAD_ID_KEY) if isinstance(meta, dict) else None
+    return isinstance(stored, str) and bool(stored.strip())
+
+
+def set_run_thread_id(version, thread_id: str) -> None:
+    """Record ``thread_id`` on the run record. Builds a new dict so the ORM sees the change."""
+    meta = getattr(version, "api_meta", None)
+    version.api_meta = {**(meta if isinstance(meta, dict) else {}), RUN_THREAD_ID_KEY: str(thread_id)}
+
 
 class SessionVersionStatusEnum(str, Enum):
     """

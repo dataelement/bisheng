@@ -1,7 +1,7 @@
 import { DropdownItem } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { FileSearch } from "lucide-react";
+import { FileSearch, GitBranch } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
@@ -15,7 +15,7 @@ interface SpaceRowVersionMenuProps {
   item: KnowledgeSpaceChild;
   enabled: boolean;
   indicator?: boolean;
-  onOpen: (panel: "merge" | "similar") => void;
+  onOpen: (dialog: "manage" | "similar") => void;
 }
 
 export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator = false, onOpen }: SpaceRowVersionMenuProps) {
@@ -23,8 +23,8 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
   const similar = item.has_similar === true && item.is_multi_version !== true;
   const eligible = enabled && item.file_type === 1 && item.status === 2 && (!indicator || similar);
   const permission = useQuery({
-    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "detail-actions"],
-    queryFn: () => getMyResourcePermissionsApi("knowledge_space", String(spaceId)),
+    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-file-actions", item.id],
+    queryFn: ({ signal }) => getMyResourcePermissionsApi("knowledge_file", String(item.id), { signal }),
     enabled: eligible,
     retry: false,
     cacheTime: 0,
@@ -32,12 +32,12 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
   useEffect(() => {
     if (eligible && permission.error) showApiError(permission.error);
   }, [eligible, permission.error]);
-  if (!eligible || permission.isError || !permission.data?.actions?.includes(indicator ? "manage_permission" : "edit")) return null;
+  if (!eligible || permission.isFetching || permission.isError || !permission.data?.actions?.includes("edit")) return null;
   if (indicator) return (
     <button
       type="button"
       className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
-      onClick={event => { event.stopPropagation(); onOpen("similar"); }}
+      onClick={event => { event.stopPropagation(); onOpen("manage"); }}
     >
       <FileSearch className="size-3" />
       {t("knowledge.version.pill_similar", { ns: "shared" })}
@@ -45,8 +45,8 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
   );
   return (
     <>
-      <DropdownItem icon={<Outlined.History aria-hidden />} onSelect={() => onOpen("merge")}>
-        {t("versions.manage")}
+      <DropdownItem icon={<GitBranch aria-hidden />} onSelect={() => onOpen("manage")}>
+        {t("knowledge.version.dialog_title", { ns: "shared" })}
       </DropdownItem>
       {similar && <DropdownItem icon={<Outlined.FileSearch aria-hidden />} onSelect={() => onOpen("similar")}>
         {t("versions.similar")}

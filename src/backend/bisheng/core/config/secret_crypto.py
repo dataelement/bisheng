@@ -1,24 +1,36 @@
 """Credential encryption using an explicitly supplied deployment keyring.
 
-This module has no application imports or import-time configuration side effects.
-Every process must receive BS_SECRET_KEYS_FILE before its runtime initialization.
-The cached keyring is a startup snapshot: rotating files requires restarting the
-process, rather than changing its encryption identity partway through a request.
+Managed deployments set BS_SECRET_KEYS_FILE to an absolute keyring path before
+runtime initialization. When that variable is unset, the process runs in
+legacy mode and uses the historical product Fernet key so feat/3.1.0-beta1
+style configs (MySQL URL ciphertext, optional encrypt() fields, plaintext
+MinIO/ES/Milvus values) keep working during image-only upgrades.
+
+The cached keyring is a startup snapshot: rotating files or switching mode
+requires restarting the process.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
+import sys
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 _KEY_FILE_ENV = "BS_SECRET_KEYS_FILE"
 _MAX_KEYRING_BYTES = 65536
+# feat/3.1.0-beta1 shipped this key in settings.py. Managed mode refuses it as
+# primary; legacy mode (no BS_SECRET_KEYS_FILE) keeps it only for upgrades.
+_LEGACY_PRODUCT_FERNET_KEY = "TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E="
+_LEGACY_PRODUCT_KEY_SHA256 = "f58095410df241bfee6f26c9963900d062bfe68f429a2fc3ca9147357851b80a"
+_SecretMode = Literal["legacy", "managed"]
 
 
 class CredentialConfigurationError(ValueError):
@@ -81,6 +93,34 @@ class KeyRing:
             raise CredentialDecryptionError("credential: ciphertext cannot be decrypted") from None
 
 
+def secret_mode() -> _SecretMode:
+    """legacy when BS_SECRET_KEYS_FILE is unset; managed when it is set.
+
+    A set-but-invalid path must fail in get_keyring/load_keyring, never fall
+    back to the historical key (silent downgrade).
+    """
+    path = os.environ.get(_KEY_FILE_ENV)
+    if path is None or not str(path).strip():
+        return "legacy"
+    return "managed"
+
+
+def is_legacy_secret_mode() -> bool:
+    return secret_mode() == "legacy"
+
+
+def _legacy_keyring() -> KeyRing:
+    if hashlib.sha256(_LEGACY_PRODUCT_FERNET_KEY.encode("utf-8")).hexdigest() != _LEGACY_PRODUCT_KEY_SHA256:
+        raise CredentialConfigurationError("legacy product key integrity check failed")
+    cipher = Fernet(_LEGACY_PRODUCT_FERNET_KEY.encode("ascii"))
+    print(
+        "bisheng: BS_SECRET_KEYS_FILE unset; using legacy product crypto "
+        "(feat/3.1.0-beta1 compatible). Provision an external keyring for managed mode.",
+        file=sys.stderr,
+    )
+    return KeyRing(cipher, MultiFernet([cipher]))
+
+
 def load_keyring(path: str | Path) -> KeyRing:
     """Read an explicit keyring, including symlink-based Kubernetes volumes.
 
@@ -113,7 +153,7 @@ def load_keyring(path: str | Path) -> KeyRing:
     if (
         not isinstance(data, dict)
         or set(data) != {"version", "keys"}
-        or type(data["version"]) is not int
+        or type(data["version"]) not in (int,)  # Reject bool and integer subclasses.
         or data["version"] != 1
         or not isinstance(data["keys"], list)
         or not data["keys"]
@@ -124,6 +164,11 @@ def load_keyring(path: str | Path) -> KeyRing:
         raise CredentialConfigurationError(f"{_KEY_FILE_ENV}: invalid Fernet key")
     if len(set(keys)) != len(keys):
         raise CredentialConfigurationError(f"{_KEY_FILE_ENV}: duplicate keys")
+    # A public historical product key may only be a credential migration reader.
+    if hashlib.sha256(keys[0].encode("utf-8")).hexdigest() == _LEGACY_PRODUCT_KEY_SHA256:
+        raise CredentialConfigurationError(
+            f"{_KEY_FILE_ENV}: public historical primary refused; provision a private primary and restart"
+        )
     try:
         ciphers = [Fernet(key.encode("ascii")) for key in keys]
     except (ValueError, TypeError):
@@ -133,10 +178,11 @@ def load_keyring(path: str | Path) -> KeyRing:
 
 @lru_cache(maxsize=1)
 def get_keyring() -> KeyRing:
-    """Resolve this process's keyring once; there is deliberately no default."""
+    """Resolve this process's keyring once."""
+    if is_legacy_secret_mode():
+        return _legacy_keyring()
     path = os.environ.get(_KEY_FILE_ENV)
-    if not path:
-        raise CredentialConfigurationError(f"{_KEY_FILE_ENV}: external key file required")
+    # secret_mode() already required a non-empty value for managed.
     return load_keyring(path)
 
 

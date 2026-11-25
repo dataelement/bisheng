@@ -1,6 +1,7 @@
 """Legacy plaintext is backed up as ciphertext before any cleanup is allowed."""
 
 import json
+import stat
 
 import pytest
 import yaml
@@ -16,7 +17,11 @@ from bisheng.core.config.credential_sealed_migration import (
     verify_staged,
 )
 from bisheng.core.config.secret_crypto import CredentialConfigurationError, get_keyring
-from test.core.test_credential_sealed_bundle import sealed_deployment as sealed_deployment
+from test.core.test_credential_sealed_bundle import sealed_deployment as _sealed_deployment
+from test.core.test_credential_sealed_rotation import assert_private_native_bundle
+
+# Re-export the fixture without shadowing an imported binding in test parameters.
+sealed_deployment = _sealed_deployment
 
 
 @pytest.fixture
@@ -51,13 +56,20 @@ def legacy(sealed_deployment, tmp_path, monkeypatch):
 
 def test_conversion_preserves_values_and_does_not_delete_source_before_switch(legacy):
     source, store, key, values = legacy
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
     assert (source / "mysql.password").read_text() == values["mysql"]
     native = bundle_native_files(session / "bundle", key)
     assert native["mysql.password"].decode() == values["mysql"]
+    allowed = assert_private_native_bundle(session / "bundle", key)
+    for name, content in native.items():
+        assert content == bundle_native_files(source, key, allow_legacy=True)[name]
     for p in session.rglob("*"):
-        if p.is_file():
-            assert not any(v.encode() in p.read_bytes() for v in values.values())
+        if p.is_dir():
+            assert not p.is_symlink() and stat.S_IMODE(p.stat().st_mode) == 0o700
+        elif p.is_file() and p not in allowed:
+            assert not any(v.encode() in p.read_bytes() for v in values.values()), str(p.relative_to(session))
     assert read_confidential(session / "inventory.sealed.json", key_file=key)
     with pytest.raises(CredentialConfigurationError):
         cleanup(session, key_file=key)
@@ -65,7 +77,9 @@ def test_conversion_preserves_values_and_does_not_delete_source_before_switch(le
 
 def test_cleanup_only_after_verified_switch_and_detects_modified_source(legacy):
     source, store, key, _ = legacy
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
     verify_staged(session, session / "bundle", key_file=key)
     mark_phase(session, "CONSUMERS_SWITCHED")
     (source / "mysql.password").write_text("unexpected-concurrent-change")
@@ -78,7 +92,9 @@ def test_cleanup_removes_owned_legacy_files_but_retains_encrypted_backups(legacy
     source, store, key, _ = legacy
     external = store.parent / "customer-original"
     external.write_text("unrelated-customer-file")
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
     verify_staged(session, session / "bundle", key_file=key)
     mark_phase(session, "CONSUMERS_SWITCHED")
     cleanup(session, key_file=key)
@@ -90,7 +106,9 @@ def test_cleanup_removes_owned_legacy_files_but_retains_encrypted_backups(legacy
 
 def test_cleanup_cannot_treat_an_unmounted_store_as_deleted_files(legacy):
     source, store, key, _ = legacy
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
     verify_staged(session, session / "bundle", key_file=key)
     mark_phase(session, "CONSUMERS_SWITCHED")
     (store / "deployment.id").unlink()
@@ -105,7 +123,9 @@ def test_cleanup_preserves_an_active_key_even_inside_the_old_bundle(legacy):
     key = source / "active-master.json"
     key.write_bytes(original_key.read_bytes())
     key.chmod(0o600)
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
     verify_staged(session, session / "bundle", key_file=key)
     mark_phase(session, "CONSUMERS_SWITCHED", key_file=key)
     verify_bindings(session, [str(key), str(session / "bundle")], key_file=key)
@@ -118,16 +138,34 @@ def test_cleanup_cli_requires_the_whole_managed_store_mount(legacy):
     from bisheng.core.config.credential_tool import main
 
     source, store, key, _ = legacy
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
     verify_staged(session, session / "bundle", key_file=key)
     mark_phase(session, "CONSUMERS_SWITCHED")
-    assert main(["artifact", "migrate-clean", "--session-dir", str(session), "--key-file", str(key), "--deployment-id", "migration-deployment"]) == 2
+    assert (
+        main(
+            [
+                "artifact",
+                "migrate-clean",
+                "--session-dir",
+                str(session),
+                "--key-file",
+                str(key),
+                "--deployment-id",
+                "migration-deployment",
+            ]
+        )
+        == 2
+    )
     assert (source / "mysql.password").exists()
 
 
 def test_live_or_stopped_legacy_directory_bindings_block_cleanup(legacy):
     source, store, key, _ = legacy
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
     for bindings in [[], [str(source)], [str(source / "mysql.password")], [str(store)]]:
         with pytest.raises(CredentialConfigurationError):
             verify_bindings(session, bindings, key_file=key)
@@ -183,7 +221,9 @@ def test_legacy_inputs_are_sealed_in_place_and_metadata_remains_usable(legacy):
     context.write_text(json.dumps({"version": 2, "revision": "a" * 32, "deployment_id": "migration-deployment"}))
     context.chmod(0o600)
     before = manifest.read_bytes(), context.read_bytes()
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
     verify_staged(session, session / "bundle", key_file=key)
     mark_phase(session, "CONSUMERS_SWITCHED")
     cleanup(session, key_file=key)
@@ -201,8 +241,19 @@ def test_binding_cli_ignores_docker_separator_lines_but_not_missing_evidence(leg
     from bisheng.core.config.credential_tool import main
 
     source, store, key, _ = legacy
-    session = prepare_migration(source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment")
-    command = ["artifact", "migrate-bindings", "--key-file", str(key), "--session-dir", str(session), "--deployment-id", "migration-deployment"]
+    session = prepare_migration(
+        source, store=store, key_file=key, out_dir=store / "migrations/test", deployment="migration-deployment"
+    )
+    command = [
+        "artifact",
+        "migrate-bindings",
+        "--key-file",
+        str(key),
+        "--session-dir",
+        str(session),
+        "--deployment-id",
+        "migration-deployment",
+    ]
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO((str(session / "bundle") + "\n\n").encode())))
     assert main(command) == 0
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"\n\n")))

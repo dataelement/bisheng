@@ -82,16 +82,18 @@ def test_chat_credits_governed_respects_credit_billing_switch(monkeypatch):
     assert chat_credits.governed(SimpleNamespace(app_type="daily_chat")) is False
 
 
-async def test_workbench_models_use_visible_models_when_billing_disabled(monkeypatch):
+@pytest.mark.parametrize("billing_enabled", [False, True])
+async def test_workbench_models_keep_visibility_independent_of_billing(monkeypatch, billing_enabled):
     from bisheng.common.services.config_service import settings
+    from bisheng.dsh import runtime
     from bisheng.dsh.domain.services import model_catalog
 
     authorized = AsyncMock(return_value=[{"id": "1", "name": "auth-only"}])
     visible = AsyncMock(return_value=[{"id": "2", "name": "visible-only"}])
-    monkeypatch.setattr(model_catalog, "authorized_workbench_models", authorized)
+    monkeypatch.setattr(runtime, "read_policy", authorized)
     monkeypatch.setattr(model_catalog, "visible_workbench_models", visible)
 
-    monkeypatch.setattr(settings.credit_billing, "enabled", False)
+    monkeypatch.setattr(settings.credit_billing, "enabled", billing_enabled)
     result = await model_catalog.user_workbench_models(7, config={})
     assert result == [{"id": "2", "name": "visible-only"}]
     visible.assert_awaited_once_with(7, {})
@@ -104,7 +106,9 @@ async def test_desktop_models_and_completions_bypass_quota_and_keep_visibility_w
 
     monkeypatch.setattr(settings.credit_billing, "enabled", False)
 
-    model = SimpleNamespace(id=10, model_name="qwen", config={"pricing": {"input": "2", "output": "6", "currency": "CNY"}}, create_time=None)
+    model = SimpleNamespace(
+        id=10, model_name="qwen", config={"pricing": {"input": "2", "output": "6", "currency": "CNY"}}, create_time=None
+    )
     server = SimpleNamespace(name="provider", type="openai")
     usage = AsyncMock()
     execution = SimpleNamespace(

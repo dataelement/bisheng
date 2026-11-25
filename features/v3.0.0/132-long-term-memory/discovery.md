@@ -10,8 +10,8 @@
 
 ## 需求来源
 
-- 调研：`docs/PRD/memory 长期记忆/memory 方案调研（结构版）.md`
-- 需求：`docs/PRD/memory 长期记忆/长期记忆 PRD.md` v0.2
+- 调研：`docs/PRD/3.1/memory 长期记忆/memory 方案调研（结构版）.md`
+- 需求：`docs/PRD/3.1/memory 长期记忆/长期记忆 PRD.md` v0.2
 
 需求发现以逐项采访的方式完成，结论全部记录在 PRD §7。本文件不重复，只列对规格口径有决定作用的裁定。
 

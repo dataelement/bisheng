@@ -256,7 +256,7 @@ def evaluate_probe(result: dict, uid: int, data_dir: str = DATA_DIR) -> None:
     if problems:
         raise LocalIsolationUnavailable("; ".join(problems))
     if result.get("data") is False:
-        logger.warning("local isolation: sandboxed code can read {} (chmod 0700 did not take)", data_dir)
+        raise LocalIsolationUnavailable(f"shared data directory {data_dir} is readable by the pool uid")
 
 
 def _probe(prlimit: str, conf: Any) -> None:

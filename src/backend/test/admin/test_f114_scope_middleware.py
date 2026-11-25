@@ -123,6 +123,37 @@ def test_execution_and_personal_tasks_do_not_inherit_browser_scope(scoped_client
     super_check.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/workstation/chat/completions",
+        "/api/v1/workstation/chat/completions/abort",
+        "/api/v1/workstation/gen_title",
+        "/api/v1/workstation/messages/c1",
+        "/api/v1/workstation/messages/c1/agent",
+        "/api/v1/workstation/conversations/c1/stop",
+        "/api/v1/workstation/conversations/c1/events",
+        "/api/v1/linsight/workbench/submit",
+        "/api/v1/linsight/workbench/continue",
+    ],
+)
+def test_personal_workbench_runs_do_not_inherit_browser_scope(scoped_client, path):
+    """24006: a cross-tenant super admin chats as itself in its own tenant."""
+    client, resolver, super_check = scoped_client
+    assert client.post(path).json()["scope"] is None
+    resolver.assert_not_awaited()
+    super_check.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/v1/workstation/config", "/api/v1/workstation/config/daily", "/api/v1/linsight/skill/selectable"]
+)
+def test_workbench_management_routes_keep_browser_scope(scoped_client, path):
+    client, resolver, _ = scoped_client
+    assert client.get(path).json()["scope"] == 3
+    resolver.assert_awaited()
+
+
 def test_service_account_old_header_is_still_legal(scoped_client):
     client, _resolver, _super_check = scoped_client
     assert client.post("/api/v1/service-accounts", headers={"X-Service-Account-Tenant": "3"}).status_code == 200

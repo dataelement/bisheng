@@ -6,7 +6,7 @@ import { useToastContext } from '~/Providers';
 export const clientSimilarDocumentsServices: SimilarDocumentsServices = {
   getRecommendations: getVersionRecommendationsApi,
   searchDocuments: searchVersionSourcesApi,
-  relate: (fileId, documentId) => mergeIntoCurrentApi({ current_knowledge_file_id: fileId, source_document_id: documentId }),
+  relate: (fileId, documentId, signal) => mergeIntoCurrentApi({ current_knowledge_file_id: fileId, source_document_id: documentId }, signal),
   dismiss: dismissSimilarApi,
 };
 

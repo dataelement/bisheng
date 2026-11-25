@@ -28,7 +28,7 @@ function VersionManagementDialogContent({ open, onOpenChange, spaceId, file, ser
   return (
     <DialogShell open={open} onOpenChange={onOpenChange} busy={busy} title={t('dialog_title')} closeLabel={t('close')} className={styles.managementSize} footer={<Button type="button" color="default" variant="outlined" disabled={busy} onClick={() => onOpenChange(false)}>{t('cancel')}</Button>}>
       <div className={`${styles.body} py-5`}>
-        <RelateDocumentPanel spaceId={spaceId} file={file} services={services} onLinked={handleLinked} onDismissed={handleDismissed} onError={onError} onSuccess={onSuccess} onBusyChange={setBusy} />
+        <RelateDocumentPanel spaceId={spaceId} file={file} services={services} onLinked={handleLinked} onDismissed={handleDismissed} onError={onError} onSuccess={onSuccess} onBusyChange={setBusy} hostLoadingIndicator={false} />
       </div>
     </DialogShell>
   );

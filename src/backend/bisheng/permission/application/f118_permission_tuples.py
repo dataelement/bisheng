@@ -1,6 +1,9 @@
 """Complete finite Store transformation; values here never authorize writes."""
 
+from collections import defaultdict
 from dataclasses import dataclass, field, replace
+
+from loguru import logger
 
 from bisheng.common.errcode.permission import PermissionMigrationBlockedError
 from bisheng.permission.application.relation_api import PermissionObject, PermissionRelation, PermissionSubject
@@ -51,6 +54,37 @@ class PermissionTuplePlan:
     deletes: tuple = field(repr=False)
 
 
+def _retired_source_keys(before):
+    """Explicit frozen inactive ordinary sources, never an inferred revoke."""
+    if before.mode.projection_state != "CURRENT":
+        return {}
+    sources = defaultdict(list)
+    for source in before.assignees:
+        sources[source.grant_id].append(source)
+    result = {}
+    for grant in before.grants:
+        if grant.projection_state != "CURRENT" or grant.state not in {"ACTIVE", "INACTIVE"}:
+            continue
+        original = sources[grant.id]
+        retired = tuple(source for source in original if source.state == "INACTIVE" and not source.protected)
+        if not retired:
+            continue
+        ident = "permission_grant:" + stable_grant_key(
+            tenant_id=before.tenant_id,
+            resource_type=before.resource_type,
+            resource_id=before.resource_id,
+            model_key=grant.model_key,
+        )
+        for source in retired:
+            result[source.projected_subject, "ordinary_assignee", ident] = ident
+        if grant.state == "INACTIVE" and all(
+            source.state == "INACTIVE" and not source.protected for source in original
+        ):
+            result["permission_model:" + grant.model_key, "model", ident] = ident
+            result[ident, "grant", before.resource_type + ":" + before.resource_id] = ident
+    return result
+
+
 class F118PermissionTupleBuilder:
     def __init__(self, *, catalog_plan, before_tuples, source_schema, target_schema, legacy_policy=False):
         self.catalog, self.source, self.target = catalog_plan, source_schema, target_schema
@@ -62,6 +96,7 @@ class F118PermissionTupleBuilder:
         self.expected_before, self.expected_after = set(), set()
         self.after_order = {}
         self.legacy_policy = legacy_policy
+        self.retired_source_keys = {}
 
     def _add(self, output, keys):
         for key in keys:
@@ -77,6 +112,7 @@ class F118PermissionTupleBuilder:
         if old_object in self.resources:
             blocked("duplicate_resource_object")
         self.resources.add(old_object)
+        self.retired_source_keys.update(_retired_source_keys(old))
         if old_object != new_object:
             self.moves[old_object] = new_object
         for actual, schema, output in (
@@ -204,10 +240,15 @@ class F118PermissionTupleBuilder:
         extras = owned - self.expected_before - duplicate_parents
         retained_extras = set()
         invalid_extras = set()
+        retired_extras = set()
         for key in extras:
             if self._extra(key) and permits(self.source, key):
                 continue
             if not self.legacy_policy:
+                if key in self.retired_source_keys and permits(self.source, key) and typed_relation(key) == key:
+                    retired_extras.add(key)
+                    invalid_extras.add(key)
+                    continue
                 # SQL mode owns the sole structural parent/mode. An extra
                 # parent is removable only when its canonical original edge
                 # is present; never infer a missing parent or a new Grant.
@@ -242,6 +283,15 @@ class F118PermissionTupleBuilder:
                 retained_extras.add(key)
             else:
                 blocked("existing_graph_drift")
+        affected = {self.retired_source_keys[key] for key in retired_extras}
+        if affected:
+            # An inactive row cannot authorize deletion from a Grant reused by
+            # another resource/userset or carrying an unexplained graph edge.
+            for key in self.before:
+                if (key[0].partition("#")[0] in affected or key[2] in affected) and (
+                    key not in self.expected_before and key not in self.retired_source_keys
+                ):
+                    blocked("retired_grant_context_unclassified")
         if self.expected_before - owned:
             blocked("missing_existing_graph")
         result = dict.fromkeys(key for key in self.before_order if key not in owned or key in retained_extras)
@@ -287,6 +337,12 @@ class F118PermissionTupleBuilder:
         }
         if any(not permits(self.source, key) for key in self.before - staged):
             blocked("delete_source_schema_mismatch")
+        if retired_extras:
+            logger.warning(
+                "F118 plans native deletion of {} frozen SQL-inactive ordinary-source tuples across {} Grants",
+                len(retired_extras),
+                len(affected),
+            )
         # Frozen fact/compiler order is deterministic across fresh processes;
         # neither live Read order nor hash-set iteration selects the sequence.
         return PermissionTuplePlan(

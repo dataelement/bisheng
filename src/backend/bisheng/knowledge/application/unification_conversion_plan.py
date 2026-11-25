@@ -39,6 +39,7 @@ from bisheng.knowledge.domain.schemas.unification_space_membership import (
     CreatorMembershipPlan,
     creator_membership_template,
 )
+from bisheng.knowledge.domain.services.model_reference_extractor import legacy_knowledge_model_version
 from bisheng.llm.domain.services.chat_default_model_backfill import transform_chat_default
 from bisheng.llm.domain.services.default_reference_extractor import extract_model_default_references
 from bisheng.llm.domain.services.linsight_default_model_backfill import transform_linsight_llm_config
@@ -259,7 +260,9 @@ class ConversionPlanBuilder:
                     after_neutral_digest=digest(_values(after.neutral, raw.NEUTRAL_COLUMNS)),
                     after_inventory_business_revision_digest=knowledge_business_revision_digest(after),
                     after_owner_configuration_digest=KnowledgeReferenceSourceOwner._snapshot(
-                        owner
+                        owner,
+                        retained_legacy=legacy_knowledge_model_version(owner["model"], owner["model_transition"])
+                        is not None,
                     ).configuration_digest,
                     target_type=3,
                     target_is_released=False,

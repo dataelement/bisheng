@@ -38,8 +38,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
     cardGridRef,
     cardCols,
     isAdmin,
-    canEditSpace,
-    canManageMembers,
+    editEntryIds,
     versionManagementEnabled,
     setVersionMgmtFile,
     setVersionHistoryFile,
@@ -247,8 +246,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                       versionManagementEnabled={versionManagementEnabled}
                       onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                       onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
-                      canManageMembers={canManageMembers}
-                      canManageVersions={canEditSpace}
+                      canManageVersions={editEntryIds.has(file.id)}
                       canRename={renameEntryIds.has(file.id)}
                       canDelete={deleteEntryIds.has(file.id)}
                       canDownload={downloadEntryIds.has(file.id)}
@@ -310,8 +308,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                 versionManagementEnabled={versionManagementEnabled}
                 onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                 onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
-                canManageMembers={canManageMembers}
-                canManageVersions={canEditSpace}
+                editEntryIds={editEntryIds}
                 highlightedTagIds={searchTagIds}
                 highlightKeyword={searchQuery}
                 footer={listBottomStatus}

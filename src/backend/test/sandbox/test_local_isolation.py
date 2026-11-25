@@ -354,10 +354,11 @@ def test_probe_rejects_leaks(key: str, value, fragment: str) -> None:
         local_isolation.evaluate_probe(probe, 30001)
 
 
-def test_probe_only_warns_on_readable_data_dir() -> None:
+def test_probe_rejects_readable_shared_data_dir() -> None:
     probe = _good_probe(30001)
     probe["data"] = False
-    local_isolation.evaluate_probe(probe, 30001)
+    with pytest.raises(LocalIsolationUnavailable, match="data"):
+        local_isolation.evaluate_probe(probe, 30001)
 
 
 def test_tighten_permissions_closes_both_dirs(tmp_path) -> None:

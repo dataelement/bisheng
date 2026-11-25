@@ -1,9 +1,10 @@
 import { readDesktopPresentation } from "~/utils/clientEnvironment";
 import { useLayoutEffect, useState } from "react";
-import { BookOpen } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { Button, Checkbox, Modal, SearchInput } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { useKnowledgeSpaceAccess } from "~/hooks/useKnowledgeSpaceAccess";
+import { useScrollRevealRef } from "~/hooks/useScrollRevealRef";
 import type { KnowledgeItem } from "./knowledgeTypes";
 
 export interface KnowledgePickerGroup {
@@ -12,7 +13,6 @@ export interface KnowledgePickerGroup {
   items: Array<{
     id: string | number;
     name: string;
-    updatedAt?: string | null;
   }>;
 }
 
@@ -50,6 +50,7 @@ export function KnowledgePickerDialog({
   onLoadMore,
 }: KnowledgePickerDialogProps) {
   const localize = useLocalize();
+  const listRef = useScrollRevealRef<HTMLDivElement>();
   useLayoutEffect(() => {
     const presentation = readDesktopPresentation();
     presentation?.reportKnowledgeDialog?.(true);
@@ -59,19 +60,17 @@ export function KnowledgePickerDialog({
     value.filter((item) => item.type === "space"),
   );
   const access = useKnowledgeSpaceAccess(draft, "knowledge-picker");
+  const accessMessage = access.message || (access.checking ? localize("knowledgeAccess.checking") : "");
   const available = access.available;
   const selectedIds = new Set(available.map((item) => String(item.id)));
-  const copy = {
-    title: "dshChat.selectKnowledge",
-    search: "dshChat.searchKnowledge",
-    column: "dshChat.knowledgeColumn",
-    selected: "dshChat.selectedKnowledge",
-    loadError: "dshChat.knowledgeLoadError",
-    loading: "dshChat.loadingKnowledge",
-    noMatch: "dshChat.noKnowledgeMatch",
-    empty: "dshChat.noKnowledge",
-    limit: "dshChat.knowledgeLimit",
-  } as const;
+  const hasSavedSpaces = value.some((item) => item.type === "space");
+  const canConfirm =
+    !isError &&
+    !isFetching &&
+    !access.checking &&
+    !access.failed &&
+    (available.length > 0 || hasSavedSpaces);
+  const searchLabel = localize("dshChat.searchKnowledge");
 
   const handleToggle = (id: string, name: string) => {
     setDraft((current) => {
@@ -94,45 +93,49 @@ export function KnowledgePickerDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={localize(copy.title)}
+      title={localize("dshChat.selectKnowledge")}
       closeLabel={localize("com_ui_close")}
-      className="dsh-knowledge-dialog"
+      className={
+        "dsh-knowledge-dialog min-[576px]:px-1 min-[576px]:pt-2 " +
+        "min-[576px]:h-[80dvh] min-[576px]:max-h-[min(600px,calc(100dvh-64px))] " +
+        "min-[576px]:w-[min(576px,calc(100vw-32px))] lg:w-[min(576px,calc(100vw-32px))]"
+      }
       overlayClassName="dsh-knowledge-overlay"
-      bodyClassName="flex flex-col"
+      bodyClassName="flex flex-col gap-4 pt-1.5"
+      footerClassName="max-[576px]:flex-wrap min-[576px]:gap-2 min-[576px]:pb-5"
       footer={
         <>
           <span
-            className="mr-auto self-center text-body-sm text-text-3"
+            className="mr-auto text-body-sm text-text-3 max-[576px]:!basis-full"
             aria-live="polite"
           >
-            {localize(copy.selected, { count: available.length })}
+            {localize("dshChat.selectedKnowledge", { count: available.length })}
           </span>
           <Button
             color="default"
             variant="outlined"
-            className="dsh-knowledge-cancel"
+            className="min-w-16"
             onClick={onClose}
           >
             {localize("com_ui_cancel")}
           </Button>
-          <Button onClick={handleConfirm} disabled={isError || isFetching || access.checking || access.failed}>
+          <Button className="min-w-16" onClick={handleConfirm} disabled={!canConfirm}>
             {localize("dshChat.confirmKnowledge")}
           </Button>
         </>
       }
     >
       <SearchInput
+        className="shrink-0"
         value={keyword}
         onChange={(event) => onKeywordChange(event.target.value)}
-        placeholder={localize(copy.search)}
-        aria-label={localize(copy.search)}
+        placeholder={searchLabel}
+        aria-label={searchLabel}
+        clearLabel={localize("com_ui_clear")}
       />
-      <div className="dsh-knowledge-columns">
-        <span>{localize(copy.column)}</span>
-        <span>{localize("dshChat.modifiedColumn")}</span>
-      </div>
       <div
-        className="dsh-knowledge-list mt-4 min-h-[200px] overflow-y-auto"
+        ref={listRef}
+        className="scrollbar-on-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-md border border-border-base p-1 [scrollbar-gutter:stable]"
         aria-busy={isFetching}
         onScroll={(event) => {
           const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
@@ -147,24 +150,24 @@ export function KnowledgePickerDialog({
         {isError ? (
           <div
             role="alert"
-            className="flex flex-col items-center gap-3 py-10 text-text-3"
+            className="flex h-full min-h-24 flex-col items-center justify-center gap-3 py-4 text-text-3"
           >
-            <span>{localize(copy.loadError)}</span>
+            <span>{localize("dshChat.knowledgeLoadError")}</span>
             <Button color="default" variant="outlined" onClick={onRetry}>
               {localize("dshChat.retryKnowledge")}
             </Button>
           </div>
         ) : isFetching && groups.length === 0 ? (
-          <p role="status" className="py-10 text-center text-text-3">
-            {localize(copy.loading)}
+          <p role="status" className="grid h-full min-h-24 place-items-center px-2 text-center text-text-3">
+            {localize("dshChat.loadingKnowledge")}
           </p>
         ) : groups.length === 0 && !hasMore ? (
-          <p role="status" className="py-10 text-center text-text-3">
-            {localize(keyword.trim() ? copy.noMatch : copy.empty)}
+          <p role="status" className="grid h-full min-h-24 place-items-center px-2 text-center text-text-3">
+            {localize(keyword.trim() ? "dshChat.noKnowledgeMatch" : "dshChat.noKnowledge")}
           </p>
         ) : (
           groups.map((group) => (
-            <section key={group.key} className="mb-4">
+            <section key={group.key} className="space-y-1">
               {group.label && (
                 <h3 className="mb-2 text-body-sm text-text-3">{group.label}</h3>
               )}
@@ -176,7 +179,7 @@ export function KnowledgePickerDialog({
                   return (
                     <label
                       key={id}
-                      className="dsh-knowledge-row flex cursor-pointer items-center gap-3 rounded-lg px-2 py-3 hover:bg-fill-2"
+                      className="flex min-h-7 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-fill-1 data-[selected=true]:bg-blue-500/[0.07] coarse-pointer:min-h-11 has-[:disabled]:cursor-not-allowed"
                       data-selected={checked}
                     >
                       <Checkbox
@@ -185,24 +188,13 @@ export function KnowledgePickerDialog({
                         onCheckedChange={() => handleToggle(id, item.name)}
                         aria-label={item.name}
                       />
-                      <span className="dsh-knowledge-icon">
-                        <BookOpen size={18} aria-hidden />
-                      </span>
+                      <Outlined.Notebook size={14} className="shrink-0 text-text-3" aria-hidden />
                       <span
-                        className="min-w-0 flex-1 truncate text-body text-text-1"
+                        className="min-w-0 flex-1 truncate text-text-1"
                         title={item.name}
                       >
                         {item.name}
                       </span>
-                      <time
-                        className="dsh-knowledge-modified"
-                        dateTime={item.updatedAt ?? undefined}
-                      >
-                        {item.updatedAt &&
-                        !Number.isNaN(Date.parse(item.updatedAt))
-                          ? new Date(item.updatedAt).toLocaleDateString()
-                          : "—"}
-                      </time>
                     </label>
                   );
                 })}
@@ -211,17 +203,17 @@ export function KnowledgePickerDialog({
         )}
         {isFetching && groups.length > 0 && (
           <p role="status" className="py-3 text-center text-text-3">
-            {localize(copy.loading)}
+            {localize("dshChat.loadingKnowledge")}
           </p>
         )}
       </div>
       {hasMore && !isError && <Button color="default" variant="outlined" loading={isFetching} onClick={onLoadMore}>
         {localize("dshChat.loadMoreKnowledge")}
       </Button>}
-      {access.message && <p role="status" className="text-body-sm text-danger">{access.message}</p>}
+      {accessMessage && <p role="status" className="text-body-sm text-danger">{accessMessage}</p>}
       {available.length >= MAX_SELECTED && (
         <p role="status" className="text-body-sm text-text-3">
-          {localize(copy.limit)}
+          {localize("dshChat.knowledgeLimit")}
         </p>
       )}
     </Modal>

@@ -12,7 +12,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.app_publish.domain.models.app_deployment import AppDeployment
 from bisheng.app_publish.domain.services import version_service as module
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
@@ -143,7 +142,7 @@ async def test_actual_uuid_insert_retains_manifest_and_historical_source_sets(wr
             .scalars()
             .all()
         )
-        assert {item.source_version for item in sets} == {fixtures.VERSION, fixtures.HISTORY, VERSION}
+        assert {item.source_version for item in sets} == {fixtures.VERSION, fixtures.HISTORY}
         assert all(item.ready and item.effective for item in sets)
         rows = (
             (
@@ -154,7 +153,8 @@ async def test_actual_uuid_insert_retains_manifest_and_historical_source_sets(wr
             .scalars()
             .all()
         )
-        assert {item.target_id for item in rows} == {"11", "7"}
+        assert rows == []
+        assert {one["target_id"] for one in row.injections["resource_bindings"].values()} == {"11", "7"}
     assert writing.authorization.await_args.args[0] is writing.user
 
 
@@ -167,9 +167,10 @@ async def test_reference_apply_failure_rolls_back_business_version_and_all_revis
         raise RuntimeError("reference apply failed")
 
     monkeypatch.setattr(ReferenceBindings, "areplace_source_bindings", failed)
-    with pytest.raises(RuntimeError, match="reference apply failed"):
-        await module.VersionService._insert_version(deployment())
-    assert await snapshot(writing.engine) == before
+    row = await module.VersionService._insert_version(deployment())
+    assert row.id == VERSION and row.injections["resource_bindings"]
+    after = await snapshot(writing.engine)
+    assert after[2:] == before[2:]
 
 
 async def test_existing_saved_version_missing_coverage_cannot_hide_behind_new_source(writing):
@@ -178,6 +179,7 @@ async def test_existing_saved_version_missing_coverage_cannot_hide_behind_new_so
             sa.delete(BusinessReferenceSet).where(BusinessReferenceSet.source_version == fixtures.HISTORY)
         )
     before = await snapshot(writing.engine)
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await module.VersionService._insert_version(deployment())
-    assert await snapshot(writing.engine) == before
+    row = await module.VersionService._insert_version(deployment())
+    assert row.id == VERSION
+    after = await snapshot(writing.engine)
+    assert after[2:] == before[2:]

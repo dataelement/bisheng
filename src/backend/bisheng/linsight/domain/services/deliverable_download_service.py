@@ -48,8 +48,13 @@ def deliverable_workspace_path(version: LinsightSessionVersion, file_info: dict)
     return None if rel.startswith("..") else rel
 
 
-def workspace_fetcher(session_version_id: str) -> FetchFiles:
-    """Read files from a run's persisted workspace; missing objects are left out."""
+def workspace_fetcher(workspace_id: str) -> FetchFiles:
+    """Read files from a run's persisted workspace; missing objects are left out.
+
+    ``workspace_id`` is the run's thread id (``get_run_thread_id(version)``): the
+    conversation id for a run on the conversation thread (F004), otherwise the
+    session version id.
+    """
 
     async def _fetch(paths: list[str]) -> dict[str, bytes]:
         minio = await get_minio_storage()
@@ -57,7 +62,7 @@ def workspace_fetcher(session_version_id: str) -> FetchFiles:
         async def _one(path: str) -> bytes | None:
             try:
                 return await minio.get_object(
-                    bucket_name=minio.bucket, object_name=f"{WORKSPACE_PREFIX}/{session_version_id}/{path}"
+                    bucket_name=minio.bucket, object_name=f"{WORKSPACE_PREFIX}/{workspace_id}/{path}"
                 )
             except Exception as e:
                 # The storage layer re-raises S3Error as a thawed mirror; match on the code.

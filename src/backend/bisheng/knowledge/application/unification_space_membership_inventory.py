@@ -157,7 +157,7 @@ class MembershipInventoryVerifier:
             type(header["creator_user_id"]) is not int
             or header["creator_user_id"] <= 0
             or creator is None
-            or creator["exists"] is not True
+            or creator["exists"] is not (command["membership_action"] != "retain_missing")
             or command["creator_user_id"] != header["creator_user_id"]
             or command["before_member_count"] != header["member_count"]
             or command["before_member_digest"] != summary.before_digest
@@ -165,7 +165,11 @@ class MembershipInventoryVerifier:
             or summary.owner_count > 1
         ):
             _blocked("creator_or_original_set_changed")
-        if command["membership_action"] == "insert":
+        if command["membership_action"] == "retain_missing":
+            if command["existing_creator_member_id"] is not None or command["creator_planned_at"] is not None:
+                _blocked("retained_creator_identity_changed")
+            expected = digest(None)
+        elif command["membership_action"] == "insert":
             if summary.owner_count or command["existing_creator_member_id"] is not None:
                 _blocked("insert_conflict")
             try:

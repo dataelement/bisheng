@@ -29,6 +29,13 @@ async def test_batch_retry_accepts_timeout_file(batch, monkeypatch):
         )
     app = batch.application()
     app.dispatcher = None
+
+    # Grant rename but not visible: visible only decides which names are shown, never retry eligibility.
+    async def rename_only(identity, *, resource_type, resource_ids, actions):
+        batch.calls.append((resource_type, tuple(resource_ids), actions))
+        return {str(ident): {"rename"} & set(actions) for ident in resource_ids}
+
+    app.permissions = rename_only
     service = KnowledgeSpaceService(request=None, login_user=batch.user)
     service.batch_application_factory = lambda: app
 
@@ -43,8 +50,8 @@ async def test_batch_retry_accepts_timeout_file(batch, monkeypatch):
     monkeypatch.setattr(worker_module, "retry_knowledge_file_celery", task)
     assert await service.batch_retry_failed_files(1, [17]) is True
     task.delay.assert_called_once_with(17)
-    assert any(call[0] == "knowledge_file" and 17 in call[1] and call[2] == ("rename",) for call in batch.calls)
-    assert not any("visible" in call[2] or "edit" in call[2] for call in batch.calls)
+    assert any(call[0] == "knowledge_file" and 17 in call[1] and "rename" in call[2] for call in batch.calls)
+    assert not any("edit" in call[2] for call in batch.calls)
     async with batch.db.sessions() as session:
         file = await session.get(KnowledgeFile, 17)
         assert file.status == KnowledgeFileStatus.WAITING and file.remark == "batch_retry_failed_files"

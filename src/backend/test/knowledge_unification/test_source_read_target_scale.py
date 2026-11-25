@@ -174,7 +174,7 @@ async def test_saved_real_source_targets_use_once_grouped_evidence_and_bounded_s
             assert all(row.ancestor_deletion.stage == "deleting" for row in rows)
         assert not session.sync_session.identity_map and not session.new and not session.dirty
         assert knowledge.scopes._resolve_tenant_id() == 101
-    assert sum(candidates) == count * 3, (sum(candidates), count * 3)
+    assert sum(candidates) == 0  # Actual target reads never scan old reference rows.
     assert_budget(statements, kind=kind, count=count)
 
 

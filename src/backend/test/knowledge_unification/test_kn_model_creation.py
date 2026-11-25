@@ -64,7 +64,7 @@ async def create(context, *, asynchronous, model="11", kind=1):
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
-async def test_actual_legacy_creation_persists_one_exact_source_before_index_io(creation, asynchronous):
+async def test_actual_legacy_creation_commits_business_before_async_reference_refresh(creation, asynchronous):
     context, projection = creation
     before = fixtures.state(context)
     row, actual = await create(context, asynchronous=asynchronous)
@@ -73,7 +73,7 @@ async def test_actual_legacy_creation_persists_one_exact_source_before_index_io(
     after = fixtures.state(context)
     assert len(after["knowledge"]) == len(before["knowledge"]) + 1
     refs = [item for item in after["business_resource_reference"] if item["source_id"] == str(row.id)]
-    assert [(item["slot_key"], item["target_id"]) for item in refs] == [("model", "11")]
+    assert refs == []
     assert row.tenant_id == 101 and row.user_id == context.user.user_id
 
 
@@ -118,7 +118,7 @@ async def test_external_index_initialization_observes_committed_resource_and_bin
     def verify_committed(knowledge):
         facts = fixtures.state(context)
         assert any(row["id"] == knowledge.id for row in facts["knowledge"])
-        assert any(row["source_id"] == str(knowledge.id) for row in facts["business_resource_reference"])
+        assert not any(row["source_id"] == str(knowledge.id) for row in facts["business_resource_reference"])
         projection.assert_awaited_once_with(context.user, knowledge)
         observed.append(knowledge.id)
 

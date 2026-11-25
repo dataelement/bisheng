@@ -35,7 +35,10 @@ test('restored revoked selection is excluded and the reason survives reload unti
   };
   const first = renderHook(useChatScope, setup());
   expect(first.result.current.blocked).toBe(true);
+  expect(first.result.current.verifying).toBe(true);
+  expect(first.result.current.message).toBe('');
   await waitFor(() => expect(first.result.current.message).toContain('knowledgeAccess.revoked'));
+  expect(first.result.current.verifying).toBe(false);
   expect(first.result.current.available).toEqual([]);
   expect(first.result.current.message).toContain(space.name);
   first.unmount();
@@ -69,6 +72,7 @@ test('request failures keep intent, block sends, and recover without declaring r
   jest.mocked(checkResourceAction).mockRejectedValue(new Error('offline'));
   const { result } = renderHook(() => useKnowledgeSpaceAccess([space], 'old'), setup());
   await waitFor(() => expect(result.current.failed).toBe(true));
+  expect(result.current.verifying).toBe(false);
   expect(result.current.available).toEqual([space]);
   expect(result.current.message).toBe('knowledgeAccess.failed');
   expect(result.current.blocked).toBe(true);

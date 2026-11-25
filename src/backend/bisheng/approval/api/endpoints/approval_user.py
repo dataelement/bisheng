@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
@@ -12,7 +14,7 @@ router = APIRouter(prefix="/approval", tags=["approval"])
 
 
 class ApprovalTaskDecisionReq(BaseModel):
-    action: str
+    action: Literal["approve", "reject"]
     comment: str | None = Field(default=None, max_length=2000)
 
 

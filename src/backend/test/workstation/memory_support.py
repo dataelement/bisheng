@@ -1,26 +1,20 @@
-"""Shared harness for the daily-mode memory tests (F132 Wave 8).
+"""Shared harness for the daily-mode memory registration tests (F132 Wave 8).
 
 The memory doubles (SQLite seam, KV, index, detail store) are copied from
 ``test/memory/conftest.py`` in reduced form; that file is not imported so these
-tests do not depend on its fixture set. The stream harness patches everything
-around ``_agent_stream_chat_completion`` and leaves the generator body real, the
-same way ``test_stream_interrupt_persist.py`` does. The model is a scripted fake
-agent that really invokes the tools it is given.
+tests do not depend on its fixture set.
 """
 
 from __future__ import annotations
 
 import fnmatch
-import json
 import time
-import uuid
 from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.memory.domain.models.memory_item import MemoryItem
@@ -29,7 +23,7 @@ from bisheng.memory.domain.models.memory_resident_snapshot import MemoryResident
 from bisheng.memory.domain.models.memory_session_cursor import MemorySessionCursor
 from bisheng.memory.domain.models.memory_turn_record import MemoryTurnRecord
 from bisheng.memory.domain.models.memory_user_setting import MemoryUserSetting
-from bisheng.memory.domain.ports import IndexHit, MemoryContext, detail_object_key
+from bisheng.memory.domain.ports import IndexHit, detail_object_key
 
 TENANT_A = 1
 USER_1 = 101
@@ -254,12 +248,6 @@ def memory(memory_db):
     factory.reset()
 
 
-def make_ctx(scene="daily", chat_id="other-chat", **kw) -> MemoryContext:
-    kw.setdefault("timezone", "Asia/Shanghai")
-    kw.setdefault("turn_id", uuid.uuid4().hex)
-    return MemoryContext(tenant_id=TENANT_A, user_id=USER_1, scene=scene, chat_id=chat_id, **kw)
-
-
 def login_user():
     return SimpleNamespace(user_id=USER_1, tenant_id=TENANT_A, user_name="u101")
 
@@ -273,186 +261,6 @@ def seed_user(memory_db, user_id=USER_1):
             s.commit()
 
 
-async def register(memory_db, chat_id=CHAT_ID):
-    """What the login-state endpoint does for a conversation."""
-    from bisheng.memory.domain.services.gate import MemoryGate
-
-    seed_user(memory_db)
-    await MemoryGate.open(chat_id, login_user())
-
-
-async def disable_my_memory():
-    from bisheng.memory.domain.repositories.setting_repository import SettingRepository
-
-    await SettingRepository.set_enabled(make_ctx(), False)
-
-
 def cursor(memory_db, chat_id=CHAT_ID):
     with memory_db.session() as s:
         return s.get(MemorySessionCursor, chat_id)
-
-
-def turn_rows(memory_db, chat_id=CHAT_ID):
-    with memory_db.session() as s:
-        return list(s.exec(select(MemoryTurnRecord).where(MemoryTurnRecord.chat_id == chat_id)).all())
-
-
-async def metric_total(kv, metric):
-    from bisheng.memory.domain.services.metrics import _COUNTER_KEY, _today
-
-    h = await kv.hgetall(_COUNTER_KEY.format(day=_today(), tenant=TENANT_A))
-    return sum(v for k, v in h.items() if k.endswith("|" + metric))
-
-
-# --------------------------------------------------------------------------- stream harness
-class Chunk:
-    """Minimal stand-in for a LangChain streaming chunk."""
-
-    def __init__(self, content: str):
-        self.content = content
-        self.additional_kwargs: dict = {}
-
-
-class FakeAgent:
-    """Scripted ReAct agent: text steps stream, tool steps really invoke the tool."""
-
-    def __init__(self, tool_node, script, after=None):
-        self.tools = dict(tool_node.tools_by_name)
-        self.script = script
-        self.after = after
-
-    async def astream_events(self, _inputs, version="v2", config=None):
-        from langchain_core.messages import ToolMessage
-
-        for step in self.script:
-            if step[0] == "text":
-                yield {"event": "on_chat_model_stream", "name": "model", "data": {"chunk": Chunk(step[1])}}
-                continue
-            _kind, name, args = step
-            run_id = uuid.uuid4().hex
-            yield {"event": "on_tool_start", "name": name, "run_id": run_id, "data": {"input": args}}
-            out = await self.tools[name].ainvoke(args)
-            yield {
-                "event": "on_tool_end",
-                "name": name,
-                "run_id": run_id,
-                "data": {"output": ToolMessage(content=out, tool_call_id=run_id, name=name)},
-            }
-        if self.after is not None:
-            raise self.after
-
-
-@pytest.fixture
-def stream_env(monkeypatch):
-    """Patch everything around the daily-mode generator; record prompts, tools and rows."""
-    from bisheng.workstation.domain.schemas.chat import APIChatCompletion
-    from bisheng.workstation.domain.services import chat_service
-
-    inserted: list = []
-    conversation = SimpleNamespace(chat_id=CHAT_ID, user_id=USER_1, name="已命名")
-    message = SimpleNamespace(id=101)
-    ws_config = SimpleNamespace(systemPrompt="你是助手。")
-    model_info = SimpleNamespace(displayName="stub-model")
-    state = SimpleNamespace(
-        chunks=["好的。"],
-        script=[("text", "好的。")],
-        after=None,
-        prompts=[],
-        tool_names=[],
-        llm_messages=[],
-        user_tools=[],
-    )
-
-    class _LLM:
-        async def astream(self, messages):
-            state.llm_messages.append(list(messages))
-            for text in state.chunks:
-                yield Chunk(text)
-            if state.after is not None:
-                raise state.after
-
-    async def _init(data, login_user, session_subject=None, *, skip_llm=False, memory_register=None):
-        # Same call the real _agent_initialize_chat makes (failures are swallowed there).
-        await chat_service.register_session(memory_register, conversation.chat_id)
-        return ws_config, conversation, message, _LLM(), model_info, False
-
-    def _create_react_agent(model, tool_node, prompt=None, **_kw):
-        state.prompts.append(prompt)
-        state.tool_names.append(sorted(tool_node.tools_by_name))
-        return FakeAgent(tool_node, state.script, state.after)
-
-    monkeypatch.setattr(chat_service, "_agent_initialize_chat", _init)
-    monkeypatch.setattr("langgraph.prebuilt.create_react_agent", _create_react_agent)
-    monkeypatch.setattr(chat_service, "VisionToolBindWrapper", lambda *a, **k: object())
-    monkeypatch.setattr(chat_service, "_resolve_user_kb_selection", AsyncMock(return_value=[]))
-    monkeypatch.setattr("bisheng.common.image_view.loop.image_view_configured", AsyncMock(return_value=False))
-    monkeypatch.setattr(chat_service.DailyCitationScope, "load", AsyncMock(return_value=None))
-
-    async def _prepare_tools(**_kw):
-        return list(state.user_tools), []
-
-    monkeypatch.setattr(chat_service, "_prepare_tools", _prepare_tools)
-    monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [], [])))
-    monkeypatch.setattr(chat_service, "_get_history_max_tokens", AsyncMock(return_value=4096))
-    monkeypatch.setattr(chat_service.WorkStationService, "get_chat_history", AsyncMock(return_value=[]))
-    monkeypatch.setattr(chat_service.DepartmentFlowService, "resolve_limit_and_dept", AsyncMock(return_value=(0, None)))
-    monkeypatch.setattr(chat_service, "log_telemetry_events", AsyncMock(return_value=None))
-    monkeypatch.setattr(chat_service, "save_message_citations", AsyncMock(return_value=None))
-    monkeypatch.setattr(chat_service, "save_message_citations_sync", MagicMock(return_value=None))
-
-    def _record(row):
-        inserted.append(row)
-        row.id = 900 + len(inserted)
-        return row
-
-    monkeypatch.setattr(chat_service.ChatMessageDao, "insert_one", MagicMock(side_effect=_record))
-    monkeypatch.setattr(chat_service.ChatMessageDao, "ainsert_one", AsyncMock(side_effect=_record))
-    monkeypatch.setattr(
-        chat_service.SensitiveWordPolicyService,
-        "evaluate_workbench_user_text",
-        staticmethod(lambda *_a, **_k: None),
-    )
-    monkeypatch.setattr(
-        chat_service.SensitiveWordPolicyService,
-        "is_workbench_content_safety_active",
-        staticmethod(lambda *_a, **_k: False),
-    )
-
-    def data(text="今天喝什么"):
-        return APIChatCompletion(clientTimestamp="2026-11-13T00:00:00Z", conversationId=CHAT_ID, model="m1", text=text)
-
-    return SimpleNamespace(
-        inserted=inserted, state=state, data=data, chat_service=chat_service, conversation=conversation
-    )
-
-
-def login_register():
-    """The register callable a login-state endpoint hands to the service."""
-    from bisheng.memory.domain.services.gate import MemoryGate
-
-    async def _register(chat_id):
-        await MemoryGate.open(chat_id, login_user())
-
-    return _register
-
-
-async def run_turn(env, *, registered=True):
-    """Drive one daily-mode turn to completion; returns the SSE chunks."""
-    kwargs = {"memory_register": login_register()} if registered else {}
-    response = await env.chat_service._agent_stream_chat_completion(MagicMock(), env.data(), login_user(), **kwargs)
-    return [chunk async for chunk in response.body_iterator]
-
-
-def sse_events(chunks, category=None):
-    out = []
-    for c in chunks:
-        if not c.startswith("event: message"):
-            continue
-        body = json.loads(c.split("data: ", 1)[1])
-        if category is None or body.get("category") == category:
-            out.append(body)
-    return out
-
-
-def answer_rows(inserted):
-    return [r for r in inserted if r.category == "agent_answer"]

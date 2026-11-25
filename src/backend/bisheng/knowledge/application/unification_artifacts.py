@@ -9,11 +9,22 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
+from contextlib import contextmanager
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
 
 _KINDS = frozenset(
-    {"baseline", "plan", "permission_catalog", "permission_resources", "sources", "conversion", "verification"}
+    {
+        "baseline",
+        "plan",
+        "permission_catalog",
+        "permission_resources",
+        "sources",
+        "conversion",
+        "verification",
+        "history_replay",
+        "upgrade_flow",
+    }
 )
 _MAX_BYTES = 16 * 1024 * 1024
 
@@ -82,6 +93,33 @@ class UnificationArtifactStore:
             _reject()
         self.storage = storage
         self.bucket = bucket
+        self.verified_inputs = None
+
+    @contextmanager
+    def verified_reads(self, *, max_bytes=64 * 1024 * 1024):
+        """Own disposable verified bytes/plans for this invocation, including nested stages."""
+        if self.verified_inputs is not None:
+            yield self.verified_inputs
+            return
+        from bisheng.knowledge.application.unification_execution_inputs import VerifiedExecutionInputs
+
+        execution = self.verified_inputs = VerifiedExecutionInputs(self, max_bytes=max_bytes)
+        try:
+            yield execution
+        except BaseException:
+            try:
+                execution.close()
+            except Exception as cleanup_error:
+                from loguru import logger
+
+                logger.warning(
+                    "F118 maintenance reason=verified_inputs_cleanup_failed error_type={}", type(cleanup_error).__name__
+                )
+            raise
+        else:
+            execution.close()
+        finally:
+            self.verified_inputs = None
 
     async def _read_verified(self, descriptor, run_id, kind):
         try:
@@ -118,7 +156,9 @@ class UnificationArtifactStore:
             raise
         except Exception as error:
             raise ReferenceCoverageNotReadyError(reason="migration_artifact_io_failed") from error
-        await self._read_verified(descriptor, run_id, kind)
+        verified = await self._read_verified(descriptor, run_id, kind)
+        if self.verified_inputs is not None:
+            self.verified_inputs.remember((run_id, kind, digest), verified)
         return descriptor
 
     async def aload_canonical(self, descriptor, *, run_id, kind) -> bytes:
@@ -131,4 +171,12 @@ class UnificationArtifactStore:
             or descriptor["object_key"] != _key(run_id, kind, descriptor["sha256"])
         ):
             _reject()
-        return await self._read_verified(dict(descriptor), run_id, kind)
+        key = (run_id, kind, descriptor["sha256"])
+        if self.verified_inputs is not None:
+            cached = self.verified_inputs.read(key)
+            if cached is not None:
+                return cached
+        data = await self._read_verified(dict(descriptor), run_id, kind)
+        if self.verified_inputs is not None:
+            self.verified_inputs.remember(key, data)
+        return data

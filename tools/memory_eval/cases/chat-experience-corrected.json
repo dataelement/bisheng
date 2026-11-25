@@ -1,0 +1,33 @@
+{
+  "id": "chat-experience-corrected",
+  "acs": [
+    "AC-50",
+    "AC-108"
+  ],
+  "turns": [
+    {
+      "user": "帮我统计本季度的活跃用户数",
+      "new_session": false,
+      "expect_write": null
+    },
+    {
+      "user": "不对，活跃用户要按当月登录天数不少于 3 天算，不是登录过一次就算",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "帮我统计上个月的活跃用户，先说清楚口径",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "3 天",
+      "3天",
+      "三天"
+    ]
+  },
+  "notes": "用户纠正过的口径整理为经验",
+  "requires_consolidation": true
+}

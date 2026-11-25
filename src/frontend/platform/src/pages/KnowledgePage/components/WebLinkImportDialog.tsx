@@ -1,3 +1,4 @@
+import { referenceErrorMessage } from '@bisheng/api-client';
 import { Button, Input, toast } from "@bisheng/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -95,6 +96,8 @@ function WebLinkOpening({
   const resolveErrorMessage = (cause: unknown, fallback: string) => {
     const error = errorFacts(cause);
     const code = error.status_code ?? error.statusCode;
+    const referenceMessage = referenceErrorMessage({ status_code: code, data: error.data }, (key, values) => t(`api_errors:${key}`, values));
+    if (referenceMessage) return referenceMessage;
     const message =
       typeof error.status_message === "string"
         ? error.status_message.toLowerCase()

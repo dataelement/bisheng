@@ -7,19 +7,20 @@ from unittest.mock import AsyncMock
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
-from test.knowledge_unification import test_app_snapshot as fixtures
 
 from bisheng.app_publish.domain.services import preview_instance_service as preview_module
 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
 from bisheng.app_runtime.domain.services import app_state_service as module
 from bisheng.app_runtime.domain.services import runtime_delivery_coordinator as coordinator_module
 from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
 from bisheng.resource_reference.application.bindings import ReferenceBindings
+from bisheng.resource_reference.application.source_sync import refresh_root
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+from test.knowledge_unification import test_app_snapshot as fixtures
 
 ctx = fixtures.ctx
 resolving = fixtures.resolving
@@ -45,6 +46,9 @@ async def deleting(writing, monkeypatch):
     projection = AsyncMock()
     monkeypatch.setattr(module.AppStateService, "_project_delete", projection)
     monkeypatch.setattr(module, "get_reference_binding_runtime", AsyncMock(return_value=writing.runtime), raising=False)
+    from bisheng.resource_reference.application import source_sync
+
+    monkeypatch.setattr(source_sync, "notify_reference_sync", AsyncMock())
     created = []
 
     class Coordinator:
@@ -95,6 +99,7 @@ async def delete(context, app_id="actual-app"):
 async def test_root_deletion_releases_every_saved_version_but_retains_immutable_rows(deleting):
     result = await delete(deleting)
     assert result.state == "deleted"
+    await refresh_root(101, "hosted_app_version", "actual-app", session_factory=fixtures.module.get_async_db_session)
     async with AsyncSession(deleting.engine) as session, session.begin():
         assert (await session.get(App, "actual-app")).state == "deleted"
         assert len((await session.execute(sa.select(AppVersion))).scalars().all()) == 2
@@ -104,7 +109,7 @@ async def test_root_deletion_releases_every_saved_version_but_retains_immutable_
             .scalars()
             .all()
         )
-        assert len(sets) == 2 and all(item.ready and not item.effective for item in sets)
+        assert not sets
         assert len((await session.execute(sa.select(RuntimeOperation))).scalars().all()) == 1
     control = deleting.coordinators[-1]
     control.stop.assert_not_awaited()
@@ -148,36 +153,27 @@ async def test_complete_inventory_rejects_unknown_or_incomplete_sources_before_s
             )
         else:
             await session.execute(sa.update(BusinessResourceReference).values(source_revision=99))
-    before = await fixtures.snapshot(deleting.engine)
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await delete(deleting)
-    assert await fixtures.snapshot(deleting.engine) == before
-    deleting.project_delete.assert_not_awaited()
-    assert not deleting.coordinators or not deleting.coordinators[-1].submitted
-
-
-async def test_second_source_apply_failure_rolls_back_all_versions_root_and_intent(deleting, monkeypatch):
-    before = await fixtures.snapshot(deleting.engine)
-    real = ReferenceBindings.areplace_source_bindings
-    count = 0
-
-    async def failed(self, *args, **kwargs):
-        nonlocal count
-        result = await real(self, *args, **kwargs)
-        count += 1
-        if count == 2:
-            raise RuntimeError("second source failed")
-        return result
-
-    monkeypatch.setattr(ReferenceBindings, "areplace_source_bindings", failed)
-    with pytest.raises(RuntimeError, match="second source failed"):
-        await delete(deleting)
-    assert await fixtures.snapshot(deleting.engine) == before
-    deleting.project_delete.assert_not_awaited()
+    assert (await delete(deleting)).state == "deleted"
+    deleting.project_delete.assert_awaited_once()
+    assert deleting.coordinators[-1].submitted
+    await refresh_root(101, "hosted_app_version", "actual-app", session_factory=fixtures.module.get_async_db_session)
     async with AsyncSession(deleting.engine) as session:
-        assert not (await session.execute(sa.select(RuntimeOperation))).scalars().all()
-    if deleting.coordinators:
-        deleting.coordinators[-1].wake.assert_not_awaited()
+        assert not (await session.execute(sa.select(BusinessResourceReference))).scalars().all()
+
+
+async def test_legacy_source_writer_is_not_used_by_app_delete(deleting, monkeypatch):
+    binding = AsyncMock(side_effect=RuntimeError("second source failed"))
+    monkeypatch.setattr(ReferenceBindings, "areplace_source_bindings", binding)
+    async with AsyncSession(deleting.engine) as session:
+        before = (await session.execute(sa.select(BusinessResourceReference))).scalars().all()
+    assert (await delete(deleting)).state == "deleted"
+    async with AsyncSession(deleting.engine) as session:
+        after = (await session.execute(sa.select(BusinessResourceReference))).scalars().all()
+        assert {row.id for row in before} == {row.id for row in after}
+        assert len((await session.execute(sa.select(RuntimeOperation))).scalars().all()) == 1
+    binding.assert_not_awaited()
+    deleting.project_delete.assert_awaited_once()
+    deleting.coordinators[-1].wake.assert_awaited_once()
 
 
 async def test_projection_failure_prevents_sql_finalize_and_wakeup(deleting):
@@ -201,6 +197,7 @@ async def test_cleanup_failure_keeps_committed_delete_and_durable_operation_for_
     monkeypatch.setattr(coordinator_module, "RuntimeDeliveryCoordinator", failing_controller)
     result = await delete(deleting)
     assert result.state == "deleted" and result.detail["cleanup_pending"] is True
+    await refresh_root(101, "hosted_app_version", "actual-app", session_factory=fixtures.module.get_async_db_session)
     assert result.detail["cleanup_operation_id"]
     async with AsyncSession(deleting.engine) as session, session.begin():
         assert (await session.get(App, "actual-app")).state == "deleted"
@@ -372,6 +369,7 @@ async def test_real_destroy_intent_commits_with_sources_then_actual_node_can_rea
     result = await delete(deleting)
     assert result.state == "deleted" and not result.detail["cleanup_pending"]
     assert len(scopes) == 1 and scopes[0]["app_id"] == "actual-app" and scopes[0]["generation"] == 2
+    await refresh_root(101, "hosted_app_version", "actual-app", session_factory=fixtures.module.get_async_db_session)
     async with AsyncSession(deleting.engine) as session, session.begin():
         operations = (await session.execute(sa.select(RuntimeOperation))).scalars().all()
         assert len(operations) == 1 and operations[0].kind == "destroy"

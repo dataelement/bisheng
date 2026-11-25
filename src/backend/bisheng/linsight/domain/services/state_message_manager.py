@@ -1,5 +1,4 @@
 import asyncio
-import pickle
 from enum import StrEnum
 from typing import Any
 
@@ -8,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.cache.serialization import RedisSerializationError, decode_redis_value, encode_redis_value
 from bisheng.linsight.domain.models.linsight_execute_task import (
     ExecuteTaskStatusEnum,
     LinsightExecuteTask,
@@ -112,6 +112,8 @@ class LinsightStateMessageManager:
         """Log Redis failures and propagate them to the caller."""
         try:
             return await operation(*args, **kwargs)
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Redis operation failed: {e}")
             raise
@@ -124,7 +126,7 @@ class LinsightStateMessageManager:
             for task in tasks:
                 await pipe.set(
                     self._keys["execution_tasks"] + task["id"],
-                    pickle.dumps(task),
+                    encode_redis_value(self._keys["execution_tasks"] + task["id"], task),
                     ex=self.DEFAULT_EXPIRATION,
                 )
                 await pipe.sadd(self._keys["task_ids"], task["id"])
@@ -170,7 +172,7 @@ class LinsightStateMessageManager:
                 # Write AgainRedis
                 await pipe.set(
                     self._keys["session_version_info"],
-                    pickle.dumps(session_version_model.model_dump()),
+                    encode_redis_value(self._keys["session_version_info"], session_version_model.model_dump()),
                     ex=self.DEFAULT_EXPIRATION,
                 )
                 await pipe.execute()
@@ -208,6 +210,8 @@ class LinsightStateMessageManager:
                 return session_version_model
 
             return LinsightSessionVersion.model_validate(info)
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to get session version info: {e}")
             session_version_model = await LinsightSessionVersionDao.get_by_id(self._session_version_id)
@@ -230,6 +234,8 @@ class LinsightStateMessageManager:
             # Batch WriteRedis
             await self._cache_execution_tasks([task.model_dump() for task in tasks])
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to set execution tasks: {e}")
             raise
@@ -272,6 +278,8 @@ class LinsightStateMessageManager:
             self._logger.info(f"Updated task {task_id} status to {status}")
             return task_data
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to update task {task_id} status: {e}")
             raise
@@ -339,6 +347,8 @@ class LinsightStateMessageManager:
 
             self._logger.info(f"Set user input for task {task_id}")
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to set user input for task {task_id}: {e}")
             raise ServerError.http_exception()
@@ -388,6 +398,8 @@ class LinsightStateMessageManager:
             await self._cache_execution_tasks([task_model.model_dump()])
             await LinsightExecuteTaskDao.update_fields_by_id(task_id, history=task_model.history)
             self._logger.info(f"Re-stamped {answer_idx} clarify answer(s) onto task {task_id} history")
+        except RedisSerializationError:
+            raise
         except Exception as e:
             # Non-critical: live rendering is unaffected; only the refreshed view
             # of an answered clarify degrades. Don't fail the resumed turn for it.
@@ -422,6 +434,8 @@ class LinsightStateMessageManager:
             await self.set_execution_tasks([task_model])
             return task_model
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to get execution task {task_id}: {e}")
             return None
@@ -523,6 +537,8 @@ class LinsightStateMessageManager:
             else:
                 self._logger.info(f"Added step to task {task_id}")
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to add step to task {task_id}: {e}")
             raise
@@ -554,13 +570,21 @@ class LinsightStateMessageManager:
             ordered_ids = sorted(ids)
             values = await rc.mget([self._keys["execution_tasks"] + task_id for task_id in ordered_ids]) if ids else []
             for task_id, value in zip(ordered_ids, values, strict=True):
-                task = LinsightExecuteTask.model_validate(pickle.loads(value)) if value else stored.get(task_id)
+                task = (
+                    LinsightExecuteTask.model_validate(
+                        decode_redis_value(self._keys["execution_tasks"] + task_id, value)
+                    )
+                    if value is not None
+                    else stored.get(task_id)
+                )
                 if task is None:
                     task = await LinsightExecuteTaskDao.get_by_id(task_id)
                 if task is not None:
                     tasks.append(task)
             return tasks
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to get execution tasks: {e}")
             return []
@@ -576,6 +600,8 @@ class LinsightStateMessageManager:
             await self._redis_client.adelete(*keys)
             self._logger.info(f"Cleaned up {len(keys)} keys for session {self._session_version_id}")
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to cleanup session data: {e}")
             raise
@@ -600,6 +626,8 @@ class LinsightStateMessageManager:
 
             return stats
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to get session stats: {e}")
             return {"error": str(e)}

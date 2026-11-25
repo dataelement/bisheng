@@ -10,9 +10,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import bypass_tenant_filter, set_visible_tenant_ids, visible_tenant_ids
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.flow_version import FlowVersion
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.public_endpoints.domain.context import (
     PublicApiPrincipal,
     reset_current_public_api_principal,
@@ -26,6 +28,7 @@ from bisheng.resource_reference.application.source_contracts import (
 )
 from bisheng.workflow.application import reference_source_owner as module
 from bisheng.workflow.application.reference_source_owner import WorkflowReferenceSourceOwner, normalize_execution_graph
+from bisheng.workflow.domain.repositories.reference_source_repository import WorkflowReferenceSourceRepository
 from test.knowledge_unification import test_wf_transaction as fixtures
 
 store = fixtures.store
@@ -46,6 +49,30 @@ def authorization(monkeypatch):
 
 def request(version=None, **kwargs):
     return SourceReadRequest(SourceType.WORKFLOW_VERSION, "wf", version, **kwargs)
+
+
+@pytest.mark.parametrize("kind", [None, 2, 3])
+async def test_preview_reports_missing_space_without_relabeling_unsupported_resources(store, kind):
+    engine, sync = store
+    Knowledge.__table__.create(sync)
+    if kind is not None:
+        with sync.begin() as connection:
+            connection.execute(
+                sa.insert(Knowledge).values(id=31, name="selected", tenant_id=101, user_id=11, type=kind)
+            )
+    async with AsyncSession(engine) as session, session.begin():
+        if kind is None:
+            with pytest.raises(SpaceNotFoundError) as error:
+                await WorkflowReferenceSourceRepository.aget_knowledge_resource_type(session, 31)
+            assert error.value.code == 18000
+            assert error.value.kwargs["space_id"] == 31
+        elif kind == 2:
+            with pytest.raises(ResourceReferenceInvalidError):
+                await WorkflowReferenceSourceRepository.aget_knowledge_resource_type(session, 31)
+        else:
+            assert (
+                await WorkflowReferenceSourceRepository.aget_knowledge_resource_type(session, 31) == "knowledge_space"
+            )
 
 
 async def test_real_current_snapshot_is_canonical_and_no_managed_entities(store, identity, authorization):

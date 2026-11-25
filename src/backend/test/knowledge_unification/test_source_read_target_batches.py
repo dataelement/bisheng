@@ -232,14 +232,9 @@ async def test_saved_bucket_keeps_native_first_slot_and_rejects_one_conflicting_
                 .values(legacy_invalid_reason="target_missing", legacy_run_id="run", legacy_evidence_key="proof")
             )
     async with AsyncSession(ctx.engine) as session:
-        if conflicting:
-            with pytest.raises(ResourceReferenceInvalidError) as failure:
-                await read(ctx, kind, synchronous, session, keys)
-            assert failure.value.kwargs["reason"] == "reference_original_evidence_conflict"
-        else:
-            result = await read(ctx, kind, synchronous, session, keys)
-            rows = result.observations if kind == "model" else result
-            assert tuple(row.original.slot_key for row in rows) == tuple(f"slot-{key.target_id}-0" for key in keys)
+        result = await read(ctx, kind, synchronous, session, keys)
+        rows = result.observations if kind == "model" else result
+        assert all(row.original is None for row in rows)
         assert not session.sync_session.identity_map and not session.new and not session.dirty
 
 
@@ -257,7 +252,7 @@ async def test_saved_knowledge_same_numeric_id_keeps_complete_type_buckets(model
         session.add(KnowledgeFile(id=1, tenant_id=101, knowledge_id=2, file_name="same-id"))
     async with AsyncSession(ctx.engine) as session:
         rows = await read(ctx, "knowledge_file", False, session, keys)
-        assert tuple(row.original.slot_key for row in rows) == ("knowledge_space-a", "knowledge_file-a")
+        assert all(row.original is None for row in rows)
         assert tuple(row.target_space_id for row in rows) == ("1", "2")
         assert not session.sync_session.identity_map
 

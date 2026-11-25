@@ -117,6 +117,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.resource_reference.application.contracts import canonical_target_id
+from bisheng.resource_reference.application.source_sync import notify_reference_sync, notify_reference_sync_sync
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
 from bisheng.utils.async_utils import run_async_safe
@@ -494,7 +495,7 @@ class KnowledgeService(KnowledgeUtils):
             they can see (``list_visible_objects``), then run the historical
             keyset scan under an ``id IN (:visible_ids)`` filter. ``visible``
             is the superset of every concrete action, so the pre-filter is
-            sufficient for legacy ``action="use"``, normalized to visible.
+            sufficient for the ``visible`` admission check.
             Other requested actions still use the per-page BatchCheck.
           * ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset
             cursor with key ``[sort_value, id]``; ``sort_by="name"`` still
@@ -504,8 +505,6 @@ class KnowledgeService(KnowledgeUtils):
         """
         if knowledge_type == KnowledgeTypeEnum.PRIVATE:
             raise KnowledgeTypeNotSupportedError()
-        # Retain the old HTTP action as an alias, never as a business action.
-        action = "visible" if action == "use" else action
         total_start = perf_counter()
 
         # ---- 1. Decode cursor (branch on sort_by) ----
@@ -937,14 +936,13 @@ class KnowledgeService(KnowledgeUtils):
             if not skip_hook:
                 run_async_safe(cls._project_library_created(login_user, actual), timeout=60)
 
-        # The actual flushed row drives projection. Knowledge and outgoing
-        # bindings share one SQL transaction; a projection failure rolls both
-        # back without invoking a compensating DAO in another Session.
+        # Project the flushed business row before its normal commit.
         with get_sync_db_session() as session:
             KnowledgeModelReferenceApplication.create(
                 session, db_knowledge, login_user=login_user, project_created=project_created
             )
             session.commit()
+            notify_reference_sync_sync(get_current_tenant_id(), "knowledge", str(db_knowledge.id))
 
         # qa knowledge builds its index lazily on first Q&A add (different schema)
         cls._init_knowledge_indices_sync(login_user.user_id, db_knowledge)
@@ -1006,6 +1004,7 @@ class KnowledgeService(KnowledgeUtils):
                 session, db_knowledge, login_user=login_user, project_created=project_created
             )
             await session.commit()
+            await notify_reference_sync(get_current_tenant_id(), "knowledge", str(db_knowledge.id))
 
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
@@ -1099,8 +1098,7 @@ class KnowledgeService(KnowledgeUtils):
             )
             knowledge = prepared.row
             # Preserve the existing projection -> external cleanup -> SQL
-            # finalize order. Files, QA pairs, Knowledge and outgoing bindings
-            # now finalize inside this one transaction.
+            # finalize order. Files, QA pairs and Knowledge share this transaction.
             run_async_safe(
                 cls._project_library_deletion(login_user, knowledge_id=knowledge_id, include_container=not only_clear),
                 timeout=300,
@@ -1109,6 +1107,7 @@ class KnowledgeService(KnowledgeUtils):
             cls.delete_knowledge_file_in_minio(knowledge_id)
             KnowledgeModelReferenceApplication.apply_removal(session, prepared)
             session.commit()
+            notify_reference_sync_sync(get_current_tenant_id(), "knowledge", str(knowledge_id))
 
         # Clear dropped the Milvus collection + ES index above; recreate empty
         # indices so the cleared (still-existing) resource stays queryable instead
@@ -1158,7 +1157,7 @@ class KnowledgeService(KnowledgeUtils):
             if candidate is None:
                 raise KnowledgeNotExistError()
             selected = canonical_target_id(model_id)
-            current = canonical_target_id(candidate.model) if candidate.model else None
+            current = KnowledgeModelReferenceApplication.current_model_id(candidate)
             if current == selected:
                 old = KnowledgeModelReferenceApplication._facts(candidate)
                 row = repository.get(session, knowledge_id, for_update=True)
@@ -1190,6 +1189,7 @@ class KnowledgeService(KnowledgeUtils):
                         login_user.user_id,
                     )
             session.commit()
+            notify_reference_sync_sync(get_current_tenant_id(), "knowledge", str(knowledge_id))
         if command is not None:
             # A queue failure cannot roll back already committed business
             # configuration. Operators retry this same operation/revision.
@@ -1978,7 +1978,9 @@ class KnowledgeService(KnowledgeUtils):
         # Get file size inbytes）
         file_size = os.path.getsize(filepath)
 
-        original_file_name = cls.get_upload_file_original_name(file_name)
+        original_file_name = (
+            trusted_source.file_name if trusted_source is not None else cls.get_upload_file_original_name(file_name)
+        )
         actual_snapshot = None
         if processing_rule_request is not None:
             from bisheng.knowledge.application.file_processing_adapter import (

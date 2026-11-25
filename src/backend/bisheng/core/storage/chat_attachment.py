@@ -11,7 +11,11 @@ The stored name is a uuid: the original filename is display metadata on the
 message, never an identity -- two users uploading "1.png" must not collide.
 """
 
+import asyncio
+import hashlib
 import os
+import re
+from typing import Any
 from urllib.parse import unquote
 from uuid import uuid4
 
@@ -54,6 +58,94 @@ def _safe_extension(filename: str) -> str:
 def build_chat_object_name(user_id: int | str, filename: str) -> str:
     """Storage object name for one conversation attachment."""
     return f"{chat_object_prefix(user_id)}{uuid4().hex}{_safe_extension(filename)}"
+
+
+# F004 (design §7 item 11): the copies an answer keeps of the files its run wrote.
+ANSWER_FILE_DIR = "answers"
+# Set on an answer-row file item that points at a copy: the ``file_id`` its
+# ``file`` events carried while the run was live (the workspace object's id).
+WORKSPACE_FILE_ID_KEY = "workspace_file_id"
+_SAFE_KEY_PART = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def _key_part(value: str) -> str:
+    """``value`` when it is safe inside an object key, else a digest of it."""
+    value = str(value or "")
+    return value if _SAFE_KEY_PART.fullmatch(value) else hashlib.md5(value.encode("utf-8")).hexdigest()
+
+
+def build_answer_file_object_name(partition: int | str, run_id: str, file_key: str, filename: str) -> str:
+    """Object name of the copy one answer keeps of one generated file.
+
+    ``chat/{partition}/answers/{run_id}/{file_key}{ext}``. One answer row per run,
+    so the run id is the answer's directory. The name is a function of its
+    inputs: writing the row of the same run again overwrites the same copy.
+    """
+    return (
+        f"{chat_object_prefix(partition)}{ANSWER_FILE_DIR}/{_key_part(run_id)}/"
+        f"{_key_part(file_key)}{_safe_extension(filename)}"
+    )
+
+
+def answer_file_id(object_name: str) -> str:
+    """Stable ``file_id`` of an answer's copy (differs from the workspace file's id)."""
+    return hashlib.md5(object_name.encode("utf-8")).hexdigest()[:16]
+
+
+async def copy_answer_files(
+    files: list[dict] | None, partition: int | str, run_id: str, *, minio_client: Any = None
+) -> list[dict]:
+    """Give an answer its own copy of each generated file, in place.
+
+    Each item carries ``object_name`` (an object of the main bucket that a later
+    run may overwrite, e.g. ``workspace/{conversation}/output/x``). The object is
+    copied inside the bucket (a server-side copy) and the item is repointed:
+    ``object_name`` = the copy, ``file_id`` = the copy's id, and the id it had
+    goes to ``workspace_file_id``.
+
+    A copy that fails is logged and that item is left as it was (it keeps
+    pointing at the source object); the other files and the answer row are not
+    affected. Returns ``files``.
+    """
+    if not files:
+        return files or []
+    if minio_client is None:
+        try:
+            minio_client = await get_minio_storage()
+        except Exception:
+            logger.exception(
+                "cannot reach object storage to copy the files of run {}; the answer keeps the workspace objects",
+                run_id,
+            )
+            return files
+
+    async def copy_one(item: dict) -> None:
+        source = item.get("object_name")
+        if not source:
+            return
+        name = item.get("file_name") or item.get("filename") or ""
+        dest = build_answer_file_object_name(partition, run_id, str(item.get("file_id") or source), name)
+        try:
+            await minio_client.copy_object(
+                source_bucket=minio_client.bucket,
+                source_object=source,
+                dest_bucket=minio_client.bucket,
+                dest_object=dest,
+            )
+        except Exception:
+            logger.exception(
+                "failed to copy generated file {} of run {} to {}; the answer keeps the workspace object",
+                source,
+                run_id,
+                dest,
+            )
+            return
+        item[WORKSPACE_FILE_ID_KEY] = item.get("file_id")
+        item["object_name"] = dest
+        item["file_id"] = answer_file_id(dest)
+
+    await asyncio.gather(*(copy_one(item) for item in files if isinstance(item, dict)))
+    return files
 
 
 def temp_object_name_from_url(file_url: str, tmp_bucket: str) -> str | None:
@@ -128,6 +220,14 @@ async def promote_chat_attachments(
     partition = storage_partition or str(user_id)
     for file, source_object, dest_object in _plan_promotions(files, partition, minio_client.tmp_bucket):
         try:
+            from bisheng.core.storage.minio.signed_reference import verify_signed_reference
+
+            reference = verify_signed_reference(
+                file.get("filepath") or file.get("file_path") or file.get("file_url") or "", minio_client
+            )
+            if reference.bucket != minio_client.tmp_bucket or reference.version_id:
+                raise ValueError("Attachment source does not match its signed reference")
+            source_object = reference.object_name
             await minio_client.copy_object(
                 source_bucket=minio_client.tmp_bucket,
                 source_object=source_object,
@@ -155,6 +255,14 @@ def promote_chat_attachments_sync(files: list[dict] | None, user_id: int | str) 
 
     for file, source_object, dest_object in _plan_promotions(files, user_id, minio_client.tmp_bucket):
         try:
+            from bisheng.core.storage.minio.signed_reference import verify_signed_reference
+
+            reference = verify_signed_reference(
+                file.get("filepath") or file.get("file_path") or file.get("file_url") or "", minio_client
+            )
+            if reference.bucket != minio_client.tmp_bucket or reference.version_id:
+                raise ValueError("Attachment source does not match its signed reference")
+            source_object = reference.object_name
             minio_client.copy_object_sync(
                 source_bucket=minio_client.tmp_bucket,
                 source_object=source_object,

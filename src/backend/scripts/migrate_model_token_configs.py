@@ -9,6 +9,8 @@ Run from src/backend/ with the service's config environment and interpreter:
 The default is read-only. Pause API/Worker model-configuration writers and
 drain in-flight calls before apply; restart them afterwards to clear caches.
 Use --restore-backup with a fresh --backup-file to restore unchanged records.
+This DB-only CLI owns its database context and closes its pool before the
+event loop exits; it does not initialize the full FastAPI environment.
 """
 
 from __future__ import annotations
@@ -38,11 +40,21 @@ def main() -> int:
     if args.tenant_ids and any(value < 1 for value in args.tenant_ids):
         parser.error("--tenant-id must be a positive integer")
 
-    from bisheng.core.context.manager import close_app_context
+    from bisheng.core.context.manager import app_context
+    from bisheng.core.database.manager import DatabaseManager
     from bisheng.llm.domain.services.model_token_config_upgrade import migrate_model_token_configs
 
     async def run() -> int:
+        database = None
         try:
+            from bisheng.common.services.config_service import settings
+
+            database = DatabaseManager(
+                database_url=settings.database_url,
+                engine_config=settings.database_pool.as_engine_kwargs(),
+            )
+            app_context.register_context(database)
+            await app_context.async_get_instance(DatabaseManager.name)
             result = await migrate_model_token_configs(
                 apply=args.apply,
                 tenant_ids=args.tenant_ids,
@@ -59,7 +71,11 @@ def main() -> int:
             )
             return 2
         finally:
-            await close_app_context()
+            # Lazy registration does not mark the whole app initialized, so
+            # close_app_context() would skip this owned pool. Close it in the
+            # same loop even if registration, initialization or migration fails.
+            if database is not None:
+                await database.async_close()
 
     return asyncio.run(run())
 

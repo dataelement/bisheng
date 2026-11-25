@@ -61,6 +61,62 @@ def _record(cls, row, **overrides):
 
 
 class PermissionMigrationSnapshotRepository:
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
+    async def adiscover_environment(self, session, *, environment=None):
+        """Resolve one CURRENT Catalog's actual ACTIVE pin, never machine use."""
+        self._scope(session)
+        release, pin = PermissionCatalogRelease.__table__, AuthorizationModelRelease.__table__
+        rows = await self._read(
+            session,
+            select(release.c.id, release.c.write_fenced, pin.c.environment, pin.c.status)
+            .outerjoin(pin, pin.c.id == release.c.required_authorization_model_release_id)
+            .where(release.c.status == "CURRENT")
+            .limit(2),
+        )
+        if len(rows) != 1:
+            _blocked("current_catalog_not_unique")
+        row = rows[0]
+        actual = row["environment"]
+        if row["write_fenced"] or row["status"] != "ACTIVE" or type(actual) is not str or not actual.strip():
+            _blocked("authorization_pin_not_ready")
+        if environment is not None and environment != actual:
+            _blocked("environment_mismatch")
+        await self.aload_catalog_baseline(session, environment=actual)
+        return actual
+
+    async def ainspect_rootless_file_authorization(self, session, *, file_ids):
+        """Global absence proof for isolated IDs, never an authorization grant."""
+        self._scope(session)
+        if (
+            type(file_ids) is not tuple
+            or not 1 <= len(file_ids) <= 199
+            or any(type(v) is not int or v <= 0 for v in file_ids)
+            or len(set(file_ids)) != len(file_ids)
+        ):
+            _blocked("invalid_exact_file_ids")
+        occupied = set()
+        ids = tuple(map(str, file_ids))
+        with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+            for model in (ResourcePermissionMode, PermissionGrant, PermissionVisibleSourceProjection):
+                rows = await session.execute(
+                    select(model.resource_id).where(
+                        model.resource_type.in_(("folder", "knowledge_file")), model.resource_id.in_(ids)
+                    )
+                )
+                occupied.update(int(row[0]) for row in rows)
+            rows = await session.execute(
+                select(PermissionProjectionOperation.scope_key).where(
+                    PermissionProjectionOperation.scope_type == "resource",
+                    PermissionProjectionOperation.scope_key.in_(
+                        tuple(f"{kind}:{ident}" for ident in ids for kind in ("folder", "knowledge_file"))
+                    ),
+                )
+            )
+            occupied.update(int(row[0].partition(":")[2]) for row in rows)
+        return frozenset(occupied)
+
     async def acount_file_authorization_rows(self, session, *, file_ids):
         tenant = self._scope(session)
         if (
@@ -84,11 +140,19 @@ class PermissionMigrationSnapshotRepository:
                 counts[int(row["resource_id"])] += 1
         return counts
 
-    async def avalidate_global_integrity(self, session):
+    async def avalidate_global_integrity(self, session, *, retained_tenant_ids=()):
         """One run-wide raw probe per original table, never per tenant."""
         self._scope(session)
+        if self.fact_view is not None:
+            return await self.fact_view.validate_permission_global(session, retained_tenant_ids=retained_tenant_ids)
         if not session.in_transaction():
             _blocked("native_transaction_required")
+        if (
+            type(retained_tenant_ids) is not tuple
+            or any(type(value) is not int or value <= 0 for value in retained_tenant_ids)
+            or len(set(retained_tenant_ids)) != len(retained_tenant_ids)
+        ):
+            _blocked("invalid_retention_scope")
         tenant = Tenant.__table__.alias("f118_permission_actual_tenant")
         queries = []
         for model in (
@@ -98,11 +162,13 @@ class PermissionMigrationSnapshotRepository:
             PermissionVisibleSourceProjection,
         ):
             table = model.__table__.alias("f118_original_" + model.__tablename__)
+            condition = or_(table.c.tenant_id.is_(None), tenant.c.id.is_(None))
+            for offset in range(0, len(retained_tenant_ids), 200):
+                condition &= or_(
+                    table.c.tenant_id.is_(None), table.c.tenant_id.not_in(retained_tenant_ids[offset : offset + 200])
+                )
             queries.append(
-                select(table.c.id)
-                .outerjoin(tenant, tenant.c.id == table.c.tenant_id)
-                .where(or_(table.c.tenant_id.is_(None), tenant.c.id.is_(None)))
-                .limit(1)
+                select(table.c.id).outerjoin(tenant, tenant.c.id == table.c.tenant_id).where(condition).limit(1)
             )
         assignee = PermissionGrantAssignee.__table__.alias("f118_global_assignee")
         grant = PermissionGrant.__table__.alias("f118_global_grant")
@@ -289,17 +355,38 @@ class PermissionMigrationSnapshotRepository:
         )
 
     async def aload_resource(self, session, *, mode_id, resource_keys, lock=False):
+        return (await self.aload_resources(session, requests=((mode_id, resource_keys),), lock=lock))[0]
+
+    async def aload_resources(self, session, *, requests, lock=False):
         """Exact old/new resource buckets, including every inactive source."""
         tenant = self._scope(session)
         if (
-            type(mode_id) is not int
-            or mode_id <= 0
-            or type(resource_keys) is not tuple
-            or not 1 <= len(resource_keys) <= 2
+            type(requests) is not tuple
+            or not 1 <= len(requests) <= 100
             or type(lock) is not bool
             or not session.in_transaction()
         ):
             _blocked("resource_identity_required")
+        by_key, requested = {}, {}
+        for request in requests:
+            if type(request) is not tuple or len(request) != 2:
+                _blocked("resource_identity_required")
+            mode_id, resource_keys = request
+            if (
+                type(mode_id) is not int
+                or mode_id <= 0
+                or mode_id in requested
+                or type(resource_keys) is not tuple
+                or not 1 <= len(resource_keys) <= 2
+            ):
+                _blocked("resource_identity_required")
+            requested[mode_id] = resource_keys
+            for key in resource_keys:
+                if type(key) is not tuple or len(key) != 2 or not all(type(value) is str and value for value in key):
+                    _blocked("resource_key_invalid")
+                if key in by_key and by_key[key] != mode_id:
+                    _blocked("resource_identity_required")
+                by_key[key] = mode_id
         transaction = TransactionIdentity.capture(session)
 
         def current():
@@ -317,8 +404,13 @@ class PermissionMigrationSnapshotRepository:
             return result
 
         mode = ResourcePermissionMode.__table__
-        rows = await read(select(*mode.c).where(mode.c.id == mode_id, mode.c.tenant_id == tenant))
-        if len(rows) != 1 or (rows[0]["resource_type"], rows[0]["resource_id"]) not in resource_keys:
+        rows = await read(
+            select(*mode.c).where(mode.c.id.in_(requested), mode.c.tenant_id == tenant).order_by(mode.c.id)
+        )
+        modes = {row["id"]: row for row in rows}
+        if set(modes) != set(requested) or any(
+            (row["resource_type"], row["resource_id"]) not in requested[row["id"]] for row in rows
+        ):
             _blocked("resource_mode_changed")
         await self._operations(session, rows)
         current()
@@ -326,9 +418,7 @@ class PermissionMigrationSnapshotRepository:
         for model in (PermissionGrant, PermissionVisibleSourceProjection):
             table, records, after = model.__table__, [], 0
             keys = []
-            for key in resource_keys:
-                if type(key) is not tuple or len(key) != 2 or not all(type(value) is str and value for value in key):
-                    _blocked("resource_key_invalid")
+            for key in by_key:
                 keys.append((table.c.resource_type == key[0]) & (table.c.resource_id == key[1]))
             while True:
                 page = await read(
@@ -369,23 +459,31 @@ class PermissionMigrationSnapshotRepository:
         names = set(VisibleSourceProjectionDTO.model_fields)
         from bisheng.permission.migration.f118_plan import PermissionResourceBaseline
 
-        result = PermissionResourceBaseline(
-            tenant,
-            rows[0]["resource_type"],
-            rows[0]["resource_id"],
-            _record(ResourceModeBaseline, rows[0]),
-            tuple(_record(PermissionGrantBaseline, row) for row in grant_rows),
-            tuple(
-                _record(PermissionAssigneeBaseline, source)
-                for grant in grant_rows
-                for source in grouped.get(grant["id"], ())
-            ),
-            tuple(
-                PermissionVisibleSourceBaseline(
-                    row["id"], VisibleSourceProjectionDTO.model_validate({key: row[key] for key in names})
-                )
-                for row in visible_rows
-            ),
+        grants_by_mode, visible_by_mode = {}, {}
+        for row in grant_rows:
+            grants_by_mode.setdefault(by_key[(row["resource_type"], row["resource_id"])], []).append(row)
+        for row in visible_rows:
+            visible_by_mode.setdefault(by_key[(row["resource_type"], row["resource_id"])], []).append(row)
+        result = tuple(
+            PermissionResourceBaseline(
+                tenant,
+                modes[ident]["resource_type"],
+                modes[ident]["resource_id"],
+                _record(ResourceModeBaseline, modes[ident]),
+                tuple(_record(PermissionGrantBaseline, row) for row in grants_by_mode.get(ident, ())),
+                tuple(
+                    _record(PermissionAssigneeBaseline, source)
+                    for grant in grants_by_mode.get(ident, ())
+                    for source in grouped.get(grant["id"], ())
+                ),
+                tuple(
+                    PermissionVisibleSourceBaseline(
+                        row["id"], VisibleSourceProjectionDTO.model_validate({key: row[key] for key in names})
+                    )
+                    for row in visible_by_mode.get(ident, ())
+                ),
+            )
+            for ident in requested
         )
         current()
         return result
@@ -394,8 +492,21 @@ class PermissionMigrationSnapshotRepository:
         tenant = self._scope(session)
         self._bounds(after_id, limit)
         table = model.__table__
-        statement = select(*table.c).where(table.c.id > (after_id or 0)).order_by(table.c.id).limit(limit)
-        rows = await self._read(session, statement)
+        statement = select(*table.c)
+        if self.fact_view is not None:
+            rows = await self.fact_view.page_mappings(
+                session,
+                model=model,
+                statement=statement,
+                after=after_id,
+                limit=limit,
+                read=self._read,
+                tenant=tenant,
+            )
+        else:
+            rows = await self._read(
+                session, statement.where(table.c.id > (after_id or 0)).order_by(table.c.id).limit(limit)
+            )
         if any(row["tenant_id"] != tenant for row in rows):
             _blocked("page_tenant_mismatch")
         return rows
@@ -408,6 +519,10 @@ class PermissionMigrationSnapshotRepository:
         operations = await self._read(
             session, select(table.c.id, table.c.tenant_id, table.c.status).where(table.c.id.in_(ids))
         )
+        if self.fact_view is not None:
+            states = self.fact_view.states(PermissionProjectionOperation.__tablename__, ids)
+            operations = [row for row in operations if row["id"] not in states]
+            operations.extend(after for _before, after in states.values() if after is not None)
         expected = {row["id"]: row for row in operations}
         tenant = self._scope(session)
         if any(
@@ -432,18 +547,26 @@ class PermissionMigrationSnapshotRepository:
         # Keep invalid parent chains visible as NULL/cross-tenant facts. A raw
         # alias prevents automatic child filtering from hiding broken joins.
         parent = PermissionGrant.__table__.alias("f118_original_grant_parent")
-        rows = await self._read(
-            session,
-            select(
-                *(getattr(PermissionGrantAssignee, column.name) for column in source.c),
-                parent.c.id.label("parent_id"),
-                parent.c.tenant_id.label("parent_tenant"),
-            )
-            .outerjoin(parent, parent.c.id == source.c.grant_id)
-            .where(source.c.id > (after_id or 0))
-            .order_by(source.c.id)
-            .limit(limit),
+        query = select(
+            *(getattr(PermissionGrantAssignee, column.name) for column in source.c),
+            parent.c.id.label("parent_id"),
+            parent.c.tenant_id.label("parent_tenant"),
         )
+        query = query.outerjoin(parent, parent.c.id == source.c.grant_id)
+        if self.fact_view is not None:
+            rows = await self.fact_view.page_mappings(
+                session,
+                model=PermissionGrantAssignee,
+                statement=query,
+                after=after_id,
+                limit=limit,
+                read=self._read,
+                tenant=tenant,
+            )
+        else:
+            rows = await self._read(
+                session, query.where(source.c.id > (after_id or 0)).order_by(source.c.id).limit(limit)
+            )
         if any(
             row["tenant_id"] != tenant or row["parent_id"] is None or row["parent_tenant"] != tenant for row in rows
         ):

@@ -59,7 +59,9 @@ async def test_switch_checks_only_owning_category(target, kind, enabled):
     assert await target.service.set_availability(124, enabled) == {"tool_id": 124, "enabled": enabled}
     target.load.assert_awaited_once_with(124)
     target.load_category.assert_awaited_once_with(14)
-    target.permission.assert_awaited_once_with(target.service.user, resource_type="tool", resource_id=14, action="use")
+    target.permission.assert_awaited_once_with(
+        target.service.user, resource_type="tool", resource_id=14, action="visible"
+    )
     target.save.assert_awaited_once_with(124, enabled)
     target.audit.assert_awaited_once_with(target.service.user, "availability", "tool", 124, {"enabled": enabled})
 

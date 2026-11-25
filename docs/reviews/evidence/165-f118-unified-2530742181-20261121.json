@@ -1,0 +1,242 @@
+{
+  "source_commit": "2530742181d23954c57a3692a4025cdcf552ebba",
+  "archive_sha256": "4fb6607ada0c7eef3b4ef2eded3be19d403bedf1342138f056a9121261ee2d16",
+  "run_id": "upgrade-310b1-20261119",
+  "environment": "dev",
+  "operator_id": 1,
+  "scope": "completed_run_compatibility_and_strict_after_state",
+  "pre_migration_replay_performed": false,
+  "prior_legacy_run_completed": true,
+  "maintenance_source_path": "/app/data/upgrade/3.1.0-beta1/execution-20261120/13-new-unified-2530742181/source/src/backend",
+  "evidence_path": "/app/data/upgrade/3.1.0-beta1/execution-20261120/13-new-unified-2530742181",
+  "schema_head": "v310b1_f016_dsh_call_pricing",
+  "backup": {
+    "stage": "00-backup",
+    "started_at": "2026-11-20T15:51:32.452843+00:00",
+    "running": false,
+    "exit_code": 0,
+    "finished_at": "2026-11-20T15:51:44.064160+00:00",
+    "elapsed_ms": 11611,
+    "bytes": 39897492,
+    "sha256": "121f47fe8966ec8de6f18dde2fff0e2b37c79dd95e84fe6203855091b049794a"
+  },
+  "stages": [
+    {
+      "stage": "01-alembic-current",
+      "started_at": "2026-11-20T15:52:48.369956+00:00",
+      "finished_at": "2026-11-20T15:52:58.179835+00:00",
+      "elapsed_seconds": 9.809879,
+      "exit_code": 0,
+      "log_bytes": 3087
+    },
+    {
+      "stage": "02-alembic-heads",
+      "started_at": "2026-11-20T15:52:48.422890+00:00",
+      "finished_at": "2026-11-20T15:52:53.569377+00:00",
+      "elapsed_seconds": 5.146487,
+      "exit_code": 0,
+      "log_bytes": 195
+    },
+    {
+      "stage": "03-alembic-upgrade-head",
+      "started_at": "2026-11-20T15:53:41.920424+00:00",
+      "finished_at": "2026-11-20T15:53:51.738675+00:00",
+      "elapsed_seconds": 9.818251,
+      "exit_code": 0,
+      "log_bytes": 3197
+    },
+    {
+      "stage": "04-unified-dry-run",
+      "started_at": "2026-11-20T15:54:45.676262+00:00",
+      "finished_at": "2026-11-20T15:56:42.457106+00:00",
+      "elapsed_seconds": 116.780844,
+      "exit_code": 0,
+      "log_bytes": 23102
+    },
+    {
+      "stage": "05-unified-apply",
+      "started_at": "2026-11-20T15:57:58.887222+00:00",
+      "finished_at": "2026-11-20T15:58:08.612685+00:00",
+      "elapsed_seconds": 9.725463,
+      "exit_code": 0,
+      "log_bytes": 11336
+    },
+    {
+      "stage": "06-unified-strict-verify",
+      "started_at": "2026-11-20T15:59:04.294016+00:00",
+      "finished_at": "2026-11-20T16:04:32.665274+00:00",
+      "elapsed_seconds": 328.371258,
+      "exit_code": 0,
+      "log_bytes": 64789
+    },
+    {
+      "stage": "07-redis-verify",
+      "started_at": "2026-11-20T16:05:50.448392+00:00",
+      "finished_at": "2026-11-20T16:05:59.384016+00:00",
+      "elapsed_seconds": 8.935624,
+      "exit_code": 0,
+      "log_bytes": 10873
+    }
+  ],
+  "f118_three_invocations_seconds": 454.878,
+  "f118_and_redis_verify_seconds": 463.813,
+  "dry_run": {
+    "preflight_complete": true,
+    "can_apply": true,
+    "ready": false,
+    "blocker": 0,
+    "not_evaluated": 0,
+    "stages": {
+      "history": "already_prepared",
+      "inventory": "checked",
+      "permissions": "passed",
+      "references": "checked",
+      "sql": "passed"
+    }
+  },
+  "formal_result": {
+    "ready": true,
+    "complete": true,
+    "tenant_ids": [
+      1,
+      189
+    ],
+    "coverage_epoch": 1,
+    "baseline_hash": "38bf58c6a55a23480a0ae90534444d54c86db3252266604570008f5683892c21",
+    "plan_hash": "110cc9b45649f0521eae64ff8d440cb932ca2678d51466957c957ed22392c82b",
+    "stages": {
+      "history": "completed",
+      "inventory": "completed",
+      "permissions": "completed",
+      "references": "completed",
+      "sql": "completed"
+    }
+  },
+  "source_proof_totals": {
+    "source_count": 117,
+    "reference_count": 135,
+    "valid_count": 65,
+    "invalid_legacy_count": 70,
+    "invalid_deleted_count": 0,
+    "invalid_scope_count": 0,
+    "zero_reference_count": 8
+  },
+  "redis_verify": {
+    "apply": false,
+    "ready": true,
+    "checkpoints": {
+      "writes": 270,
+      "checkpoints": 206,
+      "unindexed_writes": 0,
+      "unindexed_checkpoints": 0,
+      "ready": true
+    },
+    "usage": {
+      "streams": 19,
+      "backlog_streams": 0,
+      "unindexed_partitions": 0,
+      "unscheduled_streams": 0,
+      "ready": true
+    }
+  },
+  "database_comparison": {
+    "added_tables": [
+      "bisheng.installation_bootstrap",
+      "bisheng.knowledge_unification_executor_lock"
+    ],
+    "after_dump_and_comparison_ms": 14685,
+    "after_dump_bytes": 39897650,
+    "after_dump_sha256": "172c3896c5a3a1f2125fdfee295bcaac647f5d5d23864a443e7f1aab4dd945f6",
+    "after_table_count": 213,
+    "before_table_count": 211,
+    "existing_table_sections_changed": [],
+    "missing_tables": [],
+    "openfga_table_count": 6
+  },
+  "source_and_state_integrity": {
+    "archive_regular_files": 5407,
+    "changed_source_files": [],
+    "original_history_sha256": "d8ab8d94302829f329fcd1902268255a1067a0fd58d4bb60f10d35bb97ead298",
+    "run_checkpoint_head_snapshot_unchanged": true
+  },
+  "minio": {
+    "artifact_count": 315,
+    "artifact_inventory_sha256": "1c45ae1de7c4b3d003c791983db5122e9febe0ece233e6e3df081bcb899da591",
+    "unchanged_from_mid_verify": true,
+    "modified_since_dry_run": 0
+  },
+  "local_flow_candidate_remote_exists": false,
+  "progress": [
+    {
+      "stage": "04-unified-dry-run",
+      "events": 19,
+      "heartbeats": 7,
+      "max_heartbeat_gap_seconds": 15.001,
+      "phases": [
+        "initialize",
+        "scan",
+        "sql_plan",
+        "permission_plan"
+      ],
+      "jsonl_bytes": 9355
+    },
+    {
+      "stage": "05-unified-apply",
+      "events": 2,
+      "heartbeats": 0,
+      "max_heartbeat_gap_seconds": null,
+      "phases": [
+        "initialize"
+      ],
+      "jsonl_bytes": 691
+    },
+    {
+      "stage": "06-unified-strict-verify",
+      "events": 51,
+      "heartbeats": 21,
+      "max_heartbeat_gap_seconds": 15.006,
+      "phases": [
+        "initialize",
+        "sql_plan",
+        "permission_plan",
+        "verify",
+        "fga",
+        "fga_verify",
+        "permission_finalize",
+        "reference_register",
+        "reference_retired_verify",
+        "reference_verify",
+        "reference_tail"
+      ],
+      "jsonl_bytes": 28980
+    }
+  ],
+  "service_states": {
+    "bisheng-backend": "exited",
+    "bisheng-backend-worker": "exited",
+    "bisheng-frontend": "exited",
+    "bisheng-upgrade-20261120": "running"
+  },
+  "original_five_business_files_present": 5,
+  "executor_seed_count": 0,
+  "onsite_migration_source_patches": false,
+  "business_services_restarted": false,
+  "runtime_exit_log_checks": {
+    "f118": {
+      "event_loop_closed": 0,
+      "unclosed_client_session": 0,
+      "unclosed_connector": 0,
+      "destroyed_task": 0,
+      "traceback": 0
+    },
+    "redis": {
+      "unclosed_client_session": 1,
+      "legacy_preview_count": 1,
+      "legacy_apply_count": 1,
+      "legacy_verify_count": 1,
+      "script_source_unchanged": true,
+      "exit_code": 0,
+      "ready": true
+    }
+  }
+}

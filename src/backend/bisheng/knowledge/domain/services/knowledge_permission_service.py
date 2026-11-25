@@ -62,7 +62,7 @@ class KnowledgePermissionService:
             login_user,
             resource_type=resource_type,
             resource_id=knowledge_id,
-            action="visible" if action == "use" else action,
+            action=action,
         )
 
     @classmethod

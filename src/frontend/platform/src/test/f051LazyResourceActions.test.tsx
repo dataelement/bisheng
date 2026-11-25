@@ -79,7 +79,7 @@ describe("F051 lazy resource actions", () => {
 
   it("does not request actions until load is called", async () => {
     getMyResourcePermissionsApi.mockResolvedValue({
-      actions: ["visible", "edit", "use"],
+      actions: ["visible", "edit"],
     })
     render(<Probe />, { wrapper: provider("f051-explicit-user") })
 

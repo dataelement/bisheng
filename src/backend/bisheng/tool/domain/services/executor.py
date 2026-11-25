@@ -244,7 +244,7 @@ class ToolExecutor(BaseTool):
 
             from bisheng.core.database import get_sync_db_session
             from bisheng.tool.domain.models.gpts_tools import WebSearchSecret
-            from bisheng.tool.domain.services.web_search import SecretUnavailable, WebSearchCipher, verify_operation
+            from bisheng.tool.domain.services.web_search import SecretUnavailable, WebSearchCipher, _custom
 
             tenant = get_current_tenant_id()
             if (
@@ -262,8 +262,8 @@ class ToolExecutor(BaseTool):
             custom = params.get("config", {}).get("custom")
             if not isinstance(custom, dict) or "api_key" in custom:
                 raise SecretUnavailable("Custom search configuration unavailable")
-            verify_operation(custom.get("operation"), custom.get("proof"), tenant_id=tenant, category_id=tool_type.id)
-            custom.pop("proof")
+            custom = _custom(custom)
+            params["config"]["custom"] = custom
             auth = custom.get("operation", {}).get("auth", {})
             if auth.get("location") != "none":
                 with get_sync_db_session() as session:

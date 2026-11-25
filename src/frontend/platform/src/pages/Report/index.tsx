@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { getReportFormApi } from "../../controllers/API/flow";
+import { showApiError } from "@/controllers/request";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import LabelPanne from "./components/Label";
 import Word from "./components/Word";
@@ -50,7 +51,7 @@ export default function Report() {
             </div>
             <div className="gap-4 flex h-screen p-10">
                 <div ref={iframeRef} className="flex-1 border flex justify-center items-center bg-accent">
-                    {docx.path ? (
+                    {(docx.path || docx.source_kind === 'empty') ? (
                         // office
                         <Word data={docx}></Word>
                     ) : (
@@ -79,6 +80,7 @@ export default function Report() {
 }
 
 const useReport = () => {
+    const { t } = useTranslation('flow');
     const [loading, setLoading] = useState(false);
 
     const [docx, setDocx] = useState({
@@ -100,11 +102,7 @@ const useReport = () => {
     }, [id]);
 
     const handleCreate = () => {
-        setDocx({
-            ...docx,
-            // path: 'http://192.168.106.120:3002/empty.docx'
-            path: location.origin + __APP_ENV__.BASE_URL + "/empty.docx",
-        });
+        setDocx({ key: docx.key, path: '', source_kind: 'empty' });
     };
 
     const handleImport = () => {
@@ -115,18 +113,21 @@ const useReport = () => {
         input.style.display = "none"; // Hidden from view
         input.multiple = false; // Allow only one file selection
 
-        input.onchange = (e: Event) => {
-            setLoading(true);
-
-            // Get the selected file
+        input.onchange = async (e: Event) => {
             const file = (e.target as HTMLInputElement).files?.[0];
-            uploadFileWithProgress(file, (progress) => {}).then((res) => {
+            if (!file) return;
+            setLoading(true);
+            try {
+                const res = await uploadFileWithProgress(file, () => {});
+                if (!res?.file_path || !res?.preview_upload_ref) {
+                    throw new Error(String(t('wordEditorLoadFailed')));
+                }
+                setDocx({ key: docx.key, path: res.file_path, preview_upload_ref: res.preview_upload_ref });
+            } catch (error) {
+                showApiError(error);
+            } finally {
                 setLoading(false);
-                setDocx({
-                    ...docx,
-                    path: res.file_path,
-                });
-            });
+            }
         };
 
         input.click();

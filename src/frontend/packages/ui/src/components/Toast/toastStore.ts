@@ -41,6 +41,7 @@ export interface ToastItem
   type: ToastType;
   message: string;
   action?: ToastAction;
+  loading?: boolean;
 }
 
 /** §6 lifetime formula. */
@@ -90,6 +91,8 @@ function show(type: ToastType, message: string, options: ToastOptions = {}): str
   return queue.push({ id, type, message, duration, closable, action: options.action });
 }
 
+let loadingToastSequence = 0;
+
 export interface ToastPayload extends ToastOptions {
   type?: ToastType;
   message: string;
@@ -105,6 +108,16 @@ export const toast = {
   error: (message: string, options?: ToastOptions) => show('error', message, options),
   warning: (message: string, options?: ToastOptions) => show('warning', message, options),
   info: (message: string, options?: ToastOptions) => show('info', message, options),
+  /** Pair with dismiss(id) when the operation settles or is cancelled. */
+  loading: (message: string) =>
+    queue.push({
+      id: `loading:${++loadingToastSequence}`,
+      type: 'info',
+      message,
+      loading: true,
+      duration: 0,
+      closable: false,
+    }),
   /** Object form, for call sites whose type is a runtime value. */
   show: ({ type = 'info', message, ...options }: ToastPayload) => show(type, message, options),
   dismiss: dismissToast,

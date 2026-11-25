@@ -63,6 +63,19 @@ async def request_target(user):
     return EffectiveManagementScope(value["scope_tenant_id"], value["source"], value["expires_at"])
 
 
+async def share_link_target(user):
+    """Target of a share-link request that names no management tenant.
+
+    The share link is the credential of the request, and the share endpoints read
+    the linked resource across tenants. The browser therefore sends no
+    X-Management-Tenant with a ``share-token`` request (hasIndependentScope in
+    the frontend api-client). Use the current selection when one exists, else
+    the home tenant, and never require a selection.
+    """
+    value = await TenantScopeService.get_scope(user.user_id, is_super=True)
+    return EffectiveManagementScope(value["scope_tenant_id"], value["source"], value["expires_at"])
+
+
 @contextmanager
 def bind_admitted_scope(admitted):
     with contexts.tenant_execution_scope(admitted.tenant_id):
@@ -100,13 +113,20 @@ async def admit(connection, kind):
         if expected is not None:
             require_expected_management_tenant(expected, EffectiveManagementScope(target, "own", None))
     elif tenant_business:
-        selected = await request_target(user) if user.is_global_super else EffectiveManagementScope(target, "own", None)
+        expected = connection.headers.get("X-Management-Tenant")
+        # A share-link request carries its own credential and no management target.
+        share_request = expected is None and bool(connection.headers.get("share-token"))
+        if not user.is_global_super:
+            selected = EffectiveManagementScope(target, "own", None)
+        elif share_request:
+            selected = await share_link_target(user)
+        else:
+            selected = await request_target(user)
         target = selected.tenant_id
         source = selected.source
-        expected = connection.headers.get("X-Management-Tenant")
         # Native browser WebSockets cannot set custom headers. Their endpoint
         # resource gate still proves the ID belongs to this fixed selection.
-        if expected is not None or (user.is_global_super and connection.scope["type"] == "http"):
+        if expected is not None or (user.is_global_super and connection.scope["type"] == "http" and not share_request):
             require_expected_management_tenant(expected, selected)
     elif kind == RequestScope.PLATFORM and not user.is_global_super:
         raise AdminScopeForbiddenError()

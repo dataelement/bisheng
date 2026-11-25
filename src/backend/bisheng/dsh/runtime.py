@@ -35,6 +35,19 @@ async def read_model_pricing(model_id: int) -> dict | None:
     return await LLMService.read_model_pricing(model_id)
 
 
+async def read_ledger_policy(user_id: int):
+    """Accounting metadata for a separately authorized administrator call."""
+
+    def read():
+        from bisheng.core.database import get_sync_db_session
+        from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
+
+        with get_sync_db_session() as session:
+            return UnifiedPolicyRepository(session).ledger_policy(user_id)
+
+    return await asyncio.to_thread(read)
+
+
 async def read_credit_setting():
     """F016: current tenant's credit settings; defaults when the tenant has none."""
 

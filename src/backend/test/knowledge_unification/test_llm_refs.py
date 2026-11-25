@@ -12,7 +12,6 @@ import pytest
 from sqlalchemy import event, select
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError, LLMModelSharedReadonlyError
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, management_tenant_scope
 from bisheng.core.database import tenant_filter
@@ -141,6 +140,7 @@ def actor(*, admin=True, super_admin=False):
 
 async def inspect(impact, identity, *, server_id=1, retained=(), delete_server=False):
     session, service, _ = impact
+    await session.commit()  # Hints read committed data through their independent Session.
     return await service.ainspect_removed_models(
         session, identity=identity, server_id=server_id, retained_model_ids=retained, delete_server=delete_server
     )
@@ -167,9 +167,9 @@ async def test_five_model_kinds_full_pages_and_distinct_source_versions_are_coun
     assert {target.target_id for target in result.targets} == {"11", "12", "13", "14", "15"}
     assert sum(dict(result.source_counts).values()) == 6
     assert sum(dict(result.slot_counts).values()) == 438
-    assert result.blocked and result.check_complete and ledger.reads == 2
+    assert result.blocked and result.check_complete and ledger.reads == 0
     assert result.restricted_counts == result.source_counts
-    assert result.coverage_epoch == 1 and len(result.inbound_digest) == 64
+    assert result.coverage_epoch == 0 and len(result.inbound_digest) == 64
     assert "private-" not in json.dumps(asdict(result))
     assert len(model_queries) <= 10
 
@@ -188,17 +188,18 @@ async def test_shared_root_target_counts_both_source_tenants_without_disclosing_
     assert result.targets[0].target_id == "22" and result.blocked
 
 
-async def test_no_production_coverage_adapter_never_means_zero_references(impact):
-    session, service, _ = impact
-    with actor() as user, pytest.raises(ReferenceCoverageNotReadyError) as failure:
-        await ModelReferenceService(runtime=service.runtime).ainspect_removed_models(
+async def test_model_hints_do_not_require_a_production_coverage_adapter(impact):
+    session, _, ledger = impact
+    await session.commit()
+    with actor() as user:
+        result = await ModelReferenceService().ainspect_removed_models(
             session, identity=user, server_id=1, retained_model_ids=()
         )
-    assert failure.value.kwargs["reason"] == "model_reference_coverage_unconfigured"
+    assert result.check_complete and not result.blocked and ledger.reads == 0
 
 
 @pytest.mark.parametrize("failure", ["source", "tenant", "epoch", "query"])
-async def test_incomplete_or_changed_checks_fail_closed_even_for_empty_results(impact, failure):
+async def test_ledger_changes_do_not_block_hints_and_query_failure_is_unknown(impact, failure, monkeypatch):
     session, _, ledger = impact
     if failure == "source":
         row = (await session.execute(select(KnowledgeUnificationRun))).scalar_one()
@@ -208,15 +209,23 @@ async def test_incomplete_or_changed_checks_fail_closed_even_for_empty_results(i
     elif failure == "epoch":
         ledger.drift = True
     else:
+        from unittest.mock import AsyncMock
 
-        def broken(state):
-            if state.is_select and "business_resource_reference" in str(state.statement):
-                raise RuntimeError("reference storage unavailable")
+        from sqlalchemy.exc import OperationalError
 
-        event.listen(session.sync_session, "do_orm_execute", broken)
+        from bisheng.resource_reference.domain.repositories.reference_hint_repository import ReferenceHintRepository
+
+        monkeypatch.setattr(
+            ReferenceHintRepository,
+            "aread",
+            AsyncMock(side_effect=OperationalError("select", {}, Exception("unavailable"))),
+        )
     await session.flush()
-    with actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
-        await inspect(impact, user)
+    await session.commit()
+    with actor() as user:
+        result = await inspect(impact, user)
+    assert ledger.reads == 0
+    assert result.check_complete is (failure != "query")
 
 
 async def test_original_admin_tenant_and_shared_readonly_boundaries_remain(impact):
@@ -279,5 +288,6 @@ async def test_inbound_target_metadata_must_agree_with_actual_live_owner(impact,
         rows[0].legacy_invalid_reason = "target_missing"
         rows[0].legacy_run_id, rows[0].legacy_evidence_key = "frozen-run", "frozen-evidence"
     await session.flush()
-    with actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
-        await inspect(impact, user)
+    with actor() as user:
+        result = await inspect(impact, user)
+    assert result.check_complete and result.blocked

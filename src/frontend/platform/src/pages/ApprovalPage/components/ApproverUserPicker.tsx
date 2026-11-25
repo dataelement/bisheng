@@ -1,12 +1,9 @@
-import { Button, Input } from '@bisheng/ui';
+import { Checkbox, Input } from "@bisheng/ui";
 import { SubjectBusinessId, SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus";
 import { useSubjectSearch } from "@/components/bs-comp/selectComponent/useSubjectSearch";
-
-
 import { getUsersApi } from "@/controllers/API/user";
 import { getExceptionApproverCandidatesApi, type ApprovalApproverCandidate } from "@/controllers/API/approval";
 import { managementRequestScope } from "@/controllers/managementScope";
-import { Checkbox } from "@bisheng/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -31,6 +28,7 @@ export function ApproverUserPicker({ exceptionId, value, names, onChange }: Appr
   const scopeKey = JSON.stringify([exceptionId ?? 'flow-node', managementRequestScope(), scopeRevision]);
   const search = useSubjectSearch<ApprovalApproverCandidate>({
     scopeKey,
+    retainRowsOnAppend: true,
     fetchPage: (keyword, page, signal) => exceptionId == null
       ? getUsersApi({ name: keyword, page, pageSize: 50, simple: true }, { signal })
       : getExceptionApproverCandidatesApi(exceptionId, keyword, page, signal),
@@ -41,7 +39,7 @@ export function ApproverUserPicker({ exceptionId, value, names, onChange }: Appr
   }, [search.rows]);
   return (
     <div className="min-w-0 space-y-3 py-2">
-      <Input {...search.inputProps} placeholder={t("subjectSearch.userPlaceholder")} className={"block w-full"} />
+      <Input {...search.inputProps} placeholder={t("subjectSearch.userPlaceholder")} />
       <div
         className="max-h-60 overflow-y-auto rounded-lg border border-border divide-y divide-border"
         onScroll={(event) => {
@@ -86,12 +84,12 @@ export function ApproverUserPicker({ exceptionId, value, names, onChange }: Appr
               </span>
             </label>
           ))}
+        <SubjectSearchStatus
+          loading={search.loadingMore}
+          failed={search.loadMoreFailed}
+          onRetry={search.retry}
+        />
       </div>
-      {!search.loading && !search.failed && !search.tooLong && search.rows.length < search.total && (
-        <Button size="small" variant="text" type="button" onClick={search.loadMore} color="default">
-          {t("subjectSearch.loadMore")}
-        </Button>
-      )}
       {value.length > 0 && (
         <div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
           {t("subjectSearch.selectedCount", { count: value.length })}:{" "}

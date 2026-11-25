@@ -145,7 +145,8 @@ async def test_main_overflow_is_compressed_and_retried():
     assert result["messages"][-1].content == "报告完成"
     assert model.summary_calls == 1  # compressed exactly once
     # The evicted history was offloaded before the summary replaced it.
-    assert "/conversation_history/t.md" in result["files"]
+    # deepagents 0.7 names the file after a generated session id, not the thread id.
+    assert [path for path in result["files"] if path.startswith("/conversation_history/")] != []
 
 
 async def test_main_overflow_after_compression_fails_as_context_overflow():
@@ -170,8 +171,10 @@ async def test_subagent_overflow_comes_back_as_a_tool_result():
             {"name": "task", "args": {"description": "读第 1-50 页", "subagent_type": "general-purpose"}, "id": "t0"}
         ],
     )
-    # main: delegate → (subagent: overflow, overflow) → main reads the note and finishes.
-    model = _model([task_call, OVERFLOW, OVERFLOW, AIMessage("改为分段处理，报告完成")])
+    # main: delegate → (subagent: reads 3 pages, overflow, overflow) → main reads the
+    # note and finishes. The subagent needs a history that compression can shorten:
+    # deepagents 0.7 does not retry an overflow when recovery removed nothing.
+    model = _model([task_call, *_fetch_calls(3), OVERFLOW, OVERFLOW, AIMessage("改为分段处理，报告完成")])
 
     result = await _run(_build(model, LinsightConf(), {"window": 32768, "source": "deployed"}))
 

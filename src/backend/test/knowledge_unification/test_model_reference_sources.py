@@ -3,14 +3,13 @@
 import base64
 import hashlib
 import json
-import tracemalloc
 from dataclasses import asdict
 from types import SimpleNamespace
 
 import pytest
 
 from bisheng.common.cursor import encode_cursor
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.core.logger import trace_id_var
 from bisheng.llm.domain.services.model_reference_cursor import (
     ModelReferenceSourceEntry,
@@ -130,7 +129,7 @@ async def test_complete_classification_counts_distinct_sources_once_but_only_ret
     for i in range(401):
         seed(session, ident=f"{i:03}", slots=203 if i == 2 else 1)
     seed(session, ident="foreign-secret", tenant=202)
-    await session.flush()
+    await session.commit()
     with original.actor() as user:
         result = await first(impact, user)
         assert dict(result.source_counts)["assistant"] == 402
@@ -146,7 +145,7 @@ async def test_complete_classification_counts_distinct_sources_once_but_only_ret
         page = await following(impact, user, result.source_page.next_cursor)
         assert [item.disclosure.source.source_id for item in page.data] == ["002", "003"]
         assert [item.matched_slot_count for item in page.data] == [203, 1]
-        assert [len(call) for call in owner.calls] == [2]
+        assert [len(call) for call in owner.calls] == [200, 200, 1]
 
 
 async def test_actual_default_owner_sql_metadata_is_used_and_missing_own_row_fails_closed(impact):
@@ -158,7 +157,7 @@ async def test_actual_default_owner_sql_metadata_is_used_and_missing_own_row_fai
     seed(session, ident="assistant_llm", kind="model_default")
     row = TenantSystemModelConfig(tenant_id=101, key="assistant_llm", value="not-read-secret")
     session.add(row)
-    await session.flush()
+    await session.commit()
     with original.actor() as user:
         result = await first(impact, user)
         item = result.source_page.data[0]
@@ -167,9 +166,9 @@ async def test_actual_default_owner_sql_metadata_is_used_and_missing_own_row_fai
         )
         assert dict(result.qualified_counts)["model_default"] == 1
         await session.delete(row)
-        await session.flush()
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await first(impact, user)
+        await session.commit()
+        result = await first(impact, user)
+        assert not result.check_complete
 
 
 @pytest.mark.parametrize("failure", [OSError("metadata unavailable"), ValueError("bad chain")])
@@ -177,9 +176,10 @@ async def test_metadata_failure_is_not_restricted_or_zero_references(impact, fai
     session, service, _ = impact
     metadata(service, failure=failure)
     seed(session)
-    await session.flush()
-    with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
-        await first(impact, user)
+    await session.commit()
+    with original.actor() as user:
+        result = await first(impact, user)
+    assert not result.check_complete and not result.source_counts
 
 
 async def test_continuation_fresh_permissions_and_trace_change_but_no_stale_credential_or_scope(impact):
@@ -223,7 +223,7 @@ async def test_original_openapi_d_user_admin_does_not_gain_a_new_web_only_creden
     metadata(service)
     for i in range(3):
         seed(session, ident=str(i))
-    await session.flush()
+    await session.commit()
     principal = OpenApiPrincipal(
         credential_id=9,
         actor_kind="natural_person",
@@ -267,7 +267,7 @@ async def test_still_admin_narrowed_scope_and_model_revision_cannot_reuse_a_sour
     metadata(service)
     for i in range(3):
         seed(session, ident=str(i))
-    await session.flush()
+    await session.commit()
     with original.actor() as user:
         result = await first(impact, user)
         cursor = result.source_page.next_cursor
@@ -286,7 +286,7 @@ async def test_still_admin_narrowed_scope_and_model_revision_cannot_reuse_a_sour
             reset_current_permission_actor(token)
         retained_row = await session.get(LLMModel, 15)
         retained_row.model_name = "actual-revision-changed"
-        await session.flush()
+        await session.commit()
         with pytest.raises(ResourceReferenceInvalidError):
             await following(impact, user, cursor)
 
@@ -298,14 +298,14 @@ async def test_all_six_types_and_versions_keep_qualified_counts_and_last_page_bi
         seed(session, ident="same", kind=kind.value)
     seed(session, ident="same", kind="workflow_version", version="history")
     last_rows = seed(session, ident="z", slots=201)
-    await session.flush()
+    await session.commit()
     with original.actor() as user:
         before = await first(impact, user)
         assert sum(dict(before.source_counts).values()) == 8
         assert before.qualified_counts == before.source_counts
         assert sum(dict(before.restricted_counts).values()) == 0
         last_rows[-1].slot_key = "last-page-changed"
-        await session.flush()
+        await session.commit()
         with pytest.raises(ResourceReferenceInvalidError):
             await following(impact, user, before.source_page.next_cursor)
         after = await first(impact, user)
@@ -340,11 +340,11 @@ async def test_new_session_can_continue_but_last_binding_id_reinsertion_requires
                 .first()
             )
             row.id += 500
-            await active.flush()
-            with pytest.raises(ResourceReferenceInvalidError):
-                await following((active, service, ledger), user, result.source_page.next_cursor)
+            await active.commit()
+            page = await following((active, service, ledger), user, result.source_page.next_cursor)
+            assert page.data[0].disclosure.source.source_id == "2"
             changed = await first((active, service, ledger), user)
-            assert changed.inbound_digest != result.inbound_digest
+            assert changed.inbound_digest == result.inbound_digest
 
 
 def binding(ident, *, slot="same"):
@@ -367,46 +367,36 @@ def binding(ident, *, slot="same"):
 
 
 @pytest.mark.parametrize("ids", [(0,), (True,), (2**64,), (1, 1), (2, 1)])
-async def test_v2_digest_rejects_invalid_or_nonmonotonic_physical_ids(impact, monkeypatch, ids):
-    _, service, _ = impact
+async def test_model_hints_do_not_use_legacy_owner_stream_authority(impact, monkeypatch, ids):
+    from unittest.mock import AsyncMock
+
+    _, service, ledger = impact
     metadata(service)
-
-    async def pages(*args, global_id_order=False, **kwargs):
-        assert global_id_order is True
-        yield tuple(binding(i) for i in ids)
-
-    monkeypatch.setattr(service.runtime.repository, "aiter_inbound_for_owner_pages", pages)
-    with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
-        await first(impact, user)
-
-
-async def test_100001_slots_stream_complete_digest_without_hash_list_peak(impact, monkeypatch):
-    _, service, _ = impact
-    metadata(service)
-    count = 100001
-
-    async def pages(active, scope, *, global_id_order=False):
-        assert global_id_order is True
-        for start in range(1, count + 1, 200):
-            yield tuple(binding(i, slot=str(i)) for i in range(start, min(start + 200, count + 1)))
-
-    monkeypatch.setattr(service.runtime.repository, "aiter_inbound_for_owner_pages", pages)
-    expected = hashlib.sha256(b"f118-model-inbound-v2\0")
-    for i in range(1, count + 1):
-        expected.update(i.to_bytes(8, "big"))
-        expected.update(_binding_digest(binding(i, slot=str(i))))
+    legacy = AsyncMock(side_effect=AssertionError("legacy owner stream is not a hint source"))
+    monkeypatch.setattr(service.runtime.repository, "aiter_inbound_for_owner_pages", legacy)
     with original.actor() as user:
-        tracemalloc.start()
-        try:
-            result = await first(impact, user)
-            _, peak = tracemalloc.get_traced_memory()
-        finally:
-            tracemalloc.stop()
-    assert result.inbound_digest == expected.hexdigest()
-    assert dict(result.slot_counts)["assistant"] == count
-    assert result.source_page.data[0].matched_slot_count == count
-    print(f"model-source aggregate: slots={count}, peak_bytes={peak}")
-    assert peak < 1024 * 1024
+        result = await first(impact, user)
+    assert result.check_complete and not result.blocked and ledger.reads == 0
+    legacy.assert_not_called()
+
+
+async def test_model_hints_count_ordinary_rows_without_legacy_coverage_or_physical_id_digest(impact, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bisheng.resource_reference.domain.repositories.reference_hint_repository import ReferenceHintRepository
+
+    _, service, ledger = impact
+    metadata(service)
+    rows = tuple(binding(i, slot=str(i)) for i in range(1, 1002))
+    monkeypatch.setattr(ReferenceHintRepository, "aread", AsyncMock(return_value=rows))
+    expected = hashlib.sha256()
+    for row in rows:
+        expected.update(_binding_digest(row))
+    with original.actor() as user:
+        result = await first(impact, user)
+    assert result.check_complete and result.inbound_digest == expected.hexdigest()
+    assert dict(result.slot_counts)["assistant"] == 1001
+    assert result.source_page.data[0].matched_slot_count == 1001 and ledger.reads == 0
 
 
 def test_core_accepts_typed_disclosure_dependency_without_another_impact_runtime():

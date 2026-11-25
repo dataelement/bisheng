@@ -1,3 +1,6 @@
+import { resolveKnowledgeParseFailureMessage } from './knowledgeParseFailureMessage';
+import { localizedBusinessFailure } from '~/utils/failureInfo';
+import { resolveLocalizedKnowledgeImportError } from '~/pages/knowledge/webLinkI18n';
 import { ApiError } from '@bisheng/api-client';
 import request, { showApiError, translateApiErrorMessage } from './request';
 
@@ -10,6 +13,7 @@ jest.mock('~/api/chat/headers-helpers', () => ({ setTokenHeader: jest.fn() }));
 jest.mock('~/utils/loginRedirect', () => ({ redirectToLogin: jest.fn() }));
 import i18next from 'i18next';
 import messages from '../../../packages/locales/src/api_errors/en.json';
+import { knowledgeProcessing } from '../locales/en/translation.json';
 beforeAll(async () => { await i18next.init({ lng: 'en', resources: { en: { translation: { api_errors: messages } } } }); });
 const transport = (jest.requireMock('axios') as typeof import('axios')).default.create();
 const adapter = transport.defaults.adapter;
@@ -59,9 +63,47 @@ it('keeps a readable fallback before translations have initialized', () => {
 });
 
 
+it.each([
+ ['source_file_move_input_required', knowledgeProcessing.conflict.source_file_input],
+ ['source_space_move_input_required', knowledgeProcessing.conflict.source_input],
+])('shows the localized source dependency for %s', (reason, expected) => {
+ i18next.addResourceBundle('en', 'translation', { knowledgeProcessing });
+ expect(translateApiErrorMessage({ status_code: 10999, data: { reason } })).toBe(expected);
+});
+
 it('explains the observed knowledge operation and keeps unknown diagnostics private', () => {
  i18next.addResource('en', 'translation', 'knowledgeProcessing.conflict.file_queue', 'This file is queued. View Task history.');
  const error = {status_code: 10999, data: {reason: 'processing_file_state_not_ready', blocking_operation: 'file_waiting', exception: 'PRIVATE'}};
  expect(translateApiErrorMessage(error)).toBe('This file is queued. View Task history.');
  expect(translateApiErrorMessage({status_code: 10999, data: {reason: 'PRIVATE', blocking_operation: '__proto__'}})).toBe(messages['10999']);
+});
+
+
+it('shows the failing node and missing model through the HTTP error presenter', async () => {
+ const envelope = { status_code: 10996, status_message: 'PRIVATE', data: { reason: 'reference_target_invalid', reference_errors: [{
+  node_id: 'llm_b1ef4', node_name: 'LLM', resource_type: 'model', target_id: '375', state: 'invalid_missing',
+ }] } };
+ transport.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: envelope });
+ const error = await request.get('/test').catch(cause => cause);
+ if (!(error instanceof ApiError)) throw new Error('Expected ApiError');
+ expect(error).toMatchObject({ status_code: 10996, data: envelope.data });
+ expect(error.message).toContain('LLM'); expect(error.message).toContain('375');
+ expect(error.message).toContain('does not exist'); expect(error.message).not.toContain('PRIVATE');
+ showApiError(error);
+ expect(toast).toHaveBeenCalledWith(expect.objectContaining({ message: error.message }));
+});
+
+
+it('keeps exact causes in parse failures, task failures and knowledge import errors', () => {
+ const data = { reason: 'reference_target_invalid', exception: 'PRIVATE', reference_errors: [{ resource_type: 'knowledge_file', target_id: '17', state: 'invalid_deleted' }] };
+ const localize = (key: string, values?: Record<string, unknown>) => String(i18next.t(key as Parameters<typeof i18next.t>[0], values ?? {}));
+ const results = [
+  resolveKnowledgeParseFailureMessage({ code: 10996, data }),
+  localizedBusinessFailure(10996, localize, data),
+  resolveLocalizedKnowledgeImportError({ status_code: 10996, data }, localize, 'api_errors.fallback'),
+ ];
+ for (const message of results) {
+  expect(message).toContain('knowledge file (ID: 17) has been deleted');
+  expect(message).not.toContain('PRIVATE');
+ }
 });

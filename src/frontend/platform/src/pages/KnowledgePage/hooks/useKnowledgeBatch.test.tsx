@@ -203,3 +203,28 @@ it("keeps batch item names, skip reasons, and results in their respective rows",
   const results = await screen.findByRole("table", { name: "batch.results" });
   expect(within(results).getByRole("row", { name: "failed.txt batch.state_accepted" })).toBeVisible();
 });
+
+it("shows the space tag permission reason and keeps authorized file names in a blocked batch", async () => {
+  const denied = {
+    ...plan,
+    can_execute: false,
+    valid_items: [],
+    invalid_items: [{ id: 7, type: "file" as const, name: "editable.txt", reason: "space_tag_permission_required" }],
+  };
+  vi.mocked(api.inspectBatch).mockResolvedValue({ tenant: "101", inspection: denied });
+  vi.mocked(api.precheckBatch).mockResolvedValue(denied);
+  function Review() {
+    const operation = useKnowledgeBatch("scope");
+    return <>
+      <button onClick={() => { void operation.open({ ...command, operation: "tag", new_tag_names: ["new"] }); }}>Open</button>
+      <BatchOperationDialog operation={operation} />
+    </>;
+  }
+  render(<Review />);
+  fireEvent.click(screen.getByRole("button", { name: "Open" }));
+  expect(await screen.findByText("editable.txt")).toBeVisible();
+  expect(screen.getByText("batch.reason_space_tag_permission_required")).toBeVisible();
+  expect(screen.queryByText("batch.unnamed")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "batch.confirm" })).toBeDisabled();
+  expect(api.confirmBatch).not.toHaveBeenCalled();
+});

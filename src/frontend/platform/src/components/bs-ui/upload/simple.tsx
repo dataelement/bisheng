@@ -15,7 +15,7 @@ interface SimpleUploadProps {
     className?: string;
     icon?: ReactNode;
     preCheck?: (file: File) => unknown;
-    onSuccess: (name: string, path: string) => unknown;
+    onSuccess: (name: string, path: string, previewUploadRef?: string) => unknown;
 }
 
 export default function SimpleUpload({ filekey, uploadUrl, accept, className = '', icon = <UploadIcon className="group-hover:text-primary" />, preCheck, onSuccess }: SimpleUploadProps) {
@@ -54,7 +54,7 @@ export default function SimpleUpload({ filekey, uploadUrl, accept, className = '
 
         try {
             const res = await axios.post(uploadUrl, formData);
-            await onSuccess(files[0].name, res.file_path)
+            await onSuccess(files[0].name, res.file_path, res.preview_upload_ref)
         } catch (error) {
             showApiError(error);
         }

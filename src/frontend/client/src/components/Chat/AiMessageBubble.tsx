@@ -14,7 +14,9 @@ import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Mess
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
+import { QueueCard } from "~/components/Linsight/Execution/QueueCard";
 import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
+import { useRunQueuePosition } from "~/hooks/useRunQueuePosition";
 import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
@@ -25,6 +27,10 @@ import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
+import { queueIdOf } from "~/hooks/unifiedRun";
+import { selectIsMessageQueued, useRunStore } from "~/store/runStore";
+import { MessageQueuedNote, RunStoppedNote } from "./RunMessageNotes";
+import { useRunPage } from "~/components/Chat/runPageContext";
 import {
     ExportSelectionButton,
     MessageCheckbox,
@@ -32,7 +38,10 @@ import {
 import { cn } from "~/utils";
 import { CopyButton } from "~/components/Chat/MessageCopyButton";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
+import { UserMessageReferences } from "~/components/Chat/Messages/UserMessageReferences";
+import { InlineChatReference } from "~/components/Chat/InlineChatReference";
 import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
+import { MessageAttachments } from "~/components/Chat/attachments/MessageAttachments";
 import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
 import { renderGeneratedFileLink } from "~/components/Chat/attachments/GeneratedFileLink";
 import { isImageFileName } from "~/components/ui/icon/File/FileIcon";
@@ -97,6 +106,7 @@ interface AiMessageBubbleProps {
     setSiblingIdx?: (idx: number) => void;
     /** Knowledge space AI: gray user bubble, borderless assistant, 14px body, full width */
     knowledgeChatLayout?: boolean;
+    showComposerAttachments?: boolean;
     /** Show the export-session entry under assistant messages. Only the full
         homepage/task chat opts in; the lightweight knowledge/file/article docks
         and the share view leave it off. */
@@ -283,6 +293,7 @@ const AiMessageBubble = memo(
         siblingCount,
         setSiblingIdx,
         knowledgeChatLayout,
+        showComposerAttachments,
         allowExport,
         stripCitationHandlesOnCopy,
         allowFeedback = true,
@@ -300,6 +311,7 @@ const AiMessageBubble = memo(
                     siblingCount={siblingCount}
                     setSiblingIdx={setSiblingIdx}
                     knowledgeChatLayout={knowledgeChatLayout}
+                    showComposerAttachments={showComposerAttachments}
                     onPreviewFile={onPreviewFile}
                 />
             );
@@ -334,6 +346,7 @@ function UserBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    showComposerAttachments,
     onPreviewFile,
 }: {
     message: ChatMessage;
@@ -341,9 +354,13 @@ function UserBubble({
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    showComposerAttachments?: boolean;
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const { user } = useAuthContext();
+    // F004 AC-13/AC-14: sent while a run was busy and not read by the agent yet.
+    // The store only holds conversations whose run events the page follows.
+    const queued = useRunStore(selectIsMessageQueued(message.conversationId ?? "", queueIdOf(message)));
 
     // F028: render selection checkbox at the left margin when selection mode
     // is active for this conversation. ``mr-auto`` keeps the user bubble
@@ -353,10 +370,11 @@ function UserBubble({
         !!message.conversationId &&
         isActiveForChat(message.conversationId);
 
-    // Pull out the optional `:::tag {...}:::` chip prefix
+    const composerReferences = message.composerReferences;
+    // Knowledge chat history may still contain the older tag prefix.
     const { tag, bodyText } = useMemo(
-        () => parseUserMessageText(message.text || ""),
-        [message.text]
+        () => composerReferences?.length ? { tag: null, bodyText: message.text } : parseUserMessageText(message.text || ""),
+        [composerReferences, message.text]
     );
 
     return (
@@ -371,8 +389,9 @@ function UserBubble({
             {/* Mobile: cap the bubble so its left edge keeps a 40px gap from the
                 content area (long URLs were overflowing off the left edge). */}
             <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
-                {/* Uploaded files preserve order and open documents in the preview panel. */}
-                <UploadedFileList files={message.files || []} conversationId={message.conversationId} onPreviewFile={onPreviewFile} />
+                {showComposerAttachments
+                    ? <MessageAttachments files={message.files} conversationId={message.conversationId} onPreviewFile={onPreviewFile} />
+                    : <UploadedFileList files={message.files || []} conversationId={message.conversationId} onPreviewFile={onPreviewFile} />}
                 {/* min-w-0: without it this flex row's `min-width: auto` floors at
                     the URL's (unbreakable) min-content width, defeating the bubble's
                     max-width and letting long content overflow off the left edge. */}
@@ -402,26 +421,14 @@ function UserBubble({
                                     : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
                             )}
                         >
-                            {tag && (
-                                <span
-                                    className={cn(
-                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
-                                        knowledgeChatLayout
-                                            ? "text-[14px] font-normal leading-[22px]"
-                                            : "h-5 text-xs font-medium leading-none align-middle"
-                                    )}
-                                    style={{ backgroundColor: "rgb(var(--brand-500)/0.35)" }}
-                                    title={`#${tag.name}`}
-                                >
-                                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                                        #{tag.name}
-                                    </span>
-                                </span>
-                            )}
-                            {bodyText}
+                            {tag && <InlineChatReference kind="tag" label={`#${tag.name}`} />}
+                            {composerReferences?.length
+                                ? <UserMessageReferences text={bodyText} references={composerReferences} />
+                                : bodyText}
                         </div>
                     </div>
                 </div>
+                {queued && <MessageQueuedNote />}
                 {/* Action buttons */}
                 <div className="dsh-message-actions flex items-center justify-end gap-1 mt-1.5">
                     <MessageTime message={message} />
@@ -438,8 +445,8 @@ function UserBubble({
 // ==================== Assistant Bubble ====================
 function AssistantBubble({
     message,
-    isLatest,
-    isStreaming,
+    isLatest: isLatestProp,
+    isStreaming: isStreamingProp,
     onRegenerate,
     siblingIdx,
     siblingCount,
@@ -468,6 +475,32 @@ function AssistantBubble({
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const localize = useLocalize();
+    // F004: the answer row of a run in progress carries `liveRunId` until the run
+    // ends. It stops being the last row once the user sends a message into the
+    // run, so its streaming state cannot depend on its position in the list.
+    const isLiveRun = message.liveRunId !== undefined;
+    const isLatest = isLiveRun || isLatestProp;
+    const isStreaming = isLiveRun || isStreamingProp;
+    // F004 (T061): on a page that follows run events a stored deep-research turn
+    // is review only; the turn in progress is this same row fed by the run store.
+    const runPage = useRunPage();
+    const isLiveTaskRow = isLiveRun && message.category === "task";
+    // The run waits for the user's answer: nothing is being written, so the
+    // live row shows no typing cursor. Only a live row reads the store.
+    const liveRunWaiting = useRunStore((state) => {
+        if (!message.liveRunId || !message.conversationId) return false;
+        const run = state.conversations[message.conversationId]?.run;
+        return run?.runId === message.liveRunId && run.status === "waiting";
+    });
+    // AC-36: a deep-research run that has produced nothing yet may still wait in
+    // the worker queue; its position is asked for until work starts.
+    const liveTaskIdle = useRunStore((state) => {
+        if (!isLiveTaskRow || !message.conversationId) return false;
+        const run = state.conversations[message.conversationId]?.run;
+        if (!run || run.runId !== message.liveRunId || run.status !== "running") return false;
+        return !run.text && run.thinking.length === 0 && run.toolCalls.length === 0 && run.plan.length === 0;
+    });
+    const queuePosition = useRunQueuePosition(message.conversationId, liveTaskIdle);
 
     // Prefer the backend's own classification; fall back to the status code so
     // pre-classification backends still split busy-vs-failed correctly, and land
@@ -482,13 +515,13 @@ function AssistantBubble({
     const isTransientError = !!message.error && isTransientErrorType(resolvedErrorType);
 
     // v2.5 Agent-native detection — when a message has structured fields set
-    // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
+    // (populated from the run events or by the getAgentMessages history
     // loader), skip the legacy :::thinking:::/:::web::: regex parsing and let
     // the dedicated components own those sections.
     const isAgentNative = useMemo(() => {
-        if (message.category === "agent_answer") return true;
+        if (message.category === "agent_answer" || isLiveTaskRow) return true;
         return Array.isArray(message.events) && message.events.length > 0;
-    }, [message.category, message.events]);
+    }, [message.category, message.events, isLiveTaskRow]);
 
     // Parse :::thinking::: and :::web::: from the raw text (legacy path only).
     // Agent-native path still needs to strip the legacy envelope because the
@@ -567,7 +600,7 @@ function AssistantBubble({
     );
 
     const modelName = message.sender || "AI";
-    const showCursor = isLatest && isStreaming;
+    const showCursor = isLatest && isStreaming && !liveRunWaiting;
     const isWaitingFirstToken =
         isStreaming &&
         isLatest &&
@@ -580,6 +613,7 @@ function AssistantBubble({
     // tokens / events have landed yet. Disappears as soon as anything
     // streams in (events.length > 0 || regularContent).
     const showWaiting =
+        queuePosition === null &&
         !!isStreaming &&
         !!isLatest &&
         !message.error &&
@@ -595,7 +629,9 @@ function AssistantBubble({
     // F035 Track J (TJ-7): task turn — render the embedded linsight execution
     // panel by SV instead of the agent/legacy text rendering. The user question
     // bubble is the preceding (daily) user row; this row owns the rich panel.
-    if (message.category === "task") {
+    // F004 (T061): a `task` row that carries `liveRunId` is the run in progress
+    // and falls through to the shared timeline below.
+    if (message.category === "task" && !isLiveTaskRow) {
         return (
             <div className={cn("dsh-assistant-message flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
                 {showCheckbox && message.conversationId && (
@@ -613,6 +649,7 @@ function AssistantBubble({
                         conversationId={message.conversationId}
                         answer={message.text}
                         onPreviewFile={onPreviewFile}
+                        liveChannel={!runPage}
                     />
                 </div>
             </div>
@@ -662,6 +699,8 @@ function AssistantBubble({
                     </>
                 )}
 
+                {queuePosition !== null && <QueueCard position={queuePosition} />}
+
                 {/* Pre-stream "正在思考" indicator — pulsing black dot. Rendered AFTER the
                     thinking block so that once "思考内容" appears it sits below that node
                     (answer-pending), not above it. */}
@@ -676,7 +715,7 @@ function AssistantBubble({
                     answer body streamed in: a stream that fails *after* emitting text
                     must keep its markdown + citation rendering instead of degrading to
                     raw text (which also leaks the private-use citation markers). */}
-                {!showWaiting && (hasAnswerBody || !message.error) && (
+                {!showWaiting && (hasAnswerBody || !message.error) && !(message.stopped && !regularContent) && (
                     <div
                         className={cn(
                             "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
@@ -753,12 +792,15 @@ function AssistantBubble({
                             referenceId={message.referenceId}
                             fallbackMessage={isPlainFailure ? undefined : message.errorText || regularContent}
                             description={isPlainFailure ? plainFailureText : undefined}
-                            // Daily chat never shows the per-type "建议…" line: the
-                            // input box is right below, so "re-send" goes without saying.
+                            // No per-type "建议…" line: the chat description says what to do.
                             hideHint
+                            surface="chat"
                         />
                     )
                 )}
+
+                {/* F004: the user stopped the run. Neutral mark, never the error style. */}
+                {!showWaiting && message.stopped && !message.error && <RunStoppedNote />}
 
                 {/* Action buttons (only show when not streaming). Suppressed on the
                     transient busy notice — copy/feedback on a "try again" status is

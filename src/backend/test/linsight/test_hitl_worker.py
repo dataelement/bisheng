@@ -19,11 +19,11 @@ is exercised conceptually via ``make_checkpointer`` being swappable for
 from __future__ import annotations
 
 import asyncio
-import pickle
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.core.cache.serialization import decode_redis_value, encode_redis_value
 from bisheng.linsight.worker import (
     LinsightQueue,
     ScheduleCenterProcess,
@@ -41,19 +41,19 @@ class _FakeRedisList:
         self.lists: dict[str, list] = {}
 
     async def arpush(self, key, value, expiration=3600):
-        value = pickle.dumps(value) if not isinstance(value, bytes) else value
+        value = encode_redis_value(key, value)
         self.lists.setdefault(key, []).append(value)
 
     async def alpush(self, key, value, expiration=3600):
-        # NOTE: RedisClient.alpush does NOT pickle; callers must pass bytes.
-        self.lists.setdefault(key, []).insert(0, value)
+        # Object queue writers authenticate every value.
+        self.lists.setdefault(key, []).insert(0, encode_redis_value(key, value))
 
     async def ablpop(self, key, timeout=0):
         items = self.lists.get(key, [])
         if not items:
             return None
         raw = items.pop(0)
-        return pickle.loads(raw) if raw else None
+        return decode_redis_value(key, raw) if raw else None
 
     async def alpop(self, key, count=None):
         items = self.lists.get(key, [])
@@ -63,16 +63,15 @@ class _FakeRedisList:
 
     async def alrange(self, key, start=0, end=-1):
         items = self.lists.get(key, [])
-        return [pickle.loads(v) for v in items if v is not None]
+        return [decode_redis_value(key, v) for v in items if v is not None]
 
     async def allen(self, key):
         return len(self.lists.get(key, []))
 
     async def alrem(self, key, value):
-        value = pickle.dumps(value) if not isinstance(value, bytes) else value
         items = self.lists.get(key, [])
         before = len(items)
-        self.lists[key] = [v for v in items if v != value]
+        self.lists[key] = [v for v in items if decode_redis_value(key, v) != value]
         return before - len(self.lists[key])
 
 

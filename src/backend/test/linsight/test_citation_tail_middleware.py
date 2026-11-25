@@ -200,7 +200,7 @@ def test_deliverable_line_switches_to_handles():
     prompt = _build_linsight_system_prompt(True, citation_handles=True)
     assert "[S3] 或 [S3][S7]" in prompt
     assert CITATION_LINE_MARK not in prompt
-    assert "[Sn]" in _LINSIGHT_CITATION_TAIL_HANDLES_ZH
+    assert "[S3]" in _LINSIGHT_CITATION_TAIL_HANDLES_ZH and "[Sn]" not in _LINSIGHT_CITATION_TAIL_HANDLES_ZH
     assert "" not in _LINSIGHT_CITATION_TAIL_HANDLES_ZH
 
 
@@ -222,12 +222,16 @@ async def test_stacks_use_handle_tail_and_rules_when_scope_enabled(factory_env):
 
 async def test_source_middleware_mounted_only_under_handle_contract(factory_env):
     session = SimpleNamespace(id="sv-1", session_id="chat-1", tenant_id=1, user_id=1, question="q")
-    scope = SimpleNamespace(enabled=True, entries=[], handles={}, svid="sv-1", session_id="chat-1", record_seen=AsyncMock())
+    scope = SimpleNamespace(
+        enabled=True, entries=[], handles={}, svid="sv-1", session_id="chat-1", record_seen=AsyncMock()
+    )
 
     await agent_factory.create_linsight_agent(session, [SearchKnowledgeBase(), _FakeWeb()], citation_scope=scope)
     main = _names(factory_env["middleware"])
     researcher = _names(factory_env["subagents"][0]["middleware"])
-    assert "LinsightCitationSource" in main and main.index("LinsightCitationSource") < main.index("LinsightCitationTail")
+    assert "LinsightCitationSource" in main and main.index("LinsightCitationSource") < main.index(
+        "LinsightCitationTail"
+    )
     assert "LinsightCitationSourceSub" in researcher
 
     scope.enabled = False

@@ -96,10 +96,10 @@ async def test_native_many_target_plan_keeps_one_core_scan_one_insert_and_consta
     inbound = [(sql, params) for sql, params in statements if "FROM business_resource_reference" in sql]
     assert len(result.inspection.targets) == count
     assert sum(dict(result.inspection.slot_counts).values()) == 3 * count
-    assert by_table["llm_model"] == 4 and by_table["llm_server"] == 3
-    assert by_table["resource_reference_tombstone"] == ceil(count / 200)
+    assert by_table["llm_model"] == 1 and by_table["llm_server"] == 2
+    assert by_table["resource_reference_tombstone"] == 0
     assert len(inbound) <= ceil(count / 200) + 3 * count // 200
-    assert max(len(params) for _, params in inbound) <= 204
+    assert max(len(params) for _, params in inbound) <= 400
     assert len(selects) <= 23 + 2 * ceil(count / 200) + 3 * count // 200
     assert sum(sql.lstrip().upper().startswith("INSERT INTO KNOWLEDGE_OPERATION_PLAN") for sql, _ in statements) == 1
     assert not any(sql.lstrip().upper().startswith(("UPDATE", "DELETE")) for sql, _ in statements)

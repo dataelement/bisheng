@@ -295,9 +295,16 @@ M2此前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26
 
 1. 运维先停止所有业务写端及消费者、保存一致备份和 schema 记录，再执行中性 DDL。脚本不启停服务，也不检查 Celery 队列或据队列推断停写。
 2. 新 M2 前运行 `prepare_f118_history.py` 的 preview，保存选中 SQL/FGA 证据、计划及必要的精确孤儿物理内容备份；核对后按同计划 `--apply --operator-id <ID>`。计划中有未解决项时继续阻塞，不自动扩大清理范围。普通资源的 SQL/底层向量数量偏差仍单独治理。
-3. 为当次 Run、环境、writer 和实际全部租户生成不可变 backup/schema 证据描述符。旧30租户材料不能冒充当前31租户材料，不改写旧材料或冻结基线。
+3. DBA 完成一致备份并通知升级负责人即可，不生成或提交 backup/schema 证明描述符及 `f118-inputs.json`。使用原服务配置、当次 Run 和实际环境直接执行正式预检。新 Run 的实际租户集合现场盘点；旧 Run 仍核对原集合，不改写旧材料或冻结基线。
 4. 新 Run 默认 preview 现在执行与正式新 M2 相同的完整业务、权限、六类来源与计划校验。分页暂存于私有本地临时目录，成功或抛异常退出时删除；不写 SQL、OpenFGA 或 MinIO，不冻结 Run。通过返回 `validation_scope=current_inventory`、`preflight_complete=true`、`frozen=false`、`ready=false`。`preflight_complete` 仅表示本轮预检完成，不能作为迁移完成或开服依据。
 5. 已有冻结 Run 的 preview/`--resume` 沿原图校验，输出 `validation_scope=frozen_run`、`preflight_complete=false`；不会重新扫描并覆盖原基线。原 Run 租户集合变化仍阻断复核。若新预览初查后被另一进程抢先冻结，也明确拒绝，不把旧图复核冒充全量新扫描。
 6. 新 M2 记录 `physical_inventory_policy=bindings_only`：普通资源只保留 SQL 的 `index_name/collection_name` 原绑定，不查询 ES/Milvus 的存在性、schema、count，也不逐文件做 MinIO stat。代码中的模型/知识引用“physical fact”若来自 SQL 目标仓储，仍是目标行与父关系校验，并非向量查询。旧冻结图继续按旧 codec 和原证据合同校验。
-7. MinIO 仍承载不可变 backup/schema 证据及正式 baseline/plan，故保留这些迁移对象读写。已确认的孤儿文件清理仍需按精确文件 ID、原索引绑定和对象键备份、核验、删除对应内容；这条历史准备路径可访问 ES/Milvus/MinIO，不能泛化为扫描或删除整库。
+7. MinIO 仍承载正式 baseline/plan 等迁移自身的恢复材料；外部 DBA backup/schema 证明不再读写。新冻结根记录 `external_material_policy=not_required`，旧 Run 省略参数时从原图读取历史身份字段，保留原哈希及 checkpoint。已确认的孤儿文件清理仍需按精确文件 ID、原索引绑定和对象键备份、核验、删除对应内容；这条历史准备路径可访问 ES/Milvus/MinIO，不能泛化为扫描或删除整库。
 8. 预检通过后显式 `--apply` 重新盘点并冻结 M2，随后完成 SQL 转换、权限 namespace/目标授权模型及 Catalog 发布、六来源回填、对账和全租户 Coverage。只有真实升级验收通过后，运维才恢复业务访问。中断使用同 Run、原材料和 checkpoint 恢复，遇阻保存证据并维持维护状态。
+
+## 2026-11-19 操作收敛
+
+正式操作以[3.1.0-beta1 升级指南](../../../docs/upgrades/v3.1.0-beta1.md)第五、六阶段为准；上文历史演练中的 DBA 证据封装命令不再执行。默认 preview、显式 apply 及冻结后同 Run resume 的区分不变，停服/一致备份由 DBA 与运维协调负责。普通资源转换、权限、引用和历史孤儿精确清理范围均不扩大。
+
+
+冻结后的默认权限发布还会核验原图残留：原 mode/Grant 为 CURRENT、原普通 assignee 明确 INACTIVE 且没有相同聚合边的 ACTIVE 贡献时，将该 assignee 边列入正式发布的 DELETE；原 Grant 明确 INACTIVE、全部来源均为已停用普通来源时，连同其准确 model/grant 边退役。候选必须来自冻结 SQL，整个 Grant 图组件不能含其他资源、userset 或未知关系。只通过原 Run 的正式发布和 ACK 检查点执行，不手工删图、不改历史账本、不重新冻结。旧 policy-1 Run 沿用原保留规则；缺失退役证据、保护主体或未知关系继续阻塞。
