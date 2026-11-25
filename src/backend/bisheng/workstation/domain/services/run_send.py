@@ -960,14 +960,19 @@ async def _start_direct(
         # The sources this execution's tools registered (T059).
         citation_items=lambda: direct_run_turn.collected_citations(result.run_id),
         on_persisted=on_persisted,
+        # Design §5 #34: when the run asks again, the row so far waits in Redis.
+        on_parked=lambda state: run_message_persist.save_parked_answer(
+            svc.redis, conversation_id, result.run_id, state
+        ),
     )
+    parked_answer = None
     if is_resume:
-        earlier = parked.get("text") or ""
-        if earlier:
-            projector.final_msg = earlier
-            projector.events.append({"type": "text", "content": earlier})
-        # Every question this run asked, with its answer, after the text written before.
-        projector.events.extend(await run_message_persist.answered_question_events(conversation_id, result.run_id))
+        # What the run showed before it parked (thinking, tool calls, text), with
+        # every question it asked answered in place.
+        parked_answer = await run_message_persist.parked_answer_raw(svc.redis, conversation_id, result.run_id)
+        await run_message_persist.seed_parked_answer(
+            projector, conversation_id, result.run_id, parked.get("text") or "", parked_answer
+        )
         # T055: files written before the park belong to the same answer row.
         projector.seed_files(parked.get("files"))
 
@@ -1007,6 +1012,8 @@ async def _start_direct(
         sender=sender,
         model_id=data.model,
         storage_partition=storage_partition,
+        # Kept for whoever closes the resumed run without this projector.
+        parked_answer=parked_answer,
     )
     # The only attachment of these hooks: no process-wide hook factory is
     # registered in the API process, or every row would be written twice.

@@ -33,7 +33,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.linsight.domain.services.run_event_stream import EventWriter, RunEventStream
 from bisheng.workstation.api.endpoints import chat as chat_endpoint
-from bisheng.workstation.domain.services import chat_service, run_send
+from bisheng.workstation.domain.services import chat_service, run_message_persist, run_send
 from bisheng.workstation.domain.services.run_dispatch import RunDispatchService, inbox_key
 from bisheng.workstation.domain.services.run_lease import RunLeaseService
 
@@ -183,7 +183,9 @@ async def world(monkeypatch: pytest.MonkeyPatch):
         async def run():
             writer = EventWriter(w.stream, ctx.conversation_id, ctx.run_id)
             parked = False
-            for event in [{"type": "run_started", "data": {"profile": "direct"}}, *script]:
+            # A resumed execution continues the run's stream (no ``run_started``).
+            started = [] if ctx.is_resume else [{"type": "run_started", "data": {"profile": "direct"}}]
+            for event in [*started, *script]:
                 event = {**event, "run_id": ctx.run_id}
                 await writer.emit(event)
                 for hook in on_event:
@@ -911,3 +913,193 @@ async def test_answer_row_keeps_the_question_and_its_answer(world: _World, clien
     asked = events[1]
     assert (asked["type"], asked["tool_name"], asked["tool_call_id"]) == ("tool_call", "ask_user", "c1")
     assert asked["args"] == question and asked["results"] == "活动宣传页"
+
+
+# --------------------------------------------------- what the run showed before it parked
+# Design §5 #34: the answer row keeps the thinking, tool calls and text written
+# before each question, and each question with its answer in place.
+
+
+def _asking(call_id: str, question_text: str, *, before: list[dict]) -> tuple[dict, list[dict]]:
+    question = {"call_id": call_id, "reason": "", "questions": [{"id": f"q-{call_id}", "question": question_text}]}
+    script = [
+        *before,
+        {"type": "tool_call", "data": {"call_id": call_id, "name": "ask_user", "status": "start", "params": {}}},
+        {"type": "ask_user", "data": question},
+    ]
+    return question, script
+
+
+def _worked(tag: str) -> list[dict]:
+    """Thinking, one finished tool call and some text."""
+    return [
+        {"type": "thinking", "data": {"text": f"想一想{tag}", "call_id": f"m-{tag}"}},
+        {
+            "type": "tool_call",
+            "data": {"call_id": f"t-{tag}", "name": "read_file", "status": "start", "params": {"path": f"{tag}.md"}},
+        },
+        {
+            "type": "tool_call",
+            "data": {"call_id": f"t-{tag}", "name": "read_file", "status": "end", "output": f"内容{tag}"},
+        },
+        {"type": "text", "data": {"text": f"文字{tag}。"}},
+    ]
+
+
+async def _send(world: _World, client: httpx.AsyncClient, text: str, script: list[dict]) -> str:
+    world.script = script
+    response = await client.post(f"{PREFIX}/chat/completions", json=_body(text=text), headers=V2)
+    await asyncio.gather(*world.tasks)
+    return response.json()["data"]["run_id"]
+
+
+def _answered(call_id: str, answer: str) -> dict:
+    return {"type": "ask_user_answered", "data": {"call_id": call_id, "answer": answer}}
+
+
+def _shape(events: list[dict]) -> list[tuple]:
+    out = []
+    for event in events:
+        if event["type"] == "tool_call":
+            out.append(("tool_call", event["tool_name"], event["tool_call_id"]))
+        else:
+            out.append((event["type"], event["content"]))
+    return out
+
+
+async def test_answer_row_keeps_what_the_run_showed_before_it_asked(world: _World, client: httpx.AsyncClient):
+    question, script = _asking("c1", "做哪种网页", before=_worked("一"))
+    run_id = await _send(world, client, "做个网页", script)
+    assert (await world.state()).status == "waiting"
+
+    await _send(
+        world,
+        client,
+        "活动宣传页",
+        [
+            _answered("c1", "活动宣传页"),
+            {"type": "text", "data": {"text": "好的。"}},
+            {"type": "run_finished", "data": {}},
+        ],
+    )
+
+    (row,) = world.answer_rows
+    stored = json.loads(row.message)
+    assert stored["msg"] == "文字一。好的。"
+    events = stored["events"]
+    assert _shape(events) == [
+        ("thinking", "想一想一"),
+        ("tool_call", "read_file", "t-一"),
+        ("text", "文字一。"),
+        ("tool_call", "ask_user", "c1"),
+        ("text", "好的。"),
+    ]
+    assert events[0]["ended_at"] is not None
+    assert events[1]["args"] == {"path": "一.md"} and events[1]["ended_at"] is not None
+    assert events[3]["args"] == question and events[3]["results"] == "活动宣传页"
+    assert events[3]["error"] is None
+    assert json.loads(row.extra)["run_id"] == run_id
+
+
+async def test_answer_row_keeps_every_round_of_questions(world: _World, client: httpx.AsyncClient):
+    first, script = _asking("c1", "做哪种网页", before=_worked("一"))
+    run_id = await _send(world, client, "做个网页", script)
+    second, script = _asking("c2", "什么配色", before=_worked("二"))
+    assert await _send(world, client, "活动宣传页", [_answered("c1", "活动宣传页"), *script]) == run_id
+    assert (await world.state()).status == "waiting"
+    await _send(
+        world,
+        client,
+        "蓝色",
+        [_answered("c2", "蓝色"), {"type": "text", "data": {"text": "做好了。"}}, {"type": "run_finished", "data": {}}],
+    )
+
+    (row,) = world.answer_rows
+    stored = json.loads(row.message)
+    assert stored["msg"] == "文字一。文字二。做好了。"
+    events = stored["events"]
+    assert _shape(events) == [
+        ("thinking", "想一想一"),
+        ("tool_call", "read_file", "t-一"),
+        ("text", "文字一。"),
+        ("tool_call", "ask_user", "c1"),
+        ("thinking", "想一想二"),
+        ("tool_call", "read_file", "t-二"),
+        ("text", "文字二。"),
+        ("tool_call", "ask_user", "c2"),
+        ("text", "做好了。"),
+    ]
+    assert (events[3]["args"], events[3]["results"]) == (first, "活动宣传页")
+    assert (events[7]["args"], events[7]["results"]) == (second, "蓝色")
+
+
+async def test_run_parked_without_kept_events_falls_back_to_text_and_answers(world: _World, client: httpx.AsyncClient):
+    """A run that parked before the upgrade has no kept events: text, then the answered questions."""
+    question, script = _asking("c1", "做哪种网页", before=_worked("一"))
+    await _send(world, client, "做个网页", script)
+    await world.redis.hdel(run_message_persist.direct_run_key(CID), run_message_persist.PARKED_ANSWER_FIELD)
+
+    await _send(
+        world,
+        client,
+        "活动宣传页",
+        [
+            _answered("c1", "活动宣传页"),
+            {"type": "text", "data": {"text": "好的。"}},
+            {"type": "run_finished", "data": {}},
+        ],
+    )
+
+    (row,) = world.answer_rows
+    events = json.loads(row.message)["events"]
+    assert _shape(events) == [("text", "文字一。"), ("tool_call", "ask_user", "c1"), ("text", "好的。")]
+    assert events[1]["args"] == question and events[1]["results"] == "活动宣传页"
+
+
+async def test_stopped_while_parked_keeps_every_answered_round(world: _World, client: httpx.AsyncClient):
+    """The snapshot path (stop of a parked run): the unanswered question is left out."""
+    _, script = _asking("c1", "做哪种网页", before=_worked("一"))
+    run_id = await _send(world, client, "做个网页", script)
+    _, script = _asking("c2", "什么配色", before=_worked("二"))
+    await _send(world, client, "活动宣传页", [_answered("c1", "活动宣传页"), *script])
+    snapshot = await world.stream.snapshot(CID)
+
+    row = await run_message_persist.persist_stopped_direct_answer(CID, run_id, snapshot["text"], redis=world.redis)
+
+    stored = json.loads(row.message)
+    assert stored["msg"] == "文字一。文字二。"
+    assert _shape(stored["events"]) == [
+        ("thinking", "想一想一"),
+        ("tool_call", "read_file", "t-一"),
+        ("text", "文字一。"),
+        ("tool_call", "ask_user", "c1"),
+        ("thinking", "想一想二"),
+        ("tool_call", "read_file", "t-二"),
+        ("text", "文字二。"),
+    ]
+    assert json.loads(row.extra)["status"] == "stopped"
+
+
+async def test_expired_after_resume_keeps_the_rounds_and_the_later_text(world: _World, client: httpx.AsyncClient):
+    """The snapshot path (lease lapsed after the answer): kept events plus the text written after."""
+    _, script = _asking("c1", "做哪种网页", before=_worked("一"))
+    run_id = await _send(world, client, "做个网页", script)
+    # The resumed execution writes text and dies before its terminal event.
+    await _send(
+        world, client, "活动宣传页", [_answered("c1", "活动宣传页"), {"type": "text", "data": {"text": "写到一半"}}]
+    )
+
+    row = await run_message_persist.persist_expired_direct_answer(
+        CID, run_id, {"code": 1, "reason": "expired", "detail": "lost"}, redis=world.redis
+    )
+
+    stored = json.loads(row.message)
+    assert stored["msg"] == "文字一。写到一半"
+    assert _shape(stored["events"]) == [
+        ("thinking", "想一想一"),
+        ("tool_call", "read_file", "t-一"),
+        ("text", "文字一。"),
+        ("tool_call", "ask_user", "c1"),
+        ("text", "写到一半"),
+    ]
+    assert stored["events"][3]["results"] == "活动宣传页"
