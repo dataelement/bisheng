@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { Button as ProductButton, Tabs, TooltipProvider } from '@bisheng/ui';
 import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_TOOLBAR, ModuleHomeHeader } from '~/components/ModuleHome';
+import { ExpandableSearchField } from '~/components/ui/ExpandableSearchField';
 import cn from '~/utils/cn';
 import { USE_PRODUCT_COMPONENTS } from './home/vnext/componentMode';
 import { Filled, Outlined } from 'bisheng-icons';
@@ -44,10 +45,17 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [localCategory, setLocalCategory] = useState<HomeCategory>('all');
+  const [search, setSearch] = useState('');
   const category = controlledCategory ?? localCategory;
-  const setCategory = (next: HomeCategory) => {
+  const keyword = search.trim().toLowerCase();
+  const searchLabel = localize('com_knowledge.home_next.search_by_name');
+  const handleCategoryChange = (next: HomeCategory) => {
     if (controlledCategory === undefined) setLocalCategory(next);
     onCategoryChange?.(next);
+  };
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    if (!keyword && value.trim() && category !== 'all') handleCategoryChange('all');
   };
   useLayoutEffect(() => {
     // The shared tab strip generates trigger IDs; link the external scroll panel to them.
@@ -66,11 +74,25 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
   const groups = useMemo(() => groupHomeSpaces(
     lists.mine.data ?? [], lists.joined.data ?? [], lists.department.data ?? [],
   ), [lists.mine.data, lists.joined.data, lists.department.data]);
+  const results = useMemo(() => {
+    if (!keyword) return groups;
+    const matches: typeof groups = { all: [], department: [], created: [], joined: [] };
+    for (const item of groups.all) {
+      if (item.space.name.toLowerCase().includes(keyword)) {
+        matches.all.push(item);
+        matches[item.source].push(item);
+      }
+    }
+    return matches;
+  }, [groups, keyword]);
   const pinnedIds = useMemo(() => groups.all.filter(({ space }) => space.isPinned).map(({ space }) => space.id), [groups]);
   const [pinOrder, setPinOrder] = useState<readonly string[]>([]);
   const stablePinOrder = useMemo(() => mergePinnedOrder(pinOrder, pinnedIds), [pinOrder, pinnedIds]);
   useEffect(() => { setPinOrder((previous) => mergePinnedOrder(previous, pinnedIds)); }, [pinnedIds]);
-  const visible = useMemo(() => sortHomeSpaces(groups[category], sort, stablePinOrder), [groups, category, sort, stablePinOrder]);
+  const visible = useMemo(() => sortHomeSpaces(results[category], sort, stablePinOrder), [results, category, sort, stablePinOrder]);
+  useLayoutEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [category, keyword]);
   const reduceMotion = useReducedMotion();
   // Layout animations measure each card before and after a reorder. Keep that
   // work bounded even when switching between a small category and All.
@@ -152,6 +174,17 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
   return (
     <section className={cn(MODULE_HOME_FRAME, tokens.scope, styles.page)} aria-label={menuNames.knowledge}>
       <ModuleHomeHeader title={menuNames.knowledge}>
+        <ExpandableSearchField
+          value={search}
+          onChange={handleSearchChange}
+          placeholder={searchLabel}
+          aria-label={searchLabel}
+          expandedWidthClassName="w-[min(220px,36vw)]"
+          containerClassName="max-w-full"
+          showClearButton
+          clearButtonLabel={localize('com_ui_clear')}
+          disabled={!enabled}
+        />
         {USE_PRODUCT_COMPONENTS ? <ProductButton type="button" color="primary" variant="solid" size="medium"
           data-product-control disabled={!enabled} onClick={onCreateSpace}>
           <Outlined.Plus aria-hidden />{localize('com_knowledge.create_knowledge_space')}
@@ -164,7 +197,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
           <Tabs className="dsh-home-tabs" aria-label={menuNames.knowledge} size="medium" activeKey={category}
             onChange={(value) => {
               const next = categories.find((key) => key === value);
-              if (next) setCategory(next);
+              if (next) handleCategoryChange(next);
             }}
             items={categories.map((key) => {
               const Icon = key !== 'all' ? categoryIcons[key] : undefined;
@@ -172,7 +205,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
                 key,
                 icon: Icon ? <Icon aria-hidden /> : undefined,
                 label: localize(`com_knowledge.home_next.${key}`),
-                badge: resolved ? groups[key].length : undefined,
+                badge: resolved ? results[key].length : undefined,
               };
             })} />
         </div>
@@ -187,12 +220,14 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
               <button type="button" className={styles.secondaryButton} onClick={lists.retry}>{localize('com_ui_retry')}</button>
             </div>
           ) : loading ? <p className={styles.status} role="status">{localize('com_knowledge.loading')}</p>
-            : empty ? <KnowledgeHomeEmptyState category={category}
-              onCreate={enabled ? onCreateSpace : undefined}
-              onOpenSquare={enabled ? onKnowledgeSquare : undefined} />
-              : groups.all.length > KNOWLEDGE_HOME_BATCH_SIZE
-                ? <KnowledgeHomeGrid key={`${category}:${sort}`} items={visible} renderCard={renderCard} scrollRef={scrollRef} />
-                : <TooltipProvider><div className={styles.grid}>{visible.map(renderCard)}</div></TooltipProvider>}
+            : empty ? (
+              keyword ? <p className={styles.status} role="status">{localize('com_knowledge.no_matched_space')}</p>
+                : <KnowledgeHomeEmptyState category={category}
+                  onCreate={enabled ? onCreateSpace : undefined}
+                  onOpenSquare={enabled ? onKnowledgeSquare : undefined} />
+            ) : groups.all.length > KNOWLEDGE_HOME_BATCH_SIZE
+              ? <KnowledgeHomeGrid key={`${category}:${sort}:${keyword}`} items={visible} renderCard={renderCard} scrollRef={scrollRef} />
+              : <TooltipProvider><div className={styles.grid}>{visible.map(renderCard)}</div></TooltipProvider>}
         </div>
       </div>
       <KnowledgeDeletionDialog operation={actions.deletion} />

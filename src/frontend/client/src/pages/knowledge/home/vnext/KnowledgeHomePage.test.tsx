@@ -214,6 +214,55 @@ it('supports arrow-key category selection and preserves focus', async () => {
   });
 });
 
+it('starts a name search in all spaces and keeps the keyword when narrowing by tab', async () => {
+  mockData.joined[0].description = 'Alpha description';
+  const user = userEvent.setup();
+  mount();
+  const department = screen.getByRole('tab', { name: 'com_knowledge.home_next.department 1' });
+  fireEvent.mouseDown(department);
+
+  const searchName = 'com_knowledge.home_next.search_by_name';
+  const trigger = screen.getByRole('button', { name: searchName });
+  act(() => trigger.focus());
+  expect(trigger).toHaveFocus();
+  await user.keyboard('{Enter}');
+  const search = screen.getByRole('textbox', { name: searchName });
+  expect(search).toHaveFocus();
+  expect(department).toHaveAttribute('aria-selected', 'true');
+  fireEvent.change(search, { target: { value: '   ' } });
+  expect(department).toHaveAttribute('aria-selected', 'true');
+
+  fireEvent.change(search, { target: { value: '  LPHA  ' } });
+  expect(screen.getByRole('tab', { name: 'com_knowledge.home_next.all 1', selected: true })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Alpha' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Beta' })).not.toBeInTheDocument();
+
+  await user.click(department);
+  expect(search).toHaveValue('  LPHA  ');
+  expect(screen.getByRole('status')).toHaveTextContent('com_knowledge.no_matched_space');
+  expect(screen.queryByRole('link', { name: 'Alpha' })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'com_ui_clear' }));
+  expect(search).toHaveFocus();
+  expect(search).toHaveValue('');
+  expect(department).toHaveAccessibleName('com_knowledge.home_next.department 1');
+  expect(department).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('link', { name: 'Department' })).toBeInTheDocument();
+});
+
+it('searches spaces beyond the first rendered batch', async () => {
+  mockData.mine = Array.from({ length: 60 }, (_, index) => row(String(index + 1), `Space ${index + 1}`));
+  mount();
+  expect(screen.queryByRole('link', { name: 'Space 60' })).not.toBeInTheDocument();
+
+  const searchName = 'com_knowledge.home_next.search_by_name';
+  await userEvent.click(screen.getByRole('button', { name: searchName }));
+  fireEvent.change(screen.getByRole('textbox', { name: searchName }), { target: { value: 'Space 60' } });
+
+  expect(screen.getAllByRole('article')).toHaveLength(1);
+  expect(screen.getByRole('link', { name: 'Space 60' })).toBeInTheDocument();
+});
+
 it('keeps full category counts and exposes later cards when tabbing through a large list', () => {
   mockData = {
     mine: Array.from({ length: 100 }, (_, index) => row(String(index + 1), `Space ${index + 1}`)),

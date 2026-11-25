@@ -1326,6 +1326,7 @@
       "joined": "已加入空间",
       "load_error": "知识空间加载失败，请重试",
       "more": "更多操作",
+      "search_by_name": "搜索知识空间名称",
       "sort_create_time": "按创建时间",
       "sort_name": "按名称",
       "sort_update_time": "按更新时间",
