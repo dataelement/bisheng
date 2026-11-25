@@ -261,28 +261,32 @@ async def test_preview_knowledge_kind_candidate_unlocked_final_current_read(
         "edges": [],
     }
     req = TransientTargetRequest("workflow", "wf", canonical_payload_json({"graph": graph}))
+    from bisheng.workflow.application import preview_knowledge_validation
+
+    knowledge_authorization = AsyncMock(
+        side_effect=lambda identity, **kwargs: {ident: {"visible"} for ident in kwargs["resource_ids"]}
+    )
+    monkeypatch.setattr(preview_knowledge_validation, "batch_check_business_actions", knowledge_authorization)
     locks = []
     async with AsyncSession(engine) as session, session.begin():
-        scalar = session.scalar
+        execute = session.execute
 
         async def record(query, *args, **kwargs):
             if "knowledge.type" in str(query):
                 locks.append(query._for_update_arg is not None)
-            return await scalar(query, *args, **kwargs)
+            return await execute(query, *args, **kwargs)
 
-        monkeypatch.setattr(session, "scalar", record)
+        monkeypatch.setattr(session, "execute", record)
         owner = WorkflowReferenceSourceOwner()
         before = await owner.aresolve_transient(session, req, identity)
         with sync.begin() as connection:
             connection.execute(knowledge.update().where(knowledge.c.id == 7).values(type=3))
         await owner.arevalidate_transient(session, req, identity, before)
     assert locks == [False, True]
-    knowledge_auth = [
-        call.kwargs for call in authorization.await_args_list if call.kwargs["resource_type"].startswith("knowledge_")
-    ]
+    knowledge_auth = [call.kwargs for call in knowledge_authorization.await_args_list]
     assert knowledge_auth == [
-        {"resource_type": "knowledge_library", "resource_id": "7", "action": "visible"},
-        {"resource_type": "knowledge_space", "resource_id": "7", "action": "visible"},
+        {"resource_type": "knowledge_library", "resource_ids": ("7",), "actions": ("visible",)},
+        {"resource_type": "knowledge_space", "resource_ids": ("7",), "actions": ("visible",)},
     ]
 
 

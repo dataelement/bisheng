@@ -11,12 +11,11 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_rag_citation_registry_items,
 )
 from bisheng.common.services.failure_context import FailureContextAdapter
-from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
-from bisheng.llm.domain.share_fallback import (
-    get_model_by_id_with_share_fallback,
-)
+
+# Content budget of one search before the first ``limit`` chunks are taken. It
+# matches the daily-chat default, so both modes fuse and cut the same candidates.
+SEARCH_MAX_CONTENT = 15000
 
 
 class ToolInput(BaseModel):
@@ -28,7 +27,7 @@ class ToolInput(BaseModel):
 
 class SearchKnowledgeBase(BaseTool):
     name: str = "search_knowledge_base"
-    description: str = """在知识库或知识空间中进行语义检索。
+    description: str = """在知识库或知识空间中检索(关键词与语义混合检索)。
 
         用法:当你需要从知识库 / 知识空间中检索相关内容时,调用此工具。
         本工具只检索知识库和知识空间;用户上传的文件请直接用 ls / read_file 在工作目录中查看,不要在此检索。
@@ -55,6 +54,9 @@ class SearchKnowledgeBase(BaseTool):
     # graph and the researcher sub-graph (they share this tool instance). None
     # keeps the pre-F069 behaviour.
     citation_scope: Any | None = None
+    # The user of the task. Retrieval runs the daily-chat path as this user, so
+    # knowledge spaces get the same view_space / view_file checks.
+    login_user: Any | None = None
 
     def _run(self, query: str, knowledge_id: str | None = None, **kwargs) -> str:
         """Use the tool."""
@@ -101,10 +103,8 @@ class SearchKnowledgeBase(BaseTool):
                 ensure_ascii=False,
             )
 
-    async def base_search(self, vector_client, query: str, k: int, **kwargs) -> str:
-        knowledge_id = kwargs.pop("knowledge_id", None)
-        knowledge_name = kwargs.pop("knowledge_name", "") or ""
-        documents = await vector_client.asimilarity_search(query, k=k, **kwargs)
+    async def format_documents(self, documents: list, knowledge_id=None, knowledge_name: str = "") -> str:
+        """The tool result for ``documents``: citation-annotated chunks, or a no-result message."""
         if not documents:
             # "没有找到相关的知识内容"
             return '{"状态": "无结果", "错误信息":"没有找到相关的知识内容"}'
@@ -145,23 +145,41 @@ class SearchKnowledgeBase(BaseTool):
             )
 
     async def search_knowledge(self, query: str, knowledge_id: int, limit: int) -> str:
-        knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
-        if not knowledge_info:
-            raise Exception("Knowledgebase does not exist or has been deleted")
-        if not knowledge_info.model:
-            # "Knowledge Base Not ConfiguredembeddingModels"
-            raise Exception("Knowledge Base Not ConfiguredembeddingModels")
-        # The KB embedding may be a Root-shared system default; read via
-        # the share fallback so child tenants can resolve Root-owned rows.
-        embed_info = get_model_by_id_with_share_fallback(int(knowledge_info.model))
-        if not embed_info:
-            # "Configured by the Knowledge BaseembeddingModel does not exist or has been deleted"
-            raise Exception("Configured by the Knowledge BaseembeddingModel does not exist or has been deleted")
-        milvus_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(0, knowledge=knowledge_info)
-        return await self.base_search(
-            milvus_client,
+        """Search one knowledge base or space the way daily chat does.
+
+        ES and Milvus results are fused (RRF) and the user's file permissions
+        apply (``WorkStationService.queryChunksFromDB``). The fused rank order
+        is kept, and the first ``limit`` chunks are returned.
+        """
+        if self.login_user is None:
+            raise Exception("search_knowledge_base has no user identity")
+        from bisheng.workstation.domain.schemas.chat import UseKnowledgeBaseParam
+        from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+        # queryChunksFromDB reads the actual type of each id, so a knowledge
+        # space id may sit in the organization list too.
+        _, documents, failures = await WorkStationService.queryChunksFromDB(
             query,
-            limit,
-            knowledge_id=knowledge_id,
-            knowledge_name=knowledge_info.name or "",
+            UseKnowledgeBaseParam(organization_knowledge_ids=[knowledge_id]),
+            SEARCH_MAX_CONTENT,
+            self.login_user,
+            sort_by_source_and_index=False,
         )
+        if not documents and failures:
+            failure = failures[0]
+            return json.dumps(
+                {
+                    "状态": "失败",
+                    "错误信息": failure.get("error") or "知识库检索失败",
+                    **({"failure_info": failure["failure_info"]} if failure.get("failure_info") else {}),
+                },
+                ensure_ascii=False,
+            )
+        documents = list(documents or [])[:limit]
+        knowledge_name = ""
+        if documents:
+            from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
+            knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+            knowledge_name = getattr(knowledge, "name", "") or ""
+        return await self.format_documents(documents, knowledge_id=knowledge_id, knowledge_name=knowledge_name)

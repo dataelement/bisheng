@@ -190,6 +190,20 @@ class WorkflowReferenceSourceRepository:
         return WorkflowVersionReadFact(*row[:6], json.dumps(row.data, ensure_ascii=False, allow_nan=False))
 
     @classmethod
+    async def aget_knowledge_resource_types(cls, session, target_ids, *, for_update=False):
+        """Read the distinct preview selections in bounded batches under C3."""
+        cls._context(session)
+        ids = sorted({int(value) for value in target_ids})
+        result = {}
+        for offset in range(0, len(ids), 200):
+            query = select(Knowledge.id, Knowledge.type).where(Knowledge.id.in_(ids[offset : offset + 200]))
+            if for_update:
+                query = query.with_for_update()
+            with session.no_autoflush:
+                result.update((str(row.id), row.type) for row in (await session.execute(query)).all())
+        return result
+
+    @classmethod
     async def aget_knowledge_resource_type(
         cls, session: AsyncSession, target_id: int, *, for_update: bool = False
     ) -> str:

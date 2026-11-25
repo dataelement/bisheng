@@ -202,6 +202,16 @@ WS 侧的 `RedisCallback` 与 Worker 使用同一个服务端执行快照判定�
 
 `WorkflowClient` 将业务异常原码反馈，HTTP 403/404 映射为对应既有业务错误，其余异常使用 10541，日志保留堆栈；页面不接收内部异常详情。错误帧后发送既有 `processing/close` 帧结束等待，不清除 pending 输入或伪造执行成功，因此合法输入仍可重试。协议、错误文案及前端生产逻辑沿用现有实现。实际 WS、图执行、SQLite 消息持久化和前端错误处理回归及边界见 `docs/reviews/public-workflow-input-continuation-20261125.md`。
 
+### 4.12 工作流运行前引用预检（2026-11-25）
+
+用户已确认恢复“运行前请求后端、错误标红、失败不创建连接”的方案。新增 `POST /api/v1/workflow/references/validate`，输入 `{workflow_id,data:{nodes,edges}}`，返回 `{valid,errors}`；错误项包含 `resource_type/target_id/state/node_id/node_name/parameter_key`。校验通过并非执行凭证；无持久写、会话或队列副作用。
+
+接口复用 `execution_admission` 的来源签发、目标事实读取和最终重校验；来源先验证实际工作流及编辑权限。`WorkflowReferenceSourceRepository` 对选择 ID 去重、每批 200 个读取类型，按实际类型批量调用既有 visible 动作。缺项继续由目标事实读取拒绝，不再提前抛无定位的 18000；权限拒绝构造成所有受影响位置的不可用诊断，权限服务故障继续失败。预检在完整结果中返回全部位置，原 HTTP/WS 摘要仍保留默认最多五项。租户过滤的 missing 事实不能证明全局删除，预检归一为 unavailable；有确凿生命周期事实时保留 deleting/invalid_deleted 等状态。不新增全局资源发现接口。
+
+平台运行按钮保留本地校验，再由 `useWorkflowPreflight` 请求当前画布的深拷贝；重复请求由 ref 阻止，按钮在等待期间禁用。请求返回后比较当前图签名，变化则拒绝启动。成功后回调只使用已校验快照。节点外框沿用 nodeErrorBorderEvent，具体知识选择项沿用已有错误标签/字段状态；原 ID、名称不变。单节点使用相同预检，只提交该节点；临时文件规则先由原本地校验拒绝。网络失败不伪装成缺失资源。业务 store 不直接请求 HTTP。
+
+不恢复旧 `/knowledge/info` 作为全部资源的存在性依据：它返回权限筛选后的结果，且无法表达当前预览的来源及绑定语义。新 API 与前端必须同时部署；旧服务没有该路由时前端按校验失败停止，不降级放行。实际执行在预检后继续重查，覆盖预检后删除的竞争条件。
+
 ## 5. 已知坑与处理
 
 | 已核实事实 | 忽略后的问题 | 处理位置 |

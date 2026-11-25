@@ -3,7 +3,7 @@
 import json
 
 
-def reference_error_details(references, states, graph=None):
+def reference_error_details(references, states, graph=None, *, limit=5, include_parameter=False):
     """Keep exact target states and all affected node locations without name lookups."""
     nodes = {
         str(node["data"]["id"]): node["data"]
@@ -30,18 +30,22 @@ def reference_error_details(references, states, graph=None):
             elif parameter == "advanced_retrieval_switch.rerank_model":
                 detail["resource_type"] = "rerank_model"
             detail.update(node_id=node_id[:100], node_name=(str(node.get("name") or "").strip() or node_id)[:100])
+            if include_parameter:
+                detail["parameter_key"] = parameter
             break
         if detail not in details:
             details.append(detail)
-        if len(details) == 5:
+        if limit is not None and len(details) == limit:
             break
     return details
 
 
-def snapshot_reference_errors(snapshot, facts):
+def snapshot_reference_errors(snapshot, facts, *, limit=5, include_parameter=False):
     payload = json.loads(snapshot.payload_json)
     return reference_error_details(
         snapshot.references,
         {fact.key: fact.state if str(fact.state) != "valid" else "unavailable" for fact in facts if not fact.is_valid},
         payload.get("graph"),
+        limit=limit,
+        include_parameter=include_parameter,
     )
