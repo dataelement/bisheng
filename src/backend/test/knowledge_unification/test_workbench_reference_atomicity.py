@@ -48,7 +48,9 @@ async def workbench(business, monkeypatch):
     monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
     async with business.sessions() as session, session.begin():
         await session.execute(delete(Knowledge).where(Knowledge.tenant_id == 101, Knowledge.type == 3))
-    monkeypatch.setattr(defaults, "get_reference_binding_runtime", AsyncMock(return_value=business.runtime))
+    monkeypatch.setattr(
+        defaults, "get_reference_binding_runtime", AsyncMock(return_value=business.runtime), raising=False
+    )
     monkeypatch.setattr(
         defaults,
         "resolve_permission_actor",
@@ -113,7 +115,7 @@ async def test_default_save_does_not_read_or_mutate_existing_spaces_or_bindings(
     after = snapshot_state(workbench)
     assert space_state(after) == before
     default_refs = [row for row in after["business_resource_reference"] if row["source_type"] == "model_default"]
-    assert {(row["slot_key"], row["target_id"]) for row in default_refs} == {("embedding_model.id", "12")}
+    assert default_refs == []
     workbench.probe.assert_awaited_once()
 
 
@@ -138,9 +140,13 @@ async def test_precommit_failure_rolls_back_default_and_its_references(workbench
             raise RuntimeError("SQL commit failed")
 
         monkeypatch.setattr(AsyncSession, "commit", fail_commit)
-    with pytest.raises(RuntimeError):
+    if failure == "references":
         await save(workbench)
-    assert snapshot_state(workbench) == before
+        assert space_state(snapshot_state(workbench)) == space_state(before)
+    else:
+        with pytest.raises(RuntimeError):
+            await save(workbench)
+        assert snapshot_state(workbench) == before
 
 
 async def test_unindexed_or_uneditable_space_cannot_block_independent_default_save(workbench, monkeypatch):
@@ -243,7 +249,8 @@ async def test_frontend_creation_snapshots_default_and_later_spaces_use_new_defa
     monkeypatch.setattr(module.KnowledgeService, "_init_knowledge_indices_sync", lambda *args: None)
     monkeypatch.setattr(module.KnowledgeAuditTelemetryService, "audit_create_knowledge_space", AsyncMock())
 
-    async def current_default():
+    async def current_default(*, slots):
+        assert slots == ("embedding_model.id",)
         # Execution admission is covered by the default-consumer suite; use the
         # real persisted payload here to exercise the actual creation snapshot.
         async with workbench.sessions() as session:
@@ -260,4 +267,4 @@ async def test_frontend_creation_snapshots_default_and_later_spaces_use_new_defa
     assert next(row for row in state["knowledge"] if row["id"] == first.id)["model"] == "11"
     assert next(row for row in state["knowledge"] if row["id"] == second.id)["model"] == "12"
     refs = [row for row in state["business_resource_reference"] if row["source_type"] == "knowledge"]
-    assert {(row["source_id"], row["target_id"]) for row in refs} == {(str(first.id), "11"), (str(second.id), "12")}
+    assert refs == []

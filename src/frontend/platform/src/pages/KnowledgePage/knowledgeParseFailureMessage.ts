@@ -1,4 +1,4 @@
-import { resolveErrorMessageTemplate } from '@bisheng/api-client';
+import { referenceErrorMessage, resolveErrorMessageTemplate } from '@bisheng/api-client';
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
 const ASR_ERROR_CODES = new Set([10014, 10015, 10016, 10017, 10018, 10019]);
@@ -121,6 +121,8 @@ function resolveKnownExceptionMessage(message: string, t: TranslateFn): string |
 }
 
 function translatedParseError(code: number, data: Record<string, unknown>, t: TranslateFn): string | undefined {
+  const referenceMessage = referenceErrorMessage({ status_code: code, data }, (key, values) => t(`api_errors:${key}`, values));
+  if (referenceMessage) return referenceMessage;
   const key = `api_errors:${code}`;
   const message = t(key, { defaultValue: "" });
   if (!message || message === key || message === String(code)) return undefined;

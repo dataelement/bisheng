@@ -3,13 +3,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useState } from "react";
 import KnowledgeTagSelect from "@/pages/KnowledgePage/components/tags/KnowledgeTagSelect";
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), error: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), error: vi.fn(), create: vi.fn(), remove: vi.fn() }));
 vi.mock("@/controllers/API/knowledgeTags", () => ({
   getKnowledgeTagsApi: mocks.get,
   setFileTagsApi: mocks.save,
   batchAddFileTagsApi: vi.fn(),
-  createKnowledgeTagApi: vi.fn(),
-  deleteKnowledgeTagApi: vi.fn(),
+  createKnowledgeTagApi: mocks.create,
+  deleteKnowledgeTagApi: mocks.remove,
 }));
 vi.mock("@/controllers/request", () => ({ showApiError: mocks.error }));
 const tags = [{ id: 4, name: "Finance" }, { id: 5, name: "Legal" }];
@@ -55,4 +55,21 @@ it("uses space tag APIs for a knowledge-space file", async () => {
  expect(mocks.get).toHaveBeenCalledWith(7, {page: 1, limit: 100}, true);
  fireEvent.click(screen.getByRole("button", {name: "bs:confirmButton"}));
  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({knowledge_id: 7, file_id: 11, tag_ids: [4, 5]}, true));
+});
+
+
+it("keeps existing file tags editable while space tag creation and deletion are restricted", async () => {
+  render(<KnowledgeTagSelect isSpace knowledgeId={7} fileIds={[11]} initialTags={[tags[0]]}
+    spaceTagPermission={{ status: "restricted", retry: vi.fn() }} open onUpdate={updated} />);
+  expect(await screen.findByText("tagEditor.spacePermissionRequired")).toBeVisible();
+  expect(screen.getByRole("textbox")).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+  const remove = screen.getAllByRole("button", { name: "tagEditor.deleteTag" });
+  expect(remove.every(button => button.hasAttribute("disabled"))).toBe(true);
+  fireEvent.click(remove[0]);
+  fireEvent.click(screen.getByText("Legal"));
+  fireEvent.click(screen.getByRole("button", { name: "bs:confirmButton" }));
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ knowledge_id: 7, file_id: 11, tag_ids: [4, 5] }, true));
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(mocks.remove).not.toHaveBeenCalled();
 });

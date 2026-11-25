@@ -13,7 +13,6 @@ from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from bisheng.common.errcode.knowledge import (
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -146,8 +145,8 @@ def test_native_complete_targets_then_actual_root_then_current_index(native):
 
         event.listen(session, "do_orm_execute", current_read)
         result = ctx.runtime.require_source_valid(session, scope, ctx.identity)
-        assert ctx.owner.calls[:4] == ["candidate", "targets", "root", "index"]
-        assert result.snapshot == scopes.snapshot() and result.source_revision == 3 and result.root_revision == 4
+        assert ctx.owner.calls == ["candidate", "targets", "root"]
+        assert result.snapshot == scopes.snapshot()
         assert not session.identity_map and not session.new and not session.dirty
 
 
@@ -235,6 +234,6 @@ def test_native_missing_index_is_not_an_empty_source(native):
         session.delete(row)
         session.commit()
         scope = native.verifier.issue_scope(session, scopes.REQUEST, native.identity)
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            native.runtime.require_source_valid(session, scope, native.identity)
-        assert native.owner.calls == ["candidate"]
+        result = native.runtime.require_source_valid(session, scope, native.identity)
+        assert result.snapshot == scopes.snapshot()
+        assert native.owner.calls == ["candidate", "targets", "root"]

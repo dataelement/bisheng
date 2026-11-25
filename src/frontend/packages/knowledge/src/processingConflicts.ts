@@ -22,6 +22,7 @@ const KNOWLEDGE_PROCESSING_CONFLICT_REASONS: Record<string, string> = {
     processing_retry_fence_conflict: 'job_active',
     model_provider_operation_active: 'model_busy',
     reference_target_deleting: 'deleting',
+    source_file_move_input_required: 'source_file_input',
     source_space_move_input_required: 'source_input',
     space_transfer_input_required: 'transfer_input',
     move_source_input_required: 'move_input',

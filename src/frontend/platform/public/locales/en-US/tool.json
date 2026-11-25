@@ -398,8 +398,8 @@
       "name": "WeCom"
     },
     "Dalle3绘画": {
-      "name": "Image generation",
-      "desc": "Generate images from a prompt using the configured service and model."
+      "name": "$t(tool:categories.图像生成.name)",
+      "desc": "$t(tool:categories.图像生成.desc)"
     },
     "Jina AI": {
       "desc": "Convert content of target URLs (PDF supported) into Markdown format for LLM processing",

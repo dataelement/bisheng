@@ -253,7 +253,7 @@ async def test_original_file_and_ancestor_deletion_evidence_are_read_exactly(kno
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, REQUEST, ctx.identity)
         fact = (await ctx.knowledge.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.state == ("invalid_deleted" if stage == "deleted" else "deleting") and not fact.is_valid
+        assert fact.state == ("invalid_missing" if stage == "deleted" else "deleting") and not fact.is_valid
 
 
 async def test_foreign_knowledge_and_copied_scope_cannot_expand_the_target_read(knowledge_read_context):
@@ -263,8 +263,8 @@ async def test_foreign_knowledge_and_copied_scope_cannot_expand_the_target_read(
     await insert_knowledge(ctx, tenant_id=1)
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, REQUEST, ctx.identity)
-        with pytest.raises(ResourceReferenceInvalidError):
-            await ctx.knowledge.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity)
+        fact = (await ctx.knowledge.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
+        assert fact.state == "invalid_missing" and not fact.is_valid
         with pytest.raises(ResourceReferenceInvalidError):
             await ctx.knowledge.ainspect_source_targets(session, replace(scope), (ref.target,), identity=ctx.identity)
 
@@ -306,8 +306,8 @@ async def test_unsaved_preview_never_borrows_original_missing_target_evidence(kn
         scope = await ctx.verifier.aissue_transient_scope(
             session, TransientTargetRequest("workflow", "workflow-a", payload((ref,))), ctx.identity
         )
-        with pytest.raises(ResourceReferenceInvalidError):
-            await ctx.knowledge.ainspect_transient_targets(session, scope, (ref.target,), identity=ctx.identity)
+        fact = (await ctx.knowledge.ainspect_transient_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
+        assert fact.state == "invalid_missing" and not fact.is_valid
 
 
 @pytest.mark.parametrize("conflicting", [False, True])
@@ -339,11 +339,7 @@ async def test_actual_legacy_reader_keeps_unknown_owner_and_rejects_conflicting_
             )
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, REQUEST, ctx.identity)
-        if conflicting:
-            with pytest.raises(ResourceReferenceInvalidError):
-                await ctx.knowledge.ainspect_source_targets(session, scope, (refs[0].target,), identity=ctx.identity)
-        else:
-            fact = (
-                await ctx.knowledge.ainspect_source_targets(session, scope, (refs[0].target,), identity=ctx.identity)
-            )[0]
-            assert fact.state == "invalid_legacy" and fact.target_tenant_id is None and not fact.is_valid
+        fact = (await ctx.knowledge.ainspect_source_targets(session, scope, (refs[0].target,), identity=ctx.identity))[
+            0
+        ]
+        assert fact.state == "invalid_missing" and fact.target_tenant_id is None and not fact.is_valid

@@ -19,6 +19,6 @@ async def test_hosted_management_summary_is_or_not_edit_only(monkeypatch):
     await WorkFlowService._managed_hosted_actions(object(), rows)
     assert WorkFlowService._managed_visible(rows[0], {}, "edit")
     assert not WorkFlowService._managed_visible(rows[1], {}, "edit")
-    assert not WorkFlowService._managed_visible(rows[2], {"workflow": frozenset({"use"})}, "edit")
+    assert not WorkFlowService._managed_visible(rows[2], {"workflow": frozenset({"visible"})}, "edit")
     assert WorkFlowService._managed_visible(rows[2], {"workflow": frozenset({"edit"})}, "edit")
     assert rows[0]["allowed_actions"] == ["publish"]

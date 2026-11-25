@@ -15,7 +15,7 @@
  * that row reads the session status, which is the only authority on whether the run
  * is over.
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { TaskPanel } from './TaskPanel';
 
 jest.mock('~/hooks', () => ({
@@ -123,5 +123,51 @@ describe('TaskPanel header state', () => {
         // Gate-keeper: the stop path outranks the wrap-up window.
         render(<TaskPanel tasks={FOUR_DONE} completed={false} running terminated />);
         expect(screen.getByText('com_linsight_task_terminated')).toBeTruthy();
+    });
+});
+
+describe('TaskPanel plan rows of the unified runtime (F004)', () => {
+    const open = () => fireEvent.click(screen.getByRole('button'));
+
+    it('shows the new wording and keeps the previous wording struck through (AC-10)', () => {
+        const rows = [
+            task('a', 'success'),
+            { id: 'b', name: 'make a deck', status: 'in_progress', previousName: 'write a report' } as never,
+        ];
+        const { container } = render(<TaskPanel tasks={rows} completed={false} running />);
+        open();
+        const struck = container.querySelector('del');
+        expect(struck?.textContent).toBe('write a report');
+        expect(struck?.parentElement?.textContent).toBe('write a reportmake a deck');
+        // Exactly one row is marked as rewritten.
+        expect(container.querySelectorAll('del')).toHaveLength(1);
+    });
+
+    it('does not strike anything when the previous wording equals the current one', () => {
+        const rows = [{ id: 'a', name: 'same', status: 'in_progress', previousName: 'same' } as never];
+        const { container } = render(<TaskPanel tasks={rows} completed={false} running />);
+        expect(container.querySelector('del')).toBeNull();
+    });
+
+    it('labels a cancelled row and leaves it out of both numbers (AC-08, AC-11)', () => {
+        const rows = [task('a', 'success'), task('b', 'in_progress'), task('c', 'cancelled')];
+        render(<TaskPanel tasks={rows} completed={false} running />);
+        expect(screen.getByText('1/2')).toBeTruthy();
+        expect(screen.getAllByText('runPlan.cancelled')).toHaveLength(1);
+        // The cancelled row stays in the list.
+        expect(screen.getByText('c')).toBeTruthy();
+    });
+
+    it('does not label any row on the legacy path', () => {
+        render(<TaskPanel tasks={[...FOUR_DONE, ...THREE_PRUNED]} completed terminated />);
+        expect(screen.queryByText('runPlan.cancelled')).toBeNull();
+    });
+
+    it('reads "stopped" in the header after the user stopped the run', () => {
+        const rows = [task('a', 'success'), task('b', 'not_started')];
+        render(<TaskPanel tasks={rows} completed={false} terminated stopped />);
+        expect(screen.getByText('runPlan.stopped')).toBeTruthy();
+        expect(screen.queryByText('com_linsight_task_terminated')).toBeNull();
+        expect(screen.getByText('1/2')).toBeTruthy();
     });
 });

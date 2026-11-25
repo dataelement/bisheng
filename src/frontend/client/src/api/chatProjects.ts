@@ -55,21 +55,21 @@ function parseSnapshot(value: unknown): ProjectSnapshot {
 }
 
 const endpoint = 'api/v1/chat/projects';
-const options = (signal?: AbortSignal) => ({ signal, timeout: 15000, showError: false, skipMaintenance: true });
+const options = (signal?: AbortSignal) => ({ signal, timeout: 15000, showError: false });
 
 export async function fetchProjectSnapshot(signal?: AbortSignal): Promise<ProjectSnapshot> {
   return parseSnapshot(unwrapProjectEnvelope(await request.get<unknown>(`${endpoint}/snapshot`, options(signal))));
 }
 
 export async function performProjectAction(operation: ProjectOperation, signal?: AbortSignal): Promise<ProjectActionResult> {
-  const data = unwrapProjectEnvelope(await request.post(`${endpoint}/actions`, operation, options(signal)));
+  const data = unwrapProjectEnvelope(await request.post(`${endpoint}/actions`, operation, { ...options(signal), skipMaintenance: true }));
   if (!record(data) || !record(data.outcome)) throw new ProjectApiError();
   if (data.outcome.items !== undefined && (!Array.isArray(data.outcome.items) || data.outcome.items.some(item => !record(item) || typeof item.kind !== 'string' || typeof item.status !== 'string' || item.status.length > 64 || (item.chat_id !== undefined && typeof item.chat_id !== 'string') || (item.legacy_id !== undefined && typeof item.legacy_id !== 'string')))) throw new ProjectApiError();
   return data as ProjectActionResult;
 }
 
 export async function fetchProjectConversations(input: { project_id?: string; query?: string; cursor?: string }, signal?: AbortSignal): Promise<ProjectConversationPage> {
-  const data = unwrapProjectEnvelope(await request.get<unknown>(`${endpoint}/conversations`, { ...options(signal), params: input }));
+  const data = unwrapProjectEnvelope(await request.get<unknown>(`${endpoint}/conversations`, { ...options(signal), params: input, skipMaintenance: true }));
   if (!record(data) || !Array.isArray(data.data) || data.data.length > 100 || !Number.isSafeInteger(data.total) || Number(data.total) < 0 || !(data.next_cursor === null || (typeof data.next_cursor === 'string' && /^\d{1,9}$/.test(data.next_cursor)))) throw new ProjectApiError();
   return { data: data.data.map(row => {
     if (!record(row) || typeof row.chat_id !== 'string' || typeof row.flow_id !== 'string' || typeof row.flow_type !== 'number') throw new ProjectApiError();

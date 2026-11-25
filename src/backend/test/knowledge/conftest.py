@@ -28,6 +28,38 @@ _PROXY_ENV_VARS = (
 
 
 @pytest.fixture(autouse=True)
+def _authorized_legacy_version_fixture(request, monkeypatch):
+    """Legacy version unit tests model a granted tenant-1 actor.
+
+    Only these historical service tests use this boundary fixture. Security
+    regressions deliberately run without it and assert F048 denials instead.
+    Resolve container rows in their own SQLite session, never a real database.
+    """
+    if not request.node.path.stem.startswith("test_knowledge_version_service_"):
+        return
+    request.getfixturevalue("tenant_context")(1)
+    from sqlmodel import select
+
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+    from bisheng.knowledge.domain.services import knowledge_version_service as module
+
+    original_init = module.KnowledgeVersionService.__init__
+
+    def initialize(service, *args, **kwargs):
+        original_init(service, *args, **kwargs)
+        service.login_user.tenant_id = 1
+
+    async def load_knowledge(knowledge_id):
+        session = request.getfixturevalue("async_db_session")
+        result = await session.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+        return result.scalars().first()
+
+    monkeypatch.setattr(module.KnowledgeVersionService, "__init__", initialize)
+    monkeypatch.setattr(module.KnowledgeDao, "aquery_by_id", load_knowledge)
+    monkeypatch.setattr(module, "require_business_action", AsyncMock())
+
+
+@pytest.fixture(autouse=True)
 def _clear_proxy_env(monkeypatch):
     """A SOCKS proxy in the environment makes httpx fail for want of socksio.
 

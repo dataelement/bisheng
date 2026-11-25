@@ -38,7 +38,12 @@ processing, application, metadata, owner = fixtures.processing, fixtures.applica
 @pytest.fixture
 async def flow(owner, monkeypatch):
     runtime = await model_module.get_knowledge_model_read_runtime()
-    monkeypatch.setattr(metadata_module, "get_knowledge_model_read_runtime", AsyncMock(return_value=runtime))
+    monkeypatch.setattr(
+        metadata_module,
+        "get_knowledge_model_read_runtime",
+        AsyncMock(side_effect=AssertionError("metadata must not load model references")),
+        raising=False,
+    )
     service = ProcessingJobService(owner=owner.app.owner, available_kinds={"metadata_schema_change"})
     return SimpleNamespace(
         context=owner.app.context,

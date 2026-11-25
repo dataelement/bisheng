@@ -27,7 +27,7 @@ async def get_config(
 ):
     if purpose == "navigation":
         return resp_200(data=await WorkStationService.get_navigation_config())
-    ret = await WorkStationService.get_daily_chat_config(for_picker=True)
+    ret = await WorkStationService.get_daily_chat_config(include_models=False)
     from bisheng.dsh.domain.services.model_catalog import workbench_models_for_display
 
     ret.models = await workbench_models_for_display(login_user)

@@ -66,6 +66,7 @@ class PinnedMigrationPermissionReader:
         self._client = None
         self._entered = False
         self._tuple_inventory_started = False
+        self.history_view = None
 
     async def __aenter__(self):
         if self._entered:
@@ -133,6 +134,7 @@ class PinnedMigrationPermissionReader:
             raise _blocked("original_tuple_inventory_already_started")
         self._tuple_inventory_started = True
         client = self._client
+        observed_writes = set()
         try:
             async with aclosing(client.iter_tuples(consistency="HIGHER_CONSISTENCY")) as stream:
                 async for key in stream:
@@ -151,8 +153,17 @@ class PinnedMigrationPermissionReader:
                         )
                     ):
                         raise _blocked("original_tuple_key_invalid")
-                    yield OriginalTupleFact(key["user"], key["relation"], key["object"])
+                    triple = key["user"], key["relation"], key["object"]
+                    if self.history_view is not None:
+                        if triple in self.history_view.graph_deletes:
+                            continue
+                        observed_writes.add(triple)
+                    yield OriginalTupleFact(*triple)
             self._tuple_scope(client)
+            if self.history_view is not None:
+                for triple in sorted(self.history_view.graph_writes - observed_writes):
+                    self._tuple_scope(client)
+                    yield OriginalTupleFact(*triple)
         except PermissionMigrationBlockedError:
             raise
         except Exception as error:
@@ -176,11 +187,33 @@ class PinnedMigrationPermissionReader:
             raise _blocked("invalid_absent_file_ids")
         for ident in file_ids:
             rows = await self._client.read_tuples(object=f"knowledge_file:{ident}", consistency="HIGHER_CONSISTENCY")
+            if self.history_view is not None:
+                rows = self.history_view.apply_tuples(rows, object=f"knowledge_file:{ident}")
             self._tuple_scope()
             if get_current_tenant_id() != tenant_id or is_tenant_filter_bypassed():
                 raise _blocked("concrete_native_tenant_required")
             if rows:
                 raise _blocked("stranded_file_authorization_present")
+
+    async def aassert_no_historical_file_objects(self, *, file_ids):
+        """One complete pinned Store walk for a verified Run's retained IDs.
+
+        This is an operational whole-Run proof, never a resource decision.
+        Checking both subjects and objects retains the downstream guard while
+        avoiding one remote request per historical file.
+        """
+        if (
+            type(file_ids) is not tuple
+            or tuple(sorted(set(file_ids))) != file_ids
+            or any(type(ident) is not int or ident <= 0 for ident in file_ids)
+        ):
+            raise _blocked("invalid_historical_file_ids")
+        if not file_ids:
+            return
+        selected = {f"{kind}:{ident}" for ident in file_ids for kind in ("knowledge_file", "folder")}
+        async for fact in self.aiter_original_tuples():
+            if fact.object in selected or fact.user.split("#", 1)[0] in selected:
+                raise _blocked("historical_file_authorization_present")
 
     async def aassert_no_file_tuples(self, session, tenant_id, *, file_ids):
         self._scope(session, tenant_id)
@@ -209,3 +242,12 @@ class PinnedMigrationPermissionReader:
                 raise _blocked("shared_identity_invalid")
             ids.add(int(key.removeprefix("llm_server:")))
         return frozenset(ids)
+
+
+async def read_completed_migration_catalog(session, *, environment):
+    """Finite current Catalog/pin facts for an explicit completed-stage resume."""
+    from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
+        PermissionMigrationSnapshotRepository,
+    )
+
+    return await PermissionMigrationSnapshotRepository().aload_catalog_baseline(session, environment=environment)

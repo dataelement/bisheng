@@ -1,5 +1,6 @@
 """File deletion crosses actual F048 journals and native history cutover."""
 
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -11,6 +12,9 @@ from bisheng.knowledge.application import knowledge_deletion as module
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
+from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
 from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
 from bisheng.permission.application import control_state, sql_runtime
@@ -39,8 +43,9 @@ application, context, db, deletion_tenant, service = (
 
 
 @pytest.mark.parametrize("residual_count", [0, 180])
+@pytest.mark.parametrize("failed_copy", [False, True])
 async def test_historical_file_delete_requires_real_projection_and_preserves_primary(
-    application, context, monkeypatch, residual_count
+    application, context, monkeypatch, residual_count, failed_copy
 ):
     models = (
         PermissionProjectionOperation,
@@ -62,6 +67,52 @@ async def test_historical_file_delete_requires_real_projection_and_preserves_pri
     async with context.db.engine.begin() as connection:
         await connection.run_sync(metadata.create_all)
     async with context.db.sessions() as session, session.begin():
+        if failed_copy:
+            now = datetime(2026, 11, 16)
+            session.add(
+                KnowledgeOperationPlan(
+                    id="old-copy-plan",
+                    tenant_id=101,
+                    actor_user_id=7,
+                    actor_reference={},
+                    operation="space_copy",
+                    space_id=1,
+                    operation_id="old-copy-job",
+                    consumed_at=now,
+                    request_hash="a" * 64,
+                    plan_digest="b" * 64,
+                    expires_at=now + timedelta(minutes=5),
+                )
+            )
+            session.add(
+                KnowledgeProcessingJob(
+                    id="old-copy-job",
+                    tenant_id=101,
+                    space_id=2,
+                    kind="space_copy",
+                    state="failed",
+                    actor_user_id=7,
+                    idempotency_key="old-copy",
+                    request_hash="a" * 64,
+                    expected_model_config_revision=0,
+                    total_count=1,
+                    failed_count=1,
+                    pending_count=0,
+                )
+            )
+            session.add(
+                KnowledgeProcessingItem(
+                    id="old-copy-item",
+                    tenant_id=101,
+                    job_id="old-copy-job",
+                    file_id=31,
+                    document_id=100,
+                    version_id=301,
+                    expected_space_id=2,
+                    state="failed",
+                    step="pending",
+                )
+            )
         session.add(
             ResourcePermissionMode(
                 id=1,
@@ -220,6 +271,8 @@ async def test_historical_file_delete_requires_real_projection_and_preserves_pri
     async with context.db.sessions() as session:
         assert await session.get(KnowledgeFile, 31) is None
         assert await session.get(KnowledgeFile, 30) is not None
+        if failed_copy:
+            assert (await session.get(KnowledgeProcessingJob, "old-copy-job")).state == "failed"
         assert await session.get(KnowledgeDocument, 100) is not None
         versions = (
             (

@@ -51,7 +51,7 @@ async def test_old_create_persists_space_creator_and_real_model_source_with_old_
         row = await session.get(Knowledge, result.id)
         assert row.type == 3 and row.model == "11" and row.user_id == 7
     refs = [row for row in state(context)["business_resource_reference"] if row["source_id"] == str(result.id)]
-    assert [(row["slot_key"], row["target_id"]) for row in refs] == [("model", "11")]
+    assert refs == []
     assert adapter.authorize_created.call_args.kwargs["record"].resource_type == "knowledge_space"
 
 
@@ -175,7 +175,7 @@ async def test_actual_v1_v2_and_mcp_old_create_entries_share_space_r2_and_keep_o
     ids = {web.data.id, new.data.id, api.data.id, tool.id}
     assert {row["type"] for row in snapshots["knowledge"] if row["id"] in ids} == {3}
     refs = [row for row in snapshots["business_resource_reference"] if row["source_id"] in {str(i) for i in ids}]
-    assert len(refs) == 4
+    assert refs == []
     assert adapter.authorize_created.await_count == 4
 
 

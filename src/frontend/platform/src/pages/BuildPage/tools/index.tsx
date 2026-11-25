@@ -28,6 +28,7 @@ import { ToolPriceDialog, type PricedToolChild } from "./ToolPriceDialog";
 import ToolSet from "./ToolSet";
 import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
+import { canConfigureBuiltinTool } from './builtinConfigPolicy';
 
 const MANAGED_TOOLS = [
     'Bing web搜索', '天眼查',
@@ -76,7 +77,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
-    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string; systemPreset: boolean } | null>(null);
     const isBuiltinTool = type === "";
     const { actions, load: loadToolActions } = useLazyResourceActions('tool', ['edit', 'delete', 'manage_permission']);
     const canManageTool = (id: string | number) =>
@@ -122,14 +123,14 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         }).map((el) => ({
             ...el,
             write: isBuiltinTool
-                ? Boolean(user?.is_global_super)
+                ? canConfigureBuiltinTool(actions[String(el.id)])
                 : hasResourceAction(actions, el.id, 'edit'),
             delete: !isBuiltinTool && hasResourceAction(actions, el.id, 'delete'),
         }));
-    }, [actions, allData, isBuiltinTool, keyword, type, user?.is_global_super]);
+    }, [actions, allData, isBuiltinTool, keyword, type]);
 
     const hasSet = (el) => {
-        if (!user?.is_global_super) return false
+        if (!isBuiltinTool || !el.write) return false
         return MANAGED_TOOLS.includes(el.name) || hasManagedToolKey(el.children)
     }
 
@@ -137,14 +138,15 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const { loading: btnLoading, refresh } = useMcpRefrensh(t)
 
     return (
-        <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
-            <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main-content">
-                <div className="relative w-fit border-r border-border-base p-6">
+        <div className="flex h-full relative">
+            <div className="relative flex h-full w-full overflow-hidden bg-background-main-content">
+                <div className="flex w-[17rem] shrink-0 flex-col overflow-y-auto border-r border-border-base p-6">
                     {type !== 'skill' && <SearchInput
+                        className="shrink-0"
                         placeholder={t("tools.search")}
                         onChange={(e) => setKeyword(e.target.value)}
                     />}
-                    <div className="mt-4">
+                    <div className="mt-4 shrink-0">
                         <div
                             className={`flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${type === "" && "bg-muted-foreground/10"
                                 }`}
@@ -175,16 +177,13 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             onClick={() => setType('skill')}
                         ><Sparkles /><span>{t('tools.skills')}</span></button>}
                     </div>
-                    {type !== 'skill' && <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
-                        <div className="flex items-center gap-2">
-                            <p className="text-sm text-muted-foreground break-keep">
-                                {t("tools.manageCustomTools")}
-                            </p>
-                            {/* F027 AC-12: "总记录数" badge removed from the tool list UI; backend response shape unchanged. */}
-                        </div>
-                    </div>}
+                    {type !== 'skill' && (
+                        <p className="mt-auto shrink-0 break-words pt-6 text-sm text-muted-foreground">
+                            {t("tools.manageCustomTools")}
+                        </p>
+                    )}
                 </div>
-                <div className="relative h-full w-full flex-1 overflow-auto p-5 pb-20 pt-2 scrollbar-hide">
+                <div className="relative h-full min-w-0 flex-1 overflow-auto p-5 pb-20 pt-2 scrollbar-hide">
                     {type === 'skill' ? <SkillManagement /> : <>
                     {
                         loading && <div className="absolute inset-0 z-10 flex items-center justify-center">
@@ -222,7 +221,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                                 editRef.current.edit(el)
                                         }}
                                         onPermission={canManageTool(el.id)
-                                            ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
+                                            ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name, systemPreset: tool.is_preset === 1 }); setPermDialogOpen(true); }
                                             : null}
                                         onHoverPermissions={handleHoverToolPermissions}
                                         showPricing={showToolPricing}
@@ -272,7 +271,8 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                 <PermissionDialog
                     open={permDialogOpen}
                     onOpenChange={setPermDialogOpen}
-                    allowAllMembers={isBuiltinTool}
+                    allowAllMembers={permTarget.systemPreset}
+                    systemPreset={permTarget.systemPreset}
                     resourceType="tool"
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}

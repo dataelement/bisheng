@@ -34,7 +34,7 @@ class CapabilityCatalogService:
     async def list(self):
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
@@ -46,10 +46,14 @@ class CapabilityCatalogService:
                 if not tool.is_delete and tool.id not in disabled
             },
         )
+        from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+        # F005: an auto-enabled workbench tool is always on, so the center does not list it.
+        auto_enabled = await WorkStationService.aauto_enabled_tool_ids()
         rows = []
         for group in groups:
             for tool in group.children or []:
-                if tool.is_delete:
+                if tool.is_delete or tool.id in auto_enabled:
                     continue
                 demo = demo_for(tool)
                 name = WorkCapabilitiesService._tool_name(tool)
@@ -75,6 +79,9 @@ class CapabilityCatalogService:
         from bisheng.linsight.domain.services.user_skills import UserSkillsService
 
         for record, enabled in await UserSkillsService(self.user.user_id).records(False):
+            if getattr(record, "auto_enabled", False):
+                # F005: always available, so not listed in the capability center.
+                continue
             skill = self.work._skill_info(record)
             ready = enabled
             if ready:
@@ -106,7 +113,10 @@ class CapabilityCatalogService:
         if configured_tools is not None:
             from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
-            configured = await WorkStationService.afilter_tools_by_use_permission(configured_tools, self.user)
+            # F005: auto-enabled groups are always on, so the picker does not offer them.
+            configured = await WorkStationService.afilter_tools_by_use_permission(
+                [group for group in configured_tools if not group.get("auto_enabled")], self.user
+            )
             disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
                 [
                     SimpleNamespace(id=child["id"], is_preset=group.get("is_preset") or 0)
@@ -137,7 +147,7 @@ class CapabilityCatalogService:
             ]
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
@@ -183,7 +193,7 @@ class CapabilityCatalogService:
             raise HTTPException(404, "Account availability is unavailable for this tool")
         try:
             allowed = await check_business_action(
-                self.user, resource_type="tool", resource_id=category.id, action="use"
+                self.user, resource_type="tool", resource_id=category.id, action="visible"
             )
         except (InvalidCatalogActionError, PermissionInvalidResourceError, PermissionPublishNotReadyError) as exc:
             raise HTTPException(404, "Account availability is unavailable for this tool") from exc
@@ -204,7 +214,7 @@ class CapabilityCatalogService:
             raise HTTPException(409, "Tool has no stable invocation name")
         started = monotonic()
         try:
-            # The ordinary Work path rechecks tenant, use permission, schema and audit.
+            # The ordinary Work path rechecks tenant, visibility permission, schema and audit.
             result = await self.work.call_tool(name, arguments)
         except jsonschema.ValidationError:
             raise HTTPException(422, "Demo arguments do not match the tool schema") from None

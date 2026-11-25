@@ -6,10 +6,9 @@ search_kwargs passed to MultiRetriever contain the expected Milvus expr / ES fil
 
 Strategy B: asyncio.run wrapper smoke test for _fetch_non_primary_file_ids.
 """
+
 from __future__ import annotations
 
-import types
-from typing import Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,14 +16,24 @@ import pytest
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.workflow.common.knowledge import ConditionCases, RagUtils
 
-
 # ---------------------------------------------------------------------------
 # Helpers — build a minimal RagUtils without full BaseNode init
 # ---------------------------------------------------------------------------
 
+
+@pytest.fixture(autouse=True)
+def authorize_fixture_knowledge(monkeypatch):
+    # These tests isolate version-filter composition; authorization has its own
+    # allow/deny tests in test_knowledge_authorization_boundary.py.
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.workflow_knowledge_authorization.authorized_knowledge_ids",
+        lambda **kwargs: kwargs["knowledge_ids"],
+    )
+
+
 def _make_rag_utils(
-    knowledge_vector_list: Dict,
-    metadata_filter: Optional[ConditionCases] = None,
+    knowledge_vector_list: dict,
+    metadata_filter: ConditionCases | None = None,
     keyword_weight: float = 0.5,
     vector_weight: float = 0.5,
 ) -> RagUtils:
@@ -38,6 +47,11 @@ def _make_rag_utils(
     obj._retriever_kwargs = {"k": 100, "param": {"ef": 110}}
     obj._multi_milvus_retriever = None
     obj._multi_es_retriever = None
+    obj.user_id = 7
+    obj.flow_user_id = 7
+    obj.tenant_id = 1
+    obj._knowledge_auth = True
+    obj._knowledge_value = list(knowledge_vector_list)
     return obj
 
 
@@ -61,6 +75,7 @@ def _make_knowledge_info(
 # ---------------------------------------------------------------------------
 # Strategy A — unit tests with mocked _fetch_non_primary_file_ids
 # ---------------------------------------------------------------------------
+
 
 class TestInitKnowledgeRetrieverNoExclusions:
     """Test case 1: no non-primary exclusions."""
@@ -158,7 +173,7 @@ class TestInitKnowledgeRetrieverWithExclusions:
         self,
         base_milvus_str: str,
         base_es_filter_dict: dict,
-        excluded: List[int],
+        excluded: list[int],
     ):
         """Helper: wire up a single knowledge and capture search_kwargs."""
         knowledge_id = 1
@@ -213,9 +228,7 @@ class TestInitKnowledgeRetrieverWithExclusions:
         # Original terms clause still present
         assert {"terms": {"metadata.document_id": [5, 6]}} in es_filter
         # must_not clause appended
-        assert {
-            "bool": {"must_not": {"terms": {"metadata.document_id": [10, 20]}}}
-        } in es_filter
+        assert {"bool": {"must_not": {"terms": {"metadata.document_id": [10, 20]}}}} in es_filter
 
     def test_no_metadata_filter_with_exclusions(self):
         """No metadata filter + exclusions: Milvus expr is just not-in; ES has only must_not."""
@@ -233,9 +246,7 @@ class TestInitKnowledgeRetrieverWithExclusions:
 
         es_filter = es_kws[0]["filter"]
         assert len(es_filter) == 1
-        assert es_filter[0] == {
-            "bool": {"must_not": {"terms": {"metadata.document_id": [10, 20]}}}
-        }
+        assert es_filter[0] == {"bool": {"must_not": {"terms": {"metadata.document_id": [10, 20]}}}}
 
     def test_ids_are_sorted_in_output(self):
         """Exclusion ids must be sorted ascending in Milvus literal and ES list."""
@@ -314,8 +325,7 @@ class TestInitKnowledgeRetrieverEmptyList:
                 side_effect=_fake_multi_retriever,
             ):
                 with patch(
-                    "bisheng.workflow.common.knowledge.KnowledgeRag"
-                    ".get_multi_knowledge_vectorstore_sync",
+                    "bisheng.workflow.common.knowledge.KnowledgeRag.get_multi_knowledge_vectorstore_sync",
                     return_value={},
                 ):
                     obj.init_knowledge_retriever()
@@ -330,6 +340,7 @@ class TestInitKnowledgeRetrieverEmptyList:
 # ---------------------------------------------------------------------------
 # Strategy B — asyncio.run wrapper smoke test
 # ---------------------------------------------------------------------------
+
 
 class TestFetchNonPrimaryFileIds:
     """Smoke test: _fetch_non_primary_file_ids handles empty list gracefully."""
@@ -364,6 +375,7 @@ class TestFetchNonPrimaryFileIds:
 # Integration: verify build_primary_only_filter is used (not mocked)
 # ---------------------------------------------------------------------------
 
+
 class TestBuildPrimaryOnlyFilterDirect:
     """Directly verify build_primary_only_filter output shapes used in production."""
 
@@ -390,6 +402,4 @@ class TestBuildPrimaryOnlyFilterDirect:
         milvus_expr, es_filter = build_primary_only_filter([10, 20])
         assert milvus_expr == "document_id not in [10, 20]"
         assert len(es_filter) == 1
-        assert es_filter[0] == {
-            "bool": {"must_not": {"terms": {"metadata.document_id": [10, 20]}}}
-        }
+        assert es_filter[0] == {"bool": {"must_not": {"terms": {"metadata.document_id": [10, 20]}}}}

@@ -123,8 +123,8 @@ class KnowledgeVersionMutationRepository:
     def __init__(self):
         self._issued = WeakKeyDictionary()
 
-    async def aread_authorization_space(self, session, *, operation, inputs):
-        """Resolve the owning space without locks or issuing a mutation state."""
+    async def aread_authorization_targets(self, session, *, operation, inputs):
+        """Resolve actual editable files without locks or issuing a mutation state."""
         tenant, _ = _scope(session)
         if operation == "primary":
             version = await self._one(session, Version, VersionRowFact, _id(inputs["version_id"]))
@@ -135,6 +135,7 @@ class KnowledgeVersionMutationRepository:
             )
             if document is None:
                 return None
+            file = await self._one(session, File, VersionFileFact, version.knowledge_file_id)
             space_id = document.knowledge_id
         else:
             key = "knowledge_file_id" if operation == "link" else "current_file_id"
@@ -145,7 +146,27 @@ class KnowledgeVersionMutationRepository:
         space = await self._one(session, Knowledge, VersionSpaceFact, space_id)
         if space is None or space.tenant_id != tenant or space.type != 3:
             return None
-        return space
+        if file is None or file.file_type != 1 or file.tenant_id != tenant or file.knowledge_id != space.id:
+            return None
+        files = [file]
+        if operation != "primary":
+            document_id = inputs["target_document_id" if operation == "link" else "source_document_id"]
+            document = await self._one(session, Document, VersionDocumentFact, _id(document_id), owned=True)
+            if document is not None and document.knowledge_id == space.id and document.primary_version_id is not None:
+                version = await self._one(session, Version, VersionRowFact, document.primary_version_id)
+                other = (
+                    await self._one(session, File, VersionFileFact, version.knowledge_file_id)
+                    if version and version.document_id == document.id
+                    else None
+                )
+                if (
+                    other is not None
+                    and other.file_type == 1
+                    and other.tenant_id == tenant
+                    and other.knowledge_id == space.id
+                ):
+                    files.append(other)
+        return space, tuple(files)
 
     @staticmethod
     async def _rows(session, statement):

@@ -2,13 +2,19 @@
 import { notification } from '@bisheng/ui';
 
 import { getOfficeTokenApi } from "@/controllers/API/flow";
+import { showApiError } from "@/controllers/request";
 import { getOfficeReachableUrl } from "@/utils/officeUrl";
 import i18next from "i18next";
 import { useContext, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { locationContext } from "../../../contexts/locationContext";
 
-export default function Word({ data, workflow }) {
+interface WordProps {
+    data: { key: string; path: string; source_kind?: 'empty'; preview_upload_ref?: string };
+    workflow?: boolean;
+}
+
+export default function Word({ data, workflow = false }: WordProps) {
     const { appConfig } = useContext(locationContext);
     const { t } = useTranslation("flow");
 
@@ -18,6 +24,8 @@ export default function Word({ data, workflow }) {
     const backUrl = getOfficeReachableUrl(workflow ? "/api/v1/workflow/report/callback" : "/api/v1/report/callback");
 
     const editorConfig = {
+        ...(data.source_kind === "empty" ? { source_kind: "empty" as const } : {}),
+        ...(data.preview_upload_ref ? { preview_upload_ref: data.preview_upload_ref } : {}),
         // Editor width
         width: "100%",
         // Editor height
@@ -81,47 +89,58 @@ export default function Word({ data, workflow }) {
         },
     };
 
-    const createEditor = (config) => {
-        window.editor = new window.DocsAPI.DocEditor("bsoffice", config);
-    };
-
-    // Sign editorConfig with JWT and then create editor
-    const initEditor = async () => {
-        const finalConfig = { ...editorConfig };
-        try {
-            const res = await getOfficeTokenApi(editorConfig);
-            if (res.token) {
-                finalConfig.token = res.token;
-            }
-        } catch (e) {
-            // If token request fails, proceed without token (for non-JWT setups)
-            console.warn("Failed to get OnlyOffice JWT token, proceeding without it:", e);
-        }
-        createEditor(finalConfig);
-    };
-
-
     useEffect(() => {
+        let disposed = false;
+        let editor: { destroyEditor: () => void } | undefined;
+        let script: HTMLScriptElement | undefined;
+        let sdkLoaded = false;
+        const initEditor = async () => {
+            try {
+                const res = await getOfficeTokenApi(editorConfig);
+                if (disposed) return;
+                if (typeof res?.token !== "string" || !res.token.trim()
+                    || !res.config || typeof res.config !== "object"
+                    || res.config.documentType !== "word"
+                    || !res.config.document || typeof res.config.document !== "object"
+                    || !res.config.editorConfig || typeof res.config.editorConfig !== "object") {
+                    throw new Error(String(t("wordEditorLoadFailed")));
+                }
+                editor = new window.DocsAPI.DocEditor("bsoffice", { ...res.config, token: res.token });
+                window.editor = editor;
+            } catch (error) {
+                if (!disposed) showApiError(error);
+            }
+        };
         if (window.DocsAPI) {
-            initEditor();
+            void initEditor();
         } else {
             if (!wordUrl) {
                 notification.open({ type: "error", title: String(t("wordEditorLoadFailed") ?? ''), description: String(t("checkOfficeServiceConfig") ?? '') });
+                return;
             }
-            const script = document.createElement("script");
-            script.src = wordUrl + "/web-apps/apps/api/documents/api.js"; // OnlyOffice editor service
-            script.onload = initEditor;
+            script = document.createElement("script");
+            script.src = wordUrl + "/web-apps/apps/api/documents/api.js";
+            script.onload = () => {
+                sdkLoaded = true;
+                void initEditor();
+            };
             document.head.appendChild(script);
             script.onerror = () => {
-                notification.open({ type: "error", title: String(t("wordEditorLoadFailed") ?? ''), description: String(t("checkOfficeServiceConfig") ?? '') });
+                if (!disposed) notification.open({ type: "error", title: String(t("wordEditorLoadFailed") ?? ''), description: String(t("checkOfficeServiceConfig") ?? '') });
             };
         }
-
         return () => {
-            console.log("destroyEditor :>> ");
-            window.editor?.destroyEditor();
+            disposed = true;
+            if (script) {
+                script.onload = null;
+                script.onerror = null;
+                // Even after loading, the SDK reads this tag to locate each new editor iframe.
+                if (!sdkLoaded) script.remove();
+            }
+            editor?.destroyEditor();
+            if (window.editor === editor) window.editor = undefined;
         };
-    }, []);
+    }, [data.key, data.path, data.source_kind, data.preview_upload_ref, workflow]);
 
     return (
         <div className="relative w-full h-full">

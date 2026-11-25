@@ -112,60 +112,14 @@ def parse_destination(url: str) -> ParsedDestination:
     return ParsedDestination(url, parts.scheme, hostname, port, origin)
 
 
-_RFC1918 = tuple(ipaddress.ip_network(value) for value in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
-_ULA = ipaddress.ip_network("fc00::/7")
-# Explicit ranges avoid Python-version-dependent is_global exemptions. Disallow
-# the whole IPv6 protocol-assignment block, not merely current Teredo/ORCHID.
-_SPECIAL_V4 = tuple(
-    ipaddress.ip_network(value)
-    for value in (
-        "0.0.0.0/8",
-        "100.64.0.0/10",
-        "127.0.0.0/8",
-        "169.254.0.0/16",
-        "192.0.0.0/24",
-        "192.0.2.0/24",
-        "192.88.99.0/24",
-        "198.18.0.0/15",
-        "198.51.100.0/24",
-        "203.0.113.0/24",
-        "224.0.0.0/4",
-        "240.0.0.0/4",
-    )
-)
-_SPECIAL_V6 = tuple(
-    ipaddress.ip_network(value)
-    for value in (
-        "::/96",
-        "::ffff:0:0/96",
-        "64:ff9b::/96",
-        "64:ff9b:1::/48",
-        "100::/64",
-        "2001::/23",
-        "2001:db8::/32",
-        "2002::/16",
-        "3fff::/20",
-    )
-)
-_METADATA_V4 = frozenset((ipaddress.ip_address("100.100.100.200"), ipaddress.ip_address("168.63.129.16")))
-
-
 def _allowed(ip: IPAddress) -> bool:
-    if ip.version == 4:
-        if ip in _METADATA_V4 or any(ip in network for network in _SPECIAL_V4):
-            return False
-        private = any(ip in network for network in _RFC1918)
-    else:
-        # ISATAP interface identifiers embed IPv4 even in otherwise global /64s.
-        isatap = (int(ip) >> 32) & 0xFFFFFFFF in (0x00005EFE, 0x02005EFE)
-        if isatap or any(ip in network for network in _SPECIAL_V6):
-            return False
-        private = ip in _ULA
-    if private:
-        return False
-    return ip.is_global and not (
-        ip.is_multicast or ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_reserved
-    )
+    """Allow intranet destinations; only reject loopback / link-local / multicast / unspecified.
+
+    Product alignment restored the pre-security-batch URL policy: RFC1918, ULA and
+    other non-public ranges are reachable again (intranet Wiki/OA, private pip, DB).
+    Loopback and link-local (incl. cloud metadata link-local) remain denied.
+    """
+    return not (ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified)
 
 
 def resolve_destination(

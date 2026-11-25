@@ -8,7 +8,7 @@ import pytest
 from bisheng.api.services import flow as flow_service
 from bisheng.api.v1.schemas import FlowVersionCreate
 from bisheng.common.errcode.flow import CurVersionDelError
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.database.models.flow_version import FlowVersion
 from test.knowledge_unification import test_wf_create as create_fixtures
 from test.knowledge_unification import test_wf_current as current_fixtures
@@ -30,33 +30,30 @@ async def delete(context, version_id=2):
 async def test_delete_only_one_version_releases_only_its_set_and_preserves_definition(configured):
     old = next(row for row in rows(configured, "business_reference_set") if row["source_version"] == "1")
     assert (await delete(configured)).status_code == 200
+    await save_fixtures.refresh(configured)
     assert {(row["source_version"], row["slot_key"]) for row in rows(configured, "business_resource_reference")} == {
         ("1", "node:old-current.model_id")
     }
-    assert next(row for row in rows(configured, "business_reference_set") if row["source_version"] == "1") == old
-    removed = next(row for row in rows(configured, "business_reference_set") if row["source_version"] == "2")
-    assert removed["effective"] == 0 and removed["ready"] == 1
+    current_set = next(row for row in rows(configured, "business_reference_set") if row["source_version"] == "1")
+    assert current_set["digest"] == old["digest"]
+    assert not [row for row in rows(configured, "business_reference_set") if row["source_version"] == "2"]
     async with configured.session_factory() as session:
         version = await session.get(FlowVersion, 2)
         assert version.is_delete == 1 and version.data["nodes"]
 
 
-async def test_delete_reference_failure_rolls_back_soft_delete_and_all_binding_revisions(configured, monkeypatch):
-    before_versions = rows(configured, "flowversion")
+async def test_delete_version_does_not_call_legacy_binding_writer(configured, monkeypatch):
+    from unittest.mock import AsyncMock
+
     before_refs = rows(configured, "business_resource_reference")
     before_sets = rows(configured, "business_reference_set")
-    original = configured.runtime.aapply_source_bindings
-
-    async def fail_after_write(session, prepared):
-        await original(session, prepared)
-        raise RuntimeError("binding delete failed")
-
-    monkeypatch.setattr(configured.runtime, "aapply_source_bindings", fail_after_write)
-    with pytest.raises(RuntimeError, match="binding delete failed"):
-        await delete(configured)
-    assert rows(configured, "flowversion") == before_versions
+    binding = AsyncMock(side_effect=RuntimeError("binding delete failed"))
+    monkeypatch.setattr(configured.runtime, "aapply_source_bindings", binding)
+    assert (await delete(configured)).status_code == 200
+    assert next(row for row in rows(configured, "flowversion") if row["id"] == 2)["is_delete"] == 1
     assert rows(configured, "business_resource_reference") == before_refs
     assert rows(configured, "business_reference_set") == before_sets
+    binding.assert_not_awaited()
 
 
 async def test_current_version_delete_keeps_original_business_restriction(configured):
@@ -68,18 +65,18 @@ async def test_current_version_delete_keeps_original_business_restriction(config
 async def test_original_deleted_target_can_be_unbound_by_deleting_its_source_version(configured):
     await current_fixtures.force_delete_model(configured)
     assert (await delete(configured)).status_code == 200
+    await save_fixtures.refresh(configured)
     assert [(row["source_version"], row["target_id"]) for row in rows(configured, "business_resource_reference")] == [
         ("1", "7")
     ]
 
 
-async def test_delete_version_rejects_business_index_drift_instead_of_silent_cleanup(configured):
+async def test_delete_version_ignores_stale_auxiliary_index(configured):
     async with configured.session_factory() as session, session.begin():
         version = await session.get(FlowVersion, 2)
         version.data = graph(node("drift", "llm", model_id=7))
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await delete(configured)
-    assert next(row for row in rows(configured, "flowversion") if row["id"] == 2)["is_delete"] == 0
+    assert (await delete(configured)).status_code == 200
+    assert next(row for row in rows(configured, "flowversion") if row["id"] == 2)["is_delete"] == 1
 
 
 async def test_copy_version_cannot_borrow_original_source_deleted_target_evidence(configured):

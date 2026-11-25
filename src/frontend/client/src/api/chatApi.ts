@@ -9,8 +9,10 @@ import { isApiError, normalizeApiError } from "@bisheng/api-client";
 import { readCitationFailure } from "~/api/citationFailure";
 import type { MemoryFlags } from "~/api/memory";
 import http from "~/api/request";
+import { runRowMarks } from "~/hooks/unifiedRun";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 import { getShareTokenFromPath } from "~/utils/shareToken";
+import type { SentComposerReference } from "~/components/Chat/Input/composerReferences";
 
 // --- Endpoints ---
 const API = {
@@ -22,7 +24,6 @@ const API = {
         `/api/v1/workstation/messages/${conversationId}/agent`,
     sessionInfo: (conversationId: string) =>
         `/api/v1/chat/info?chat_id=${encodeURIComponent(conversationId)}`,
-    sseChat: () => `/api/v1/workstation/chat/completions`,
     // Links handed out at upload time expire; ask for a fresh one at render.
     attachmentUrl: (conversationId: string, fileId: string) =>
         `/api/v1/chat/${conversationId}/files/${fileId}/url`,
@@ -35,6 +36,13 @@ const API = {
 };
 
 // --- Types ---
+// F004: run event types of the unified runtime live with the run store.
+export type {
+    RunEvent, RunEventType, RunEventDataMap, RunPlanItem, PlanItemStatus, RunTextData, RunToolCallData, RunAskUserData,
+    RunAskUserQuestion, RunAskUserAnsweredData, RunSteerData, RunFileData, RunQueuedData, RunFailedData, RunResyncData,
+    RunSendResult,
+} from '~/store/runStore';
+export { getRunEventsUrl, sendRunMessage, stopConversationRun } from './runApi';
 export type { ChatCitation, ChatCitationItem } from '@bisheng/chat/citations';
 import type { ChatCitation } from '@bisheng/chat/citations';
 
@@ -135,6 +143,8 @@ export interface ChatMessage {
     searchResult?: SearchWebItem[];
     // Reference sources
     references?: ReferenceSource[];
+    /** References shown inline in the user's prompt, at UTF-16 offsets. */
+    composerReferences?: SentComposerReference[];
     citations?: ChatCitation[] | null;
     files?: any[];
     /** Persisted 点赞/点踩 verdict on this answer row: 0 none / 1 up / 2 down.
@@ -158,6 +168,18 @@ export interface ChatMessage {
     events?: AgentEvent[];
     /** F132: memory notice / attribution flags of this answer (owner only). */
     memory?: MemoryFlags;
+    /**
+     * F004: set on the local answer row that mirrors a run of the unified
+     * runtime. `''` while the send is still waiting for its run id. Never set
+     * on a row loaded from history.
+     */
+    liveRunId?: string;
+    /** F004: the user stopped the run of this answer; shown as "stopped", not as a failure. */
+    stopped?: boolean;
+    /** F004: inbox id of a user message sent into a run (key of its "queued" mark). */
+    steerMessageId?: string;
+    /** F004: with `steerMessageId` on a history row: the run has not read the message yet. */
+    steerQueued?: boolean;
 }
 
 export interface ContentPart {
@@ -293,8 +315,20 @@ function mapAgentResponseItem(row: any): ChatMessage {
         base.errorText = failureExtra.error_msg;
         Object.assign(base, dailyFailureMetadata(failureExtra));
     }
+    Object.assign(base, runRowMarks(failureExtra));
     if (category === "question" && raw && typeof raw === "object") {
         base.text = raw.query ?? "";
+        if (Array.isArray(raw.composer_references)) {
+            base.composerReferences = raw.composer_references.filter(
+                (reference: SentComposerReference | null) => reference
+                    && (reference.kind === "skill" || reference.kind === "tool" || reference.kind === "space")
+                    && (reference.is_tag === undefined || (reference.kind === "space" && reference.is_tag === true))
+                    && typeof reference.label === "string"
+                    && Number.isInteger(reference.offset)
+                    && reference.offset >= 0
+                    && reference.offset <= base.text.length,
+            );
+        }
         if (!base.files?.length && Array.isArray(raw.files)) {
             base.files = normalizeHistoryMediaFiles(raw.files);
         }
@@ -315,10 +349,7 @@ function mapAgentResponseItem(row: any): ChatMessage {
     // answer fallback shown if the panel can't hydrate.
     if (category === "task") {
         base.text = typeof raw === "string" ? raw : (raw?.msg ?? raw?.answer ?? "");
-        let extra: any = row.extra;
-        if (typeof extra === "string") {
-            try { extra = JSON.parse(extra); } catch { extra = null; }
-        }
+        const extra = failureExtra;
         base.linsightSessionVersionId =
             row.linsightSessionVersionId
             ?? row.linsight_session_version_id
@@ -463,12 +494,6 @@ export async function resolveCitationDetails(citationIds: string[]): Promise<Cha
         .map((citationId) => citationDetailMemoryCache[citationCacheKey(citationId, scope)])
         .filter(Boolean)
         .concat(resolvedItems.filter((detail) => detail?.citationId && !citationIds.includes(detail.citationId)));
-}
-
-/** Get the full SSE URL (absolute) for creating SSE connection */
-export function getSSEUrl(): string {
-    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-    return `${base}${API.sseChat()}`;
 }
 
 /** Get the full SSE URL for channel article chat */

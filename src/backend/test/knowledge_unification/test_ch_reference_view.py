@@ -11,7 +11,6 @@ import sqlalchemy as sa
 from bisheng.channel.application import reference_source_owner as owner_module
 from bisheng.channel.application.reference_source_owner import ChannelReferenceSourceOwner
 from bisheng.channel.domain.services import channel_service as service_module
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.knowledge.application.source_read_target_owner import KnowledgeSourceReadTargetOwner
 from bisheng.knowledge.domain.models import knowledge as knowledge_module
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
@@ -76,7 +75,7 @@ async def test_deleted_space_and_descendant_folder_stay_selected_without_fake_na
     item = result.main.spaces[0]
     assert (item.knowledge_space_id, item.folder_id, item.knowledge_space_name) == ("10", "30", None)
     assert not result.main.enabled and len(item.reference_states) == 2
-    assert all(state.state == "invalid_deleted" and not state.is_valid for state in item.reference_states)
+    assert all(state.state == "invalid_missing" and not state.is_valid for state in item.reference_states)
 
 
 async def test_hidden_target_retains_id_without_exposing_metadata(view, monkeypatch):
@@ -116,5 +115,13 @@ async def test_missing_index_is_not_shown_as_empty_settings(view):
                 BusinessReferenceSet.tenant_id == 101, BusinessReferenceSet.source_id == root.id
             )
         )
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await context.service._load_knowledge_sync(root.id, context.user)
+    result = await context.service._load_knowledge_sync(root.id, context.user)
+    assert result.main.spaces[0].knowledge_space_id == "10"
+    async with context.sessions() as session:
+        assert (
+            not (
+                await session.execute(sa.select(BusinessReferenceSet).where(BusinessReferenceSet.source_id == root.id))
+            )
+            .scalars()
+            .all()
+        )

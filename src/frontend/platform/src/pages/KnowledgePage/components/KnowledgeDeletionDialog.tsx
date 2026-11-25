@@ -28,6 +28,7 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
   const danger = consent.plan === plan && consent.danger;
   const impact = view.result?.impact ?? view.inspection;
   const complete = view.result?.check_complete ?? view.inspection?.check_complete;
+  const referenceComplete = view.result?.impact.reference_check_complete ?? view.inspection?.check_complete;
   const locked = view.busy || view.dispatched;
   const needsSkip = !!view.result?.requires_skip_confirmation;
   const executable =
@@ -73,13 +74,15 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
               {view.code === 10999 && view.reason === "source_space_move_input_required"
                 ? tr("source_tasks_block_delete")
                 : view.code === 10994
-                ? tr("unavailable")
+                ? tr("hints_unavailable")
                 : view.stale
                   ? tr("changed")
                   : view.error || tr("failed")}
             </p>
           )}
-          {complete === false && <p role="alert">{tr("unavailable")}</p>}
+          {complete === false && <p role="alert">{tr("failed")}</p>}
+          {referenceComplete === false && <p role="alert">{tr("hints_unavailable")}</p>}
+          {referenceComplete === true && <p>{tr("hints_notice")}</p>}
           {!view.readonly && view.result && (
             <>
               <p>{tr("irreversible")}</p>
@@ -117,7 +120,7 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
             </>
           )}
           <KnowledgeReferenceTables
-            impact={impact}
+            impact={referenceComplete === false ? undefined : impact}
             slotCounts={view.readonly ? view.inspection?.slot_counts : undefined}
             page={view.page}
             readonly={view.readonly}
@@ -177,18 +180,6 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
               {tr("review")}
             </Button>
           )}
-          {!view.readonly &&
-            !view.force &&
-            !view.dispatched &&
-            view.command.kind === "delete" &&
-            view.result?.check_complete &&
-            !view.result.can_execute &&
-            view.code !== 10994 &&
-            !view.stale && (
-              <Button color="danger" variant="outlined" onClick={operation.force}>
-                {tr("force_review")}
-              </Button>
-            )}
           {view.dispatched && (
             <Button
               variant="outlined"

@@ -70,7 +70,12 @@ async def people(store, monkeypatch):
 
     async with sessions() as session, session.begin():
         session.add(User(user_id=7, user_name="actual", password="fixture", token_version=12))
-        session.add(Tenant(id=101, tenant_code="t101", tenant_name="actual", status="active", root_dept_id=1001))
+        row = await session.get(Tenant, 101)
+        if row is None:
+            session.add(Tenant(id=101, tenant_code="t101", tenant_name="actual", status="active", root_dept_id=1001))
+        else:
+            row.root_dept_id = 1001
+            row.status = "active"
         session.add(Tenant(id=202, tenant_code="t202", tenant_name="other", status="active", root_dept_id=2001))
         session.add(UserTenant(user_id=7, tenant_id=101, is_active=1, status="active"))
         session.add(Department(id=1001, dept_id="t101-root", name="actual", tenant_id=101, path="/1001/"))

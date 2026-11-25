@@ -41,11 +41,51 @@ def capability_store(monkeypatch):
     async def legacy_visual(model, tenant):
         return legacy.get((tenant, model))
 
+    async def read_many(keys):
+        return {
+            key: value
+            for (tenant, model), value in persisted.items()
+            if (key := f"dsh_vision:{tenant}:{model}") in keys
+        }
+
+    async def read_local_visuals(tenant):
+        return {str(model): value for (scope, model), value in legacy.items() if scope == tenant and value is not None}
+
     snapshot = AsyncMock(return_value=(SimpleNamespace(id=7, tenant_id=1), SimpleNamespace(tenant_id=1)))
     monkeypatch.setattr(vision, "repository", repository)
     monkeypatch.setattr(vision, "legacy_visual", legacy_visual)
+    monkeypatch.setattr(vision.DshSettingsRepository, "read_many", read_many)
+    monkeypatch.setattr(vision, "_read_local_visuals", read_local_visuals)
     monkeypatch.setattr(LLMService, "get_dsh_model_metadata_snapshot", snapshot)
     return SimpleNamespace(persisted=persisted, legacy=legacy, snapshot=snapshot)
+
+
+async def test_catalog_vision_reads_settings_in_bulk_and_legacy_once_per_tenant(monkeypatch):
+    owner = '{"vision":true,"authority_version":1}'
+    persisted = {"dsh_vision:1:7": owner, "dsh_vision:69:7": '{"vision":false}'}
+    reads = AsyncMock(return_value=persisted)
+    legacy = AsyncMock(side_effect=lambda tenant: {1: {"8": True}, 69: {"9": True}}[tenant])
+    monkeypatch.setattr(vision.DshSettingsRepository, "read_many", reads)
+    monkeypatch.setattr(vision, "_read_local_visuals", legacy)
+
+    with profile_scope(69):
+        assert await vision.read_catalog_vision(
+            [
+                SimpleNamespace(id=7, tenant_id=1),
+                SimpleNamespace(id=8, tenant_id=1),
+                SimpleNamespace(id=9, tenant_id=69),
+            ]
+        ) == {7: False, 8: True, 9: True}
+
+    reads.assert_awaited_once()
+    assert set(reads.await_args.args[0]) == {
+        "dsh_vision:1:7",
+        "dsh_vision:69:7",
+        "dsh_vision:1:8",
+        "dsh_vision:69:8",
+        "dsh_vision:69:9",
+    }
+    assert sorted(call.args for call in legacy.await_args_list) == [(1,), (69,)]
 
 
 @pytest.mark.parametrize(
@@ -156,21 +196,27 @@ async def test_legacy_visual_reads_only_local_rows_in_native_sqlite(monkeypatch)
     from sqlalchemy.pool import StaticPool
     from sqlmodel.ext.asyncio.session import AsyncSession
 
+    from bisheng.common.models.config import Config
     from bisheng.core import database
     from bisheng.core.database import tenant_filter
+    from bisheng.dsh.domain.repositories import settings as settings_repository
     from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
 
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     table = TenantSystemModelConfig.__table__
     tenant_filter.register_tenant_filter_events()
     async with engine.begin() as connection:
-        await connection.run_sync(lambda sync: sa.MetaData().create_all(sync, tables=[table]))
+        await connection.run_sync(lambda sync: sa.MetaData().create_all(sync, tables=[table, Config.__table__]))
         await connection.execute(
             table.insert(),
             [
                 {"tenant_id": 1, "key": "linsight_llm", "value": '{"models":[{"id":"7","visual":true}]}'},
                 {"tenant_id": 69, "key": "linsight_llm", "value": '{"models":[{"id":"7","visual":false}]}'},
             ],
+        )
+        await connection.execute(
+            Config.__table__.insert(),
+            [{"key": "dsh_vision:1:8", "value": '{"vision":true,"authority_version":1}'}],
         )
     monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | {table.name})
 
@@ -180,11 +226,19 @@ async def test_legacy_visual_reads_only_local_rows_in_native_sqlite(monkeypatch)
             yield session
 
     monkeypatch.setattr(database, "get_async_db_session", session_scope)
+    monkeypatch.setattr(settings_repository, "get_async_db_session", session_scope)
     try:
         with profile_scope(69):
             assert await vision.legacy_visual(7, 1) is True
             assert await vision.legacy_visual(7, 69) is False
             assert await vision.legacy_visual(7, 70) is None  # never Root fallback
+            assert await vision.read_catalog_vision([SimpleNamespace(id=i, tenant_id=1) for i in (7, 8, 9)]) == {
+                7: False,
+                8: True,
+                9: False,
+            }
+        with profile_scope(70):
+            assert await vision.read_catalog_vision([SimpleNamespace(id=7, tenant_id=1)]) == {7: True}
         async with engine.connect() as connection:
             assert await connection.scalar(sa.select(sa.func.count()).select_from(table)) == 2
     finally:

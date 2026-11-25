@@ -54,8 +54,8 @@ def permission_check(wired, monkeypatch):
     async def allowed(user, **kwargs):
         assert user is wired.user
         assert not user.is_global_super
-        assert kwargs["resource_type"] == "knowledge_space"
-        assert kwargs["resource_id"] == 9700
+        assert kwargs["resource_type"] == "knowledge_file"
+        assert kwargs["resource_id"] in {101, 201, 202}
         assert kwargs["action"] == "edit"
         # Permission I/O occurs after the lock-free read was rolled back.
         assert len(wired.sessions) == 1
@@ -77,7 +77,7 @@ async def test_read_only_user_cannot_mutate_versions_by_direct_http(wired, permi
     assert await snapshot(wired.database) == before
     assert response.status_code == 200 and response.json()["status_code"] == UnAuthorizedError.Code
     permission_check.assert_awaited_once()
-    assert permission_check.await_args.kwargs["resource_id"] == 9700  # Ignore a supplied space_id.
+    assert permission_check.await_args.kwargs["resource_id"] in {101, 201, 202}  # Ignore a supplied space_id.
     assert permission_check.await_args.kwargs["action"] == "edit"
     assert len(wired.sessions) == 1 and not wired.sessions[0].in_transaction()
     wired.audit_link.assert_not_called()
@@ -85,11 +85,15 @@ async def test_read_only_user_cannot_mutate_versions_by_direct_http(wired, permi
 
 
 @pytest.mark.parametrize("operation", ["link", "merge", "primary"])
-async def test_non_admin_with_effective_space_edit_can_use_original_http_endpoints(wired, permission_check, operation):
+async def test_file_editor_without_space_edit_can_use_original_http_endpoints(wired, permission_check, operation):
     response = await request(wired, operation)
     assert response.status_code == 200 and response.json()["status_code"] == 200
     assert response.json()["data"]["document_id"] == 20
-    permission_check.assert_awaited_once()
+    assert [call.kwargs["resource_id"] for call in permission_check.await_args_list] == {
+        "link": [101, 202],
+        "merge": [201, 101],
+        "primary": [201],
+    }[operation]
     assert len(wired.sessions) == 2 and all(not session.in_transaction() for session in wired.sessions)
 
 
@@ -174,12 +178,16 @@ async def test_root_managed_child_keeps_home_identity_and_uses_actual_child_spac
         response = await request(wired, operation)
     assert response.status_code == 200 and response.json()["status_code"] == 200
     assert permission_check.await_args.args[0] is wired.user
-    assert permission_check.await_args.kwargs["resource_id"] == 9700
+    assert permission_check.await_args.kwargs["resource_id"] in {101, 201, 202}
     assert wired.user.model_dump() == original
 
 
 @pytest.mark.parametrize("operation", ["link", "merge", "primary"])
-async def test_permission_on_one_space_cannot_modify_another_space(wired, permission_check, operation):
+async def test_permission_on_one_file_cannot_modify_another_file(wired, permission_check, operation):
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+    async with wired.database.engine.begin() as connection:
+        await connection.execute(sa.update(Knowledge).where(Knowledge.id == 9702).values(state=1))
     if operation == "primary":
         async with wired.database.engine.begin() as connection:
             await connection.execute(sa.insert(File), native_tests.original.file(302, knowledge_id=9702))
@@ -187,16 +195,55 @@ async def test_permission_on_one_space_cannot_modify_another_space(wired, permis
     before = await snapshot(wired.database)
 
     async def editor_in_one_space(_user, **kwargs):
-        return kwargs["resource_id"] == 9700
+        return kwargs["resource_id"] in {101, 201, 202}
 
     permission_check.side_effect = editor_in_one_space
     response = await request(wired, operation, other_space=True)
     if operation == "primary":
         assert response.json()["status_code"] == UnAuthorizedError.Code
-        assert permission_check.await_args.kwargs["resource_id"] == 9702
+        assert permission_check.await_args.kwargs["resource_id"] == 302
     else:
-        assert response.status_code == 409
-        assert permission_check.await_args.kwargs["resource_id"] == 9700
+        assert response.status_code in {404, 409}
+        permission_check.assert_not_awaited()
     assert await snapshot(wired.database) == before
     wired.audit_link.assert_not_called()
     wired.audit_primary.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "operation,denied_file", [("link", 101), ("link", 202), ("merge", 201), ("merge", 101), ("primary", 201)]
+)
+async def test_space_edit_cannot_replace_edit_on_each_affected_file(wired, permission_check, operation, denied_file):
+    before = await snapshot(wired.database)
+
+    async def grants(_user, **kwargs):
+        return kwargs["resource_type"] == "knowledge_space" or kwargs["resource_id"] != denied_file
+
+    permission_check.side_effect = grants
+    response = await request(wired, operation)
+    assert response.json()["status_code"] == UnAuthorizedError.Code
+    assert await snapshot(wired.database) == before
+    assert len(wired.sessions) == 1
+    wired.audit_link.assert_not_called()
+    wired.audit_primary.assert_not_called()
+
+
+async def test_target_primary_changed_during_authorization_cannot_reuse_old_file_edit(wired, permission_check):
+    changed = None
+
+    async def repoint(_user, **kwargs):
+        nonlocal changed
+        if changed is None:
+            async with wired.database.engine.begin() as connection:
+                await connection.execute(sa.update(Document).where(Document.id == 20).values(primary_version_id=2001))
+                await connection.execute(sa.update(Version).where(Version.document_id == 20).values(is_primary=False))
+                await connection.execute(sa.update(Version).where(Version.id == 2001).values(is_primary=True))
+            changed = await snapshot(wired.database)
+        return True
+
+    permission_check.side_effect = repoint
+    response = await request(wired, "link")
+    assert response.json()["status_code"] == KnowledgeOperationPlanConflictError.Code
+    assert "authorized_files_changed" in response.json()["data"]["reason"]
+    assert await snapshot(wired.database) == changed
+    wired.audit_link.assert_not_called()

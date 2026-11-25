@@ -77,13 +77,14 @@ export interface RelateDocumentPanelProps extends SimilarDocumentEvents {
   mode?: 'merge' | 'link';
   className?: string;
   disabled?: boolean;
+  hostLoadingIndicator?: boolean;
 }
 
 export function RelateDocumentPanel(props: RelateDocumentPanelProps) {
   return <RelateDocumentContent key={`${props.spaceId}:${props.file.id}:${serviceIdentity(props.services)}`} {...props} />;
 }
 
-function RelateDocumentContent({ spaceId, file, services, mode = 'merge', className, disabled = false, ...events }: RelateDocumentPanelProps) {
+function RelateDocumentContent({ spaceId, file, services, mode = 'merge', className, disabled = false, hostLoadingIndicator = true, ...events }: RelateDocumentPanelProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.version' });
   const renderLoading = useLoadingIndicatorRenderer();
   const state = useSimilarDocuments({ spaceId, fileId: file.id, services, ...events, linkSuccess: t('toast_link_success'), dismissSuccess: t('toast_dismiss_success') });
@@ -105,7 +106,7 @@ function RelateDocumentContent({ spaceId, file, services, mode = 'merge', classN
           <p className="mb-3 text-caption text-text-3">{t(linking ? 'section_recommendations_subtitle' : 'section_recommendations_subtitle_merge')}</p>
           {state.candidatesLoading ? (
             <div role="status" aria-label={t('loading')} aria-busy="true" className="flex h-16 items-center justify-center rounded-md border border-border-base bg-fill-1">
-              {renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : <Loader2 className="size-5 animate-spin text-text-3" />}
+              {hostLoadingIndicator && renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : <Loader2 className="size-5 animate-spin text-text-3" />}
             </div>
           ) : state.candidatesError ? (
             <ErrorState error={state.candidatesError} onRetry={state.retryCandidates} />
@@ -129,7 +130,7 @@ function RelateDocumentContent({ spaceId, file, services, mode = 'merge', classN
           ) : (
             <div className="rounded-md border border-border-base bg-bg-page">
               {state.searchLoading ? <div role="status" aria-label={t('loading')} aria-busy="true" className="flex h-16 items-center justify-center">
-                {renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : <Loader2 className="size-5 animate-spin text-text-3" />}
+                {hostLoadingIndicator && renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : <Loader2 className="size-5 animate-spin text-text-3" />}
               </div>
                 : state.searchError ? <ErrorState error={state.searchError} onRetry={state.retrySearch} />
                   : state.searchResults.length === 0 ? <p className="px-3 py-4 text-body text-text-3">{t('no_search_results')}</p>

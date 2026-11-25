@@ -66,6 +66,8 @@ const scopeKey = (scope: KnowledgeQueryScope) =>
   ] as const;
 const spaceKey = (scope: KnowledgeQueryScope, spaceId: number) =>
   [...scopeKey(scope), "space", spaceId] as const;
+const jobItemsKey = (scope: KnowledgeQueryScope, spaceId: number, jobId: string) =>
+  [...spaceKey(scope, spaceId), "job", jobId, "items"] as const;
 
 export const knowledgeQueryKeys = {
   scope: scopeKey,
@@ -110,13 +112,13 @@ export const knowledgeQueryKeys = {
   ) => [...spaceKey(scope, spaceId), "jobs", { ...query }] as const,
   job: (scope: KnowledgeQueryScope, spaceId: number, jobId: string) =>
     [...spaceKey(scope, spaceId), "job", jobId] as const,
+  jobItems: jobItemsKey,
   items: (
     scope: KnowledgeQueryScope,
     spaceId: number,
     jobId: string,
     query: ProcessingItemsQuery,
-  ) =>
-    [...spaceKey(scope, spaceId), "job", jobId, "items", { ...query }] as const,
+  ) => [...jobItemsKey(scope, spaceId, jobId), { ...query }] as const,
 };
 
 function useKnowledgeScope(scope: KnowledgeQueryScope) {
@@ -298,13 +300,13 @@ export function useKnowledgeProcessingJob(
   spaceId: number,
   jobId: string,
   api: KnowledgeSpaceApi = knowledgeSpaceApi,
-  options: ProcessingQueryOptions = {},
+  { enabled = true, ...options }: ProcessingQueryOptions & { enabled?: boolean } = {},
 ) {
   useKnowledgeScope(scope);
   return useQuery({
     queryKey: knowledgeQueryKeys.job(scope, spaceId, jobId),
     queryFn: () => api.getProcessingJob(spaceId, jobId),
-    enabled: canQuery(scope, spaceId) && Boolean(jobId),
+    enabled: enabled && canQuery(scope, spaceId) && Boolean(jobId),
     keepPreviousData: false,
     ...options,
   });

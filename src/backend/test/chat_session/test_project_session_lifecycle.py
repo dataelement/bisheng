@@ -37,18 +37,31 @@ def test_deleted_project_cannot_create_session(repo):
         assert db.get(MessageSession, "orphan") is None
 
 
-@pytest.mark.parametrize("entry", ["initialize_chat", "_agent_initialize_chat"])
+# The two production entries that create a workbench session (F004: the unified
+# send entry, and the blocked-input path that records the turn without a run).
+@pytest.mark.parametrize("entry", ["run_send._open_conversation", "chat_service._agent_initialize_chat"])
 async def test_workbench_creation_routes_project_intent_to_owner_before_any_generation(monkeypatch, entry):
     """AC-03: both production entry points create the session through the project owner."""
     from bisheng.common.services import config_service
     from bisheng.workstation.domain.schemas.chat import APIChatCompletion
     from bisheng.workstation.domain.services import chat_service
 
-    monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=False)))
+    monkeypatch.setattr(
+        config_service,
+        "settings",
+        SimpleNamespace(dsh=SimpleNamespace(enabled=False), multi_tenant=SimpleNamespace(enabled=False)),
+    )
     monkeypatch.setattr(
         chat_service.WorkStationService,
         "aget_config",
         AsyncMock(return_value=SimpleNamespace(models=[SimpleNamespace(id="model")])),
+    )
+    from bisheng.dsh.domain.services import model_catalog
+
+    monkeypatch.setattr(
+        model_catalog,
+        "user_workbench_models",
+        AsyncMock(return_value=[SimpleNamespace(id="model", displayName="model")]),
     )
     owner = AsyncMock(side_effect=RuntimeError("stop after creation"))
     legacy_insert = AsyncMock()
@@ -57,7 +70,14 @@ async def test_workbench_creation_routes_project_intent_to_owner_before_any_gene
     data = APIChatCompletion(clientTimestamp="1", model="model", text="Hello", project_id=uuid4())
     user = SimpleNamespace(user_id=7, tenant_id=1)
     with pytest.raises(RuntimeError, match="stop after creation"):
-        await getattr(chat_service, entry)(data, user)
+        await _entry(entry)(data, user)
     assert owner.await_count == 1
     assert owner.call_args.args[2] == data.project_id
     legacy_insert.assert_not_awaited()
+
+
+def _entry(name: str):
+    from bisheng.workstation.domain.services import chat_service, run_send
+
+    module, function = name.split(".")
+    return getattr({"chat_service": chat_service, "run_send": run_send}[module], function)

@@ -12,7 +12,7 @@ class CreatorMembershipPlan:
     tenant_id: int
     knowledge_id: int
     creator_user_id: int
-    membership_action: Literal["insert", "keep"]
+    membership_action: Literal["insert", "keep", "retain_missing"]
     before_member_count: int
     before_member_digest: str
     existing_creator_member_id: int | None

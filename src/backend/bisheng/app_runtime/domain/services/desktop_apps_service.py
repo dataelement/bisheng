@@ -70,7 +70,7 @@ class DesktopAppsService:
             return await workbench_page(actor, self.repository, after=after, managed=managed)
 
     async def launch(self, principal, app_id):
-        _actor, app = await self.require(principal, app_id, "use")
+        _actor, app = await self.require(principal, app_id, "visible")
         if app.state != "online":
             raise AppManageForbiddenError()
         ticket = await self.sessions.issue(principal, app_id=app.id, slug=app.slug)
@@ -93,7 +93,7 @@ async def workbench_page(actor, repository, *, after=None, managed=False):
             continue
         if not managed and app.state != "online":
             continue
-        action = "edit" if managed else "use"
+        action = "edit" if managed else "visible"
         if await check_action(actor, resource_type="app", resource_id=app.id, action=action):
             items.append(
                 {

@@ -5,6 +5,7 @@ import { isApiError } from '@bisheng/api-client';
 //
 
 import ToolSelectorContainer from "@/components/LinSight/ToolSelectorContainer";
+import { type ToolUsage, withToolUsage } from "@/components/LinSight/ToolUsageSelect";
 import { Label } from "@/components/bs-ui/label";
 
 import { getToolsApi } from "@/controllers/API/tools";
@@ -25,6 +26,8 @@ export interface ToolConfig {
     is_preset?: number;
     description?: string;
     default_checked: boolean;
+    /** F005: hidden from users and added to every workbench send; excludes default_checked. */
+    auto_enabled?: boolean;
     children: ToolChildConfig[];
 }
 
@@ -149,6 +152,7 @@ export default function ToolsConfig({ tools, onChange }: Props) {
                 is_preset: group.is_preset,
                 description: group.description,
                 default_checked: existing?.default_checked ?? false,
+                auto_enabled: existing?.auto_enabled ?? false,
                 children: (cloned.children || []).map((c: any) => ({
                     id: c.id,
                     name: c.name,
@@ -190,9 +194,9 @@ export default function ToolsConfig({ tools, onChange }: Props) {
         [tools, onChange],
     );
 
-    const handleDefaultCheckedChange = useCallback(
-        (toolId: number, defaultChecked: boolean) => {
-            onChange(tools.map((t) => (t.id === toolId ? { ...t, default_checked: defaultChecked } : t)));
+    const handleUsageChange = useCallback(
+        (toolId: number, usage: ToolUsage) => {
+            onChange(tools.map((t) => (t.id === toolId ? withToolUsage(t, usage) : t)));
         },
         [tools, onChange],
     );
@@ -219,9 +223,7 @@ export default function ToolsConfig({ tools, onChange }: Props) {
                     setShowToolSelector={setShowToolSelector}
                     toolSearchTerm={toolSearchTerm}
                     setToolSearchTerm={setToolSearchTerm}
-                    showDefaultChecked
-                    onDefaultCheckedChange={handleDefaultCheckedChange}
-                    defaultCheckedLabel={t("bench.defaultChecked")}
+                    onUsageChange={handleUsageChange}
                 />
             </div>
         </div>

@@ -43,13 +43,15 @@ async def get_file_share_url(
     filepath: str = Query(..., description="Stored MinIO path, e.g. /tmp-dir/foo.mp4"),
     login_user=LoginUserDep,
 ):
-    del login_user  # auth gate only
+    from bisheng.workstation.domain.services.object_download_service import ObjectDownloadService
+
     minio_client = await get_minio_storage()
     try:
         bucket_name, object_name = _resolve_minio_object_from_filepath(filepath, minio_client)
     except ValueError as exc:
         raise ServerError(msg=str(exc), exception=exc) from exc
 
+    await ObjectDownloadService.require_owned(bucket_name, object_name, login_user, minio_client)
     if not await minio_client.object_exists(bucket_name, object_name):
         raise ServerError(msg="File not found in object storage")
 
@@ -102,7 +104,18 @@ async def upload_file(
         minio_client = await get_minio_storage()
         timer.stage("minio_client_ready", endpoint=minio_client.minio_config.endpoint)
         timer.stage("file_read_start")
-        file_path = await save_uploaded_file(file, "bisheng", file_name)
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+        from bisheng.knowledge.domain.services.temp_upload_service import TempUploadService
+
+        tenant_id = get_current_tenant_id() or login_user.tenant_id
+        object_name = (
+            f"workstation/{tenant_id}/{login_user.user_id}/{uuid4().hex}{TempUploadService._safe_suffix(file_name)}"
+        )
+        file_path = await save_uploaded_file(file, "bisheng", object_name)
+        await PreviewSourceService.bind_owned_object(
+            bucket=minio_client.tmp_bucket, object_name=object_name, login_user=login_user
+        )
         timer.stage("file_minio_put", filepath=file_path)
         file_path = minio_client.clear_minio_share_host(file_path)
         timer.stage("file_clear_host", filepath=file_path)
@@ -122,6 +135,10 @@ async def upload_file(
             "parsing_status": "completed",
         }
         timer.finish(filepath=file_path)
+        # F004 决策 12: parsing starts now instead of when the message is sent.
+        from bisheng.workstation.domain.services import direct_attachments
+
+        await direct_attachments.start_upload_parsing(payload, user_id=login_user.user_id)
         return resp_200(data=payload)
     except Exception as exc:
         timer.fail(exc)

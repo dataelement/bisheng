@@ -10,7 +10,10 @@ from pathlib import Path
 import pytest
 
 from bisheng.core.config.credential_bundle import prepare_bundle
-from test.core.test_credential_sealed_bundle import sealed_deployment as sealed_deployment
+from test.core.test_credential_sealed_bundle import sealed_deployment as _sealed_deployment
+
+# Re-export the fixture without shadowing an imported binding in test parameters.
+sealed_deployment = _sealed_deployment
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -187,13 +190,16 @@ die() { printf '%s\n' "$*" >&2; exit 2; }
 compose() { die 'compose must not interpolate before credential activation'; }
 bash() {
   if [[ $1 = "$SCRIPT_DIR/credentials.sh" ]]; then
+    [[ $* = *'--role redis --preserve-redis-acl'* ]]
+    [[ $* = *'--network bisheng-network'* ]]
     out_dir=
     shift
     while [[ $# -gt 0 ]]; do
       case "$1" in --out-dir) out_dir=$2; shift 2 ;; *) shift ;; esac
     done
     mkdir -p "$out_dir"
-    cat >/dev/null
+    [[ $(cat) = 'bind 0.0.0.0' ]]
+    printf seeded > "$out_dir/seed-fixture"
     return 0
   fi
   command bash "$@"
@@ -201,18 +207,24 @@ bash() {
 docker() {
   case "$1" in
     ps) printf 'running-redis\n' ;;
-    exec) printf 'bind 0.0.0.0\n' ;;
+    exec) [[ $* = 'exec running-redis cat /etc/redis.conf' ]]; printf 'bind 0.0.0.0\n' ;;
     *) return 1 ;;
   esac
 }
 credential_tool() {
   if [[ $1 = artifact && $2 = info ]]; then printf 'redis\n'; return 0; fi
-  if [[ $1 = artifact && $2 = role-keys ]]; then return 0; fi
+  if [[ $1 = artifact && $2 = role-keys ]]; then die 'option C does not derive role keys'; fi
   die "unexpected credential_tool $*"
 }
-credential_runtime_publish_bundle() { BUNDLE=$credential_store/revisions/published; mkdir -p "$BUNDLE"; }
+seed_capture=$2/published-fixture
+credential_runtime_publish_bundle() {
+  [[ $(cat "$BUNDLE/seed-fixture") = seeded ]]
+  printf '%s' "$BUNDLE" > "$seed_capture"
+}
 credential_runtime_seed_bundle
-[[ -d $credential_role_key_dir ]]
+[[ $(cat "$seed_capture") = "$BUNDLE" ]]
+[[ $BUNDLE = "$credential_store/revisions/seed."*/bundle ]]
+[[ $(cat "$BUNDLE/seed-fixture") = seeded ]]
 """
     result = subprocess.run(
         ["bash", "-c", script, "seed-test", str(ROOT), str(tmp_path)],

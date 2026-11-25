@@ -373,10 +373,10 @@ async def test_permission_bucket_populated(build_list_env, tenant_scope):
     result = await WorkFlowService._application_action_map(
         _payload(),
         [{"id": "app-1", "flow_type": HOSTED}],
-        ("use",),
+        ("visible",),
     )
 
-    assert result == {"app-1": frozenset({"use"})}
+    assert result == {"app-1": frozenset({"visible"})}
     assert ("app", ("app-1",)) in build_list_env.asked
 
 
@@ -390,7 +390,7 @@ async def test_hosted_rows_are_not_bucketed_as_workflows(build_list_env, tenant_
     await WorkFlowService._application_action_map(
         _payload(),
         [{"id": "app-1", "flow_type": HOSTED}, {"id": "wf-1", "flow_type": WORKFLOW}],
-        ("use",),
+        ("visible",),
     )
 
     by_type = dict(build_list_env.asked)

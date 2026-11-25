@@ -139,23 +139,31 @@ async def prepare_node_preview(
 
 
 async def prepare_initial(
-    identity, workflow_id, graph, *, execution_mode=None, version_hint=None, allow_preview=True
+    identity, workflow_id, graph, *, execution_mode=None, version_hint=None, allow_preview=True, published_only=False
 ) -> PreparedWorkflowExecution:
-    """Resolve legacy messages by full current graph without executing the candidate."""
+    """Resolve endpoint-bound saved execution or an authorized editor preview."""
     if execution_mode is not None and (
         not isinstance(execution_mode, str) or execution_mode not in ("saved", "preview")
     ):
         raise ResourceReferenceInvalidError(reason="workflow_execution_mode_invalid")
     version = _version(version_hint)
     if execution_mode == "preview":
-        if not allow_preview:
+        if published_only or not allow_preview:
             raise ResourceReferenceInvalidError(reason="public_workflow_preview_forbidden")
         return await prepare_preview(identity, workflow_id, graph, version_hint=version)
     async with _read_session(None) as session:
         runtime = await get_reference_read_runtime()
         scope = await runtime.verifier.aissue_scope(
-            session, SourceReadRequest(SourceType.WORKFLOW_VERSION, str(workflow_id), version), identity
+            session,
+            SourceReadRequest(SourceType.WORKFLOW_VERSION, str(workflow_id), None if published_only else version),
+            identity,
         )
+        if published_only:
+            # This policy is bound by the public WS endpoint, never by message
+            # fields. Public HTTP graphs are redacted views, not execution data.
+            if version is not None and version != scope.snapshot.source_key.source_version:
+                raise ResourceReferenceInvalidError(reason="public_workflow_current_version_required")
+            return await _saved(session, runtime, identity, workflow_id, None, None, None, scope=scope)
         candidate = json.loads(scope.snapshot.payload_json)["graph"]
         if graph is None or normalize_execution_graph(graph) == candidate:
             return await _saved(session, runtime, identity, workflow_id, version, graph, None, scope=scope)

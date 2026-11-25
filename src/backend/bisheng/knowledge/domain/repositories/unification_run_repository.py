@@ -126,7 +126,9 @@ class KnowledgeUnificationRunRepository:
                 return tuple(ids)
             after = page[-1]
 
-    async def _global_rows(self, session, run_id, writer_contract_version, tenant_ids, *, lock=False):
+    async def _global_rows(
+        self, session, run_id, writer_contract_version, tenant_ids, *, lock=False, allow_failed_readonly=False
+    ):
         self._global_scope(session)
         self._identity(run_id, writer_contract_version)
         if (
@@ -165,13 +167,14 @@ class KnowledgeUnificationRunRepository:
         if not rows:
             return ()
         if tuple(row.tenant_id for row in rows) != tenant_ids or (
-            any(row.phase == "preparing" for row in rows) and not all(row.phase == "preparing" for row in rows)
+            any(row.checkpoints.get(_FAILED_FROM, row.phase) == "preparing" for row in rows)
+            and not all(row.checkpoints.get(_FAILED_FROM, row.phase) == "preparing" for row in rows)
         ):
             _reject("mixed_global_state")
         for row in rows:
             with tenant_execution_scope(row.tenant_id):
                 self._validate(row, run_id, writer_contract_version)
-            if row.phase == "failed":
+            if row.phase == "failed" and not allow_failed_readonly:
                 _reject("explicit_recovery_required")
         if len({(row.baseline_hash, row.plan_hash) for row in rows}) != 1 or any(
             row.baseline_ref != rows[0].baseline_ref or row.plan_ref != rows[0].plan_ref for row in rows
@@ -181,7 +184,7 @@ class KnowledgeUnificationRunRepository:
 
     @staticmethod
     def _global_result(run_id, writer_contract_version, tenant_ids, rows):
-        if not rows or rows[0].phase == "preparing":
+        if not rows or rows[0].checkpoints.get(_FAILED_FROM, rows[0].phase) == "preparing":
             return None
         return FrozenGlobalInventoryResult(
             run_id, writer_contract_version, tenant_ids, deepcopy(rows[0].baseline_ref), deepcopy(rows[0].plan_ref)
@@ -189,6 +192,11 @@ class KnowledgeUnificationRunRepository:
 
     async def aget_global_freeze(self, session, *, run_id, writer_contract_version, tenant_ids):
         rows = await self._global_rows(session, run_id, writer_contract_version, tenant_ids)
+        return self._global_result(run_id, writer_contract_version, tenant_ids, rows)
+
+    async def aget_global_freeze_readonly(self, session, *, run_id, writer_contract_version, tenant_ids):
+        """Inspect the original effective phase without mutating failed Runs."""
+        rows = await self._global_rows(session, run_id, writer_contract_version, tenant_ids, allow_failed_readonly=True)
         return self._global_result(run_id, writer_contract_version, tenant_ids, rows)
 
     async def afreeze_all(self, session, *, run_id, writer_contract_version, tenant_ids, baseline_ref, plan_ref):
@@ -211,6 +219,9 @@ class KnowledgeUnificationRunRepository:
         # All validation and locks precede the first mutation. No business or
         # Coverage fields are written, and the outer caller alone commits.
         for row in rows:
+            from bisheng.knowledge.domain.repositories.unification_executor_repository import carry_executor_checkpoint
+
+            carry_executor_checkpoint(row, "baseline_frozen")
             row.baseline_ref, row.plan_ref = deepcopy(baseline), deepcopy(plan)
             row.baseline_hash, row.plan_hash = baseline["sha256"], plan["sha256"]
             row.phase, row.update_time = "baseline_frozen", unification_now()
@@ -393,6 +404,9 @@ class KnowledgeUnificationRunRepository:
             if row.baseline_ref != baseline or row.plan_ref != plan:
                 _reject("frozen_evidence_changed")
             return row
+        from bisheng.knowledge.domain.repositories.unification_executor_repository import carry_executor_checkpoint
+
+        carry_executor_checkpoint(row, "baseline_frozen")
         row.baseline_ref, row.plan_ref = baseline, plan
         row.baseline_hash, row.plan_hash = baseline["sha256"], plan["sha256"]
         row.phase = "baseline_frozen"
@@ -413,6 +427,9 @@ class KnowledgeUnificationRunRepository:
             _reject("invalid_phase_transition")
         row = await self._required(session, run_id, writer_contract_version)
         self._expected(row, expected_phase, baseline_hash, plan_hash)
+        from bisheng.knowledge.domain.repositories.unification_executor_repository import carry_executor_checkpoint
+
+        carry_executor_checkpoint(row, next_phase)
         row.phase = next_phase
         return await self._save(session, row)
 

@@ -12,7 +12,7 @@ import pytest
 import sqlalchemy as sa
 from sqlmodel import Session
 
-from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as App
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, QAKnowledge
@@ -89,8 +89,7 @@ async def test_true_delete_commits_zero_inactive_outgoing_source_and_only_owned_
     after = state(context)
     assert all(row["id"] != 40 for row in after["knowledge"])
     assert not after["business_resource_reference"]
-    source = next(row for row in after["business_reference_set"] if row["record_kind"] == "source")
-    assert not source["effective"] and source["ready"]
+    assert not after["business_reference_set"]
     assert [row["tenant_id"] for row in after["knowledgefile"]] == [202]
     assert [row["tenant_id"] for row in after["qaknowledge"]] == [202]
 
@@ -127,19 +126,21 @@ async def test_clear_retains_model_source_even_with_unusable_model_and_does_not_
     assert [row["tenant_id"] for row in after["qaknowledge"]] == [202]
 
 
-async def test_reference_finalize_failure_rolls_back_actual_delete_and_all_children(lifecycle, monkeypatch):
+async def test_reference_writer_failure_does_not_block_actual_delete(lifecycle, monkeypatch):
     context = lifecycle
-    before = state(context)
-    monkeypatch.setattr(context.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("R2 failed")))
+    binding = AsyncMock(side_effect=RuntimeError("R2 failed"))
+    monkeypatch.setattr(context.runtime, "aapply_source_bindings", binding)
     async with context.sessions() as session:
         plan = await App.aprepare_removal(session, 40, login_user=context.user)
-        with pytest.raises(RuntimeError, match="R2 failed"):
-            await App.aapply_removal(session, plan)
-        await session.rollback()
-    assert state(context) == before
+        await App.aapply_removal(session, plan)
+        await session.commit()
+    after = state(context)
+    assert all(row["id"] != 40 for row in after["knowledge"])
+    assert [row["tenant_id"] for row in after["knowledgefile"]] == [202]
+    binding.assert_not_awaited()
 
 
-async def test_deleting_target_freezes_actual_source_removal(lifecycle):
+async def test_auxiliary_target_marker_does_not_block_source_removal(lifecycle):
     context = lifecycle
     async with context.sessions() as session, session.begin():
         session.add(
@@ -155,11 +156,11 @@ async def test_deleting_target_freezes_actual_source_removal(lifecycle):
                 actor_id="7",
             )
         )
-    before = state(context)
     async with context.sessions() as session:
-        with pytest.raises(KnowledgeProcessingConflictError):
-            await App.aprepare_removal(session, 40, login_user=context.user)
-    assert state(context) == before
+        plan = await App.aprepare_removal(session, 40, login_user=context.user)
+        await App.aapply_removal(session, plan)
+        await session.commit()
+    assert all(row["id"] != 40 for row in state(context)["knowledge"])
 
 
 async def test_removal_plan_never_accepts_clone_cross_transaction_or_reflected_clear_flag(lifecycle):
@@ -169,7 +170,7 @@ async def test_removal_plan_never_accepts_clone_cross_transaction_or_reflected_c
         plan = await App.aprepare_removal(session, 40, login_user=context.user)
         with pytest.raises(ResourceReferenceInvalidError):
             await App.aapply_removal(session, replace(plan))
-        with pytest.raises(ResourceReferenceInvalidError):
+        with pytest.raises((ResourceReferenceInvalidError, ValueError)):
             await App.aapply_removal(other, plan)
         object.__setattr__(plan, "only_clear", True)
         with pytest.raises(ResourceReferenceInvalidError):

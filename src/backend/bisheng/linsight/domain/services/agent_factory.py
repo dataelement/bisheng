@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 """F035 Track A · TA-3: deepagents agent factory.
 
 ``create_linsight_agent`` is the single装配点 that replaces the legacy
@@ -21,12 +22,16 @@ this factory's signature.
 
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Sequence
-from typing import Annotated, Any
+from dataclasses import dataclass
+from typing import Annotated, Any, Literal, NotRequired
 
 from json_repair import json_repair
-from langchain.agents.middleware.types import AgentMiddleware
+from langchain.agents.middleware import TodoListMiddleware
+from langchain.agents.middleware.todo import Todo
+from langchain.agents.middleware.types import AgentMiddleware, OmitFromInput
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool, tool
@@ -38,7 +43,7 @@ from pydantic import Field as PydanticField
 from pydantic import SkipValidation
 
 from bisheng.common.services.config_service import settings
-from bisheng.linsight.domain.services.base_prompt import LinsightBasePromptMiddleware
+from bisheng.linsight.domain.services.base_prompt import with_base_prompt
 from bisheng.linsight.domain.services.binary_content_guard import (
     CODE_INTERPRETER_TOOL,
     build_binary_guards,
@@ -267,6 +272,18 @@ __PATH_NAMESPACE_LINE__# 风格
 # user's knowledge selection (init_linsight_tools drops it when the whitelist is
 # empty). The prompt advertisement must track it — see _build_*_prompt below.
 _KB_TOOL_NAME = "search_knowledge_base"
+# F004: the unified assembly binds the daily-chat knowledge tool, whose name
+# differs by one letter. Either one is "the knowledge tool" for the prompt, the
+# citation rules and the image reader; the prompt names the one that is bound.
+_DAILY_KB_TOOL_NAME = "search_knowledge_bases"
+_KB_TOOL_NAMES: tuple[str, ...] = (_KB_TOOL_NAME, _DAILY_KB_TOOL_NAME)
+
+
+def _kb_tool_name(names) -> str | None:
+    """Name of the knowledge tool among ``names`` (tool names or tools), or None."""
+    present = {n if isinstance(n, str) else str(getattr(n, "name", "") or "") for n in names}
+    return next((name for name in _KB_TOOL_NAMES if name in present), None)
+
 
 # Static Chinese language directive, appended to the ABSOLUTE TAIL of the system
 # message by _LanguageTailMiddleware (below).
@@ -350,7 +367,15 @@ _LINSIGHT_CITATION_TAIL_ZH = """# 来源标注（与上文 Citation Rules 同一
 
 _LINSIGHT_CITATION_TAIL_HANDLES_ZH = """# 来源编号（与上文「来源编号」同一要求，不改变其它任何要求）
 
-写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号 [Sn]，多条写 [S3][S7]；编号取自检索结果或本轮来源表。"""
+写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号，例如 [S3]，多条写 [S3][S7]；编号取自检索结果或本轮来源表。"""
+
+# The direct profile gets no source table (F075: the daily chat never had one), so
+# its tail must not point at one. It must still name the deliverable: the daily
+# rules only say "回答中", and with a tail that said the same a direct answer wrote
+# an HTML report with no handle at all (114, 2026-11-18; 201 with the old tail).
+_DIRECT_CITATION_TAIL_HANDLES_ZH = """# 来源编号（与上文「来源编号」同一要求，不改变其它任何要求）
+
+写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号，例如 [S3]，多条写 [S3][S7]；编号取自检索结果或之前的回答。"""
 
 
 class _CitationTailMiddleware(_LanguageTailMiddleware):
@@ -385,6 +410,52 @@ _UNATTENDED_FORMAT_PHRASE = "按任务描述要求的输出格式产出（未指
 _UNATTENDED_WORTH_LINE = "- 所有缺失信息都按以上默认假设或常识补齐，并在最终回复的「所做假设」中写明。\n"
 
 
+# F004 (AC-18): with the inbox mounted, the user can send a message while a run is
+# in progress and ask for a change of plan. The two places that forbid rewriting a
+# todo's text then allow it on request. Items the user did not ask about must keep
+# their text byte-identical: StreamEventMapper._diff_todos matches rows by content
+# first, so a reworded bystander would be paired by position and could steal a row.
+# Wording follows the spike that worked 10/10 on two real models
+# (scripts/spike_unified_runtime/s3c_steer_real_model.py) and the tail-rule scoping
+# in linsight/AGENTS.md: it governs the plan only, says so, claims no precedence,
+# and carries no numbered example. Without the inbox the legacy lines stay as is.
+_PLAN_STATUS_ONLY_STEP_LINE = (
+    "   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定。\n"
+)
+_PLAN_STEERABLE_STEP_LINE = (
+    "   更新待办时一般只翻转 status（pending/in_progress/completed），以保证任务标识稳定；"
+    "只有用户要求时才改写条目文案。\n"
+    "   - 【执行中收到用户新消息】执行过程中用户可能随时发来新消息，它会出现在对话里。"
+    "用户在执行中发来新要求时，先调用 write_todos 更新计划，再继续：只改用户要求改的条目"
+    "（改写文字、增加条目，或删去不再需要的条目）；其余条目原样保留，文字逐字不变；"
+    "已完成的条目保持 completed，已写入 output/ 与 scratch/ 的文件保留，不要从头重做。"
+    "新消息只是补充信息、不改变要做的事时，不必更新计划。本条只约束计划的更新，不改变上文其它任何要求。\n"
+)
+_PLAN_STATUS_ONLY_TOOL_LINE = "- write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。\n"
+_PLAN_STEERABLE_TOOL_LINE = (
+    "- write_todos(todos)：维护有编号的待办清单；一般只翻转 status，只有用户要求时才改写条目文案，"
+    "用户没要求改的条目文字逐字不变。\n"
+)
+# The direct profile has no plan; it only learns that messages may arrive mid-run.
+_DIRECT_STEERABLE_LINE_ZH = (
+    "- 回答过程中用户可能发来新消息，它会出现在对话里：按新消息调整接下来要做的事，已经做完的部分保留，"
+    "不要从头重做。本条只说明如何对待新消息，不改变其它要求。\n"
+)
+
+
+def _to_steerable_prompt(prompt: str) -> str:
+    """Swap the two plan-rewrite lines of the planned prompt for the steerable wording."""
+
+    for old, new in (
+        (_PLAN_STATUS_ONLY_STEP_LINE, _PLAN_STEERABLE_STEP_LINE),
+        (_PLAN_STATUS_ONLY_TOOL_LINE, _PLAN_STEERABLE_TOOL_LINE),
+    ):
+        if prompt.count(old) != 1:
+            raise ValueError(f"steerable prompt marker missing: {old!r}")
+        prompt = prompt.replace(old, new)
+    return prompt
+
+
 def _cut_between(text: str, start: str, end: str, replacement: str) -> str:
     i = text.index(start)
     j = text.index(end, i)
@@ -406,6 +477,19 @@ def _to_unattended_prompt(template: str) -> str:
             raise ValueError(f"unattended prompt marker missing: {old!r}")
         out = out.replace(old, new)
     return out
+
+
+def _with_workbench_prompt(prompt: str, workbench_prompt: str | None) -> str:
+    """Layer the administrator's daily-chat system prompt under the platform rules (direct profile)."""
+
+    if not workbench_prompt:
+        return prompt
+    return (
+        prompt
+        + "\n\n# 管理员设定的回答要求\n\n"
+        + "以下是管理员为日常对话配置的要求；与上文平台规则冲突时，以平台规则为准。\n\n"
+        + workbench_prompt
+    )
 
 
 def _with_caller_instructions(prompt: str, instructions: str | None) -> str:
@@ -462,6 +546,17 @@ _CODE_INTERPRETER_RULES_ZH = (
 )
 
 
+# Shared by both profiles' prompts; injected IFF the skills middleware is attached.
+_SKILL_EXEC_LINE_ZH = (
+    "   - 【技能优先】系统提示的“可用技能”列出了本次可用的技能。动手前先对照每个技能的"
+    "描述判断是否与任务匹配；一旦匹配，**必须先** read_file 读完它的 SKILL.md，"
+    "**且必须传 limit=1000 一次读完**（默认 100 行、或自己改小成 200 都只能读到开头，"
+    "关键的生成步骤在后面），再按它的指引执行。"
+    "严禁一边产出一边读，更不要把“读 SKILL.md”和“产出交付物”放进同一轮并行工具调用"
+    "——技能内容返回时交付物已经生成，等于没读。\n"
+)
+
+
 def _build_linsight_system_prompt(
     has_knowledge_base: bool,
     skills_present: bool = False,
@@ -470,8 +565,12 @@ def _build_linsight_system_prompt(
     citation_handles: bool = False,
     unattended: bool = False,
     has_data_analyst: bool = False,
+    steerable: bool = False,
 ) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
+
+    ``steerable`` (F004, AC-18) is true IFF the inbox middleware is mounted: the
+    plan may then be rewritten on the user's request (see _to_steerable_prompt).
 
     ``has_data_analyst`` (F013) adds the data-analyst delegation lines IFF that
     subagent is assembled, with the unattended NEED_CLARIFICATION variant when no
@@ -537,14 +636,7 @@ def _build_linsight_system_prompt(
         tool_line = ""
         delegate_line = ""
     if skills_present:
-        skill_exec_line = (
-            "   - 【技能优先】系统提示的“可用技能”列出了本次可用的技能。动手前先对照每个技能的"
-            "描述判断是否与任务匹配；一旦匹配，**必须先** read_file 读完它的 SKILL.md，"
-            "**且必须传 limit=1000 一次读完**（默认 100 行、或自己改小成 200 都只能读到开头，"
-            "关键的生成步骤在后面），再按它的指引执行。"
-            "严禁一边产出一边读，更不要把“读 SKILL.md”和“产出交付物”放进同一轮并行工具调用"
-            "——技能内容返回时交付物已经生成，等于没读。\n"
-        )
+        skill_exec_line = _SKILL_EXEC_LINE_ZH
         if has_code_interpreter:
             # Hard prohibition: the fallback exports are the cheap path the model
             # keeps drifting back to, so remove them from the option set entirely
@@ -623,6 +715,8 @@ def _build_linsight_system_prompt(
         if unattended
         else _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH
     )
+    if steerable:
+        template = _to_steerable_prompt(template)
     return (
         template.replace("__KB_EXEC_LINE__", exec_line)
         .replace("__KB_TOOL_LINE__", tool_line)
@@ -638,8 +732,222 @@ def _build_linsight_system_prompt(
     )
 
 
+# --------------------------------------------------------------------------- #
+# F004: the ``direct`` profile (daily chat on the unified runtime, design 决策 1).
+#
+# A lean prompt: no numbered workflow, no plan. Unlike the planned template, which
+# is a fixed text with a few conditional slots, this one is assembled line by line
+# from the names of the tools that are actually bound, so a tool is named IFF the
+# model can call it (prompt <-> tool lockstep, linsight/AGENTS.md).
+# --------------------------------------------------------------------------- #
+ProfileName = Literal["direct", "planned"]
+_PROFILES: tuple[str, ...] = ("direct", "planned")
+
+_DIRECT_ASK_USER_RULES_ZH = (
+    "# 如何填写 ask_user\n\n"
+    "- reason：一句话说明为何需要先确认。\n"
+    "- questions：对象数组，**不能为空**；每个对象有三个字段：question（完整问题文本）、"
+    "options（字符串数组，给 2-4 个具体预设选项；只有天然无法预设选项的问题才留空）、multiple（布尔值，true 为多选）。"
+    "问题数量由实际缺口决定，同一时刻的多个缺口合并成一次提问。\n"
+    "- questions 作为参数值传入：不要把数组序列化成字符串，也不要把问题写进 reason。"
+    "reason / question / options 文本里不要出现英文双引号，需要引用词语时用中文引号「」或“”。\n"
+    "- 调用 ask_user 的那一轮不要输出普通文字回复，也不要同时调用其它工具；拿到用户答案后再继续。\n\n"
+)
+_DIRECT_DATA_ANALYST_CLARIFY_ZH = (
+    "  · 子代理返回以 NEED_CLARIFICATION: 开头的问题时：确有必要就把这些问题转成 ask_user 的 questions 问用户，"
+    "拿到答案后写进新的 description 重新委派；没有必要问就选定最合理的假设，写进新的 description 重新委派，"
+    "并在回复里写明假设。不要把 NEED_CLARIFICATION 当作最终结果。\n"
+)
+_DIRECT_DATA_ANALYST_CLARIFY_UNATTENDED_ZH = (
+    "  · 子代理返回以 NEED_CLARIFICATION: 开头的问题时，不得停下等待：选择最合理的候选项作为假设，"
+    "写进新的 description 重新委派，并在最终回复的「所做假设」中写明。"
+    "不要把 NEED_CLARIFICATION 当作最终结果。\n"
+)
+# The planned wording warns against copying credentials into the todo list; the
+# direct profile has no such list, so that one word is dropped (asserted below).
+_DATA_ANALYST_TODO_MENTION = "description、待办或回复"
+_DATA_ANALYST_TOOL_STEP_REF = "见第 2 步「查业务数据库」"
+
+
+def _direct_line(planned_line: str) -> str:
+    """A planned-template bullet (3-space indent) as a top-level bullet."""
+    return planned_line.removeprefix("   ")
+
+
+def _build_direct_system_prompt(
+    tool_names: set[str] | frozenset[str],
+    skills_present: bool = False,
+    unattended: bool = False,
+    has_data_analyst: bool = False,
+    steerable: bool = False,
+) -> str:
+    """The ``direct`` profile's main system prompt, generated from ``tool_names``.
+
+    ``steerable`` (F004) is true IFF the inbox middleware is mounted; it adds one
+    line on messages that arrive while the answer is in progress.
+
+    ``tool_names`` is every tool bound on the main graph (business tools, HITL,
+    deliverable tools, workspace file tools, ``task``). ``skills_present`` and
+    ``has_data_analyst`` are not tools; they follow the skills middleware and the
+    data-analyst subagent the factory actually assembled.
+    """
+    has = tool_names.__contains__
+    has_ask_user = has("ask_user") and not unattended
+    kb_tool = _kb_tool_name(tool_names)
+    has_kb = kb_tool is not None
+    has_code_interpreter = has(CODE_INTERPRETER_TOOL)
+    has_task = has("task")
+    has_files = has("write_file") and has("read_file")
+    exports = [name for name in ("export_docx", "export_pdf") if has(name)]
+
+    asking = "、向用户的提问" if has_ask_user else ""
+    parts: list[str] = [
+        "你是工作台助手，直接回答用户的问题、完成用户交代的事情。\n\n"
+        "# 使用语言\n\n"
+        f"全程（**包括你的思考与推理过程（thinking）、工具调用前后的简短旁白、写入文件的内容{asking}和最终回复**）"
+        "使用与用户输入一致的语言：用户用中文则全程中文，用户用英文则全程英文。\n\n"
+        "# 如何作答\n\n"
+        "- 能直接回答的问题就直接回答，不调用工具；需要资料、计算或文件时再调用下方列出的工具，拿到结果后给出回答。\n"
+        "- 不要先罗列步骤或方案再动手，也不要在回复里预告接下来要做什么；直接做，做完给出结果。\n"
+    ]
+    if steerable:
+        parts.append(_DIRECT_STEERABLE_LINE_ZH)
+    if has_ask_user:
+        parts.append(
+            "- 【何时提问】只在确有必要时调用 ask_user：缺的信息只有用户本人知道，而且按合理假设大概率会做错、"
+            "或做错后返工代价大。能从上下文、常识或资料推断的，直接采用假设推进，并在回复里写明所做假设；"
+            "用户已经回答过的问题不要再问。"
+            + ("ask_user 必须由你本人直接调用，不得通过 task 委派。\n" if has_task else "\n")
+        )
+    elif unattended:
+        parts.append(
+            "- 【无人值守，不提问】本次请求由集成系统提交，没有人在线回答问题：不得向用户提问，也不得停下来等待确认。"
+            "信息不足时按常识做出最合理的选择，并在最终回复里单列「所做假设」一节逐条写明。\n"
+        )
+    if skills_present and has_files:
+        parts.append(_direct_line(_SKILL_EXEC_LINE_ZH))
+        if has_code_interpreter:
+            ban = (
+                f"此时**禁止**调用 {' / '.join(exports)} 从 markdown 派生同一份文件，只有代码执行连续失败、"
+                "确实产不出成品时才允许用它兜底，并在回复里说明。"
+                if exports
+                else ""
+            )
+            parts.append(
+                "- 命中了与文件格式相关的技能（如 docx / xlsx / pptx / html）时，文件本体**必须**按该技能 SKILL.md "
+                "指定的做法生成：技能要求执行脚本或库时，用 bisheng_code_interpreter 执行，把成品直接写进 output/。"
+                f"{ban}\n"
+            )
+        else:
+            parts.append(
+                "- 命中了与文件格式相关的技能时，文件的内容与排版尽量遵循该技能 SKILL.md 的要求。"
+                "本次没有可用的代码执行工具，技能里需要执行脚本的做法无法落地。\n"
+            )
+    if has_kb:
+        parts.append(f"- 需要资料时用 {kb_tool} 检索知识库/知识空间。\n")
+        # The daily tool lists its knowledge bases in its own description, which the
+        # subagent reads too; only the deep-research tool needs the ids spelled out.
+        if has_task and kb_tool == _KB_TOOL_NAME:
+            parts.append(
+                "- 用 task 委派需要检索知识库/知识空间的子任务时，必须在 description 中明确列出本次可检索的知识库"
+                "及其 knowledge_id（子代理看不到对话里的“可用知识库”清单，只能读到 description）。\n"
+            )
+    if has_files:
+        parts.append(
+            "- 用户上传的文件在工作区 uploads/ 下，用 ls / read_file 查阅。上传的音视频（mp3/mp4 等）已由 ASR 转写为 "
+            "uploads/*.md：<uploaded_files> 中 path 为转写文本、name 为原始文件名，read_file(path) 即可获取内容。\n"
+            "- 【文件】只有用户要求产出文件（报告、文档、网页、表格等），或内容明显需要以文件形式交付时，才写文件；"
+            "否则直接在回复里作答。要交付的文件用 write_file 写到 output/ 下，中间产物写 scratch/。"
+            "界面只展示真实写入 output/ 的文件：没有写入就不要在回复里声称「已保存为 xxx」。"
+            "用户要求重新生成或更新已有文件时，必须再次调用 write_file 或 edit_file 写入新内容。\n"
+        )
+        if exports:
+            formats = " / ".join("Word(.docx)" if name == "export_docx" else "PDF" for name in exports)
+            parts.append(
+                f"- 用户要 {formats} 时：先 write_file 写 output/<name>.md，再调用 {' / '.join(exports)}"
+                '(source_path="output/<name>.md") 派生。markdown 里的图片用 `![说明](相对路径)` 引用，不写原始 HTML 标签。\n'
+            )
+        if has("check_html"):
+            parts.append(
+                "- 用户要 html 时：write_file 写 output/<name>.html，必须是完整自包含的单个文件"
+                "（样式写进 <style>，脚本写进 <script>，图片用 data: URI 或内联 <svg>，不引用外部地址或相对路径）。"
+                '写完调用 check_html(path="output/<name>.html")：报告里有 ERROR 就用 edit_file 修复后再调用，最多修 2 轮。\n'
+            )
+    if has_task:
+        parts.append(
+            '- 对“独立、需多轮检索/阅读、产出可蒸馏为一段摘要”的较重子任务，可用 task 委派给 "general-purpose" '
+            "子代理；简单问题自己完成，不委派。给用户的最终回复和要交付的文件由你亲自撰写，不得委派。\n"
+        )
+    if has_data_analyst and has_task:
+        source, source_field = _DATA_ANALYST_SOURCE_SKILLS_ZH if skills_present else _DATA_ANALYST_SOURCE_PLAIN_ZH
+        head = _DATA_ANALYST_EXEC_HEAD_ZH.format(source=source, source_field=source_field)
+        if _DATA_ANALYST_TODO_MENTION not in head:
+            raise ValueError(f"direct prompt marker missing: {_DATA_ANALYST_TODO_MENTION!r}")
+        parts.append(_direct_line(head.replace(_DATA_ANALYST_TODO_MENTION, "description 或回复")))
+        parts.append(_DIRECT_DATA_ANALYST_CLARIFY_ZH if has_ask_user else _DIRECT_DATA_ANALYST_CLARIFY_UNATTENDED_ZH)
+    parts.append("\n")
+
+    if has_ask_user:
+        parts.append(_DIRECT_ASK_USER_RULES_ZH)
+
+    parts.append("# 你可用的工具\n\n")
+    if has_ask_user:
+        parts.append("- ask_user(reason, questions)：向用户澄清；只在确有必要时调用（判断原则见上文「何时提问」）。\n")
+    if has_kb:
+        parts.append(f"- {kb_tool}：在授权的知识库/知识空间语义检索。\n")
+    if has_files:
+        parts.append(
+            "- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具（工具回显的 /output/x 与 output/x "
+            "是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 按字面匹配、不支持正则，"
+            '要同时搜几个关键词时用 | 分隔写在同一次 grep 里（如 "营业收入|售电收入"）。'
+            "修改已写好的文件用 edit_file 做局部替换，old_string 取能唯一定位的最短片段。\n"
+        )
+    if has("export_docx"):
+        parts.append(
+            "- export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。\n"
+        )
+    if has("export_pdf"):
+        parts.append(
+            "- export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。\n"
+        )
+    if has("check_html"):
+        parts.append(
+            "- check_html(path)：检查 output/ 下的 html 能否在离线环境和预览框里正常显示，写完 html 后调用。\n"
+        )
+    if has_task:
+        parts.append(
+            '- task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。'
+            "description 必须自包含——子代理看不到你的对话历史，只能读到 description，"
+            "完成该子任务所需的全部背景、目标、约束与必要标识都要写进去。"
+            + ("不得委派“问用户/澄清”。\n" if has_ask_user else "\n")
+        )
+        if has_data_analyst:
+            if _DATA_ANALYST_TOOL_STEP_REF not in _DATA_ANALYST_TOOL_LINE_ZH:
+                raise ValueError(f"direct prompt marker missing: {_DATA_ANALYST_TOOL_STEP_REF!r}")
+            parts.append(_DATA_ANALYST_TOOL_LINE_ZH.replace(_DATA_ANALYST_TOOL_STEP_REF, "见上文「查业务数据库」"))
+    parts.append("- 除以上工具外，本次绑定的其它工具按各自的工具说明使用。\n\n")
+
+    if has_files:
+        parts.append(
+            "# 超大工具结果\n\n"
+            "某次工具结果过大时，系统会把它存入 /large_tool_results/<tool_call_id>，只在回复里保留开头片段。"
+            "这表示结果已经产生并保存好了，不是执行失败。此时用 read_file 读那个路径把内容取回来"
+            "（文件很大就配合 offset/limit 分页读），或用 grep 在 /large_tool_results/ 下按关键字定位；"
+            "**绝对不要重跑产生它的那次调用**。\n\n"
+        )
+    if has_code_interpreter:
+        parts.append(_CODE_INTERPRETER_RULES_ZH)
+    parts.append(
+        "# 风格\n\n- 简洁，工具调用之间不加多余解释性文字。\n- 不要凭空编造事实；依据检索到的资料作答时以资料为准。\n"
+    )
+    return "".join(parts)
+
+
 def _build_researcher_prompt(
-    has_knowledge_base: bool, has_web_search: bool = False, citation_handles: bool = False
+    has_knowledge_base: bool,
+    has_web_search: bool = False,
+    citation_handles: bool = False,
+    kb_tool_name: str = _KB_TOOL_NAME,
 ) -> str:
     """Resolve the researcher subagent prompt (same lockstep rule as the main one).
 
@@ -650,8 +958,7 @@ def _build_researcher_prompt(
     media_line = " 音视频附件的 path 为 ASR 转写文本（.md），name 为原始上传名，并非扩展名错误。"
     if has_knowledge_base:
         research_line = (
-            "- 优先使用 search_knowledge_base 检索知识库/知识空间，并用 read_file / ls 阅读工作区中已有的资料。"
-            f"{media_line}"
+            f"- 优先使用 {kb_tool_name} 检索知识库/知识空间，并用 read_file / ls 阅读工作区中已有的资料。{media_line}"
         )
     else:
         research_line = (
@@ -825,7 +1132,7 @@ def _coerce_text(value: object) -> str:
         return ""
     if isinstance(value, str):
         return value.strip()
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         for x in value:
             text = _coerce_text(x)
             if text:
@@ -849,7 +1156,7 @@ def _coerce_bool(value: object) -> bool:
     multi-select one."""
     if isinstance(value, str):
         return value.strip().lower() not in _FALSY_STRINGS
-    if isinstance(value, (bool, int, float)):
+    if isinstance(value, bool | int | float):
         return bool(value)
     return False
 
@@ -869,7 +1176,7 @@ def _coerce_options(value: object) -> list[str]:
     def walk(v: object) -> None:
         if v is None:
             return
-        if isinstance(v, (list, tuple)):
+        if isinstance(v, list | tuple):
             for x in v:
                 walk(x)
             return
@@ -1056,7 +1363,7 @@ def _is_web_citation_tool(tool: object) -> bool:
     return is_web_citation_tool(tool)
 
 
-def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False) -> str:
+def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False, daily: bool = False) -> str:
     """Append the citation rules when the run actually has a citable tool.
 
     ``handles=False``: the shared citation.yaml backstop (real U+E200 markers,
@@ -1068,6 +1375,12 @@ def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False) -> s
     """
     if not enabled or not prompt:
         return prompt
+    if handles and daily:
+        # F004: the direct profile answers in the chat, so it gets the daily-chat
+        # wording of the same [Sn] contract (F075); both share one section header.
+        from bisheng.citation.domain.services.daily_citation_handles import ensure_daily_handle_rules
+
+        return ensure_daily_handle_rules(prompt)
     if handles:
         from bisheng.citation.domain.services.citation_handle_service import ensure_handle_rules
 
@@ -1207,7 +1520,11 @@ async def _rewrite_web_results_with_handles(scope: Any, annotated: Any, items: l
 def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
     wrapped = []
     for tool_obj in tools:
-        if _is_web_citation_tool(tool_obj) and isinstance(tool_obj, BaseTool):
+        # F004: a tool from the unified assembly may already carry the daily-chat
+        # citation wrapper (it registers the hits and shows the handles itself).
+        # Wrapping it again would annotate an annotated result.
+        already_cited = getattr(tool_obj, "citation_collector", None) is not None
+        if _is_web_citation_tool(tool_obj) and isinstance(tool_obj, BaseTool) and not already_cited:
             wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj, scope=scope))
         else:
             wrapped.append(tool_obj)
@@ -1279,7 +1596,8 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
       subgraph) cannot recur because the subagent simply cannot interrupt.
     """
     sub_tools = _subagent_tools(tools)
-    has_kb = any(t.name == _KB_TOOL_NAME for t in sub_tools)
+    kb_tool = _kb_tool_name(sub_tools)
+    has_kb = kb_tool is not None
     has_web = any(_is_web_citation_tool(t) for t in sub_tools)
     return {
         "name": "general-purpose",
@@ -1289,7 +1607,12 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
             "它不能向用户提问，也不负责最终交付物的撰写与拼装。"
         ),
         "system_prompt": _with_citation_rules(
-            _build_researcher_prompt(has_kb, has_web_search=has_web, citation_handles=citation_handles),
+            _build_researcher_prompt(
+                has_kb,
+                has_web_search=has_web,
+                citation_handles=citation_handles,
+                kb_tool_name=kb_tool or _KB_TOOL_NAME,
+            ),
             has_kb or has_web,
             handles=citation_handles,
         ),
@@ -1531,6 +1854,60 @@ class SkillSelectionMiddleware(AgentMiddleware):
         return await handler(request)
 
 
+@dataclass
+class MemoryWiring:
+    """What long-term memory adds to one run: the two tools and the system-message text."""
+
+    tools: list
+    prompt: str | None = None
+
+
+def build_memory_prompt(resident_text: str = "", related_text: str = "") -> str:
+    """Tool guidance, then the resident block, then the task-related block (F132 AC-51, AC-55)."""
+    from bisheng.linsight.domain.services.memory_turns import MEMORY_PROMPT_HEADER, MEMORY_TOOLS_GUIDE
+
+    parts = [MEMORY_PROMPT_HEADER, MEMORY_TOOLS_GUIDE]
+    parts += [text for text in (resident_text, related_text) if text]
+    return "\n\n".join(parts)
+
+
+def wire_memory(ctx, *, resident_text: str = "", related_text: str = "", on_write=None) -> MemoryWiring:
+    """The ONE place that turns an enabled memory context into tools and prompt text (F004 T059).
+
+    ``ctx`` is the ``MemoryContext`` the gate resolved for this run. Deep research
+    (``LinsightMemoryRound``) and daily chat on the unified runtime
+    (``DailyMemoryTurn.wiring``) both call this; neither builds the tools or the
+    text itself. The memory store is not touched: the tools read and write the
+    user's memory by tenant and user, whichever profile runs them.
+    """
+    from bisheng.memory.domain.services.tools import build_memory_tools
+
+    return MemoryWiring(
+        tools=build_memory_tools(ctx, on_write=on_write),
+        prompt=build_memory_prompt(resident_text, related_text),
+    )
+
+
+async def _resolve_vision_model(session_model):
+    """The workbench image-reading model, or None when it is not configured.
+
+    Asked only when the run's own model cannot read images. A failure disables
+    image reading for the run and is logged; it never fails the run.
+    """
+    from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+    from bisheng.common.image_view.loop import resolve_image_view_llm
+
+    try:
+        return await resolve_image_view_llm(
+            getattr(session_model, "tenant_id", None),
+            user_id=getattr(session_model, "user_id", None),
+            app_type=ApplicationTypeEnum.LINSIGHT,
+        )
+    except Exception:
+        logger.opt(exception=True).warning("image-reading model lookup failed; this run reads no knowledge images")
+        return None
+
+
 async def create_linsight_agent(
     session_model,
     tools: Sequence[BaseTool],
@@ -1544,6 +1921,11 @@ async def create_linsight_agent(
     citation_scope=None,
     context_window_sink: dict | None = None,
     memory_prompt: str | None = None,
+    profile: ProfileName = "planned",
+    inbox: AgentMiddleware | None = None,
+    memory: MemoryWiring | None = None,
+    workbench_prompt: str | None = None,
+    model_facts_sink: dict | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1565,9 +1947,30 @@ async def create_linsight_agent(
             retrieval tools so the completion audit knows which sources were seen.
         context_window_sink: mutable dict filled with the context window this run
             uses (F087), so the caller can log it when the task fails.
+        workbench_prompt: ``direct`` profile only. The daily-chat system prompt
+            the administrator configured on the workbench; appended under the
+            platform rules. Ignored for ``planned``.
         memory_prompt: F132 long-term memory text of this round (tool guidance,
             resident and experience blocks), fixed at round start. Appended only
             when the memory tools are actually bound (prompt <-> tool lockstep).
+        profile: F004 (design 决策 1). ``"planned"`` (default) is deep research:
+            ``write_todos`` plus the planning prompt, unchanged. ``"direct"`` is
+            daily chat: no ``TodoListMiddleware`` on the main graph and a lean
+            prompt generated from the bound tools. Everything else — business
+            tools, ask_user, skills, memory, subagents, the state schema with its
+            ``todos`` channel — is identical, so one checkpoint thread can
+            alternate between the two.
+        inbox: F004 (design 决策 5). The ``InboxMiddleware`` of this run, built by
+            the caller from the run's conversation, dispatch service and event
+            sink. Mounted on the MAIN graph only, in both profiles, and never for
+            an unattended run. None mounts nothing.
+        memory: F004 T059. The run's ``MemoryWiring`` from ``wire_memory``: its
+            tools are bound on the main graph and its text is appended to the
+            system message. Deep research still passes the tools inside ``tools``
+            and the text as ``memory_prompt``; both come from ``wire_memory`` too.
+        model_facts_sink: mutable dict filled with ``supports_vision`` of the
+            resolved model, so the uploaded-files pointer block words image
+            originals the same way the binary guards treat them.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -1575,8 +1978,19 @@ async def create_linsight_agent(
     from deepagents import create_deep_agent
     from deepagents.graph import DeepAgentState
 
+    if profile not in _PROFILES:
+        raise ValueError(f"unknown agent profile: {profile!r} (expected one of {_PROFILES})")
+    planned = profile == "planned"
     svid = svid or session_model.id
-    tools = _bind_linsight_citation_scope(list(tools or []), citation_scope)
+    tools = list(tools or [])
+    if memory is not None:
+        from bisheng.memory.domain.services.redaction import split_reserved_tools
+
+        # ``memory_`` names are reserved while memory is on; the built-in tools win.
+        kept, _dropped = split_reserved_tools(tools)
+        tools = [*kept, *memory.tools]
+        memory_prompt = memory_prompt or memory.prompt
+    tools = _bind_linsight_citation_scope(tools, citation_scope)
     # F073: Open API runs are unattended — no ask_user, no clarify step.
     unattended = is_unattended_run(session_model)
     hitl_tools = [] if unattended else [ask_user]
@@ -1584,6 +1998,8 @@ async def create_linsight_agent(
     # researcher handoff) follows the session's citation contract in lockstep.
     citation_handles = bool(citation_scope is not None and getattr(citation_scope, "enabled", False))
     model, supports_vision = await _resolve_model(session_model, model_id)
+    if model_facts_sink is not None:
+        model_facts_sink["supports_vision"] = bool(supports_vision)
     context_window = context_window_sink if context_window_sink is not None else {}
     await _apply_context_window(model, svid, context_window)
 
@@ -1622,7 +2038,7 @@ async def create_linsight_agent(
     # model is never told to call a tool that isn't there (root cause of the
     # "knowledge_id: Field required" error when no KB is selected). Computed here
     # because the citation tail middleware below needs the same gate.
-    has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
+    has_kb = _kb_tool_name(tools) is not None
     has_web = any(_is_web_citation_tool(t) for t in tools)
     # Built here (not with the rest of the subagent stacks below) because the
     # main graph's subagent-overflow handler draws from its degrade allowance.
@@ -1635,8 +2051,15 @@ async def create_linsight_agent(
         # and a context overflow it re-raises is compressed and retried here.
         *_summarization(model, backend, context_window),
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
-        # Main graph only: the researcher keeps its own prompt (see base_prompt.py).
-        LinsightBasePromptMiddleware(),
+        # deepagents 0.7 made planning opt-in: without this the graph has neither the
+        # ``write_todos`` tool nor the ``todos`` channel the task panel is built from
+        # (test_deepagents_07_compat). It only adds a tool and a prompt section, so
+        # it sits behind summarization and resilience, which must stay outermost.
+        # F004: the ``direct`` profile has no plan, so it gets neither the tool nor
+        # the framework's planning prompt. The ``todos`` channel itself comes from
+        # ``state_schema=DeepAgentState`` below and stays in both profiles.
+        *([TodoListMiddleware()] if planned else []),
+        _workspace_file_tools(backend),
         # F087: a `task` call whose subagent stayed over the context window after
         # compression comes back as a tool result instead of failing the task.
         SubagentContextOverflowMiddleware(subagent_resilience, context_window),
@@ -1645,10 +2068,31 @@ async def create_linsight_agent(
         # F087 P1: one tool result <= 10% of the usable input (known windows only).
         *_result_budget(backend, context_window),
     ]
+    # F004 T041: messages the user sends during the run are injected before the
+    # next model call. Main graph only: a second reader in a subagent would take
+    # messages the main agent never sees (design §5 pitfall 5). An unattended run
+    # has nobody sending messages (AC-23), same gate as ask_user.
+    if inbox is not None and not unattended:
+        middlewares.append(inbox)
+    # F004 T059 (AC-49): pictures in knowledge results. The direct profile exists
+    # only on the unified runtime; deep research gets it when the unified runtime
+    # is on (the inbox is the sign), so the legacy path is unchanged.
+    if has_kb and (not planned or inbox is not None):
+        vision_model = None if supports_vision else await _resolve_vision_model(session_model)
+        if supports_vision or vision_model is not None:
+            from bisheng.linsight.domain.services.kb_image_middleware import KbImageViewMiddleware
+
+            middlewares.append(
+                KbImageViewMiddleware(_KB_TOOL_NAMES, main_model_sees_images=supports_vision, vision_model=vision_model)
+            )
     # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
     # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
     # (design decision 5). Gated like the rules: citable tool AND handle contract.
-    if citation_handles and (has_kb or has_web):
+    # Planned profile only: the table backs the "add the handles to output/*.md"
+    # repair of deep research. A direct answer cites from the tool results it has
+    # just read, as the daily chat always did (F075 §8), and a table appended as a
+    # user message on every call made the model talk about it to the user.
+    if planned and citation_handles and (has_kb or has_web):
         from bisheng.linsight.domain.services.citation_source_middleware import LinsightCitationSourceMiddleware
 
         middlewares.append(
@@ -1699,7 +2143,12 @@ async def create_linsight_agent(
 
     # F069: citation requirement restated right before the language tail, only
     # when a citable retrieval tool is bound (same gate as the rules themselves).
-    citation_tail_text = _LINSIGHT_CITATION_TAIL_HANDLES_ZH if citation_handles else _LINSIGHT_CITATION_TAIL_ZH
+    if not citation_handles:
+        citation_tail_text = _LINSIGHT_CITATION_TAIL_ZH
+    elif planned:
+        citation_tail_text = _LINSIGHT_CITATION_TAIL_HANDLES_ZH
+    else:
+        citation_tail_text = _DIRECT_CITATION_TAIL_HANDLES_ZH
     if has_kb or has_web:
         middlewares.append(_CitationTailMiddleware(citation_tail_text))
     # Language directive LAST in the stack so it appends AFTER every framework
@@ -1751,7 +2200,7 @@ async def create_linsight_agent(
     # continue with the remaining steps (Layer B partial-result win).
     researcher = _build_researcher_subagent(tools, citation_handles=citation_handles)
     researcher_tools = researcher.get("tools") or []
-    researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_citation_tool(t) for t in researcher_tools)
+    researcher_citable = any(t.name in _KB_TOOL_NAMES or _is_web_citation_tool(t) for t in researcher_tools)
     researcher["middleware"] = _subagent_middleware(
         model=model,
         backend=backend,
@@ -1763,8 +2212,13 @@ async def create_linsight_agent(
         tools=researcher.get("tools"),
         # F069 P1: the researcher gets the source table (no nudge — it does not
         # write deliverables) and the citation tail, both gated on a citable tool.
+        # The table is planned-only, as on the main graph.
         citation=[
-            *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
+            *(
+                _researcher_source_middleware(citation_scope)
+                if (planned and citation_handles and researcher_citable)
+                else []
+            ),
             *([_CitationTailMiddleware(citation_tail_text)] if researcher_citable else []),
         ],
     )
@@ -1795,27 +2249,49 @@ async def create_linsight_agent(
     # subagent; ours is already first in their middleware lists (design decision 7).
     from bisheng.linsight.domain.services.context_budget import bisheng_summarization
 
+    main_tools = [*tools, *hitl_tools, *export_tools]
+    # F004: same condition that mounts the inbox middleware above.
+    steerable = inbox is not None and not unattended
+    if planned:
+        main_prompt = _build_linsight_system_prompt(
+            has_kb,
+            skills_present=skills_advertised,
+            # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+            # when the skill's script route can actually run in this session.
+            has_code_interpreter=has_code_interpreter,
+            has_web_search=has_web,
+            citation_handles=citation_handles,
+            unattended=unattended,
+            has_data_analyst=data_analyst is not None,
+            steerable=steerable,
+        )
+    else:
+        # Generated from what the main graph binds: the tools passed below, the
+        # workspace file tools and ``task`` (both always assembled above).
+        main_prompt = _build_direct_system_prompt(
+            {str(getattr(t, "name", "")) for t in main_tools} | set(_WORKSPACE_FILE_TOOLS) | {"task"},
+            skills_present=skills_advertised,
+            unattended=unattended,
+            has_data_analyst=data_analyst is not None,
+            steerable=steerable,
+        )
+
     with bisheng_summarization(model):
         return create_deep_agent(
             model=model,
-            tools=[*tools, *hitl_tools, *export_tools],
-            system_prompt=_with_caller_instructions(
-                _with_citation_rules(
-                    _build_linsight_system_prompt(
-                        has_kb,
-                        skills_present=skills_advertised,
-                        # Gates the hard "no export_docx/export_pdf" rule: only meaningful
-                        # when the skill's script route can actually run in this session.
-                        has_code_interpreter=has_code_interpreter,
-                        has_web_search=has_web,
-                        citation_handles=citation_handles,
-                        unattended=unattended,
-                        has_data_analyst=data_analyst is not None,
+            tools=main_tools,
+            # Main graph only: subagents keep their own prompt (see base_prompt.py).
+            system_prompt=with_base_prompt(
+                _with_caller_instructions(
+                    _with_workbench_prompt(
+                        _with_citation_rules(
+                            main_prompt, has_kb or has_web, handles=citation_handles, daily=not planned
+                        ),
+                        None if planned else workbench_prompt,
                     ),
-                    has_kb or has_web,
-                    handles=citation_handles,
+                    caller_instructions(session_model),
                 ),
-                caller_instructions(session_model),
+                profile=profile,
             ),
             middleware=middlewares,
             subagents=subagents,
@@ -1826,11 +2302,54 @@ async def create_linsight_agent(
             # list at every step, so one subagent run writes O(N^2) bytes to Redis
             # (~90 MB measured for a 200-step researcher on 105). With it, subagent
             # checkpoints hold deltas plus a snapshot every 50 updates.
-            state_schema=DeepAgentState,
+            # F004: the direct profile has no TodoListMiddleware to declare the
+            # ``todos`` channel, so its schema declares it (see _direct_state_schema).
+            state_schema=DeepAgentState if planned else _direct_state_schema(),
             backend=backend,
             checkpointer=checkpointer,
             store=None,
         )
+
+
+@functools.cache
+def _direct_state_schema() -> type:
+    """``DeepAgentState`` plus the ``todos`` channel, for the ``direct`` profile.
+
+    In the planned profile the channel is declared by ``TodoListMiddleware``'s own
+    state schema. The direct profile does not attach that middleware, and without
+    the channel a checkpoint written by a planned run on the same thread would
+    lose its plan the moment a direct run saves the next checkpoint. Declaring the
+    same field here (same type and annotation as langchain's ``PlanningState``)
+    keeps one channel set across both profiles (design 决策 1 / 决策 7, spike S6).
+    Nothing writes to it in a direct run: ``write_todos`` is not bound.
+    """
+    from deepagents.graph import DeepAgentState
+
+    # The annotation below is resolved against this module's globals (PEP 563),
+    # which is why Todo / OmitFromInput / NotRequired are module-level imports.
+    class DirectAgentState(DeepAgentState):
+        todos: Annotated[NotRequired[list[Todo]], OmitFromInput]
+
+    return DirectAgentState
+
+
+# The file tools the workspace implements. deepagents 0.7 added ``delete``, which
+# ``WorkspaceBackend`` does not override: the inherited ``FilesystemBackend.delete``
+# removes paths on the worker's own disk and never touches the object store that
+# ``ls`` / ``read_file`` answer from.
+_WORKSPACE_FILE_TOOLS = ["ls", "read_file", "write_file", "edit_file", "glob", "grep"]
+
+
+def _workspace_file_tools(backend):
+    """The framework's file middleware limited to ``_WORKSPACE_FILE_TOOLS``.
+
+    ``create_deep_agent`` swaps a middleware passed in ``middleware=`` for the
+    framework's own one of the same name, in place — on the main graph and on each
+    subagent — so this adds no second set of file tools.
+    """
+    from deepagents.middleware.filesystem import FilesystemMiddleware
+
+    return FilesystemMiddleware(backend=backend, tools=list(_WORKSPACE_FILE_TOOLS))
 
 
 def _summarization(model, backend, context_window: dict) -> list:
@@ -1876,6 +2395,10 @@ def _subagent_middleware(
     return [
         *_summarization(model, backend, context_window),
         resilience,
+        # Explicit since deepagents 0.7 (planning is opt-in). Kept on subagents so
+        # the upgrade changes no behavior: 0.6 gave every subagent ``write_todos``.
+        TodoListMiddleware(),
+        _workspace_file_tools(backend),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
         *_result_budget(backend, context_window),

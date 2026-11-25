@@ -309,7 +309,7 @@ async def test_daily_picker_only_exposes_curated_children_and_preserves_defaults
     from bisheng.permission.application import business_authorization
     from bisheng.tool.domain.services.tool import ToolServices
 
-    permission = AsyncMock(return_value={"12": frozenset({"use"})})
+    permission = AsyncMock(return_value={"12": frozenset({"visible"})})
     monkeypatch.setattr(business_authorization, "batch_check_business_actions", permission)
     monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value={1}))
     result = await app.picker_tools(
@@ -324,3 +324,16 @@ async def test_daily_picker_only_exposes_curated_children_and_preserves_defaults
     assert result[0]["children"][0]["enabled"] is False
     assert await app.picker_tools(configured_tools=[]) == []
     ToolServices().get_tool_list.assert_not_awaited()
+
+
+async def test_an_auto_enabled_workbench_tool_is_not_listed(monkeypatch):
+    """F005 AC-10: the capability center leaves out a tool the admin auto-enabled."""
+    from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+    async def _ids(cls):
+        return {2}
+
+    monkeypatch.setattr(WorkStationService, "aauto_enabled_tool_ids", classmethod(_ids))
+    app, _ = make_service(monkeypatch, [tool(), tool(2, name="Code interpreter", key="bisheng_code_interpreter")])
+
+    assert [row["resource_id"] for row in (await app.list())["items"]] == [1]

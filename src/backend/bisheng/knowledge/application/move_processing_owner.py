@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.knowledge.application import move_processing_admission as admission
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
-from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.repositories.move_batch_repository import touch_move_spaces
 from bisheng.knowledge.domain.repositories.move_cutover_repository import MoveCutoverRepository
 from bisheng.knowledge.domain.repositories.move_execution_repository import (
@@ -41,7 +40,6 @@ from bisheng.knowledge.domain.services.knowledge_space_chat_history_retention_se
 from bisheng.permission.application.identity import get_current_permission_actor
 from bisheng.permission.application.knowledge_move_projection import KnowledgeMoveProjectionApplication
 from bisheng.resource_reference.application.contracts import TransactionIdentity
-from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
 
 
 class KnowledgeMoveProcessingOwner:
@@ -50,18 +48,17 @@ class KnowledgeMoveProcessingOwner:
         *,
         session_factory,
         projection: KnowledgeMoveProjectionApplication,
-        reference_runtime: ReferenceBindingRuntime,
+        reference_runtime=None,
         clock=_now,
         chat_rehome=dispatch_knowledge_chat_rehome,
     ):
         if (
             not callable(session_factory)
             or not isinstance(projection, KnowledgeMoveProjectionApplication)
-            or not isinstance(reference_runtime, ReferenceBindingRuntime)
             or not callable(chat_rehome)
         ):
-            raise TypeError("move requires actual session, P1 and registered R2 composition")
-        self.sessions, self.projection, self.reference_runtime = session_factory, projection, reference_runtime
+            raise TypeError("move requires a business session and permission projection")
+        self.sessions, self.projection = session_factory, projection
         self.clock, self.chat_rehome, self._seen = clock, chat_rehome, WeakSet()
         self.plans = OperationPlanRepository(clock=clock)
         self.scope = MoveScopeRepository(parent_states=projection)
@@ -74,7 +71,6 @@ class KnowledgeMoveProcessingOwner:
         self.jobs = ProcessingJobRepository(
             move_jobs=self.move_jobs, move_ready=self.ready, move_execution=self.execution, clock=clock
         )
-        self.reference_owner = KnowledgeReferenceTargetOwner(move_cutover=self.cutover)
 
     @asynccontextmanager
     async def _session(self):
@@ -340,12 +336,6 @@ class KnowledgeMoveProcessingOwner:
                         logical = await self._call(
                             session,
                             self.cutover.aapply_logical(session, prepared=prepared, projection_evidence=evidence),
-                        )
-                        await self._call(
-                            session,
-                            self.reference_owner.amove_file_ownership(
-                                session, logical=logical, reference_runtime=self.reference_runtime
-                            ),
                         )
                         await self._call(
                             session,

@@ -1,6 +1,6 @@
 import { Button,Tag,Tooltip,type TagColor } from '@bisheng/ui'
 import { Outlined } from 'bisheng-icons'
-import { useMemo, type ReactElement } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { resolveKnowledgeParseFailure } from '../knowledgeParseFailureMessage'
 
@@ -18,7 +18,6 @@ interface StatusIndicatorProps {
     status: number
     remark?: string
     workspace?: boolean
-    badge?: ReactElement
 }
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
@@ -38,7 +37,7 @@ function knowledgeFileParseHint(obj: Record<string, unknown>, media: string | un
     return t(`api_errors:${numeric}`, { defaultValue: guidance })
 }
 
-export function StatusIndicator({ status, remark, workspace = false, badge }: StatusIndicatorProps) {
+export function StatusIndicator({ status, remark, workspace = false }: StatusIndicatorProps) {
     const { t } = useTranslation()
     const config = FILE_STATUSES[status]
     const reason = useMemo(() => {
@@ -70,7 +69,7 @@ export function StatusIndicator({ status, remark, workspace = false, badge }: St
     const color = workspace && (status === 1 || status === 4 || status === 5) ? 'default' : config.color
     const labelKey = workspace && status === 3 ? 'workspace.status_failed'
         : workspace && status === 4 ? 'processing' : config.labelKey
-    const label = badge ?? <Tag size="small" dot color={color} className="shrink-0 whitespace-nowrap">
+    const label = <Tag size="small" dot color={color} className="shrink-0 whitespace-nowrap">
         {t(labelKey, { ns: 'knowledge' })}
     </Tag>
     // A failed attempt does not delete the previous successful content, it only

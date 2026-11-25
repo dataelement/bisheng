@@ -1,6 +1,8 @@
 import request from '~/api/request';
 import { getArtifactPreviewKind, getPreviewKind } from './artifactUtils';
-import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS, pollSlidesPreview } from './useSlidesPreview';
+import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS, pollSlidesPreview, slidesPreviewSource } from './useSlidesPreview';
+
+const task = (fileUrl: string, versionId: string) => ({ kind: 'task' as const, fileUrl, versionId });
 
 jest.mock('~/api/request', () => ({
     __esModule: true,
@@ -43,7 +45,7 @@ describe('F111 pollSlidesPreview', () => {
 
     it('posts to file_preview with the share token and returns the prefixed PDF url', async () => {
         mockedRequest.post.mockResolvedValue({ data: { status: 'ready', file_path: '/bisheng/p.pdf?s=1' } } as never);
-        const url = await pollSlidesPreview('linsight/final_result/v/a.pptx', 'v', () => false, 'tok-1');
+        const url = await pollSlidesPreview(task('linsight/final_result/v/a.pptx', 'v'), () => false, 'tok-1');
         expect(url).toBe('/workspace/bisheng/p.pdf?s=1');
         const [path, body, config] = mockedRequest.post.mock.calls[0] as [
             string,
@@ -59,7 +61,7 @@ describe('F111 pollSlidesPreview', () => {
         mockedRequest.post
             .mockResolvedValueOnce({ data: { status: 'converting' } } as never)
             .mockResolvedValueOnce({ data: { status: 'ready', file_path: '/x.pdf' } } as never);
-        const pending = pollSlidesPreview('k', 'v', () => false, '');
+        const pending = pollSlidesPreview(task('k', 'v'), () => false, '');
         await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
         await expect(pending).resolves.toBe('/workspace/x.pdf');
         expect(mockedRequest.post).toHaveBeenCalledTimes(2);
@@ -68,7 +70,7 @@ describe('F111 pollSlidesPreview', () => {
     it('gives up after the timeout while the backend keeps converting', async () => {
         mockedRequest.post.mockResolvedValue({ data: { status: 'converting' } } as never);
         let clock = 0;
-        const pending = pollSlidesPreview('k', 'v', () => false, '', () => clock);
+        const pending = pollSlidesPreview(task('k', 'v'), () => false, '', () => clock);
         for (let i = 0; i < POLL_TIMEOUT_MS / POLL_INTERVAL_MS + 2; i += 1) {
             clock += POLL_INTERVAL_MS;
             await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
@@ -78,6 +80,55 @@ describe('F111 pollSlidesPreview', () => {
 
     it('propagates request errors so the caller can show the failure fallback', async () => {
         mockedRequest.post.mockRejectedValue(new Error('11025'));
-        await expect(pollSlidesPreview('k', 'v', () => false, '')).rejects.toThrow('11025');
+        await expect(pollSlidesPreview(task('k', 'v'), () => false, '')).rejects.toThrow('11025');
+    });
+});
+
+describe('slides preview source', () => {
+    const deck = { file_id: 'f1', file_name: 'deck.pptx', file_url: '/tmp-dir/x.pptx' };
+
+    it('uses the task turn when the deck has a version', () => {
+        expect(slidesPreviewSource({ ...deck, versionId: 'v1' } as never, '')).toEqual(task('/tmp-dir/x.pptx', 'v1'));
+        expect(slidesPreviewSource(deck as never, 'v2')).toEqual(task('/tmp-dir/x.pptx', 'v2'));
+    });
+
+    it('uses the conversation when a direct-answer deck has no version', () => {
+        const file = { ...deck, attachment: { conversationId: 'c1', fileId: 'f1' } };
+        expect(slidesPreviewSource(file as never, '')).toEqual({ kind: 'conversation', conversationId: 'c1', fileId: 'f1' });
+    });
+
+    it('has no source for a deck with neither', () => {
+        expect(slidesPreviewSource(deck as never, '')).toBeNull();
+    });
+});
+
+describe('conversation slides preview', () => {
+    const origEnv = appEnvHost.__APP_ENV__;
+
+    beforeEach(() => {
+        mockedRequest.post.mockReset();
+        appEnvHost.__APP_ENV__ = { ...origEnv, BASE_URL: '/workspace' };
+    });
+
+    afterEach(() => {
+        appEnvHost.__APP_ENV__ = origEnv;
+    });
+
+    it('posts to the conversation endpoint with the share token and no toast', async () => {
+        mockedRequest.post.mockResolvedValue({ data: { status: 'ready', file_path: '/bisheng/d.pdf' } } as never);
+        const url = await pollSlidesPreview(
+            { kind: 'conversation', conversationId: 'c 1', fileId: 'f1' },
+            () => false,
+            'tok-2',
+        );
+        expect(url).toBe('/workspace/bisheng/d.pdf');
+        const [path, , config] = mockedRequest.post.mock.calls[0] as [
+            string,
+            unknown,
+            { headers: Record<string, string>; showError: boolean },
+        ];
+        expect(path).toBe('/api/v1/workstation/conversations/c%201/files/f1/slides-preview');
+        expect(config.headers['share-token']).toBe('tok-2');
+        expect(config.showError).toBe(false);
     });
 });

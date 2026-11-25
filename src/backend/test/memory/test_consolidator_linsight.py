@@ -30,7 +30,7 @@ from bisheng.user.domain.models.user import User
 from test.memory.conftest import TENANT_A, USER_1, counter, make_message
 
 CHAT = "chat-dr-1"
-LONG_AGO = datetime.now() - timedelta(hours=2)
+LONG_AGO = datetime.now() - timedelta(hours=10)
 
 
 def _seed_chat(memory_db, chat_id=CHAT, daily_messages=()):

@@ -209,7 +209,7 @@
   "tmpKnowledgeBaseNotSupportSingleNodeDebug": "Temporary knowledge base does not support single node debugging",
   "userInputContent": "User input content",
   "userAuthVerification": "User knowledge base access verification",
-  "userAuthVerificationTips": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions.",
+  "userAuthVerificationTips": "When enabled, retrieval is filtered by the current user's own knowledge-base / knowledge-space permissions. When disabled, no permission check is applied — every bound knowledge base and space is searchable by all users.",
   "retrieverWeightSettings": "Retriever weight settings",
   "adjustWeightForVectorOrKeywordSearch": "Adjust the weight to prioritize either vector or keyword search.",
   "keyword": "Keyword",
@@ -463,7 +463,7 @@
       },
       "user_auth": {
         "label": "User knowledge permission check",
-        "help": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions."
+        "help": "When enabled, retrieval is filtered by the current user's own knowledge-base / knowledge-space permissions. When disabled, no permission check is applied — every bound knowledge base and space is searchable by all users."
       },
       "sql_agent": {
         "label": "Database Configuration"

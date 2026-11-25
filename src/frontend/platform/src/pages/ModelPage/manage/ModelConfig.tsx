@@ -100,7 +100,7 @@ export default function ModelConfig({
   const [detailReload, setDetailReload] = useState(0);
   const [connectionVersion, setConnectionVersion] = useState(0);
   const writable =
-    canManageModelSettings(user, appConfig.multiTenantEnabled) &&
+    canManageModelSettings(user) &&
     !formData.is_root_shared_readonly;
   const removal = useModelRemoval({
     enabled: writable && !detailLoading && !detailError,
@@ -589,7 +589,6 @@ export default function ModelConfig({
         view={removal.view}
         onCancel={removal.cancel}
         onConfirm={removal.confirm}
-        onForce={removal.requestForce}
         onRefresh={removal.refresh}
         onLoadMore={removal.loadMore}
       />

@@ -85,7 +85,10 @@ class CopyRepository:
                 or source.tenant_id != tenant_id
                 or target.tenant_id != tenant_id
                 or target.copy_source_id != source_id
-                or source.copy_target_id != target_id
+                or (
+                    source.copy_target_id != target_id
+                    and target.state not in {KnowledgeState.PUBLISHED.value, KnowledgeState.FAILED.value}
+                )
             ):
                 raise KnowledgeCPError()
             return source, target
@@ -99,17 +102,12 @@ class CopyRepository:
             target = session.exec(
                 select(Knowledge).where(Knowledge.id == target_id, Knowledge.tenant_id == tenant_id).with_for_update()
             ).first()
-            if (
-                source is None
-                or target is None
-                or source.copy_target_id != target_id
-                or target.copy_source_id != source_id
-                or target.user_id != actor_id
-                or source.state != KnowledgeState.COPYING.value
-            ):
+            if source is None or target is None or target.copy_source_id != source_id or target.user_id != actor_id:
                 raise KnowledgeCPError()
             if target.state != KnowledgeState.UNPUBLISHED.value:
                 return None  # Duplicate delivery never adopts a running or failed worker.
+            if source.copy_target_id != target_id or source.state != KnowledgeState.COPYING.value:
+                raise KnowledgeCPError()
             result = session.exec(
                 update(Knowledge)
                 .where(
@@ -145,8 +143,7 @@ class CopyRepository:
                 raise KnowledgeCPError()
             target.state = KnowledgeState.PUBLISHED.value if succeeded else KnowledgeState.FAILED.value
             session.add(target)
-            if succeeded:
-                source.copy_target_id = None
-                source.state = KnowledgeState.PUBLISHED.value
-                session.add(source)
+            source.copy_target_id = None
+            source.state = KnowledgeState.PUBLISHED.value
+            session.add(source)
             session.commit()

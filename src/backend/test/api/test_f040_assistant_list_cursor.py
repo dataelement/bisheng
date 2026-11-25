@@ -67,7 +67,7 @@ def _fake_dao_factory(all_rows):
     return _fake
 
 
-async def _collect_all_pages(user, *, allowed_ids, all_rows, page_size, action="use"):
+async def _collect_all_pages(user, *, allowed_ids, all_rows, page_size, action="visible"):
     """Walk the scan helper page-by-page via the (update_time, id) cursor."""
 
     async def _fake_action_map(
@@ -81,7 +81,7 @@ async def _collect_all_pages(user, *, allowed_ids, all_rows, page_size, action="
         assert resource_type == "assistant"
         requested_actions = set(actions)
         return {
-            resource_id: frozenset(requested_actions & {"use", "edit"} if resource_id in allowed_ids else ())
+            resource_id: frozenset(requested_actions & {"visible", "edit"} if resource_id in allowed_ids else ())
             for resource_id in map(str, resource_ids)
         }
 
@@ -162,8 +162,8 @@ async def test_admin_still_uses_concrete_action_facade():
     ):
         assert login_user.is_admin()
         assert resource_type == "assistant"
-        assert tuple(actions) == ("use", "edit")
-        return {resource_id: frozenset({"use", "edit"}) for resource_id in map(str, resource_ids)}
+        assert tuple(actions) == ("visible", "edit")
+        return {resource_id: frozenset({"visible", "edit"}) for resource_id in map(str, resource_ids)}
 
     action_map = AsyncMock(side_effect=_allow_all)
     with (
@@ -177,7 +177,7 @@ async def test_admin_still_uses_concrete_action_facade():
             assistant_ids=None,
             cursor=None,
             page_size=10,
-            action="use",
+            action="visible",
         )
     assert [r.id for r in visible] == [r.id for r in all_rows]
     assert has_more is False
@@ -197,8 +197,8 @@ async def test_has_more_probe_is_exact_at_page_boundary():
         actions,
     ):
         assert resource_type == "assistant"
-        assert tuple(actions) == ("use", "edit")
-        return {resource_id: frozenset({"use"}) for resource_id in map(str, resource_ids)}
+        assert tuple(actions) == ("visible", "edit")
+        return {resource_id: frozenset({"visible"}) for resource_id in map(str, resource_ids)}
 
     with (
         patch(f"{_AS}.AssistantDao.aget_all_assistants_cursor", new=_fake_dao_factory(all_rows)),
@@ -214,7 +214,7 @@ async def test_has_more_probe_is_exact_at_page_boundary():
             assistant_ids=None,
             cursor=None,
             page_size=8,
-            action="use",
+            action="visible",
         )
     assert len(visible) == 8
     assert has_more is False

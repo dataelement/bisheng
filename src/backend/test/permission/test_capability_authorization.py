@@ -81,7 +81,7 @@ async def test_tenant_grant_revoke_removes_visibility_and_ordinary_assignee(reso
         )
 
 
-@pytest.mark.parametrize("tenant_id,actions", [("8", ("use",)), ("7", ("use", "manage_permission"))])
+@pytest.mark.parametrize("tenant_id,actions", [("8", ("visible",)), ("7", ("visible", "manage_permission"))])
 async def test_tenant_grant_rejects_cross_tenant_and_management(tenant_id, actions):
     context = capability_context()
     model = replace(context.models[0], action_codes=actions)

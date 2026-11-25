@@ -1,7 +1,7 @@
 """Owner image capability and tenant restrictions, shared by both chat modes."""
 
 import json
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field
 
@@ -14,6 +14,9 @@ from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.dsh.domain.repositories.settings import DshSettingsRepository
 from bisheng.dsh.domain.schemas.contracts import DshContract
 
+if TYPE_CHECKING:
+    from bisheng.llm.domain.models import LLMModel
+
 
 class VisionSetting(DshContract):
     vision: bool = Field(default=False, strict=True)
@@ -23,14 +26,22 @@ class VisionBatchRequest(DshContract):
     model_ids: list[Annotated[int, Field(strict=True, gt=0, le=9223372036854775807)]] = Field(max_length=200)
 
 
+def _vision_key(tenant_id: int, model_id: int) -> str:
+    return f"dsh_vision:{tenant_id}:{model_id}"
+
+
 def repository(model_id: int):
     tenant = get_current_tenant_id()
     if tenant is None:
         raise DshAuthorizationUnavailableError()
-    return DshSettingsRepository(f"dsh_vision:{tenant}:{model_id}")
+    return DshSettingsRepository(_vision_key(tenant, model_id))
 
 
 async def legacy_visual(model_id: int, tenant_id: int) -> bool | None:
+    return (await _read_local_visuals(tenant_id)).get(str(model_id))
+
+
+async def _read_local_visuals(tenant_id: int) -> dict[str, bool]:
     """Only an owner's local record is evidence; inherited JSON is not a grant."""
     from bisheng.core.database import get_async_db_session
     from bisheng.dsh.domain.services.profile import profile_scope
@@ -39,16 +50,28 @@ async def legacy_visual(model_id: int, tenant_id: int) -> bool | None:
     with profile_scope(tenant_id):
         async with get_async_db_session() as session:
             own = await ModelDefaultRepository().aget_own(session, "linsight_llm")
-    if own is None:
-        return None
-    payload = json.loads(own.payload_json)
-    values = [
-        item["visual"]
-        for item in payload.get("models", [])
-        if str(item.get("id")) == str(model_id) and type(item.get("visual")) is bool
-    ]
+    payload = json.loads(own.payload_json) if own is not None else {}
     # Duplicate historical entries must not widen capability either.
-    return all(values) if values else None
+    result = {}
+    for item in payload.get("models", []):
+        value = item.get("visual")
+        if type(value) is bool:
+            model_id = str(item.get("id"))
+            result[model_id] = result.get(model_id, True) and value
+    return result
+
+
+def _parse_vision_declaration(raw: str | None) -> tuple[bool | None, bool]:
+    stored = json.loads(raw) if raw else None
+    if not stored:
+        return None, False
+    return VisionSetting.model_validate({"vision": stored["vision"]}).vision, stored.get("authority_version") == 1
+
+
+def _merge_legacy_vision(explicit: bool | None, legacy: bool | None) -> bool | None:
+    if explicit is False or legacy is False:
+        return False
+    return explicit if explicit is not None else legacy
 
 
 async def _declaration(model_id: int, tenant_id: int) -> bool | None:
@@ -56,14 +79,36 @@ async def _declaration(model_id: int, tenant_id: int) -> bool | None:
 
     with profile_scope(tenant_id):
         raw = await repository(model_id).read()
-    stored = json.loads(raw) if raw else None
-    explicit = VisionSetting.model_validate({"vision": stored["vision"]}).vision if stored else None
-    if stored and stored.get("authority_version") == 1:
+    explicit, authoritative = _parse_vision_declaration(raw)
+    if authoritative:
         return explicit
-    legacy = await legacy_visual(model_id, tenant_id)
-    if explicit is False or legacy is False:
-        return False
-    return explicit if explicit is not None else legacy
+    return _merge_legacy_vision(explicit, await legacy_visual(model_id, tenant_id))
+
+
+async def read_catalog_vision(models: list["LLMModel"]) -> dict[int, bool]:
+    """Resolve image capability for already admitted catalog models."""
+    if not models:
+        return {}
+    tenant = get_current_tenant_id()
+    if tenant is None:
+        raise DshAuthorizationUnavailableError()
+
+    keys = {(scope, model.id): _vision_key(scope, model.id) for model in models for scope in (model.tenant_id, tenant)}
+    stored = await DshSettingsRepository.read_many(list(keys.values()))
+    declarations = {pair: _parse_vision_declaration(stored.get(key)) for pair, key in keys.items()}
+    legacy_scopes = {scope for (scope, _), (_, authoritative) in declarations.items() if not authoritative}
+    legacy = {scope: await _read_local_visuals(scope) for scope in sorted(legacy_scopes)}
+    resolved = {
+        (scope, model_id): explicit
+        if authoritative
+        else _merge_legacy_vision(explicit, legacy[scope].get(str(model_id)))
+        for (scope, model_id), (explicit, authoritative) in declarations.items()
+    }
+
+    return {
+        model.id: resolved[model.tenant_id, model.id] is True and resolved[tenant, model.id] is not False
+        for model in models
+    }
 
 
 async def vision_view(model_id: int, *, snapshot=None) -> dict:

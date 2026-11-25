@@ -153,8 +153,6 @@ class ModelDeletePlanApplication:
                 retained_model_ids=retained,
                 delete_server=operation == "model_delete_server",
             )
-            if inspection.check_complete is not True:
-                raise ReferenceCoverageNotReadyError(reason="model_delete_plan_inspection_incomplete")
             if operation == "model_update_server" and not inspection.targets:
                 _changed()
             if await self._capture(scope, identity) != original:
@@ -172,9 +170,6 @@ class ModelDeletePlanApplication:
                     **{f"model:{target.target_id}": revision for target, revision in inspection.target_revisions},
                     f"server:{inspection.server_id}": inspection.server_revision,
                 },
-                inbound_digest=inspection.inbound_digest,
-                coverage_epoch=inspection.coverage_epoch,
-                inventory_hash=inspection.inventory_hash,
                 expires_at=self.plans.clock() + timedelta(seconds=self.ttl_seconds),
             )
             if await self._capture(scope, identity) != original:

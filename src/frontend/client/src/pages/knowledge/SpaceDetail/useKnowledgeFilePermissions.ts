@@ -79,6 +79,7 @@ export function useKnowledgeFilePermissions(options: UseKnowledgeFilePermissions
     permissionEntryIds: holding("manage_permission"),
     moveEntryIds: holding("move"),
     renameEntryIds: holding("rename"),
+    editEntryIds: holding("edit"),
     deleteEntryIds: holding("delete"),
     pendingFileIds: new Set(files.filter((_, index) => summaries[index]?.isFetching).map(file => file.id)),
     downloadEntryIds,

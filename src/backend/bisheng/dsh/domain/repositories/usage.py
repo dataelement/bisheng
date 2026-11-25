@@ -239,7 +239,7 @@ class DshUsageRepository:
 
         tenant = get_current_tenant_id()
         with strict_tenant_filter():
-            policy = UnifiedPolicyRepository(self.session).effective(user_id, lock=True)
+            policy = UnifiedPolicyRepository(self.session).accounting_policy(user_id, lock=True)
             if policy is None:
                 raise ValueError("Recovery requires a current SQL user policy")
             calls = []
@@ -329,7 +329,7 @@ class DshUsageRepository:
 
     def complete_recovery(self, user_id: int, *, expected_policy: dict, epoch: int):
         """Publish the recovered epoch only if policy authority has not changed during IO."""
-        current = UnifiedPolicyRepository(self.session).effective(user_id, lock=True)
+        current = UnifiedPolicyRepository(self.session).accounting_policy(user_id, lock=True)
         if current is None or current.recovery_payload() != expected_policy:
             raise ValueError("SQL policy changed during controlled recovery")
         if epoch < current.quota_epoch:
@@ -366,7 +366,7 @@ class DshUsageRepository:
                 )
                 if row.tenant_id == tenant
             ]
-            policy = UnifiedPolicyRepository(self.session).effective(user_id)
+            policy = UnifiedPolicyRepository(self.session).accounting_policy(user_id)
             unknown_pending = self.unknown_pending(user_id)
         if not rows or policy is None or any(row.projected_at is None for row in rows):
             raise ValueError("No trustworthy persisted usage snapshot exists")
@@ -416,7 +416,7 @@ class DshUsageRepository:
                 )
                 if row.tenant_id == tenant
             ]
-            policy = UnifiedPolicyRepository(self.session).effective(user_id)
+            policy = UnifiedPolicyRepository(self.session).accounting_policy(user_id)
         if calls or tool_calls or totals or policy is None:
             raise ValueError("Month history is not proven empty")
         return {

@@ -4,24 +4,30 @@
  * Inflight  : `⏳ 正在调用 {display_name} 工具` (no chips)
  * Finished  : `✓ 已{动作}{类别} ({N} 个结果)` + inline chip badges for each result
  * Failed    : `⚠️ {display_name} 失败: {error}`
+ * Stopped   : neutral `{display_name} stopped` — the user stopped the run while
+ *             the call was running (F004); not a failure, no error detail
  *
  * 3 variants via `tool_type`:
  *   - "knowledge"   → 「已检索知识 (N 个结果)」, doc-style chips
  *   - "web"         → 「已联网搜索 (N 个结果)」, site-style chips (title + source)
- *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview
+ *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview;
+ *                     "查看代码和输出" opens the
+ *                     call's parameters and output (ToolCodeOutput, F004 T060)
  */
 import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from "bisheng-icons";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, StopCircle } from "lucide-react";
 import { memo, useEffect, useState, type FC } from "react";
 import type { AgentToolCall } from "~/api/chatApi";
 import { isMemoryToolEvent } from "~/api/memory";
 import { MemorySearchHits } from "~/components/Memory/MemorySearchHits";
 import { describeMemoryStep, memoryStepLabel, mergeMemorySearchSteps } from "~/components/Memory/memoryStep";
 import { useLocalize } from "~/hooks";
+import { STOPPED_TOOL_NOTE } from "~/hooks/unifiedRun";
 import { cn } from "~/utils";
 import { toolCallDisplayName } from "~/utils/toolCallName";
+import { ToolCodeOutput } from "./ToolCodeOutput";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
@@ -309,8 +315,12 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
     ),
 );
 
-const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall, showConnector = false }) => {
+const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall: storedCall, showConnector = false }) => {
     const localize = useLocalize();
+    // F004: a call that was running when the user stopped the run is stored
+    // with this note in `error`. It is shown as stopped, not as a failure.
+    const stopped = !storedCall.inflight && storedCall.error === STOPPED_TOOL_NOTE;
+    const toolCall = stopped ? { ...storedCall, error: null } : storedCall;
     const variant = classifyToolType(toolCall);
     const rawResults = toolCall.error ? [] : parseResults(toolCall.results);
     // Per v2.5 spec §3:
@@ -336,7 +346,9 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall, showConnector = f
                     ? ((toolCall.tool_name || "").toLowerCase() === "web_fetch" ? "web_fetch" : "web_search")
                     : "tool";
         const state = toolCall.inflight ? "running" : toolCall.error ? "failed" : "done";
-        return localize(`com_tools_state_${phase}_${state}`, { name });
+        return stopped
+            ? localize("runMessage.toolStopped", { name })
+            : localize(`com_tools_state_${phase}_${state}`, { name });
     })();
     const style = variantStyles[variant];
     // Panel only renders when there is actual content: errors, or finished
@@ -372,6 +384,8 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall, showConnector = f
         <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
     ) : toolCall.error ? (
         <AlertCircle size={16} className="shrink-0 text-red-500" />
+    ) : stopped ? (
+        <StopCircle size={16} className="shrink-0 text-text-3" data-testid="tool-call-stopped" />
     ) : (
         style.icon
     );
@@ -387,6 +401,8 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall, showConnector = f
                 )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
+                {/* flex-wrap: the "view code and output" block takes its own line under the label. */}
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2">
                 <button
                     type="button"
                     onClick={hasDetails && !toolCall.inflight ? () => setExpanded((v) => !v) : undefined}
@@ -416,6 +432,8 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall, showConnector = f
                         />
                     )}
                 </button>
+                {variant === "tool" && <ToolCodeOutput toolCall={toolCall} />}
+                </div>
                 <div
                     className={cn("grid transition-all duration-300 ease-out", expanded && "mt-2")}
                     style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}

@@ -117,9 +117,13 @@ class TestHistory:
         assert (await _history(_user(), "in-scope")).data == ["msg"]
 
     async def test_out_of_scope_auditor_refused(self, db, menu_role_of_dept_3):
-        with pytest.raises(HTTPException):
+        from bisheng.common.errcode.http_error import UnAuthorizedError
+
+        with pytest.raises(UnAuthorizedError):
             await _history(_user(), "out-of-scope")
 
     async def test_plain_user_refused(self, db):
-        with pytest.raises(HTTPException):
+        from bisheng.common.errcode.http_error import UnAuthorizedError
+
+        with pytest.raises(UnAuthorizedError):
             await _history(_user(), "in-scope")

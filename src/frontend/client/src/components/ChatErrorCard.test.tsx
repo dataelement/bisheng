@@ -2,6 +2,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { createInstance } from "i18next";
 import zh from "~/locales/zh-Hans/translation.json";
 import apiErrors from "~/locales/zh-Hans/api_errors.gen.json";
+import en from "~/locales/en/translation.json";
+import enApiErrors from "~/locales/en/api_errors.gen.json";
+import ja from "~/locales/ja/translation.json";
+import jaApiErrors from "~/locales/ja/api_errors.gen.json";
 import { ChatErrorCard } from "./ChatErrorCard";
 
 const mockI18n = createInstance();
@@ -76,4 +80,48 @@ describe("unclassified task failure", () => {
         expect(screen.getByText("Redacted detail")).toBeInTheDocument();
         expect(screen.getByText(/test-failure/)).toBeInTheDocument();
     });
+});
+
+// 114, 2026-11-18: with the unified runtime on, a failed direct answer showed
+// the deep-research card ("任务执行失败"). On the chat surface the card reads as
+// a reply that failed and says what to do.
+describe("chat surface (direct answer)", () => {
+    it.each(["unknown", "lease_expired", "task_aborted", undefined])("shows a failed reply for type %s", (errorType) => {
+        render(<ChatErrorCard surface="chat" hideHint errorType={errorType} errorCode={11091} referenceId="run-1" />);
+        expect(screen.getByText(zh.com_linsight_error_title_chat_unknown)).toBeInTheDocument();
+        expect(screen.getByText(zh.com_linsight_error_desc_chat_unknown)).toBeInTheDocument();
+        expect(screen.queryByText(zh.com_linsight_error_title_unknown)).not.toBeInTheDocument();
+        expect(screen.getByText(apiErrors.failure_id_hint)).toBeInTheDocument();
+    });
+
+    it.each(["content_filter", "quota_exhausted", "credit_exhausted", "auth_error", "context_overflow", "context_compress_failed", "output_truncated"] as const)(
+        "uses the chat description for %s",
+        (errorType) => {
+            render(<ChatErrorCard surface="chat" hideHint errorType={errorType} />);
+            expect(screen.getByText(zh[`com_linsight_error_title_${errorType}`])).toBeInTheDocument();
+            const desc = zh[`com_linsight_error_desc_chat_${errorType}`];
+            // The chat description is its own copy, not the task one.
+            expect(desc).not.toBe(zh[`com_linsight_error_desc_${errorType}`]);
+            expect(screen.getByText(desc)).toBeInTheDocument();
+        },
+    );
+
+    it("keeps the task copy on the deep-research card", () => {
+        render(<ChatErrorCard errorType="quota_exhausted" />);
+        expect(screen.getByText(zh.com_linsight_error_desc_quota_exhausted)).toBeInTheDocument();
+    });
+
+    it("renders no detail toggle when there is nothing to show", () => {
+        render(<ChatErrorCard surface="chat" hideHint errorType="chat_unknown" referenceId="run-1" />);
+        expect(screen.queryByText(zh.com_linsight_error_view_detail)).not.toBeInTheDocument();
+    });
+});
+
+it("has the chat descriptions and the reference hint in every locale", () => {
+    const keys = Object.keys(zh).filter((key) => key.startsWith("com_linsight_error_desc_chat_"));
+    expect(keys).toHaveLength(8);
+    for (const [table, errors] of [[en, enApiErrors], [ja, jaApiErrors]] as const) {
+        for (const key of keys) expect((table as Record<string, unknown>)[key]).toBeTruthy();
+        expect(errors.failure_id_hint).toBeTruthy();
+    }
 });

@@ -1,3 +1,5 @@
+import { referenceErrorMessage } from '@bisheng/api-client';
+
 type LocalizeFn = (key: string, options?: Record<string, unknown>) => string;
 
 const WEB_LINK_ERROR_KEY_MAP: Record<string, string> = {
@@ -56,6 +58,8 @@ export function resolveLocalizedKnowledgeImportError(
 ) {
     const statusCode = error?.status_code ?? error?.statusCode;
     const errorData = error?.data ?? error?.errorData ?? {};
+    const referenceMessage = referenceErrorMessage({ status_code: statusCode, data: errorData }, (key, values) => localize(`api_errors.${key}`, values));
+    if (referenceMessage) return referenceMessage;
     const rawMessage = (
         typeof error?.status_message === "string" && error.status_message
             ? error.status_message

@@ -83,15 +83,9 @@ class ProcessingJobService:
             }
             for row in scope
         }
-        targets["models"] = {
-            f"{item.target.key.target_type.value}:{item.target.key.target_id}": item.target.target_revision
-            for item in preview.bindings.verified.context.receipts
-        }
         source = {
             "model_config_revision": preview.expected_revision,
             "index_generation": preview.expected_generation,
-            "source_root_revision": preview.bindings.expected_revision,
-            "old_references_digest": preview.bindings.verified.context.old_references_digest,
         }
         return targets, source
 
@@ -246,8 +240,13 @@ class ProcessingJobService:
         self.require_rebuild_scope_ready(scope)
         targets, source = self._versions(preview, scope)
         if (
-            targets != plan.target_revisions
-            or source != plan.source_revisions
+            targets != {key: value for key, value in plan.target_revisions.items() if key != "models"}
+            or source
+            != {
+                key: value
+                for key, value in plan.source_revisions.items()
+                if key not in {"source_root_revision", "old_references_digest"}
+            }
             or [row.target.model_dump(mode="json") for row in scope] != plan.target_manifest
         ):
             raise KnowledgeOperationPlanChangedError()

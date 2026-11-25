@@ -7,14 +7,23 @@ import {
   collectConversationWorkspaceFiles,
   getWorkspaceLoadState,
 } from "~/components/Linsight/Artifacts/artifactUtils";
+import { useNewLiveArtifacts } from "~/components/Linsight/Artifacts/liveWorkspaceFiles";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
-import { SopStatus } from "~/store/linsight";
-import {
-  findPendingUserInput,
-  splitSessionPseudoTask,
-} from "~/components/Linsight/Execution/stepUtils";
-import type { ExecStepEventData } from "~/components/Linsight/Execution/stepUtils";
 import { collectChatAttachments } from "../attachments/collectChatAttachments";
+import { useRunStore } from "~/store/runStore";
+
+/**
+ * F004 (T050): true while the run of this conversation waits for the user's
+ * answer. The input box then takes the answer directly, so its placeholder
+ * changes.
+ */
+export function useRunAwaitingAnswer(conversationId: string): boolean {
+  return useRunStore((state) => {
+    if (!conversationId) return false;
+    const run = state.conversations[conversationId]?.run;
+    return run?.status === "waiting" && !!run.pendingQuestion;
+  });
+}
 
 export function useTaskWorkspaceState({
   conversationId,
@@ -25,7 +34,7 @@ export function useTaskWorkspaceState({
   taskVersionIds,
   latestTaskVersionId,
 }: UseTaskWorkspaceStateOptions) {
-  const { getLinsight, updateLinsight, linsightMap } = useLinsightManager();
+  const { getLinsight, linsightMap } = useLinsightManager();
   const taskArtifacts = useWorkspacePanel(latestTaskVersionId, conversationId);
   const chatAttachments = useMemo(
     () => collectChatAttachments(messages),
@@ -180,44 +189,26 @@ export function useTaskWorkspaceState({
     },
     [],
   );
+  // F004 (T060): files of the current run show up before the history reload.
+  // They ride along with the attachments, which every workspace surface (entry
+  // button, docked / fullscreen / mobile panel) already lists.
+  const knownWorkspaceFiles = useMemo(
+    () => [...chatAttachments, ...taskWorkspaceFiles],
+    [chatAttachments, taskWorkspaceFiles],
+  );
+  const liveWorkspaceFiles = useNewLiveArtifacts(knownWorkspaceFiles, conversationId);
+  const workspaceAttachments = useMemo(
+    () => (liveWorkspaceFiles.length ? [...chatAttachments, ...liveWorkspaceFiles] : chatAttachments),
+    [chatAttachments, liveWorkspaceFiles],
+  );
   const taskWorkspaceLoadState = useMemo(
     () => getWorkspaceLoadState(taskVersionIds, linsightMap, taskLoadFailedIds),
     [taskVersionIds, linsightMap, taskLoadFailedIds],
   );
 
-  // F035: while the latest task round is in a non-terminal state (generating /
-  // running / queued), the input stays editable but the send button is disabled
-  // — the next round can only be submitted after the current one finishes.
-  const taskRunning = useMemo(() => {
-    const status = taskLinsight?.status;
-    return (
-      status === SopStatus.NotStarted ||
-      status === SopStatus.SopGenerating ||
-      status === SopStatus.SopGenerated ||
-      status === SopStatus.Running
-    );
-  }, [taskLinsight]);
-
-  // A parked task (ask_user awaiting the user's reply) keeps status === Running —
-  // park is not a distinct live status — so taskRunning stays true even though the
-  // agent is suspended on an interrupt and nothing is executing. Detect the park
-  // (an unanswered call_user_input in the latest task turn) so the input can drop
-  // the misleading "running" Stop button and show a "waiting for your reply" hint;
-  // the user answers via the ClarifyCard in the message stream, not this input.
-  const awaitingUserInput = useMemo(() => {
-    if (!taskRunning || !taskLinsight) return false;
-    const { tasks, sessionSteps } = splitSessionPseudoTask(
-      (taskLinsight.tasks as Parameters<typeof splitSessionPseudoTask>[0]) ||
-        [],
-      (taskLinsight.sessionSteps as ExecStepEventData[]) || [],
-    );
-    return !!findPendingUserInput(sessionSteps, tasks);
-  }, [taskRunning, taskLinsight]);
-
   return {
-    updateLinsight,
     taskArtifacts,
-    chatAttachments,
+    chatAttachments: workspaceAttachments,
     dockedCardRef,
     compareFreeze,
     fsMounted,
@@ -228,7 +219,5 @@ export function useTaskWorkspaceState({
     taskWorkspaceFiles,
     reportTaskTurnLoadFailed,
     taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
   };
 }

@@ -16,9 +16,8 @@ they only activate when explicitly requested in function signatures.
 Created by F000-test-infrastructure. Expanded from F001 minimal conftest.
 """
 
-# Explicit, temporary unit-test deployment bootstrap must exist before the
-# pre-mock import chain imports ConfigService during collection. Production
-# startup has no such fallback. Live acceptance uses its own --confcutdir.
+# Provide explicit throwaway deployment credentials before application imports.
+# Production has no default key; tests must not depend on a developer's secrets.
 import json
 import os
 import tempfile
@@ -69,7 +68,7 @@ from test.fixtures.table_definitions import create_all_tables
 
 @pytest.fixture(autouse=True)
 def _credential_keys(tmp_path, monkeypatch):
-    """Explicit, throwaway deployment key for tests; never a product default."""
+    """Give each test a private keyring without changing runtime admission rules."""
     from bisheng.core.config.secret_crypto import get_keyring
 
     path = tmp_path / "deployment-keyring.json"
@@ -95,6 +94,59 @@ def _local_code_tests_stay_unisolated(monkeypatch, _credential_keys):
     if conf is None or not hasattr(conf, "local_isolation"):
         return
     monkeypatch.setattr(conf, "local_isolation", "off", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _direct_run_outside_services(monkeypatch):
+    """A direct run reads the workbench prompt (database) and logs telemetry
+    (Elasticsearch) by default. Unit tests have neither; a test that checks them
+    injects its own ``workbench_prompt`` / ``log_telemetry`` into ``DirectRunner``.
+    """
+    import sys
+
+    module = sys.modules.get("bisheng.workstation.domain.services.direct_run")
+    if module is None:
+        return
+
+    async def no_prompt():
+        return None
+
+    async def no_telemetry(_ctx, _started_at):
+        return None
+
+    monkeypatch.setattr(module, "workbench_system_prompt", no_prompt)
+    monkeypatch.setattr(module, "log_daily_chat_telemetry", no_telemetry)
+
+
+@pytest.fixture(autouse=True)
+def _no_auto_enabled_capabilities(request, monkeypatch):
+    """F005 reads the auto-enabled tools from the tenant config (on every
+    workbench send, in the capability center and on a personal opt-out) and
+    mounts the user's skills on every direct run. Tests that do not cover F005
+    have neither a database nor a skill store, so all of it defaults to
+    "nothing". A test that exercises the real path opts out with
+    ``@pytest.mark.real_auto_enabled``.
+    """
+    if request.node.get_closest_marker("real_auto_enabled"):
+        return
+    from types import SimpleNamespace
+
+    from bisheng.workstation.domain.services.direct_run import DirectRunner
+    from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+    async def _unchanged(cls, data, login_user):
+        return data
+
+    async def _no_skills(self, ctx, backend):
+        return SimpleNamespace(copied=[], failed=[], snapshot=[])
+
+    async def _no_ids(cls):
+        return set()
+
+    monkeypatch.setattr(WorkStationService, "awith_auto_enabled_tools", classmethod(_unchanged))
+    monkeypatch.setattr(WorkStationService, "aauto_enabled_tool_ids", classmethod(_no_ids))
+    monkeypatch.setattr(WorkStationService, "auto_enabled_tool_ids", classmethod(lambda cls: set()))
+    monkeypatch.setattr(DirectRunner, "_default_provision_skills", _no_skills)
 
 
 @pytest.fixture()

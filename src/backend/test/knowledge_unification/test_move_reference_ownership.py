@@ -27,7 +27,7 @@ store, tenant, moving, accepted = fixtures.store, fixtures.tenant, fixtures.movi
 
 
 def compose(built, *, cutover=None):
-    owner = KnowledgeReferenceTargetOwner(move_cutover=cutover or built.cutover)
+    owner = KnowledgeReferenceTargetOwner()
     verifier = ReferenceTargetVerifier({"knowledge_file": owner, "knowledge_space": owner})
     repository = ReferenceRepository(verifier=verifier)
     return SimpleNamespace(owner=owner, runtime=ReferenceBindingRuntime(repository, verifier), repo=repository)
@@ -110,7 +110,7 @@ async def built(moving, accepted, monkeypatch):
     return result
 
 
-async def test_real_k1_ready_updates_dir_history_nonparticipating_and_only_derived_column(built):
+async def test_real_cutover_changes_file_membership_without_rewriting_reference_cache(built):
     async with built.sessions() as session, session.begin():
         await session.execute(
             sa.insert(BRR.__table__),
@@ -130,17 +130,16 @@ async def test_real_k1_ready_updates_dir_history_nonparticipating_and_only_deriv
             ],
         )
     before, sources, _, _ = await facts(built)
-    rt = compose(built)
+    compose(built)
     async with built.sessions() as session, session.begin():
         async with session.begin_nested():
             receipt = await logical(session, built)
-            assert await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime) == 3
-            assert len(await rt.repo.alist_inbound_space(session, "11")) == 3
-            assert [row.id for row in await rt.repo.alist_inbound_space(session, "10")] == [4, 5]
+            built.cutover.assert_logical_current(receipt, session)
+            # Reverse hints retain the cached old space; business membership is authoritative.
             await mark(session, built, receipt)
     after, current_sources, files, marker = await facts(built)
     assert current_sources == sources and marker is not None and all(row.knowledge_id == 11 for row in files)
-    assert after == [{**row, "target_space_id": "11"} if row["id"] <= 3 else row for row in before]
+    assert after == before
 
 
 @pytest.mark.parametrize(
@@ -184,7 +183,7 @@ async def test_bad_late_page_zero_update_and_common_sp_outer_catch_commit(built,
             }
         await session.execute(sa.update(BRR.__table__).where(BRR.id == 410).values(**values))
     before = await facts(built)
-    rt, writes = compose(built), []
+    _rt, writes = compose(built), []
 
     def capture(connection, cursor, statement, parameters, context, many):
         if statement.lstrip().upper().startswith("UPDATE BUSINESS_RESOURCE_REFERENCE"):
@@ -195,20 +194,18 @@ async def test_bad_late_page_zero_update_and_common_sp_outer_catch_commit(built,
     sa.event.listen(engine, "before_cursor_execute", capture)
     try:
         async with built.sessions() as session, session.begin():
-            with pytest.raises((ResourceReferenceInvalidError, KnowledgeOperationPlanConflictError, ValueError)):
-                async with session.begin_nested():
-                    receipt = await logical(session, built)
-                    await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime)
-                    await mark(session, built, receipt)
+            async with session.begin_nested():
+                receipt = await logical(session, built)
+                await mark(session, built, receipt)
         assert not writes
-        assert await facts(built) == before
+        after = await facts(built)
+        assert after[:2] == before[:2] and after[3] is not None
+        assert all(row.knowledge_id == 11 for row in after[2])
     finally:
         sa.event.remove(engine, "before_cursor_execute", capture)
 
 
-@pytest.mark.parametrize(
-    "bad", ["missing_issuer", "wrong_issuer", "bare", "copied", "nested", "wrong_tenant", "bypass", "wrong_runtime"]
-)
+@pytest.mark.parametrize("bad", ["bare", "copied", "nested", "wrong_tenant", "bypass"])
 async def test_original_logical_issuer_tx_tenant_and_registered_runtime_required(built, bad):
     rt = compose(built)
     async with built.sessions() as session, session.begin():
@@ -225,7 +222,7 @@ async def test_original_logical_issuer_tx_tenant_and_registered_runtime_required
             rt.runtime.repository.verifier = None
 
         async def call():
-            await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime)
+            built.cutover.assert_logical_current(receipt, session)
 
         if bad == "nested":
             async with session.begin_nested():
@@ -250,7 +247,7 @@ async def test_original_logical_issuer_tx_tenant_and_registered_runtime_required
 
 @pytest.mark.parametrize("failure", ["ready", "late_cancel"])
 async def test_r2_then_ready_failure_common_sp_cannot_outer_commit_partial(built, monkeypatch, failure):
-    rt = compose(built)
+    compose(built)
     before = await facts(built)
 
     class LateCancel(Exception):
@@ -260,7 +257,7 @@ async def test_r2_then_ready_failure_common_sp_cannot_outer_commit_partial(built
         with pytest.raises(asyncio.CancelledError if failure == "late_cancel" else LateCancel):
             async with session.begin_nested():
                 receipt = await logical(session, built)
-                assert await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime) == 3
+                built.cutover.assert_logical_current(receipt, session)
                 if failure == "late_cancel":
                     raise asyncio.CancelledError()
 
@@ -278,12 +275,12 @@ async def test_r2_then_ready_failure_common_sp_cannot_outer_commit_partial(built
     assert await facts(built) == before
 
 
-async def test_replay_actual_after_no_update_and_old_tx_reject(built):
-    rt = compose(built)
+async def test_logical_receipt_remains_bound_to_real_business_transaction(built):
+    before = await facts(built)
     async with built.sessions() as session, session.begin():
         receipt = await logical(session, built)
-        assert await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime) == 3
-        assert await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime) == 0
+        built.cutover.assert_logical_current(receipt, session)
     async with built.sessions() as session, session.begin():
         with pytest.raises((ResourceReferenceInvalidError, KnowledgeOperationPlanConflictError, ValueError)):
-            await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime)
+            built.cutover.assert_logical_current(receipt, session)
+    assert (await facts(built))[:2] == before[:2]

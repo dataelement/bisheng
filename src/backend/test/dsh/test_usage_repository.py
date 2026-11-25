@@ -9,18 +9,20 @@ from sqlalchemy import Column, DateTime, Integer, MetaData, Table, create_engine
 from sqlalchemy.engine import make_url
 from sqlmodel import Session, SQLModel
 
+from bisheng.core.context.tenant import current_tenant_id
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.role import Role
-from bisheng.database.models.tenant import Tenant
-from bisheng.user.domain.models.user_role import UserRole
-from bisheng.dsh.domain.models.unified_policy import CreditRule, ModelVisibility, PersonalLedgerState
-from bisheng.core.context.tenant import current_tenant_id
+from bisheng.database.models.role_access import RoleAccess
+from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
 from bisheng.dsh.domain.models.subject_policy import DshSubjectPolicy, DshSubjectPolicyAudit
 from bisheng.dsh.domain.models.tool_call import DshToolCall
+from bisheng.dsh.domain.models.unified_policy import CreditRule, ModelVisibility, PersonalLedgerState
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository, UsageEvent
+from bisheng.user.domain.models.user import User
+from bisheng.user.domain.models.user_role import UserRole
 
 
 def event(user=20, **changes):
@@ -57,7 +59,22 @@ def usage_db():
             raise ValueError("External tests require an explicitly isolated dsh_test_ database")
     engine = create_engine(url)
     tables = [
-        *[model.__table__ for model in (Tenant, Department, UserDepartment, Role, UserRole, CreditRule, ModelVisibility, PersonalLedgerState)],
+        *[
+            model.__table__
+            for model in (
+                Tenant,
+                User,
+                UserTenant,
+                Department,
+                UserDepartment,
+                Role,
+                RoleAccess,
+                UserRole,
+                CreditRule,
+                ModelVisibility,
+                PersonalLedgerState,
+            )
+        ],
         DshUserPolicy.__table__,
         DshSubjectPolicy.__table__,
         DshSubjectPolicyAudit.__table__,
@@ -66,9 +83,16 @@ def usage_db():
         DshMonthlyUsage.__table__,
     ]
     if url == "sqlite://":
-        role_table = Table("userrole", MetaData(), Column("id", Integer, primary_key=True),
-                           Column("user_id", Integer), Column("role_id", Integer),
-                           Column("tenant_id", Integer), Column("create_time", DateTime), Column("update_time", DateTime))
+        role_table = Table(
+            "userrole",
+            MetaData(),
+            Column("id", Integer, primary_key=True),
+            Column("user_id", Integer),
+            Column("role_id", Integer),
+            Column("tenant_id", Integer),
+            Column("create_time", DateTime),
+            Column("update_time", DateTime),
+        )
         tables = [role_table if table is UserRole.__table__ else table for table in tables]
     if any(inspect(engine).has_table(table.name) for table in tables):
         raise ValueError("Refusing to modify pre-existing DSH test tables")
@@ -76,9 +100,19 @@ def usage_db():
     token = current_tenant_id.set(2)
     with Session(engine) as session:
         session.add_all([DshUserPolicy(model_id=4, enabled=1, tenant_id=2, user_id=u, updated_by=1) for u in (20, 21)])
-        session.add(Tenant(id=2, tenant_code="usage-test", tenant_name="Usage test"))
+        session.add(Tenant(id=2, tenant_code="usage-test", tenant_name="Usage test", root_dept_id=10))
+        session.add(Department(id=10, dept_id="root", name="Root", tenant_id=2, path="/10/"))
+        for user_id in (20, 21):
+            session.add(User(user_id=user_id, user_name=f"user-{user_id}", password=str(uuid4())))
+            session.add(UserTenant(id=user_id, tenant_id=2, user_id=user_id, is_active=1, status="active"))
+            session.add(UserDepartment(id=user_id, department_id=10, user_id=user_id, is_primary=1))
         session.add(ModelVisibility(tenant_id=2, model_id=4, everyone=True, subjects=[], updated_by=1))
-        session.add_all([CreditRule(tenant_id=2, subject_type="USER", subject_id=u, monthly_token_limit=100, updated_by=1) for u in (20, 21)])
+        session.add_all(
+            [
+                CreditRule(tenant_id=2, subject_type="USER", subject_id=u, monthly_token_limit=100, updated_by=1)
+                for u in (20, 21)
+            ]
+        )
         session.add_all([PersonalLedgerState(tenant_id=2, user_id=u) for u in (20, 21)])
         session.commit()
     yield engine

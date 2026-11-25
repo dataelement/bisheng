@@ -1,15 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { prepareBrowserHeaders } from '~/api/request';
-import { openChatStream, type SSESubmission } from './useAiChatSSE';
 import useStreamChatSSE, { type StreamChatSSESubmission } from './useStreamChatSSE';
 
 // Keep the real SSE library: its default constructor sends immediately.
 jest.mock('~/api/request', () => ({ prepareBrowserHeaders: jest.fn(), translateApiErrorMessage: () => '' }));
-jest.mock('~/api/chatApi', () => ({ getSSEUrl: () => '/workspace/api/v1/workstation/chat/completions' }));
-jest.mock('~/layouts/WorkbenchSidebar/projectChatCreation', () => ({
-  captureProjectChatDraft: () => null,
-  bindProjectChatCreation: () => ({}),
-}));
 
 const prepare = jest.mocked(prepareBrowserHeaders);
 const requests: Array<{ headers: Record<string, string>; body: unknown }> = [];
@@ -40,20 +34,9 @@ afterEach(async () => {
   jest.restoreAllMocks();
 });
 
-function start(kind: 'task' | 'stream') {
+function start() {
   const onError = jest.fn();
   const onEnd = jest.fn();
-  if (kind === 'task') {
-    const submission: SSESubmission = {
-      payload: { task_mode: true, text: 'Question' }, projectDraft: null,
-      userMessage: { conversationId: '', messageId: 'question', parentMessageId: '', sender: 'user', text: 'Question' },
-      flowLeaseId: 'lease-1', onCreated: jest.fn(), onMessage: jest.fn(), onFinal: jest.fn(),
-      onStart: jest.fn(), onError, onEnd,
-    };
-    const handle = openChatStream(submission, key => key);
-    cleanups.push(handle.close);
-    return { close: handle.close, onError, onEnd };
-  }
   const submission: StreamChatSSESubmission = {
     sseUrl: '/workspace/api/v1/channel/chat', payload: { question: 'Question' },
     onStart: jest.fn(), onMessage: jest.fn(), onFinal: jest.fn(), onError, onEnd,
@@ -63,27 +46,23 @@ function start(kind: 'task' | 'stream') {
   return { close: hook.unmount, onError, onEnd };
 }
 
-it.each(['task', 'stream'] as const)('%s sends only once after the tenant proof is ready', async kind => {
-  start(kind);
+it('sends only once after the tenant proof is ready', async () => {
+  start();
   expect(requests).toHaveLength(0);
   await act(async () => { resolveScope({ 'X-Management-Tenant': '25' }); });
   expect(requests).toHaveLength(1);
   expect(requests[0].headers).toMatchObject({ 'Content-Type': 'application/json', 'X-Management-Tenant': '25' });
-  if (kind === 'task') {
-    expect(requests[0].headers['X-Flow-Lease-Id']).toBe('lease-1');
-    expect(JSON.parse(String(requests[0].body)).task_mode).toBe(true);
-  }
 });
 
-it.each(['task', 'stream'] as const)('%s never sends if canceled while waiting for the tenant', async kind => {
-  const handle = start(kind);
+it('never sends if canceled while waiting for the tenant', async () => {
+  const handle = start();
   handle.close();
   await act(async () => { resolveScope({ 'X-Management-Tenant': '25' }); });
   expect(requests).toHaveLength(0);
 });
 
-it.each(['task', 'stream'] as const)('%s reports tenant bootstrap failure without submitting a question', async kind => {
-  const handle = start(kind);
+it('reports tenant bootstrap failure without submitting a question', async () => {
+  const handle = start();
   await act(async () => { rejectScope(new Error('scope unavailable')); });
   expect(requests).toHaveLength(0);
   expect(handle.onError).toHaveBeenCalledTimes(1);

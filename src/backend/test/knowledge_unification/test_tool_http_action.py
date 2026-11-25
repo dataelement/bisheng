@@ -32,7 +32,7 @@ def tool_http(monkeypatch):
     return SimpleNamespace(app=app, user=user, rows=rows, listing=listing, identities=identities)
 
 
-@pytest.mark.parametrize("action", [None, "use", "visible"])
+@pytest.mark.parametrize("action", [None, "visible"])
 @pytest.mark.parametrize("is_preset", [None, 0, 1, 2])
 async def test_tool_query_preserves_filters_identity_and_envelope(tool_http, action, is_preset):
     case = tool_http
@@ -57,7 +57,7 @@ async def test_tool_openapi_default_is_visible(tool_http):
     assert parameter["schema"]["default"] == "visible"
 
 
-@pytest.mark.parametrize("action", ["edit", "delete", "publish", "use_kb", "unknown"])
+@pytest.mark.parametrize("action", ["use", "edit", "delete", "publish", "use_kb", "unknown"])
 async def test_unsupported_tool_query_stays_rejected(tool_http, action):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=tool_http.app), base_url="http://asgi", trust_env=False
@@ -75,5 +75,5 @@ async def test_tool_scope_and_resource_errors_never_become_successful_empty_list
         transport=httpx.ASGITransport(app=tool_http.app), base_url="http://asgi", trust_env=False
     ) as client:
         with pytest.raises(error):
-            await client.get("/api/v1/tool", params={"action": "use"})
+            await client.get("/api/v1/tool", params={"action": "visible"})
     assert tool_http.identities[0] is tool_http.user

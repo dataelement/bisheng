@@ -122,3 +122,23 @@ test('F016: shows the server credit ratio after model names, with the base model
   await user.click(screen.getByRole('treeitem', { name: 'Provider B' }));
   expect(screen.getByRole('treeitem', { name: 'Beta · 1.00x' })).toBeInTheDocument();
 });
+
+// F004 design §7 item 7: the selector is off while a run is in progress.
+test('a disabled selector explains itself on hover when a reason is given', async () => {
+  const view = render(<AiModelSelect options={options} value={1} disabled disabledReason="after the answer" onChange={jest.fn()} />);
+  const user = userEvent.setup();
+  const trigger = screen.getByRole('combobox', { name: 'com_ui_select_model' });
+  expect(trigger).toBeDisabled();
+  expect(screen.queryByRole('tooltip')).toBeNull();
+  await user.hover(trigger.closest('span[tabindex="0"]')!);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('after the answer');
+  // Enabled again: no hover zone is left around the selector.
+  view.rerender(<AiModelSelect options={options} value={1} disabled={false} disabledReason="after the answer" onChange={jest.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'com_ui_select_model' }).closest('span[tabindex="0"]')).toBeNull();
+  await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+});
+
+test('a disabled selector without a reason gets no hover zone', () => {
+  render(<AiModelSelect options={options} value={1} disabled onChange={jest.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'com_ui_select_model' }).closest('span[tabindex="0"]')).toBeNull();
+});

@@ -4,7 +4,7 @@ import { SpaceRole, VisibilityType } from "~/api/knowledge";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 
 jest.mock("~/api/knowledge", () => ({
-  SpaceRole: { CREATOR: "creator", ADMIN: "admin" },
+  SpaceRole: { CREATOR: "creator", ADMIN: "admin", MEMBER: "member" },
   VisibilityType: { PRIVATE: "private" },
 }));
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
@@ -68,4 +68,52 @@ it("shows the desktop batch menu as soon as a file is selected and hides it afte
   rerender(header(0));
   expect(screen.queryByRole("button", batchMenu)).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "com_knowledge.add_new" })).toBeVisible();
+});
+
+it.each([
+  [true, false, true, true],
+  [false, true, true, true],
+  [true, true, false, false],
+])("uses editable selected files without requiring space edit (space edit=%s, manage=%s, enabled=%s)", async (edit, manage, enabled, shown) => {
+  const onProcessSimilar = jest.fn();
+  render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <KnowledgeSpaceHeader
+        space={{
+          id: "1", name: "Space", role: SpaceRole.MEMBER, visibility: VisibilityType.PRIVATE,
+          creator: "Creator", creatorId: "7", memberCount: 1, fileCount: 2, totalFileCount: 2,
+          isPinned: false, createdAt: "", updatedAt: "", tags: [], isReleased: false,
+        }}
+        currentPath={[]}
+        onNavigateFolder={jest.fn()}
+        isSearching={false}
+        onCreateFolder={jest.fn()}
+        onTriggerUpload={jest.fn()}
+        onTriggerUploadFolder={jest.fn()}
+        onTriggerWebLink={jest.fn()}
+        selectedCount={1}
+        hasFoldersSelected={false}
+        hasFailedFiles={false}
+        onClearSelection={jest.fn()}
+        onBatchDownload={jest.fn()}
+        onBatchTag={jest.fn()}
+        onBatchRetry={jest.fn()}
+        onBatchDelete={jest.fn()}
+        canEditSpace={edit}
+        canManageMembers={manage}
+        versionManagementEnabled={enabled}
+        hasSimilarSelected
+        onProcessSimilar={onProcessSimilar}
+      />
+    </MemoryRouter>,
+  );
+  const label = "com_knowledge.version.header_process_similar_label";
+  if (shown) {
+    fireEvent.keyDown(screen.getByRole("button", { name: "com_knowledge.batch_operation" }), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: label }));
+    expect(onProcessSimilar).toHaveBeenCalledTimes(1);
+  } else {
+    expect(screen.queryByRole("button", { name: "com_knowledge.batch_operation" })).not.toBeInTheDocument();
+    expect(onProcessSimilar).not.toHaveBeenCalled();
+  }
 });

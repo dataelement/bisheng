@@ -71,6 +71,30 @@ it('saves search settings through the platform tool id and retains the masked ke
     expect(mocks.save).not.toHaveBeenCalled();
 });
 
+it('saves existing custom search settings without importing a schema or supplying proof', async () => {
+    const custom = {
+        operation: {
+            version: 2, server: 'https://search.example.test', method: 'GET', path: '/search',
+            declaration: { parameters: [], request_body: {}, responses: {}, security: null },
+            media_type: '', request: { query: {} }, auth: { location: 'none', name: '' }, response_mode: 'raw',
+        },
+        mapping: {},
+    };
+    mocks.getSearch.mockResolvedValue({
+        revision: 'revision-1', enabled: true, type: 'custom', prompt: '',
+        custom_secret_configured: false, providers: { custom },
+    });
+    render(<SharedToolSettings />);
+    fireEvent.click(screen.getByRole('button', { name: 'model.configureTool model.searchTool' }));
+    await screen.findByText('GET https://search.example.test/search');
+    fireEvent.click(screen.getByRole('button', { name: 'build.confirm' }));
+    await waitFor(() => expect(mocks.saveSearch).toHaveBeenCalledWith('16', expect.objectContaining({
+        type: 'custom', providers: { custom: expect.objectContaining({ operation: custom.operation }) },
+    })));
+    expect(mocks.saveSearch.mock.calls[0][1].providers.custom).not.toHaveProperty('proof');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
 it('retains the search draft and unlocks the dialog when the revision save fails', async () => {
     mocks.saveSearch.mockRejectedValue(new Error('conflicting revision'));
     render(<SharedToolSettings />);
