@@ -31,10 +31,18 @@ Interface (the run driver attaches projectors through its sink list):
 is asked by the driver before it writes the terminal event: it makes the answer's
 file copies and returns ``{"answer_files": [...]}`` for the event's ``data``, so
 the client learns the row's file ids with the event (``run_events.ANSWER_FILES_FIELD``).
+
+A run that asks the user parks after its ``ask_user`` event, and the answer
+resumes it in a new execution with a new projector. On ``ask_user`` this
+projector hands ``on_parked`` what the answer row has so far (``parked_state``);
+the caller keeps it in Redis, and the next projector of the run starts from it
+(``seed_events``), so the thinking and tool calls before each question stay on
+the single answer row (design §5 #34).
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import mimetypes
 import time
@@ -52,6 +60,7 @@ from bisheng.linsight.domain.services import file_events
 from bisheng.linsight.domain.services.workspace_backend import workspace_prefix_for
 from bisheng.workstation.domain.services import chat_service, direct_run_turn
 from bisheng.workstation.domain.services.daily_memory import redact_args, redact_error, redact_results
+from bisheng.workstation.domain.services.run_message_persist import ASK_USER_TOOL_NAME
 
 # What today's daily chat stores when a turn is torn down before it finished
 # (``persist_interrupted_turn("stream interrupted")``).
@@ -102,6 +111,7 @@ class DirectRunProjector:
         tool_meta: dict[str, dict[str, Any]] | None = None,
         on_persisted: Callable[[ChatMessage], Awaitable[None]] | None = None,
         object_store: Callable[[], Awaitable[Any]] | None = None,
+        on_parked: Callable[[dict], Awaitable[None]] | None = None,
         clock_ms: Callable[[], int] = _now_ms,
     ):
         self.run_id = run_id
@@ -115,6 +125,7 @@ class DirectRunProjector:
         self._tool_meta = tool_meta or {}
         self._on_persisted = on_persisted
         self._object_store = object_store
+        self._on_parked = on_parked
         self._clock_ms = clock_ms
 
         self.events: list[dict[str, Any]] = []
@@ -144,6 +155,53 @@ class DirectRunProjector:
             if isinstance(data, dict):
                 self._on_file(data)
 
+    def seed_events(self, events: list[dict], final_msg: str) -> None:
+        """The answer row as an earlier execution of the run left it (``parked_state``).
+
+        A tool call that had not ended stays open: a later end frame of the same
+        call completes it, else ``_finalise_dangling`` closes it.
+        """
+        self.events = [dict(entry) for entry in events if isinstance(entry, dict)]
+        self.final_msg = final_msg
+        self._thinking_idx = None
+        self._thinking_call_id = None
+        self._inflight_tools = {
+            str(entry.get("tool_call_id") or ""): idx
+            for idx, entry in enumerate(self.events)
+            if entry.get("type") == "tool_call" and entry.get("ended_at") is None and "results" not in entry
+        }
+
+    def parked_state(self, question: dict, now_ms: int) -> dict[str, Any]:
+        """What the answer row has when the run parks on ``question`` (the ``ask_user`` data).
+
+        ``{"msg", "events"}``. The ``ask_user`` tool call carries the question as
+        its ``args`` and no ``results``; when the interrupt came without such a
+        call, an entry is added for it.
+        """
+        self._close_thinking(now_ms)
+        events = copy.deepcopy(self.events)
+        call_id = str(question.get("call_id") or "")
+        asked = next(
+            (
+                entry
+                for entry in events
+                if entry.get("type") == "tool_call" and entry.get("tool_call_id") == call_id and "results" not in entry
+            ),
+            None,
+        )
+        if asked is None:
+            asked = {
+                "type": "tool_call",
+                "tool_call_id": call_id,
+                "tool_name": ASK_USER_TOOL_NAME,
+                "display_name": ASK_USER_TOOL_NAME,
+                "tool_type": "tool",
+                "started_at": now_ms,
+            }
+            events.append(asked)
+        asked["args"] = dict(question)
+        return {"msg": self.final_msg, "events": events}
+
     @property
     def message_id(self) -> int | None:
         """Id of the saved answer row; None until the run ended."""
@@ -168,6 +226,8 @@ class DirectRunProjector:
             self._on_tool_call(data, now_ms)
         elif event_type == run_events.FILE:
             self._on_file(data)
+        elif event_type == run_events.ASK_USER:
+            await self._on_ask_user(data, now_ms)
         elif event_type == run_events.RUN_FINISHED:
             if data.get("content_safety"):
                 # The output scanner hit: the stored answer is the replacement
@@ -180,8 +240,7 @@ class DirectRunProjector:
             await self._persist(now_ms, error=None, stopped=True)
         elif event_type == run_events.RUN_FAILED:
             await self._persist(now_ms, error=self._failure_extra(data))
-        # plan / ask_user / steer_* / queued / run_started carry nothing the answer
-        # row stores.
+        # plan / steer_* / queued / run_started carry nothing the answer row stores.
 
     async def before_terminal(self, event: dict) -> dict[str, Any] | None:
         """Fields to add to the ``data`` of the terminal event about to be written.
@@ -214,6 +273,20 @@ class DirectRunProjector:
         await self._persist(self._clock_ms(), error={"error_msg": INTERRUPTED_REASON})
 
     # -- event accumulation (the shapes of chat_service's ``events`` log) ------
+
+    async def _on_ask_user(self, data: dict, now_ms: int) -> None:
+        """The run is about to park: hand over the answer row so far. Never raises."""
+        if self._on_parked is None:
+            return
+        try:
+            await self._on_parked(self.parked_state(data, now_ms))
+        except Exception:
+            # The resumed row then falls back to the text and the answered questions.
+            logger.exception(
+                "direct run run_id={} chat_id={}: could not keep the answer events of the parked run",
+                self.run_id,
+                self.conversation_id,
+            )
 
     def _replace_with_safety_reply(self, auto_reply: str) -> None:
         """Drop thinking, tool calls and the blocked text; keep only the auto reply."""
