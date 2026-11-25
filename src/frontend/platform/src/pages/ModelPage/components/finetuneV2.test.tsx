@@ -82,7 +82,7 @@ describe('new sample inference', () => {
 
 
 describe('formal single-page task submission', () => {
-    it('discovers the service model, preserves the real dataset count, and preflights before submission', async () => {
+    it('retries an empty model name with a decimal version and preflights before submission', async () => {
         const model: TrainingCapability = { capability_id: 'qwen3', model_name: 'Qwen3-0.6B', input_types: ['text'], training_methods: ['lora'], base_model_id: 3, registered: true, validation_status: 'gpu_smoke_passed' };
         vi.mocked(listTrainingServices).mockResolvedValue([{ id: 7, server: 'Customer training' }]);
         vi.mocked(discoverTrainingModels).mockResolvedValue({ models: [model] });
@@ -98,15 +98,20 @@ describe('formal single-page task submission', () => {
         await waitFor(() => expect(discoverTrainingModels).toHaveBeenCalledWith(7));
         await user.click(screen.getByRole('combobox', { name: 'finetune.baseModel' }));
         await user.click(await screen.findByRole('option', { name: 'Qwen3-0.6B' }));
-        fireEvent.change(screen.getByLabelText('finetune.finetuneModelName'), { target: { value: 'support-v1' } });
         fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImport' }));
         fireEvent.change(screen.getByLabelText('finetune.uploadDataset'), { target: { files: [new File(['data'], 'text.zip')] } });
         fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImportAndCheck' }));
         await screen.findByText('text.zip');
         fireEvent.change(screen.getByLabelText('finetune.param_max_steps'), { target: { value: '-1' } });
         await user.click(screen.getByRole('button', { name: 'finetune.checkAndCreate' }));
+        expect(screen.getByRole('alert')).toHaveTextContent('finetune.modelNameHint');
+        expect(preflightTraining).not.toHaveBeenCalled();
+        expect(submitTraining).not.toHaveBeenCalled();
+        fireEvent.change(screen.getByLabelText('finetune.finetuneModelName'), { target: { value: 'quwe3-0.6b-001' } });
+        await user.click(screen.getByRole('button', { name: 'finetune.checkAndCreate' }));
         await waitFor(() => expect(created).toHaveBeenCalledWith('new-task'));
-        expect(submitTraining).toHaveBeenCalledWith(expect.objectContaining({ server: 7, base_model: 3, capability_id: 'qwen3', data_type: 'text', train_data: [textData], extra_params: expect.objectContaining({ max_steps: -1, cutoff_len: 1024 }) }));
+        expect(submitTraining).toHaveBeenCalledWith(expect.objectContaining({ model_name: 'quwe3-0.6b-001', server: 7, base_model: 3, capability_id: 'qwen3', data_type: 'text', train_data: [textData], extra_params: expect.objectContaining({ max_steps: -1, cutoff_len: 1024 }) }));
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(vi.mocked(preflightTraining).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(submitTraining).mock.invocationCallOrder[0]);
     });
 });

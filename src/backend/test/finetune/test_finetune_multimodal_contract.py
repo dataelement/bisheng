@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from bisheng.common.errcode.finetune import InvalidDatasetPackageError
+from bisheng.common.errcode.finetune import InvalidDatasetPackageError, InvalidExtraParamsError
 from bisheng.finetune.domain.models.finetune import Finetune, TrainMethod
 from bisheng.finetune.domain.services.finetune import FinetuneService
 from bisheng.finetune.domain.sft_backend import SFTBackend
@@ -82,6 +82,17 @@ def test_legacy_task_fields_remain_nullable():
     task = Finetune(base_model_name="legacy", model_name="legacy-output", extra_params={})
     assert task.data_type is None
     assert task.capability_snapshot is None
+
+
+@pytest.mark.parametrize("name", ["quwe3-0.6b-001", "Qwen2.5-VL-3B-Instruct", "legacy_model-1", "A" * 50])
+def test_model_name_accepts_decimal_versions(name):
+    FinetuneService.validate_model_name(name)
+
+
+@pytest.mark.parametrize("name", ["", ".", "..", "../model", "model/child", "model\\child", "model name", "A" * 51])
+def test_model_name_rejects_paths_and_invalid_lengths(name):
+    with pytest.raises(InvalidExtraParamsError):
+        FinetuneService.validate_model_name(name)
 
 
 def test_contract_v2_accepts_matching_validated_dataset():

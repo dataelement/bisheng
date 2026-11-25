@@ -90,7 +90,7 @@ class FinetuneService(MultimodalFinetuneService):
 
     @classmethod
     def validate_model_name(cls, model_name: str) -> None:
-        if not isinstance(model_name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,50}", model_name):
+        if not isinstance(model_name, str) or not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,49}", model_name):
             raise InvalidExtraParamsError()
 
     @classmethod

@@ -75,7 +75,7 @@ export function CreateTask({ rtClick, gpuClick, onCancel, onCreate, servicesVers
     const handleCreate = async () => {
         setError('');
         if (!selected?.base_model_id || !serviceId) { setError(t('finetune.selectValidatedCapability')); return; }
-        if (!/^[a-zA-Z][a-zA-Z\d_-]{0,49}$/.test(modelName)) { setError(t('finetune.modelNameHint')); return; }
+        if (!/^[a-zA-Z][a-zA-Z\d_.-]{0,49}$/.test(modelName)) { setError(t('finetune.modelNameHint')); return; }
         if (files.length !== 1 || compatibleTrainingFiles(files, dataType).length !== files.length) { setError(t('finetune.selectCheckedDataset')); return; }
         if (!validTrainingParameters(visibleParameters)) { setError(t('finetune.invalidParameters')); return; }
         if (remote?.type === 'sftp' && !credentials.password) { setError(t('finetune.datasetSourcePasswordRequired')); return; }
