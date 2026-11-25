@@ -51,6 +51,7 @@ async def test_list_knowledge_dispatches_space_to_existing_space_service(monkeyp
 
     assert result == {"data": []}
     assert list_spaces.await_args.kwargs["name"] == "space"
+    assert list_spaces.await_args.kwargs["include_department"] is True
 
 
 @pytest.mark.asyncio

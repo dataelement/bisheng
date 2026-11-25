@@ -2388,8 +2388,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         name: str | None = None,
         page_size: int = 10,
         cursor: str | None = None,
+        include_department: bool = False,
     ) -> "PageInfiniteCursorData":
         """F030 AD-08: unified v2 list of "我创建的 + 我加入的" knowledge spaces.
+
+        ``include_department`` (MCP only; the v2 HTTP contract stays frozen) also merges the
+        department knowledge spaces the acting identity may view, using the same visibility
+        check as the in-product department space list.
 
         Reuses ``get_my_created_spaces`` + ``get_my_followed_spaces`` (each returns
         the fully-decorated ``KnowledgeRead`` list for ``self.login_user``), merges
@@ -2402,7 +2407,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
-        context = "filelib_space|mine_joined"
+        context = "filelib_space|mine_joined_dept" if include_department else "filelib_space|mine_joined"
         try:
             decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
         except CursorDecodeError as exc:
@@ -2415,8 +2420,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # exclude_created=True inside get_my_followed_spaces guarantees no overlap.
         joined = await self.get_my_followed_spaces()
 
+        department: list = []
+        if include_department:
+            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                DepartmentKnowledgeSpaceService,
+            )
+
+            department = await DepartmentKnowledgeSpaceService.get_user_department_spaces(
+                request=self.request,
+                login_user=self.login_user,
+            )
+
         merged: dict = {}
-        for space in [*created, *joined]:
+        # Created and joined spaces win over the department copy of the same space.
+        for space in [*department, *joined, *created]:
             merged[space.id] = space
         items = list(merged.values())
 

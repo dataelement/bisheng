@@ -97,6 +97,7 @@ async def list_knowledge(*, request: Request, command, version_repo, doc_repo):
             name=command.name,
             page_size=command.page_size,
             cursor=command.cursor,
+            include_department=True,
         )
     raise KnowledgeTypeNotSupportedError.http_exception()
 
