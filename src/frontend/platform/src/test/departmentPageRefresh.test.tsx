@@ -1,6 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import DepartmentPage from "@/pages/DepartmentPage";
-import { getDepartmentChildrenApi } from "@/controllers/API/department";
+import { createDepartmentApi, getDepartmentChildrenApi, getDepartmentPathTreeApi } from "@/controllers/API/department";
 import { fireEvent, render, screen, waitFor, within } from "@/test/test-utils";
 import type { DepartmentTreeNode } from "@/types/api/department";
 import type { ReactNode } from "react";
@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // F038: DepartmentPage lazy-loads the tree (root layer via getDepartmentChildrenApi).
 vi.mock("@/controllers/API/department", () => ({
+  createDepartmentApi: vi.fn(),
   getDepartmentChildrenApi: vi.fn(),
   getDepartmentPathTreeApi: vi.fn(() => Promise.resolve({ roots: [], total_matches: 0, truncated: false })),
   searchDepartmentsApi: vi.fn(() => Promise.resolve({ roots: [], total_matches: 0, truncated: false })),
@@ -33,8 +34,14 @@ vi.mock("@/pages/DepartmentPage/components/DepartmentSettingsDialog", () => ({
   ),
 }));
 
-vi.mock("@/pages/DepartmentPage/components/CreateDepartmentDialog", () => ({
-  CreateDepartmentDialog: () => null,
+vi.mock("@/components/bs-comp/department/TreeDepartmentSelect", () => ({
+  TreeDepartmentSelect: ({ onChange }: { onChange: (id: number) => void }) => (
+    <button type="button" onClick={() => onChange(3)}>Choose Team as parent</button>
+  ),
+}));
+
+vi.mock("@/components/bs-comp/selectComponent/DepartmentUsersSelect", () => ({
+  default: () => null,
 }));
 
 const dept: DepartmentTreeNode = {
@@ -54,7 +61,7 @@ const dept: DepartmentTreeNode = {
 
 const mockedChildren = vi.mocked(getDepartmentChildrenApi);
 
-describe("DepartmentPage member refresh", () => {
+describe("DepartmentPage tree and member refresh", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedChildren.mockReset();
@@ -76,6 +83,49 @@ describe("DepartmentPage member refresh", () => {
     // The root layer is refetched on change (the lazy equivalent of the old
     // full-tree refresh): once on mount, again after the settings change.
     expect(mockedChildren.mock.calls.filter(([parentId]) => parentId == null).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(["row", "toolbar"])("reveals a created subdepartment from the %s without a refresh", async (entry) => {
+    const root = { ...dept, has_children: true };
+    const division = { ...dept, id: 2, dept_id: "BS@division", name: "Division", parent_id: 1, path: "/1/2/", has_children: true };
+    const team = { ...dept, id: 3, dept_id: "BS@team", name: "Team", parent_id: 2, path: "/1/2/3/" };
+    const child = { ...dept, id: 4, dept_id: "BS@new", name: "New subdepartment", parent_id: 3, path: "/1/2/3/4/" };
+    let created = false;
+    mockedChildren.mockImplementation(async (parentId) => {
+      if (parentId === null) return [root];
+      if (parentId === root.id) return [division];
+      if (parentId === division.id) return [{ ...team, has_children: created }];
+      return parentId === team.id && created ? [child] : [];
+    });
+    vi.mocked(createDepartmentApi).mockImplementationOnce(async () => {
+      created = true;
+      return child;
+    });
+    vi.mocked(getDepartmentPathTreeApi).mockResolvedValueOnce({
+      roots: [{ ...root, children: [{ ...division, children: [{ ...team, has_children: true, children: [child] }] }] }],
+      total_matches: 1,
+      truncated: false,
+    });
+
+    const user = userEvent.setup();
+    render(<DepartmentPage />);
+    const divisionRow = (await screen.findByRole("button", { name: "Division" })).closest<HTMLElement>("[data-tree-row]")!;
+    if (entry === "row") {
+      await user.click(within(divisionRow).getByRole("button", { expanded: false }));
+      const teamRow = (await screen.findByRole("button", { name: "Team" })).closest<HTMLElement>("[data-tree-row]")!;
+      await user.click(within(teamRow).getByRole("button", { name: "bs:organization.createChildDepartmentFor" }));
+    } else {
+      await user.click(screen.getByRole("button", { name: "bs:department.create" }));
+      await user.click(screen.getByRole("button", { name: "Choose Team as parent" }));
+    }
+    await user.type(screen.getByPlaceholderText("bs:department.nameRequired"), child.name);
+    await user.click(screen.getByRole("button", { name: "confirmButton" }));
+
+    expect(createDepartmentApi).toHaveBeenCalledWith(expect.objectContaining({ name: child.name, parent_id: team.id }));
+    expect(await screen.findByRole("button", { name: "New subdepartment" })).toBeVisible();
+    const teamRow = screen.getByRole("button", { name: "Team" }).closest<HTMLElement>("[data-tree-row]")!;
+    expect(within(teamRow).getByRole("button", { expanded: true })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Root" })).toHaveAttribute("aria-current", "true");
   });
 
   it("leaves an empty arrow slot for a known leaf department", async () => {

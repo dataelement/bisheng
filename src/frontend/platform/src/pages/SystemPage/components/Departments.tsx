@@ -367,9 +367,9 @@ function DepartmentDirectory({ onTenantMounted }: DepartmentDirectoryProps) {
             event.preventDefault();
             createTriggerRef.current?.focus();
           }}
-          onCreated={() => {
+          onCreated={(departmentId) => {
             setCreateOpen(false);
-            void tree.reloadLayer(createParentId).catch(showApiError);
+            void tree.reveal(departmentId, { refresh: true }).catch(showApiError);
           }}
         />
       )}
