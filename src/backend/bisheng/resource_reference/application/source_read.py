@@ -53,12 +53,16 @@ class ReferenceSourceReadRuntime:
     async def arequire_source_valid(self, session, scope, identity):
         return await self._source(session, scope, identity, purpose="execute")
 
-    async def arequire_transient_valid(self, session, scope, identity):
+    async def ainspect_transient(self, session, scope, identity):
         snapshot = await self.verifier.aget_transient_snapshot(session, scope, identity)
         facts = await self.verifier._ainspect_targets(session, scope, identity)
         await self.verifier.arevalidate_transient_scope(session, scope, identity)
-        self._require_valid(facts, snapshot)
         return TransientReferenceReadResult(snapshot, facts)
+
+    async def arequire_transient_valid(self, session, scope, identity):
+        result = await self.ainspect_transient(session, scope, identity)
+        self._require_valid(result.target_states, result.snapshot)
+        return result
 
     def _source_sync(self, session, scope, identity, *, purpose, slots=None):
         snapshot = self.verifier.get_source_snapshot(session, scope, identity)

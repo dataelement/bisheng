@@ -21,6 +21,8 @@ import ParameterSubGroup from './ParameterSubGroup';
 import RunLog from './RunLog';
 import { RunTest } from './RunTest';
 import { useUpdateVariableState } from './flowNodeStore';
+import useFlowStore from '../flowStore';
+import { useWorkflowPreflight } from '../hooks/useWorkflowPreflight';
 
 export const CustomHandle = ({ id = '', node, isLeft = false, className = '' }) => {
     const [openLeft, setOpenLeft] = useState(false);
@@ -172,14 +174,15 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     }
 
     const [nodeError, setNodeError] = useBorderColor(node)
+    const currentFlow = useFlowStore(state => state.flow)
+    const preflight = useWorkflowPreflight(currentFlow, node.id)
     const { paramValidateEntities, varValidateEntities, validateAll } = useEventMaster(node, setNodeError)
     const handleRun = async () => {
         // vilidate node
-        const errors = await validateAll({ tmp: true })
+        const errors = await preflight.validate(() => validateAll({ tmp: true }), snapshot => runRef.current.run(snapshot.nodes[0].data))
 
         if (errors.length) return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
 
-        runRef.current.run(node)
     }
 
     // 直接使用函数获取知识库ID，不依赖useMemo
@@ -457,6 +460,8 @@ const useEventMaster = (node, setNodeError) => {
 
 const useBorderColor = (node) => {
     const [error, setError] = useState(false)
+    const configurationKey = JSON.stringify(node.group_params)
+    useEffect(() => { setError(false) }, [configurationKey])
     useEffect(() => {
         const onNodeEvent = (e) => {
             const { nodeIds } = e.detail

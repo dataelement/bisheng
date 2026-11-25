@@ -634,5 +634,13 @@
   "valueType": "Value type",
   "selectDbType": "Select a database type",
   "modelLoadFailed": "Failed to load models. Please retry.",
-  "retryModelLoad": "Retry"
+  "retryModelLoad": "Retry",
+  "referencePreflight": {
+    "changed": "The workflow changed. Click Run again to validate it.",
+    "failed": "Reference validation failed. Please retry. The workflow was not started.",
+    "issue": "{{node}}: {{label}} (ID: {{id}}) {{state}}. Remove it or select another resource.",
+    "missing": "does not exist",
+    "unavailable": "is unavailable or you do not have access",
+    "reselect": "Invalid references found. Remove or replace the highlighted selections."
+  }
 }

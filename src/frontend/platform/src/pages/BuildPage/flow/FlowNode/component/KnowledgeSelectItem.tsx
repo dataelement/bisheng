@@ -8,6 +8,7 @@ import { Outlined } from "bisheng-icons";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
+import { useKnowledgeReferenceErrors } from "../../hooks/useKnowledgeReferenceErrors";
 
 export function hasTempKnowledgeMode(fileParseMode: unknown): boolean {
     return Array.isArray(fileParseMode) ? fileParseMode.includes('ingest_to_temp_kb') : fileParseMode === 'ingest_to_temp_kb';
@@ -76,6 +77,8 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         return () => onValidate(() => {});
     }, [data.value]);
     const [errorKeys, setErrorKeys] = useState([]);
+    const referenceErrors = useKnowledgeReferenceErrors(nodeId, data.key, value.map(item => String(item.value)));
+    const referenceErrorKeys = value.filter(item => referenceErrors.some(error => error.target_id === String(item.value))).map(item => item.value);
     useEffect(() => {
         onVarEvent?.((config) => {
             // Saved numeric references are checked by the authoritative execution path.
@@ -95,7 +98,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         <Label className="flex items-center bisheng-label mb-2">
             {data.required && <span className="text-red-500">*</span>}{t(`${i18nPrefix}label`)}
         </Label>
-        <MultiSelect id="knowledge-select-item" error={error} errorKeys={errorKeys} multiple
+        <MultiSelect id="knowledge-select-item" error={error || !!referenceErrors.length} errorKeys={[...errorKeys, ...referenceErrorKeys]} multiple
             value={value} options={tabType === 'tmp' ? fileOptions : options}
             hideSearch={tabType === 'tmp'}
             tabs={<Tabs activeKey={tabType} onChange={setTabType} className="mb-2" items={[
@@ -108,6 +111,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
             onChange={handleSelect} onLoad={() => { candidates.refresh(); loadFiles(); }}
             onSearch={candidates.search} onScrollLoad={candidates.loadMore} />
+        {referenceErrors.length > 0 && <p role="alert" className="text-xs text-red-500">{t('referencePreflight.reselect')}</p>}
         {data.value.type !== 'tmp' && value.some(item => !options.some(option => String(option.value) === String(item.value))) &&
             <p className="text-xs text-text-3">{t('references.unconfirmed', { ns: 'bs' })}</p>}
     </div>;

@@ -32,6 +32,7 @@ import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import { useBeforeUnload } from "./hooks/useBeforeUnload";
 import { useNodeEvent, validateMemoryLimits } from "./hooks/useNodeEvent";
+import { useWorkflowPreflight } from "./hooks/useWorkflowPreflight";
 import Notification from "./Notification";
 const APP_HEADER_ACTIONS = [
     'edit',
@@ -60,10 +61,11 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const canManage = flowId ? hasResourceAction(actions, flowId, 'manage_permission') : false;
     // console.log('flow :>> ', flow);
     const validateNodes = useNodeEvent(flow)
+    const preflight = useWorkflowPreflight(flow)
     const addNotification = useFlowStore((state) => state.addNotification);
     const handleRunClick = async () => {
         // 记录错误日志
-        const errors = await validateNodes()
+        const errors = await preflight.validate(validateNodes, snapshot => testRef.current?.run(snapshot))
         if (errors.length) {
             errors.map(el => addNotification({
                 type: 'warning',
@@ -72,7 +74,6 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             }))
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
-        testRef.current?.run(flow)
     }
     const handleOnlineClick = async () => {
         const errors = await validateNodes({ publish: true })
@@ -290,7 +291,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             {/* Right Section with Options */}
             <div className="header-right flex items-center gap-2">
                 <Notification />
-                <Button variant="outlined" disabled={!canEdit} onClick={handleUiRequest(handleRunClick)} color="default">
+                <Button variant="outlined" disabled={!canEdit || preflight.validating} onClick={handleUiRequest(handleRunClick)} color="default">
                     <Filled.PlayerPlay className="size-3.5" />
                     {t('run')}
                 </Button>

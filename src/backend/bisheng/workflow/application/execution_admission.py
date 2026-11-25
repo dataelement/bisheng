@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.core.database import get_async_db_session
 from bisheng.resource_reference.application.contracts import SourceKey, SourceType
+from bisheng.resource_reference.application.error_details import snapshot_reference_errors
 from bisheng.resource_reference.application.source_access import get_reference_read_runtime
 from bisheng.resource_reference.application.source_contracts import (
     SourceReadRequest,
@@ -120,6 +121,32 @@ async def prepare_preview(
     _version(version_hint)
     async with _read_session(reference_session) as session:
         return await _preview(session, await get_reference_read_runtime(), identity, workflow_id, graph)
+
+
+async def preflight_preview(identity, workflow_id, graph, *, reference_session=None):
+    """Inspect the unsaved graph under the same authority as actual preview execution."""
+    payload = {"graph": normalize_execution_graph(graph)}
+    async with _read_session(reference_session) as session:
+        runtime = await get_reference_read_runtime()
+        try:
+            scope = await runtime.verifier.aissue_transient_scope(
+                session, TransientTargetRequest("workflow", str(workflow_id), canonical_payload_json(payload)), identity
+            )
+            result = await runtime.ainspect_transient(session, scope, identity)
+        except ResourceReferenceInvalidError as error:
+            if error.kwargs.get("reason") != "reference_target_invalid" or not error.kwargs.get("reference_errors"):
+                raise
+            errors = error.kwargs["reference_errors"]
+        else:
+            errors = snapshot_reference_errors(
+                result.snapshot, result.target_states, limit=None, include_parameter=True
+            )
+            # Tenant-filtered absence also covers foreign targets. Do not expose
+            # global existence through an editor-supplied selection.
+            for error in errors:
+                if error["state"] == "invalid_missing":
+                    error["state"] = "unavailable"
+    return {"valid": not errors, "errors": errors}
 
 
 async def prepare_node_preview(

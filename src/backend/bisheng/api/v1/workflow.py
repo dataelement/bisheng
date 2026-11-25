@@ -39,10 +39,21 @@ from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.user.application.runtime_identity import browser_message_identity_scope
 from bisheng.utils import generate_uuid
 from bisheng.workflow.application.browser_scope import browser_workflow_scope
+from bisheng.workflow.application.execution_admission import preflight_preview
 from bisheng.workflow.application.execution_port import BoundWorkflowExecutionPort
+from bisheng.workflow.domain.schemas.reference_preflight import WorkflowReferencePreflight
 from bisheng_langchain.utils.requests import Requests
 
 router = APIRouter(prefix="/workflow", tags=["Workflow"])
+
+
+@router.post("/references/validate")
+async def validate_workflow_references(
+    payload: WorkflowReferencePreflight,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    return resp_200(await preflight_preview(login_user, payload.workflow_id, payload.data))
+
 
 # Command-service rejection codes, per the document server's documented set.
 # Anything else collapses to the generic message -- the user can only ever
