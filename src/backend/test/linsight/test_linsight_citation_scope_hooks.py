@@ -81,8 +81,7 @@ def kb_deps(monkeypatch: pytest.MonkeyPatch):
 
 
 async def _kb_search(tool: SearchKnowledgeBase) -> dict:
-    vector = SimpleNamespace(asimilarity_search=AsyncMock(return_value=[_hit()]))
-    return json.loads(await tool.base_search(vector, "PM2.5", 2, knowledge_id=99, knowledge_name="政策"))
+    return json.loads(await tool.format_documents([_hit()], knowledge_id=99, knowledge_name="政策"))
 
 
 async def test_kb_tool_reports_hits_to_scope(kb_deps):
