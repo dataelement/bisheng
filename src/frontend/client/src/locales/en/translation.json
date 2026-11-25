@@ -3094,6 +3094,14 @@
     "move_out_of_project": "Remove from project",
     "project_none": "No projects yet",
     "project_empty": "No conversations yet",
+    "conversation_age": {
+      "days": "{{n}}d",
+      "hours": "{{n}}h",
+      "minutes": "{{n}}min",
+      "months": "{{n}}mo",
+      "now": "now",
+      "years": "{{n}}y"
+    },
     "demo": {
       "project_travel": "Travel guides",
       "project_files": "File organizing",

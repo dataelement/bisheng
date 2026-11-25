@@ -298,7 +298,11 @@ export default function Conversation({
         </a>
       )}
       {!renaming && !isPopoverPresent && (
-        <ConversationHistoryDate updatedAt={conversation.updatedAt} className="dsh-history-time coarse-pointer:hidden" />
+        <ConversationHistoryDate
+          updatedAt={conversation.updatedAt}
+          createdAt={conversation.createdAt}
+          className="dsh-history-time coarse-pointer:hidden"
+        />
       )}
       {/* While renaming, drop the options slot entirely — an empty flex item
           would still cost the row an extra 8px gap before the right padding. */}

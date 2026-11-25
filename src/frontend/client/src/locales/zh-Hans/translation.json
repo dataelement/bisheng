@@ -3023,6 +3023,14 @@
     "move_out_of_project": "移出项目",
     "project_none": "暂无项目",
     "project_empty": "暂无对话",
+    "conversation_age": {
+      "days": "{{n}}天",
+      "hours": "{{n}}小时",
+      "minutes": "{{n}}分钟",
+      "months": "{{n}}个月",
+      "now": "刚刚",
+      "years": "{{n}}年"
+    },
     "demo": {
       "project_travel": "旅游攻略",
       "project_files": "文件整理",

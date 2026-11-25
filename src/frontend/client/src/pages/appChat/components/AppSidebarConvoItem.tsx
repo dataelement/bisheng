@@ -253,6 +253,7 @@ export function AppSidebarConvoItem({ conv, isActive, compact = false, onClick, 
                     {compact && (
                         <ConversationHistoryDate
                             updatedAt={conv.updatedAt}
+                            createdAt={conv.createdAt}
                             className={cn(
                                 'col-start-1 row-start-1 whitespace-nowrap text-caption-sm text-text-3 group-hover:invisible group-has-[:focus-visible]:invisible coarse-pointer:hidden',
                                 isPopoverPresent && 'invisible',
