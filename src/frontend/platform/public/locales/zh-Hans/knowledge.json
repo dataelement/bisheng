@@ -1,4 +1,51 @@
 {
+    "provider_operations": {
+        "error": "错误",
+        "errors": {
+            "not_received": "远端未接收",
+            "manual_review_required": "需要人工核查",
+            "unknown": "错误原因未知"
+        },
+        "title": "外部服务操作",
+        "unavailable": "无法读取操作记录。",
+        "empty": "此空间暂无外部服务操作记录。",
+        "unverified": "这些记录不能证明当前权限与内容一致，不允许手工放行。",
+        "space": "本地空间 ID",
+        "versions": "本地版本 ID",
+        "target": "远端目标（已脱敏）",
+        "generation": "目标代次",
+        "phase": "处理阶段",
+        "attempt": "尝试次数",
+        "operation": "操作 ID",
+        "capability_revision": "发起时的能力版本",
+        "kinds": {
+            "create_space": "创建空间",
+            "update_space_settings": "更新设置",
+            "upload": "上传",
+            "provider_transfer": "迁移文档",
+            "unknown": "未知操作"
+        },
+        "phases": {
+            "create": "创建空间",
+            "settings": "更新设置",
+            "projected": "已更新本地记录",
+            "upload": "上传",
+            "reingest": "重新导入文档",
+            "cutover": "切换到目标",
+            "unknown": "阶段未知"
+        },
+        "states": {
+            "pending": "待处理",
+            "sending": "发送中",
+            "waiting_remote": "等待远端确认",
+            "reconciling": "核对结果中",
+            "applying": "正在应用结果",
+            "succeeded": "已成功",
+            "failed": "已失败",
+            "manual_review": "需人工核查",
+            "unknown": "状态未知"
+        }
+    },
     "predefinedRules": {
         "singleNewlineRule": {
             "label": "\\n",

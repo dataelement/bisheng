@@ -208,19 +208,11 @@ class TestKnowledgeSpaceChatPermissions:
                 new_callable=AsyncMock,
                 return_value=[SimpleNamespace(chat_id="chat-1", flow_id="flow-1")],
             ),
-            patch(
-                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
-                new_callable=AsyncMock,
-                return_value=SimpleNamespace(as_retriever=lambda **kwargs: object()),
-            ),
-            patch(
-                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
-                new_callable=AsyncMock,
-                return_value=SimpleNamespace(as_retriever=lambda **kwargs: object()),
-            ),
+            patch.object(chat_service, "get_space_llm_config", AsyncMock(return_value=(None, SimpleNamespace(max_chunk_size=100)))),
+            patch.object(chat_service, "_retrieve_and_filter", AsyncMock(return_value=[])),
             patch.object(
                 chat_service,
-                "space_rag",
+                "_render_rag_response",
                 _empty_space_rag,
             ),
         ):

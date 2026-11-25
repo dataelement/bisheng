@@ -170,7 +170,7 @@ export function FileListView({
                         onDelete={() => onDelete(file.id)}
                         onRetry={() => onRetry?.(file.id)}
                         onNavigateFolder={() => onNavigateFolder?.(file.id)}
-                        onPreview={() => onPreview?.(file.id)}
+                        onPreview={onPreview ? () => onPreview(file.id) : undefined}
                         onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                         onCancelCreate={onCancelCreate}
                         onManagePermission={

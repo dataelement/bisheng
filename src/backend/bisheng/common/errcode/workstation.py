@@ -62,6 +62,11 @@ class ChatFileParseError(BaseErrorCode):
     Msg: str = "File parsing failed, please try again later"
 
 
+class KnowledgeScopeUnavailable(BaseErrorCode):
+    Code: int = 12048
+    Msg: str = "原轮次的资料范围已不可恢复，请重新选择资料后再提问"
+
+
 # --- F028: Conversation export / import to knowledge space (12060-12079) ---
 
 

@@ -77,6 +77,12 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     knowledge_space_ids: list[int] | None = Field(
         None, description="Selected knowledge space ids", sa_column=Column(JsonType, nullable=True)
     )
+    # F026 AC-26/27: per-space FIXED tag references frozen when the task was
+    # created ("7" -> 11). None = the round never recorded a tag scope (kept for
+    # pre-F026 sessions); {} = the client explicitly declared an empty scope.
+    knowledge_space_tag_filters: dict[str, int] | None = Field(
+        None, description="Frozen per-space tag references", sa_column=Column(JsonType, nullable=True)
+    )
     files: list[dict] | None = Field(
         None, description="Uploaded files list:", sa_column=Column(JsonType, nullable=True)
     )

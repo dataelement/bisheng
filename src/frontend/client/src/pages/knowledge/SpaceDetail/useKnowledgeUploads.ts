@@ -23,6 +23,7 @@ export function useKnowledgeUploads({
   setContextMenuPosition,
   queryClient,
   canUploadFile,
+  canUploadNativeExtras,
   canUseContextMenuActions,
   showToast,
   confirm,
@@ -48,7 +49,7 @@ export function useKnowledgeUploads({
   };
 
   const triggerUploadFolder = () => {
-    if (!canUploadFile) return;
+    if (!canUploadNativeExtras) return;
     folderInputRef.current?.click();
   };
 
@@ -58,7 +59,7 @@ export function useKnowledgeUploads({
   const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
 
   const triggerWebLink = () => {
-    if (!knowledgeUploadCapabilities.webLink || !canUploadFile) return;
+    if (!knowledgeUploadCapabilities.webLink || !canUploadNativeExtras) return;
     setWebLinkDialogOpen(true);
   };
 
@@ -75,7 +76,7 @@ export function useKnowledgeUploads({
   };
 
   const submitWebLink = async (overwrite = false) => {
-    if (isStorageBlocked()) return;
+    if (!canUploadNativeExtras || isStorageBlocked()) return;
     const trimmedUrl = webLinkUrl.trim();
     const normalizedTitle = normalizeWebLinkTitle(webLinkTitle);
     if (!trimmedUrl) {
@@ -222,7 +223,7 @@ export function useKnowledgeUploads({
   // (oversize / unsupported / hidden) — see useFileUpload.handleUploadFolder.
   const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const filesList = e.target.files;
-    if (filesList && filesList.length > 0 && canUploadFile) {
+    if (filesList && filesList.length > 0 && canUploadNativeExtras) {
       onUploadFolder(filesList, {
         allowedExtensions,
         maxSizeMB: maxFileSizeMB,
@@ -235,12 +236,10 @@ export function useKnowledgeUploads({
   // ─── Drag and drop ──────────────────────────────────────────────────
   const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
     useFileDragDrop({
-      onDragStateChange,
+      onDragStateChange: canUploadFile ? onDragStateChange : undefined,
       onUploadFile: canUploadFile ? onUploadFile : () => undefined,
-      // Without this the folder-drop branch in handleDrop is skipped (it
-      // guards on `onUploadFolder` being defined), so dropping a folder did
-      // nothing. Gate on canUploadFile like onUploadFile.
-      onUploadFolder: canUploadFile ? onUploadFolder : undefined,
+      // Folder import uses Native registration; never dispatch it for external spaces.
+      onUploadFolder: canUploadNativeExtras ? onUploadFolder : undefined,
       maxFileSizeMB,
       uploadSizeLimits,
       enableEtl4lm,

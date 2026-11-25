@@ -213,7 +213,7 @@ export function FileListRow({
   const isUploading = isKnowledgeItemUploading(file);
   // A folder still uploading its batch: faded, not clickable, checkbox greyed out.
   const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
-  const namePreviewable = isKnowledgeItemPreviewable(file);
+  const namePreviewable = isFolder || (Boolean(onPreview) && isKnowledgeItemPreviewable(file));
   // The frontend-only folder upload placeholder (no backend identity) keeps a
   // disabled checkbox rather than dropping it, so the column stays aligned.
   const isSelectable = !isUploadingFolderPlaceholder;

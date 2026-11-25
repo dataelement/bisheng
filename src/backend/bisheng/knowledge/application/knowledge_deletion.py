@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_reposito
 from bisheng.knowledge.domain.repositories.knowledge_space_delete_repository import KnowledgeSpaceDeleteRepository
 from bisheng.knowledge.domain.repositories.operation_plan_repository import OperationPlanRepository
 from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingFenceRepository
+from bisheng.knowledge.domain.repositories.provider_wiki_repository import WikiControl
 from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
 from bisheng.knowledge.domain.repositories.space_delete_scope_repository import SpaceDeleteScopeRepository
 from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection, deletion_scope_payload
@@ -299,6 +300,7 @@ class KnowledgeDeletionApplication:
             root, checksum = await self.execution.aroot(active, plan.space_id, lock=True)
             if checksum != plan.source_revisions["root"]:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_root_changed")
+            await WikiControl.require_native_deletion(active, plan.space_id)
             require_space_deletion_allowed(root, operation=plan.operation)
             await self.execution.arequire_transfer_idle(active, space_id=plan.space_id)
             await SourceMoveInputRepository().arequire_released(active, space_id=plan.space_id)

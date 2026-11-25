@@ -1,4 +1,5 @@
 import { directoryLoadingStyles } from "@bisheng/knowledge";
+import { ProviderUploadResults } from "./ProviderUploadResults";
 import { SpaceProcessingStatus } from "./SpaceProcessingStatus";
 import { BatchOperationDialog } from "./BatchOperationDialog";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
@@ -96,6 +97,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
       onDrop={handleDrop}
     >
       <KnowledgeSpaceToolbar model={model} />
+      <ProviderUploadResults items={model.providerUploads.items} onCheck={model.providerUploads.check} onRetry={model.providerUploads.retry} />
       <SpaceProcessingStatus state={space.state} />
       <KnowledgeDeletionDialog operation={model.deletion} />
       <BatchOperationDialog operation={model.batch} />
@@ -115,7 +117,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                     {localize("com_knowledge.upload_file")}
                   </DropdownItem>
                 )}
-                {canUploadFile && knowledgeUploadCapabilities.webLink && (
+                {model.canUploadNativeExtras && knowledgeUploadCapabilities.webLink && (
                   <DropdownItem icon={<Link2 />} onSelect={triggerWebLink}>
                     {localize("com_knowledge.web_link")}
                   </DropdownItem>
@@ -228,7 +230,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                       onEditTags={() => handleOpenEditTags(file.id)}
                       onRetry={() => handleSingleRetry(file.id)}
                       onNavigateFolder={() => onNavigateFolder(file.id)}
-                      onPreview={handlePreviewFile}
+                      onPreview={model.providerUploads.canPreview ? handlePreviewFile : undefined}
                       onValidateName={(newName) =>
                         validateFileName(
                           newName,
@@ -296,7 +298,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                 onDelete={(id) => handleDelete(id)}
                 onRetry={(id) => handleSingleRetry(id)}
                 onNavigateFolder={(id) => onNavigateFolder(id)}
-                onPreview={(id) => handlePreviewFile(id)}
+                onPreview={model.providerUploads.canPreview ? handlePreviewFile : undefined}
                 onValidateName={validateFileName}
                 onCancelCreate={onCancelCreateFolder}
                 permissionEntryIds={permissionEntryIds}

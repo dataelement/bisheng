@@ -13,6 +13,16 @@ from bisheng.open_endpoints.api.endpoints import filelib
 from test.knowledge_unification import test_legacy_space_files as native
 from test.open_api.test_chunks_string_ingest import stores as stores
 
+
+@pytest.fixture(autouse=True)
+def explicit_native_test_route(monkeypatch):
+    # These tests exercise Native SPACE registration/indexing in their local fixture DB.
+    # Never let route discovery connect to an ambient configured server.
+    from bisheng.knowledge.application import provider_v1_runtime
+
+    monkeypatch.setattr(provider_v1_runtime, "resolve_space_route", AsyncMock(return_value=None))
+
+
 store = native.store
 tenant = native.tenant
 business = native.business

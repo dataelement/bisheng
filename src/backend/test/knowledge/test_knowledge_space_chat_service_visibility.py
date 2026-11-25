@@ -334,21 +334,14 @@ async def test_chat_single_file_logs_view_file_passed_debug(monkeypatch):
         "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeDao.aquery_by_id",
         AsyncMock(return_value=space),
     )
-    monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
-        AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
-    )
-    monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
-        AsyncMock(return_value=MagicMock(as_retriever=lambda **kw: MagicMock())),
-    )
+    monkeypatch.setattr(svc, "get_space_llm_config", AsyncMock(return_value=(None, MagicMock(max_chunk_size=100))))
+    monkeypatch.setattr(svc, "_retrieve_and_filter", AsyncMock(return_value=[]))
 
-    # Patch space_rag to a no-op async generator so chat_single_file returns quickly.
     async def fake_space_rag(*args, **kwargs):
         if False:
             yield  # make this an async generator
 
-    monkeypatch.setattr(svc, "space_rag", fake_space_rag)
+    monkeypatch.setattr(svc, "_render_rag_response", fake_space_rag)
 
     sink_records = []
     handler_id = loguru_logger.add(lambda m: sink_records.append(str(m)), level="DEBUG")

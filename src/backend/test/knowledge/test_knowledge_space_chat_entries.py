@@ -116,6 +116,7 @@ async def test_recovered_root_chat_uses_whole_space_retrieval():
         query="question",
         candidate_file_ids=None,
         max_content=100,
+        tags=None,
     )
 
 

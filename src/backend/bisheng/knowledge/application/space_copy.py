@@ -10,6 +10,7 @@ from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application import move_processing_admission as admission
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as Models
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
+from bisheng.knowledge.application.provider_transfer import require_native_mutation
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.repositories.operation_plan_repository import OperationPlanRepository
 from bisheng.knowledge.domain.repositories.space_copy_job_repository import SpaceCopyJobRepository
@@ -100,6 +101,8 @@ class SpaceCopyApplication:
         await require_business_action(
             identity, resource_type="knowledge_space", resource_id=source["id"], action="upload_file"
         )
+        async with self.sessions() as session:
+            await require_native_mutation(session, tenant_id=tenant, space_id=source["id"], operation="copy")
         if get_current_permission_actor() is not actor or admission.tenant() != source["tenant_id"]:
             raise PermissionDeniedError(reason="space_copy_context_changed")
 
@@ -165,6 +168,9 @@ class SpaceCopyApplication:
             assert_authority(authority)
             async with self.sessions() as session:
                 context = authority_context()
+                await require_native_mutation(
+                    session, tenant_id=admission.tenant(), space_id=source_space_id, operation="copy"
+                )
                 current = await self.rows.aload_scope(session, source_space_id, lock=True)
                 if current != scope:
                     raise KnowledgeOperationPlanChangedError()
@@ -258,6 +264,9 @@ class SpaceCopyApplication:
             context = authority_context()
             plan = await self._read_plan(session, source_id, request)
             if plan.operation_id is None:
+                await require_native_mutation(
+                    session, tenant_id=admission.tenant(), space_id=source_id, operation="copy"
+                )
                 current = await self.rows.aload_scope(session, source_id, lock=True)
                 if current.digest != scope_digest:
                     raise KnowledgeOperationPlanChangedError()

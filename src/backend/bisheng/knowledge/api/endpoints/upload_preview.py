@@ -7,12 +7,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Path, Query, Uplo
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
+from bisheng.knowledge.api.endpoints.knowledge_space import require_native_space
 from bisheng.knowledge.domain.schemas.upload_preview import UploadChunkUpdate, UploadPreviewRequest
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.domain.services.upload_preview_service import UploadPreviewService
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 
-router = APIRouter(tags=["knowledge_space"])
+# Every receipt and edit below belongs to the native staging/preview pipeline.
+router = APIRouter(tags=["knowledge_space"], dependencies=[Depends(require_native_space)])
 Token = Annotated[str, Path(min_length=32, max_length=32, pattern="^[0-9a-f]+$")]
 
 

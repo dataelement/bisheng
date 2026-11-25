@@ -1,4 +1,16 @@
 {
+  "departmentSpace": {
+    "batchMode": "WeKnora 部门空间",
+    "batchPreview": "查看建库设置",
+    "batchRefresh": "刷新上次提交结果",
+    "createAction": "确认创建",
+    "batchUnavailable": "当前管理身份或租户尚未确认。",
+    "batchItem": "部门 {{id}}",
+    "batchPreset": "预设版本 {{revision}}；摘要模型 {{summary}}，向量模型 {{embedding}}，视觉模型 {{vision}}。",
+    "batchSeparate": "请将隐藏或恢复部门的变更与创建操作分开提交。",
+    "batchSpaceName": "{{name}}的知识空间",
+    "batchStatus": {"confirmed": "已创建并确认授权", "failed": "未能创建", "unconfirmed": "尚未确认授权"}
+  },
   "memberRoleIssues": {
     "inactive": "未生效",
     "missingRole": "角色 {{id}}",

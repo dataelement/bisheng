@@ -1883,19 +1883,19 @@
   },
   "src/hooks/useAiChat.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 14
+      "count": 13
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4
     },
     "no-console": {
-      "count": 4
+      "count": 3
     },
     "no-restricted-imports": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/hooks/useAiChatSSE.ts": {

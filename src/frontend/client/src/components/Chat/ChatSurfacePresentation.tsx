@@ -203,7 +203,8 @@ export function ChatSurfacePresentation({
                             allowExport
                             stripCitationHandlesOnCopy
                             contentWidthClassName="dsh-chat-content"
-                            onRegenerate={regenerate}
+                            onRegenerate={shareToken ? undefined : regenerate}
+                            onDailyMaterialAction={shareToken ? undefined : regenerate}
                             onOpenCitationPanel={(payload) => {
                               taskArtifacts.closeWorkspace();
                               onOpenCitationPanel(payload);

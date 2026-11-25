@@ -26,6 +26,7 @@ import desktopLayout from "./KnowledgeSpaceLayout.module.css";
  */
 interface KnowledgeSpaceHeaderProps {
   space: KnowledgeSpace;
+  wikiEntry?: React.ReactNode;
   currentPath: Array<{ id?: string; name: string }>;
   onNavigateFolder: (folderId?: string) => void;
   isSearching: boolean;
@@ -35,6 +36,7 @@ interface KnowledgeSpaceHeaderProps {
   onTriggerWebLink: () => void;
   canCreateFolder?: boolean;
   canUploadFile?: boolean;
+  canUploadNativeExtras?: boolean;
 
   // Batch Operation Props
   selectedCount: number;
@@ -78,6 +80,7 @@ interface KnowledgeSpaceHeaderProps {
 
 export function KnowledgeSpaceHeader({
   space,
+  wikiEntry,
   currentPath,
   onNavigateFolder,
   isSearching,
@@ -87,6 +90,7 @@ export function KnowledgeSpaceHeader({
   onTriggerWebLink,
   canCreateFolder = false,
   canUploadFile = false,
+  canUploadNativeExtras = false,
   onBatchDownload,
   canBatchDownload = false,
   canBatchTag = false,
@@ -233,10 +237,10 @@ export function KnowledgeSpaceHeader({
                       </SharedTooltip>
                     </span>
                   </DropdownItem>
-                  <DropdownItem onSelect={onTriggerUploadFolder} icon={<FolderUp />}>
+                  {canUploadNativeExtras && <DropdownItem onSelect={onTriggerUploadFolder} icon={<FolderUp />}>
                     {localize("com_knowledge.upload_folder")}
-                  </DropdownItem>
-                  {knowledgeUploadCapabilities.webLink && (
+                  </DropdownItem>}
+                  {canUploadNativeExtras && knowledgeUploadCapabilities.webLink && (
                     <DropdownItem onSelect={onTriggerWebLink} icon={<Link2 />}>
                       {localize("com_knowledge.web_link")}
                     </DropdownItem>
@@ -300,6 +304,7 @@ export function KnowledgeSpaceHeader({
 
       {/* 右侧：分享 + 设置 + 批量操作 + 新增。搜索/筛选/排序/视图切换已移入 FileListToolbar */}
       <div className="flex shrink-0 items-center gap-3">
+        {wikiEntry}
         {showShare && (
           <CopyShareLinkButton
             iconOnly

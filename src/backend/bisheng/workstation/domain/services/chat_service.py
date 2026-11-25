@@ -59,6 +59,7 @@ from bisheng.common.errcode.workstation import (
     ChatFileParseError,
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,
+    KnowledgeScopeUnavailable,
     LLMRateLimitError,
 )
 from bisheng.common.image_view import (
@@ -91,11 +92,12 @@ from bisheng.department.domain.services.department_flow_service import (
     lease_id_from_headers,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.schemas.round_scope import RecordedRoundScope, question_scope
 from bisheng.llm.domain import LLMService
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
-from bisheng.workstation.domain.schemas.chat import APIChatCompletion
+from bisheng.workstation.domain.schemas.chat import APIChatCompletion, UseKnowledgeBaseParam
 from bisheng.workstation.domain.services.kb_image_stage import KbImageStage
 
 from .chat_helpers import (
@@ -1076,23 +1078,29 @@ async def _build_knowledge_search_tool(
 
     async def _resolve_tag_filter_file_ids(
         kb_filters: list[_KbFilter],
-    ) -> dict[int, set[int]] | None:
-        """Resolve {kb_id: allowed_file_ids_set} from tag-name filters.
+    ) -> tuple[dict[int, set[int]], dict[int, str]]:
+        """Resolve per-space {kb_id: allowed_file_ids} from model tag filters.
 
-        Empty dict ⇒ no filter active. None ⇒ filters resolved but yielded
-        zero allowed files (caller should short-circuit to empty results).
+        Returns ``(allowed, failed)``: ``allowed[kb_id] == set()`` means the
+        condition resolved and matched nothing, while ``failed[kb_id]`` means
+        the condition could not be resolved. Both are per-space so one broken
+        condition never turns into an unconditional query of that space, and
+        never takes the other spaces down with it.
         """
         if not kb_filters:
-            return {}
+            return {}, {}
         try:
             from bisheng.database.models.group_resource import ResourceTypeEnum
             from bisheng.database.models.tag import TagDao
             from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
-        except Exception as exc:
+        except Exception as exc:  # report, never silently unfilter
             logger.warning(f"[search_kb] tag-filter unavailable: {exc}")
-            return {}
+            return {}, {
+                int(f.knowledge_base_id): "标签条件暂不可用" for f in kb_filters if str(f.knowledge_base_id).isdigit()
+            }
 
         allowed: dict[int, set[int]] = {}
+        failed: dict[int, str] = {}
         for f in kb_filters:
             try:
                 kb_id = int(f.knowledge_base_id)
@@ -1103,46 +1111,52 @@ async def _build_knowledge_search_tool(
                 continue
 
             # File-level tag filters are resolved against the KB's file set.
+            # Every step is per-space: a failure here must degrade to an
+            # explicit per-space error, never to "no filter, search it all".
             try:
                 files = await KnowledgeFileDao.aget_file_by_filters(
                     knowledge_id=kb_id,
                     page=1,
                     page_size=10000,
                 )
-            except Exception:
-                files = []
-            kb_file_ids = [str(fl.id) for fl in files]
-            if not kb_file_ids:
-                allowed[kb_id] = set()
-                continue
-            # Space KBs store file tags under SPACE_FILE; org KBs under
-            # KNOWLEDGE_FILE. get_tags_by_resource is strict on resource_type,
-            # so route per source — otherwise the LLM's tag filter silently
-            # returns zero files for org KBs.
-            resource_type = ResourceTypeEnum.SPACE_FILE if kb_id in space_id_set else ResourceTypeEnum.KNOWLEDGE_FILE
-            tag_map = TagDao.get_tags_by_resource(
-                resource_type,
-                kb_file_ids,
-            )
-            wanted = set(tag_names)
-            mode = (f.tag_match_mode or "ANY").upper()
-            matching: set[int] = set()
-            for fid, tags in tag_map.items():
-                names = {t.name for t in tags if t.name}
-                if mode == "ALL":
-                    if wanted.issubset(names):
-                        try:
-                            matching.add(int(fid))
-                        except (TypeError, ValueError):
-                            continue
-                else:  # ANY
-                    if names & wanted:
-                        try:
-                            matching.add(int(fid))
-                        except (TypeError, ValueError):
-                            continue
-            allowed[kb_id] = matching
-        return allowed
+                kb_file_ids = [str(fl.id) for fl in files]
+                if not kb_file_ids:
+                    allowed[kb_id] = set()
+                    continue
+                # Space KBs store file tags under SPACE_FILE; org KBs under
+                # KNOWLEDGE_FILE. get_tags_by_resource is strict on resource_type,
+                # so route per source — otherwise the LLM's tag filter silently
+                # returns zero files for org KBs.
+                resource_type = (
+                    ResourceTypeEnum.SPACE_FILE if kb_id in space_id_set else ResourceTypeEnum.KNOWLEDGE_FILE
+                )
+                tag_map = TagDao.get_tags_by_resource(
+                    resource_type,
+                    kb_file_ids,
+                )
+                wanted = set(tag_names)
+                mode = (f.tag_match_mode or "ANY").upper()
+                matching: set[int] = set()
+                for fid, tags in tag_map.items():
+                    names = {t.name for t in tags if t.name}
+                    if mode == "ALL":
+                        if wanted.issubset(names):
+                            try:
+                                matching.add(int(fid))
+                            except (TypeError, ValueError):
+                                continue
+                    else:  # ANY
+                        if names & wanted:
+                            try:
+                                matching.add(int(fid))
+                            except (TypeError, ValueError):
+                                continue
+                allowed[kb_id] = matching
+            except Exception as exc:  # surfaced as a per-space error below
+                logger.warning(f"[search_kb] tag condition failed kb={kb_id}: {exc}")
+                allowed.pop(kb_id, None)
+                failed[kb_id] = "标签条件无法解析，本次未检索该知识库"
+        return allowed, failed
 
     async def _search(
         knowledge_base_ids: list[str],
@@ -1182,37 +1196,46 @@ async def _build_knowledge_search_tool(
         # Resolve tag filters into {kb_id: allowed_file_ids}. Applied as a
         # post-retrieval filter on the docs returned by queryChunksFromDB so
         # we don't have to plumb file-id filters into the milvus/es layer.
-        try:
-            file_filter = await _resolve_tag_filter_file_ids(
-                model_filters,
-            )
-        except Exception as exc:
-            logger.warning(f"[search_kb] tag resolution failed: {exc}")
-            file_filter = {}
-
+        file_filter, filter_errors = await _resolve_tag_filter_file_ids(
+            model_filters,
+        )
+        # A space whose condition matched nothing, or could not be resolved at
+        # all, must not be searched: querying it would answer from the whole
+        # space and silently widen the user's selection.
+        no_match = {kb for kb, ids in file_filter.items() if not ids}
+        blocked = dict(filter_errors)
+        for kb in no_match:
+            blocked.setdefault(kb, "标签条件没有匹配到任何文件")
         # Split back into the two buckets so queryChunksFromDB picks the
         # right auth-check behaviour per KB source.
-        space_bucket = [i for i in kb_ids_int if i in space_id_set]
-        org_bucket = [i for i in kb_ids_int if i not in space_id_set]
+        space_bucket = [i for i in kb_ids_int if i in space_id_set and i not in blocked]
+        org_bucket = [i for i in kb_ids_int if i not in space_id_set and i not in blocked]
         failures: list[dict] = []
-        try:
-            _formatted, finally_docs, failures = await WorkStationService.queryChunksFromDB(
-                question=query,
-                use_knowledge_param=UseKnowledgeBaseParam(
-                    knowledge_space_ids=space_bucket,
-                    organization_knowledge_ids=org_bucket,
-                    knowledge_space_tag_filters={
-                        space_id: selected_tag_filters[space_id]
-                        for space_id in space_bucket
-                        if space_id in selected_tag_filters
-                    },
-                ),
-                max_token=max_token,
-                login_user=login_user,
-            )
-        except Exception as exc:
-            logger.exception(f"[search_kb] queryChunksFromDB failed: {exc}")
-            return _handle_agent_tool_error(exc)
+        if blocked and not space_bucket and not org_bucket:
+            # Nothing left to search: answer with the explicit condition
+            # failures instead of emitting an unconditional query.
+            docs: list = []
+            finally_docs = []
+            logger.info(f"[search_kb] every requested space blocked by its tag condition: {sorted(blocked)}")
+        else:
+            try:
+                _formatted, finally_docs, failures = await WorkStationService.queryChunksFromDB(
+                    question=query,
+                    use_knowledge_param=UseKnowledgeBaseParam(
+                        knowledge_space_ids=space_bucket,
+                        organization_knowledge_ids=org_bucket,
+                        knowledge_space_tag_filters={
+                            space_id: selected_tag_filters[space_id]
+                            for space_id in space_bucket
+                            if space_id in selected_tag_filters
+                        },
+                    ),
+                    max_token=max_token,
+                    login_user=login_user,
+                )
+            except Exception as exc:
+                logger.exception(f"[search_kb] queryChunksFromDB failed: {exc}")
+                return _handle_agent_tool_error(exc)
 
         docs = list(finally_docs or [])
         if file_filter:
@@ -1248,6 +1271,17 @@ async def _build_knowledge_search_tool(
         # <retrieval_error>. The frontend detects these and renders the KB
         # chip in an error state with the error message, so users see which
         # KB failed and why instead of the tool silently dropping them.
+        # Per-space tag-condition failures the caller must see: without them a
+        # skipped space looks like "no results" instead of "not searched".
+        for kb_id in sorted(blocked):
+            results.append(
+                "{"
+                f"<knowledge_base_id>{kb_id}</knowledge_base_id>\n"
+                f"<knowledge_base_name>{kb_name_by_id.get(str(kb_id), '')}</knowledge_base_name>\n"
+                f"<retrieval_error>{blocked[kb_id]}</retrieval_error>"
+                "}"
+            )
+
         for f in failures or []:
             kb_name = f.get("name") or ""
             if not kb_name:
@@ -1520,8 +1554,8 @@ async def _agent_initialize_chat(
     Differences vs legacy initialize_chat:
       - `message` column is JSON (not plain text)
       - `type` is 'over' (aligned with ChatResponse semantics in workflow)
-      - `extra` is '{}' (no parentMessageId — new data is linear, no tree)
-      - `overrideParentMessageId` is ignored (regenerate UI removed)
+      - `extra` records this question's knowledge scope
+      - regeneration appends a new question with the resolved scope; no tree mutation
     """
     ws_config = await WorkStationService.aget_config()
     from bisheng.dsh.domain.services.model_catalog import user_workbench_models
@@ -1584,7 +1618,7 @@ async def _agent_initialize_chat(
         storage_partition=session_subject.storage_partition if session_subject is not None else None,
     )
 
-    # Always insert a brand-new question row — Agent flow has no regenerate.
+    # Regeneration appends a new turn; the original question remains immutable.
     message = await ChatMessageDao.ainsert_one(
         ChatMessage(
             user_id=login_user.user_id,
@@ -1594,7 +1628,7 @@ async def _agent_initialize_chat(
             is_bot=False,
             sender="User",
             files=json.dumps(data.files) if data.files else None,
-            extra="{}",
+            extra=json.dumps({"knowledge_scope": _round_knowledge_scope(data)}),
             message=json.dumps(
                 {"query": data.text or "", "files": data.files or []},
                 ensure_ascii=False,
@@ -1830,6 +1864,7 @@ def _respond_blocked_workbench(conversation, message, model_info, data: APIChatC
             files=data.files or [],
             auto_reply=auto_reply,
             answer_message_id=resp.id,
+            knowledge_scope_recorded=bool(data.use_knowledge_base and data.use_knowledge_base.tag_scope_recorded),
         ):
             yield chunk
 
@@ -2124,7 +2159,13 @@ async def _agent_stream_chat_completion(
 
         # Emit first so the client can add the sidebar placeholder before any
         # streaming content arrives. onCreated hook in useAiChat keys on this.
-        yield user_message(message.id, conversation_id, "User", data.text or "")
+        yield user_message(
+            message.id,
+            conversation_id,
+            "User",
+            data.text or "",
+            knowledge_scope_recorded=bool(data.use_knowledge_base and data.use_knowledge_base.tag_scope_recorded),
+        )
         yield _sse_resp("processing", "begin", "", conversation_id)
         yield _sse_resp(
             "question",
@@ -2827,6 +2868,12 @@ async def stream_chat_completion(
     this turn to the linsight task kernel (the turn still belongs to the same
     conversation/chat_id); otherwise the daily agent flow runs unchanged.
     """
+    if data.isRegenerate:
+        try:
+            selection, _ = await _resolve_round_knowledge_selection(data, login_user, session_subject)
+        except BaseErrorCode as exc:
+            return StreamingResponse(iter([FailureContextAdapter.public_sse_text(exc)]), media_type="text/event-stream")
+        data = data.model_copy(update={"use_knowledge_base": selection})
     if data.task_mode:
         # The submit core inside ``_task_mode_stream_completion`` finishes before
         # it returns the handoff stream, so the execution lease covers exactly
@@ -2942,6 +2989,82 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     return StreamingResponse(_handoff_event(), media_type="text/event-stream")
 
 
+def _round_knowledge_scope(data: APIChatCompletion) -> dict:
+    return question_scope(data.use_knowledge_base)
+
+
+async def _resolve_round_knowledge_selection(
+    data: APIChatCompletion,
+    login_user,
+    session_subject: SessionSubject | None = None,
+) -> tuple[UseKnowledgeBaseParam | None, dict]:
+    """Only an owned workbench question may supply a regeneration scope."""
+    if not data.isRegenerate:
+        return data.use_knowledge_base, _round_knowledge_scope(data)
+
+    message_id = data.regenerate_message_id
+    # Keep oversized optimistic/invalid ids out of the dialect's integer binder.
+    if (
+        not data.conversationId
+        or not message_id
+        or not message_id.isascii()
+        or len(message_id) > 19
+        or not 0 < int(message_id) <= 2**63 - 1
+    ):
+        raise KnowledgeScopeUnavailable()
+    tenant_id = workbench_tenant_id(login_user)
+    subject = session_subject or SessionSubject.natural_person(tenant_id=tenant_id, user_id=login_user.user_id)
+    session = await MessageSessionDao.async_get_one(data.conversationId)
+    if not tenant_id or not session or session.flow_type != FlowType.WORKSTATION.value or not subject.matches(session):
+        raise KnowledgeScopeUnavailable()
+    row = await ChatMessageDao.aget_message_by_id(int(message_id))
+    if (
+        not row
+        or row.user_id != login_user.user_id
+        or row.tenant_id != tenant_id
+        or row.chat_id != data.conversationId
+        or row.category != "question"
+        or row.is_bot is not False
+        or row.flow_id
+        or row.type not in {"human", "over"}
+    ):
+        raise KnowledgeScopeUnavailable()
+
+    if data.useCurrentMaterials:
+        # Explicitly asking again can recover a legacy question, but never
+        # convert an omitted current filter into consent to search the space.
+        scope = _round_knowledge_scope(data)
+    else:
+        try:
+            extra = json.loads(row.extra or "{}")
+        except (TypeError, ValueError) as exc:
+            raise KnowledgeScopeUnavailable() from exc
+        scope = extra.get("knowledge_scope") if isinstance(extra, dict) else None
+    recorded = RecordedRoundScope.recover(scope)
+    if recorded is None:
+        raise KnowledgeScopeUnavailable()
+
+    selection = UseKnowledgeBaseParam.model_validate(recorded.model_dump(exclude={"version", "recorded"}))
+    # Re-check access before exposing any KB metadata to a model or queueing a
+    # task. The search tools still apply current file permissions at execution.
+    from bisheng.common.errcode.tag import TagNotExistError
+    from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
+    from bisheng.knowledge.domain.services.knowledge_space_tag_filter_service import KnowledgeSpaceTagFilterService
+
+    selected = [*recorded.organization_knowledge_ids, *recorded.knowledge_space_ids]
+    if selected:
+        allowed = await KnowledgePermissionService().filter_knowledge_ids_by_action_async(
+            login_user, selected, "visible"
+        )
+        if set(allowed) != set(selected):
+            raise KnowledgeScopeUnavailable()
+    try:
+        await KnowledgeSpaceTagFilterService().validate_selection(selection.knowledge_space_tag_filters)
+    except TagNotExistError as exc:
+        raise KnowledgeScopeUnavailable() from exc
+    return selection, scope
+
+
 def _to_linsight_submit(data: APIChatCompletion):
     """Map the unified chat request to a linsight submit schema (F035 Track J).
 
@@ -3018,6 +3141,12 @@ def _to_linsight_submit(data: APIChatCompletion):
     # injection (task_exec resolves from the id lists).
     org_ids = list(ukb.organization_knowledge_ids or []) if ukb else []
     space_ids = list(ukb.knowledge_space_ids or []) if ukb else []
+    # The task must search exactly what the user pinned on this round. A field
+    # the client never declared stays "unrecorded" (None) instead of being
+    # invented as "no tag" or as "the whole space".
+    tag_filters = None
+    if ukb is not None and ukb.tag_scope_recorded:
+        tag_filters = {int(k): int(v) for k, v in (ukb.knowledge_space_tag_filters or {}).items()}
     personal_enabled = bool(ukb and ukb.personal_knowledge_enabled)
 
     return LinsightQuestionSubmitSchema(
@@ -3027,6 +3156,7 @@ def _to_linsight_submit(data: APIChatCompletion):
         org_knowledge_enabled=bool(org_ids),
         organization_knowledge_ids=org_ids or None,
         knowledge_space_ids=space_ids or None,
+        knowledge_space_tag_filters=tag_filters,
         model=data.model or None,
         files=submit_files,
         tools=submit_tools,

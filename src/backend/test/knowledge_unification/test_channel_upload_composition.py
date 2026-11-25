@@ -23,6 +23,11 @@ processing, application, files, legacy, upload = (
 
 @pytest.fixture
 async def channel_upload(upload, monkeypatch):
+    from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding
+
+    async with upload.context.sessions() as session, session.begin():
+        await (await session.connection()).run_sync(KnowledgeProviderBinding.__table__.create, checkfirst=True)
+    monkeypatch.setattr(module, "get_async_db_session", upload.context.sessions)
     article = SimpleNamespace(title="Article", content="Original article", content_html="<p>Original</p>")
     service = module.ChannelService(
         channel_repository=AsyncMock(),

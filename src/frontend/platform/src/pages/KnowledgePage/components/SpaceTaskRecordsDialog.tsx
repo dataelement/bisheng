@@ -14,13 +14,18 @@ import {
 } from "@/controllers/hooks/knowledge";
 import { SpaceProcessingPanel } from "./SpaceProcessingDialog";
 
+import { SpaceProviderOperations } from './SpaceProviderOperations';
+
+type TaskKind = 'embedding_rebuild' | 'move_index' | 'provider_operations';
+
 interface SpaceTaskRecordsDialogProps {
   scope: KnowledgeQueryScope;
   spaceId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canReadProcessing: boolean;
-  initialKind?: "embedding_rebuild" | "move_index";
+  canReadProviderOperations: boolean;
+  initialKind?: TaskKind;
 }
 
 export function SpaceTaskRecordsDialog({
@@ -29,6 +34,7 @@ export function SpaceTaskRecordsDialog({
   open,
   onOpenChange,
   canReadProcessing,
+  canReadProviderOperations,
   initialKind = "embedding_rebuild",
 }: SpaceTaskRecordsDialogProps) {
   const { t } = useTranslation("knowledge");
@@ -44,12 +50,13 @@ export function SpaceTaskRecordsDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col">
-          <TaskRecordsContent
+          {open && <TaskRecordsContent
             scope={scope}
             spaceId={spaceId}
             canReadProcessing={canReadProcessing}
+            canReadProviderOperations={canReadProviderOperations}
             initialKind={initialKind}
-          />
+          />}
         </div>
       </DialogContent>
     </Dialog>
@@ -60,45 +67,46 @@ function TaskRecordsContent({
   scope,
   spaceId,
   canReadProcessing,
+  canReadProviderOperations,
   initialKind,
-}: Pick<SpaceTaskRecordsDialogProps, "scope" | "spaceId" | "canReadProcessing" | "initialKind">) {
+}: Pick<SpaceTaskRecordsDialogProps, "scope" | "spaceId" | "canReadProcessing" | "canReadProviderOperations" | "initialKind">) {
   const { t } = useTranslation("knowledge");
   const client = useQueryClient();
   const [selectedKind, setSelectedKind] = useState(initialKind ?? "embedding_rebuild");
-  const kind = canReadProcessing ? selectedKind : "move_index";
+  const kind = (selectedKind === "provider_operations" && !canReadProviderOperations) ||
+    (selectedKind === "embedding_rebuild" && !canReadProcessing) ? "move_index" : selectedKind;
+  const showKinds = canReadProcessing || canReadProviderOperations;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {canReadProcessing && (
+      {showKinds && (
         <Segmented
           className="shrink-0 self-start"
           aria-label={t("detail.task_records")}
           value={kind}
-          onChange={(value) => setSelectedKind(value as "embedding_rebuild" | "move_index")}
+          onChange={(value) => setSelectedKind(value as TaskKind)}
           options={[
-            {
-              value: "embedding_rebuild",
-              label: t("f118.processing_title_jobs"),
-            },
+            ...(canReadProcessing ? [{ value: "embedding_rebuild", label: t("f118.processing_title_jobs") }] : []),
             {
               value: "move_index",
               label: t("move.jobs"),
             },
+            ...(canReadProviderOperations ? [{ value: "provider_operations", label: t("provider_operations.title") }] : []),
           ]}
         />
       )}
-      <SpaceProcessingPanel
+      {kind === "provider_operations" ? <SpaceProviderOperations scope={scope} spaceId={spaceId} /> : <SpaceProcessingPanel
         scope={scope}
         spaceId={spaceId}
         mode="jobs"
         jobKind={kind}
         presentation="inline"
         fill
-        hideTitle={canReadProcessing}
+        hideTitle={showKinds}
         onSaved={kind === "move_index" ? () => {
           void client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
         } : undefined}
-      />
+      />}
     </div>
   );
 }

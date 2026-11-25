@@ -122,9 +122,14 @@ async def upload_knowledge_file(
     knowledge_id: int,
     file: UploadFile = File(...),
 ):
-    """Knowledge base upload file"""
+    """Stage for native document libraries and spaces only."""
+    from bisheng.knowledge.application import provider_v1_runtime as provider
 
     try:
+        # The legacy NORMAL library also has an id; its missing binding is Native.
+        # A non-ready binding raises instead of falling back to native storage.
+        if await provider.resolve_space_route(knowledge_id) is not None:
+            raise provider.ProviderFeatureUnavailable()
         file_name = file.filename
         validate_knowledge_upload_file(file_name, file.size)
 
@@ -699,17 +704,31 @@ async def get_file_share_url(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     file_id: int = Query(description="File UniqueID"),
 ):
+    from bisheng.knowledge.application import provider_v1_runtime as provider
+    from bisheng.permission.application.identity import resolve_permission_actor
+
+    space_id, route = await provider.file_route(file_id)
+    if route:
+        reads = await provider.build_provider_reads()
+        handle = await reads.issue(await resolve_permission_actor(login_user), space_id, file_id, "download")
+        return resp_200(data={"original_url": provider.handle_url(handle), "preview_url": ""})
     original_url, preview_url = await KnowledgeService.aget_file_share_with_auth(login_user, file_id, request=request)
     return resp_200(data={"original_url": original_url, "preview_url": preview_url})
 
 
 @router.get("/file_bbox")
-def get_file_bbox(
+async def get_file_bbox(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     file_id: int = Query(description="File UniqueID"),
 ):
-    res = KnowledgeService.get_file_bbox(request, login_user, file_id)
+    from starlette.concurrency import run_in_threadpool
+    from bisheng.knowledge.application import provider_v1_runtime as provider
+
+    _, route = await provider.file_route(file_id)
+    if route:
+        raise provider.ProviderFeatureUnavailable()
+    res = await run_in_threadpool(KnowledgeService.get_file_bbox, request, login_user, file_id)
     return resp_200(data=res)
 
 

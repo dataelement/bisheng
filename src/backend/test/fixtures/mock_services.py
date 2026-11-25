@@ -62,6 +62,11 @@ class _KnowledgeUtilsPlaceholder:
         return None
 
     @staticmethod
+    def delete_violation_display_chunks(file_ids):
+        """No Redis-backed display cache is populated by this test double."""
+        return None
+
+    @staticmethod
     def update_folder_update_time_sync(*args, **kwargs):
         return None
 

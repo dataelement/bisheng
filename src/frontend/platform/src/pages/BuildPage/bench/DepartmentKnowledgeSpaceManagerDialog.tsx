@@ -16,6 +16,7 @@ import {
     setDepartmentKnowledgeSpacesVisibilityApi,
 } from "@/controllers/API/departmentKnowledgeSpace";
 import { showApiError } from "@/controllers/request";
+import { DepartmentProviderBatch } from '@/pages/KnowledgePage/components/DepartmentProviderBatch';
 import type { DepartmentTreeNode } from "@/types/api/department";
 import { Checkbox } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -43,6 +44,8 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
     const [bindingByDept, setBindingByDept] = useState<Map<number, Binding>>(new Map());
     const [selectedDeptIds, setSelectedDeptIds] = useState<Set<number>>(new Set());
     const [saving, setSaving] = useState(false);
+    const [external, setExternal] = useState(false);
+    useEffect(() => { if (!open) setExternal(false); }, [open]);
     // Names learned from the lazy tree as nodes render/toggle, so the change-preview
     // can label a pending department even when it isn't currently rendered.
     const nameRef = useRef<Map<number, string>>(new Map());
@@ -220,7 +223,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
                                 {withDefaultName && (
                                     <div className="mt-1 pl-3.5 text-xs text-[#86909C]">
                                         {t("bench.departmentKnowledgeSpaceDefaultName")}：
-                                        {`${nameOf(deptId)}的知识空间`}
+                                        {t('departmentSpace.batchSpaceName', {name: nameOf(deptId)})}
                                     </div>
                                 )}
                             </div>
@@ -292,11 +295,16 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
                         </div>
                     </div>
                 </div>
+                <div>
+                    <Button variant="outlined" aria-pressed={external} onClick={() => setExternal(!external)}>{t('departmentSpace.batchMode')}</Button>
+                    {open && external && <DepartmentProviderBatch ids={pendingHide.length || pendingRestore.length ? [] : pendingCreate} onCreated={() => { onChanged?.(); void loadBindings().catch(showApiError); }} />}
+                    {external && (pendingHide.length > 0 || pendingRestore.length > 0) && <p>{t('departmentSpace.batchSeparate')}</p>}
+                </div>
                 <DialogFooter>
                     <Button variant="outlined" onClick={() => onOpenChange(false)} color="default">
                         {t("cancel")}
                     </Button>
-                    <Button disabled={saving || !hasChanges} onClick={handleSave}>
+                    <Button disabled={external || saving || !hasChanges} onClick={handleSave}>
                         {t("bench.departmentKnowledgeSpaceSave")}
                     </Button>
                 </DialogFooter>

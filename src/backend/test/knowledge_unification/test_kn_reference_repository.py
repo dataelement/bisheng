@@ -43,7 +43,10 @@ async def store(tmp_path, monkeypatch):
     tenant_filter.register_tenant_filter_events()
     path = tmp_path / "knowledge.db"
     sync = sa.create_engine(f"sqlite:///{path}")
+    from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding
+
     Knowledge.__table__.create(sync)
+    KnowledgeProviderBinding.__table__.create(sync)
     with Session(sync) as session:
         with bypass_tenant_filter():
             session.add_all(

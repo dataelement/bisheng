@@ -301,6 +301,40 @@ class SpaceUploadApplication:
         )
         await self._check_identity(knowledge.tenant_id)
 
+    async def acreate_provider_file(
+        self,
+        *,
+        knowledge,
+        parent_id,
+        request_key,
+        file_name,
+        byte_count,
+        checksum,
+        chunks,
+        port,
+        user_limit,
+        tenant_limit,
+        chunking=None,
+    ):
+        """External entry: pass original unsaved chunks and server-resolved port/budgets."""
+        from bisheng.knowledge.application.provider_upload_item import upload_item
+
+        await self._admit_destination(knowledge, parent_id)
+        return await upload_item(
+            self,
+            knowledge,
+            parent_id,
+            request_key,
+            file_name,
+            byte_count,
+            checksum,
+            chunks,
+            port,
+            user_limit,
+            tenant_limit,
+            chunking,
+        )
+
     async def acreate_file(
         self, *, knowledge: Knowledge, parent_id: int | None, prepared: PreparedUpload, file_source: FileSource
     ) -> KnowledgeFile:

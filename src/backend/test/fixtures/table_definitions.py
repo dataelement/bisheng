@@ -509,6 +509,12 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "groupresource": TABLE_GROUP_RESOURCE,
     "flow": TABLE_FLOW,
     "knowledge": TABLE_KNOWLEDGE,
+    "knowledge_provider_binding": """CREATE TABLE IF NOT EXISTS knowledge_provider_binding (
+        id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, space_id INTEGER NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1, create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        provider_key VARCHAR(48) NOT NULL, active_generation INTEGER, state VARCHAR(32) NOT NULL,
+        pending_write_operation_id VARCHAR(36), wiki_target_revision INTEGER NOT NULL DEFAULT 0,
+        wiki_applied_revision INTEGER NOT NULL DEFAULT 0, UNIQUE(tenant_id, space_id))""",
     "department": TABLE_DEPARTMENT,
     "user_department": TABLE_USER_DEPARTMENT,
     "auditlog": TABLE_AUDIT_LOG,

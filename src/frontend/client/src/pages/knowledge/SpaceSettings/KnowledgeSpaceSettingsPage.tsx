@@ -1,3 +1,4 @@
+import { ProviderSettingsSection } from "./ProviderSettingsSection";
 import { KnowledgeSpaceAccessMode } from "./KnowledgeSpaceAccessMode";
 import { Outlined } from "bisheng-icons";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
@@ -44,13 +45,18 @@ const MAX_NAME_LENGTH = 10;
 const MAX_DESCRIPTION_LENGTH = 200;
 
 export function KnowledgeSpaceSettingsPage() {
+  const { spaceId } = useParams<{ spaceId?: string }>();
+  const { user } = useAuthContext();
+  return <SpaceSettingsForm key={JSON.stringify([user?.tenant_id, user?.id, spaceId])} spaceId={spaceId} />;
+}
+
+function SpaceSettingsForm({ spaceId }: { spaceId?: string }) {
   const localize = useLocalize();
   const selectCopy = useSelectCopy();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuthContext();
   const { showToast } = useToastContext();
-  const { spaceId } = useParams<{ spaceId?: string }>();
   const settings = useKnowledgeSpaceSettingsForm(spaceId);
   // Save / cancel / back resume where the user entered from; a direct link
   // falls back to the space root (or the list when creating).
@@ -148,7 +154,7 @@ export function KnowledgeSpaceSettingsPage() {
   };
 
   const handleSubmit = async () => {
-    if (settings.autoTagFeatureVisible && settings.form.autoTagEnabled) {
+    if (settings.includeTags && settings.autoTagFeatureVisible && settings.form.autoTagEnabled) {
       if (settings.form.autoTagMode === "library" && !settings.form.autoTagLibraryId) {
         showToast({
           message: localize("com_knowledge.auto_tag_library_required"),
@@ -174,6 +180,11 @@ export function KnowledgeSpaceSettingsPage() {
     try {
       const result = await settings.submit();
       if (settings.mode === "create") {
+        if (result && 'operationId' in result) {
+          showToast({ message: localize('com_knowledge.provider_create_received'), severity: NotificationSeverity.INFO });
+          navigate(returnPath);
+          return;
+        }
         if (!result || result.initialPermissionResult?.status === "failed") return;
         showToast({
           message: localize("com_knowledge.space_create_success"),
@@ -202,7 +213,7 @@ export function KnowledgeSpaceSettingsPage() {
   if (settings.loadError) {
     return (
       <div role="alert" className="flex h-full items-center justify-center text-body text-danger">
-        {settings.loadError.message}
+        {localize('com_knowledge.provider_load_failed')}
       </div>
     );
   }
@@ -317,6 +328,11 @@ export function KnowledgeSpaceSettingsPage() {
               </div>
             </section>
 
+            <ProviderSettingsSection creating={settings.mode === 'create'} provider={settings.provider}
+              onChange={settings.setProvider} disabled={settings.submitting}
+              config={settings.mode === 'create' ? settings.preview?.preset?.config : settings.observed?.config}
+              failed={settings.preview?.failed} pending={settings.observed?.pending} />
+
             {settings.autoTagFeatureVisible && settings.canEdit && (
               <section className="space-y-6">
                 <SettingsSectionHeader
@@ -408,7 +424,7 @@ export function KnowledgeSpaceSettingsPage() {
               </section>
             )}
 
-            {settings.canManagePermissions && (
+            {(settings.canManagePermissions || settings.provider === 'weknora') && (
               <section className="space-y-6" data-testid="permission-section">
                 <SettingsSectionHeader
                   kind="permission"
@@ -419,12 +435,12 @@ export function KnowledgeSpaceSettingsPage() {
                     visibility={settings.form.visibility}
                     mode={settings.mode}
                     isDepartmentSpace={settings.isDepartmentSpace}
-                    disabled={!settings.canEdit}
+                    disabled={!settings.canEdit || !settings.canManagePermissions}
                     isReleased={settings.form.isReleased}
                     onVisibilityChange={(value) => settings.updateForm("visibility", value)}
                     onReleasedChange={(value) => settings.updateForm("isReleased", value)}
                   />
-                  {!isPrivate && (
+                  {!isPrivate && settings.canManagePermissions && !(settings.mode === 'create' && settings.provider === 'weknora') && (
                     <>
                       <PermissionDraftPanel
                         value={displayedPermissionRows}
@@ -458,7 +474,8 @@ export function KnowledgeSpaceSettingsPage() {
           onCancel={cancel}
           onSubmit={() => void handleSubmit()}
           submitting={settings.submitting}
-          disabled={!settings.form.name.trim() || (!settings.canEdit && !settings.canManagePermissions)}
+          disabled={!settings.form.name.trim() || (!settings.canEdit && !(settings.canManagePermissions && settings.permissionHasChanges))
+            || (settings.mode === 'create' && settings.provider === 'weknora' && !settings.preview.preset)}
         />
       </div>
 

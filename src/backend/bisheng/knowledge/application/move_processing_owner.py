@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.knowledge.application import move_processing_admission as admission
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
+from bisheng.knowledge.application.provider_transfer import require_native_mutation
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.repositories.move_batch_repository import touch_move_spaces
 from bisheng.knowledge.domain.repositories.move_cutover_repository import MoveCutoverRepository
@@ -279,6 +280,10 @@ class KnowledgeMoveProcessingOwner:
         async with admission.identity(plan.actor_reference, current=identity, entry_kind=entry_kind) as (actual, _):
             await self._authorize_scope(actual, scope, expected, facts, force=existing is None)
             async with self._session() as session:
+                for space_id in sorted({source_space_id, scope.destination_space_id}):
+                    await require_native_mutation(
+                        session, tenant_id=admission.tenant(), space_id=space_id, operation="move"
+                    )
                 return self._accepted(await self._call(session, self.jobs.acreate_move_reserved(session, **args)))
 
     async def astart_attempt(

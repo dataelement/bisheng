@@ -68,13 +68,21 @@ class _RetrievalChannel(VectorStore):
 class RetrievalEngine:
     """Retrieve chunks from knowledge spaces / document libraries, filtered."""
 
-    def __init__(self, login_user: UserPayload, *, version_repo: Any = None):
+    def __init__(self, login_user: UserPayload, *, version_repo: Any = None, provider_retrieval=None):
+        self.provider_retrieval = provider_retrieval
         self.login_user = login_user
         self.version_repo = version_repo
 
     # ------------------------------------------------------------------
     # Collaborators
     # ------------------------------------------------------------------
+
+    def _require_provider_if_marked(self, target):
+        # A trusted caller can supply a hydrated target before its port is
+        # wired. An explicit external route must never become a native search.
+        key = getattr(target, "provider_key", None)
+        if self.provider_retrieval is None and isinstance(key, str) and key != "native":
+            raise ValueError("provider retrieval not configured")
 
     def _visibility_service(self):
         """F029 two-layer ``visible`` filter, built without a ``Request``."""
@@ -119,6 +127,19 @@ class RetrievalEngine:
         identity may see. Caps at two retrieval attempts; emits one structured
         ``permission_filter`` log line per attempt (AC-27).
         """
+        self._require_provider_if_marked(space)
+        if self.provider_retrieval is not None and space.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.provider_retrieval import RetrievalSelection
+
+            route = await self.provider_retrieval.route(space)
+            if route is not None:
+                selection = RetrievalSelection(
+                    file_ids=None if candidate_file_ids is None else tuple(candidate_file_ids)
+                )
+                hits = await self.provider_retrieval.retrieve(
+                    space, route, selection, query, max_content, self._visibility_service()
+                )
+                return [doc for _, doc in hits]
         visibility = self._visibility_service()
         conf = self._qa_filter_conf()
 
@@ -268,7 +289,18 @@ class RetrievalEngine:
         max_content: int,
     ) -> list[tuple[int, Document]]:
         """Knowledge space (type=3): file-level ``visible`` filtering."""
+        self._require_provider_if_marked(space)
 
+        if self.provider_retrieval is not None:
+            from bisheng.knowledge.application.provider_retrieval import RetrievalSelection
+
+            route = await self.provider_retrieval.route(space)
+            if route is not None:
+                if tag_names:
+                    raise ValueError("external spaces require stable tag references")
+                return await self.provider_retrieval.retrieve(
+                    space, route, RetrievalSelection(), query, max_content, self._visibility_service()
+                )
         target_file_ids = await self.resolve_space_file_ids_by_tags(space.id, tag_names)
         if tag_names and not target_file_ids:
             return []
@@ -326,6 +358,7 @@ class RetrievalEngine:
         *,
         query: str,
         tag_filters: dict[int, list[str]] | None = None,
+        selections: dict | None = None,
         max_content: int,
     ) -> list[tuple[int, Document]]:
         """Globally fuse the two score-ranked channels, as workflow retrieval does.
@@ -335,8 +368,66 @@ class RetrievalEngine:
         knowledge base exist" — which is precisely the question the open face
         must not answer distinguishably.
         """
+        from itertools import zip_longest
+
+        from bisheng.knowledge.application.provider_retrieval import RetrievalSelection
+
+        selections = selections or {}
+        if selections.keys() - {t.id for t in targets}:
+            raise ValueError("selection outside retrieval scope")
         if not targets:
             return []
+        if self.provider_retrieval is None:
+            for target in targets:
+                self._require_provider_if_marked(target)
+            if selections:
+                raise ValueError("provider retrieval not configured")
+            return await self._retrieve_native_many(
+                targets, query=query, tag_filters=tag_filters, max_content=max_content
+            )
+        # Resolve every route first: an all-Native request must keep the
+        # historical global-ranking path. Grouping Native KBs and interleaving
+        # them by per-source rank changes which chunks survive a global top-k.
+        routes = {}
+        for target in targets:
+            route = None
+            if self.provider_retrieval is not None and target.type == KnowledgeTypeEnum.SPACE.value:
+                route = await self.provider_retrieval.route(target)
+            routes[target.id] = route
+        if not any(routes.values()):
+            if selections:
+                raise ValueError("provider selection on native target")
+            return await self._retrieve_native_many(
+                targets, query=query, tag_filters=tag_filters, max_content=max_content
+            )
+        groups = {}
+        for target in targets:
+            route = routes[target.id]
+            if route is not None:
+                if (tag_filters or {}).get(target.id):
+                    raise ValueError("external spaces require stable tag references")
+                groups[("external", target.id)] = await self.provider_retrieval.retrieve(
+                    target,
+                    route,
+                    selections.get(target.id, RetrievalSelection()),
+                    query,
+                    max_content,
+                    self._visibility_service(),
+                )
+            else:
+                if target.id in selections:
+                    raise ValueError("provider selection on native target")
+                groups.setdefault(("native", getattr(target, "model", None)), []).append(target)
+        for key, group in groups.items():
+            if key[0] == "native":
+                groups[key] = await self._retrieve_native_many(
+                    group, query=query, tag_filters=tag_filters, max_content=max_content
+                )
+        # Sources are disjoint. Equal-weight reciprocal rank orders solely by
+        # within-source rank; stable group order breaks ties, never raw scores.
+        return [hit for level in zip_longest(*groups.values()) for hit in level if hit is not None]
+
+    async def _retrieve_native_many(self, targets, *, query, tag_filters, max_content):
         if len(targets) == 1:
             return await self._retrieve_one(
                 targets[0], query=query, tag_names=(tag_filters or {}).get(targets[0].id) or [], max_content=max_content

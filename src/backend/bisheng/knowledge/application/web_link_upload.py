@@ -38,6 +38,22 @@ class WebLinkObjectPlan:
     user_metadata: dict = field(repr=False)
 
 
+def snapshot_revision(prepared: PreparedWebLink) -> str:
+    """Identify both representations and their provenance, not just indexed Markdown."""
+    import json
+    from hashlib import sha256
+
+    manifest = [
+        prepared.file_name,
+        prepared.user_metadata.get("web_title"),
+        prepared.user_metadata.get("source_url"),
+        prepared.user_metadata.get("final_url"),
+        sha256(prepared.markdown_bytes).hexdigest(),
+        sha256(prepared.html_snapshot_bytes).hexdigest() if prepared.html_snapshot_bytes else None,
+    ]
+    return sha256(json.dumps(manifest, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
 def build_web_link_objects(prepared: PreparedWebLink, *, file_id: int) -> WebLinkObjectPlan:
     if type(file_id) is not int or file_id <= 0:
         raise ValueError("web upload material requires a positive integer file ID")

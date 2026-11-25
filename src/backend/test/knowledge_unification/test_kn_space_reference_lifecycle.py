@@ -124,8 +124,17 @@ async def consumer(business, monkeypatch):
 
 @pytest.fixture
 async def deletion_consumer(consumer, monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+    from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding
+
     context, service, adapter = consumer
     models = (
+        KnowledgeProcessingFence,
+        KnowledgeProcessingArtifact,
+        KnowledgeProviderBinding,
         KnowledgeDocument,
         KnowledgeDocumentVersion,
         KnowledgeOperationPlan,
@@ -287,8 +296,12 @@ async def deletion_consumer(consumer, monkeypatch):
         fga=transport,
         finalizer=sql_runtime.SqlProjectionFinalizer(),
     )
+
+    async def read_tuples(*, object, consistency):
+        return [{"user": u, "relation": r, "object": o} for u, r, o in transport.present if o == object]
+
     runtime = F048PermissionRuntime(
-        client=SimpleNamespace(store_id="store", model_id="model"),
+        client=SimpleNamespace(store_id="store", model_id="model", read_tuples=read_tuples),
         state=control,
         marker=Marker(),
         decision=None,

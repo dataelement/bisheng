@@ -202,7 +202,7 @@ export function FileCard({
 
   // formatTime is now imported from ../knowledgeUtils
 
-  const nameToneClass = isKnowledgeItemPreviewable(file) ? "text-text-1" : "text-text-3";
+  const nameToneClass = (isFolder || (onPreview && isKnowledgeItemPreviewable(file))) ? "text-text-1" : "text-text-3";
 
   /**
    * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
@@ -400,7 +400,7 @@ export function FileCard({
     !isCreating &&
     !isRenaming &&
     !isUploadingFolderPlaceholder &&
-    (isFolder || isKnowledgeItemPreviewable(file));
+    (isFolder || (Boolean(onPreview) && isKnowledgeItemPreviewable(file)));
 
   // The danger row gets its own group only when something sits above it.
   const hasItemsAboveDelete =

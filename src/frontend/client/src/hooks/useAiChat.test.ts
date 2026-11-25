@@ -55,7 +55,7 @@ jest.mock("~/api/chatApi", () => ({
   getSessionName: (...args: unknown[]) => mockGetSessionName(...args),
   getSSEUrl: () => '/workstation/chat',
 }));
-jest.mock('~/api/request', () => ({ __esModule: true, default: {}, translateApiErrorMessage: () => '' }));
+jest.mock('~/api/request', () => ({ __esModule: true, default: {}, translateApiErrorMessage: () => '', prepareBrowserHeaders: async () => ({}) }));
 
 // Recoil atoms are read-only fixtures here: `~/store` hands out tagged objects
 // and the mocked `useRecoilState` unwraps whatever value each one carries.
@@ -78,7 +78,8 @@ jest.mock("~/store/linsight", () => ({
 jest.mock("~/hooks/AuthContext", () => ({ useAuthContext: () => ({ user: { id: "test-user" } }) }));
 
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
-jest.mock("~/Providers", () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
+const mockConfirmMaterials = jest.fn();
+jest.mock("~/Providers", () => ({ useConfirm: () => mockConfirmMaterials, useToastContext: () => ({ showToast: jest.fn() }) }));
 jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ data: mockBsConfig }) }));
 // Added since the fix was lost: the hook now reads media metadata off
 // attachments and mints an owner id for the stream registry.
@@ -134,7 +135,8 @@ const historyOf = (conversationId: string) => [
     text: `${conversationId} history`,
     sender: "User",
     isCreatedByUser: true,
-    messageId: `${conversationId}-q`,
+    messageId: conversationId === "c1" ? "11" : conversationId === "c2" ? "12" : `${conversationId}-q`,
+    knowledge_scope_recorded: true,
     parentMessageId: "",
     conversationId,
     error: false,
@@ -150,6 +152,7 @@ const renderChat = (conversationId: string) =>
 const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
+  mockConfirmMaterials.mockReset().mockResolvedValue(false);
   mockUUIDSequence = 0;
   mockUseRealProjectTransport = false;
   mockTransportPayloads.length = 0;
@@ -171,7 +174,7 @@ describe('daily answer retry identity', () => {
     await act(async () => { await result.current.sendMessage('Original question', files); });
     const initial = latestStream().submission;
     act(() => {
-      initial.onCreated('c1', { ...initial.userMessage, messageId: '101' });
+      initial.onCreated('c1', { ...initial.userMessage, messageId: '101', knowledge_scope_recorded: true });
       initial.onError('Model unavailable');
       initial.onEnd();
     });
@@ -185,10 +188,10 @@ describe('daily answer retry identity', () => {
   it('keeps updating a retry after server ID replacement and retains safety metadata', async () => {
     const { result } = renderChat('c1');
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
-    await act(async () => { await result.current.regenerate('c1-q'); });
+    await act(async () => { await result.current.regenerate('11'); });
     const retry = latestStream().submission;
     act(() => {
-      retry.onCreated('c1', { ...retry.userMessage, messageId: '102' });
+      retry.onCreated('c1', { ...retry.userMessage, messageId: '102', knowledge_scope_recorded: true });
       retry.onAgentUpdate?.({ messageId: '202', text: 'Partial answer' });
       retry.onAgentUpdate?.({ messageId: '202', text: 'Complete answer' });
       retry.onError('Connection lost', 500, { referenceId: 'support-one', errorType: 'network' });
@@ -203,7 +206,7 @@ describe('daily answer retry identity', () => {
   it('keeps legacy deltas and final metadata on the same persisted retry answer', async () => {
     const { result } = renderChat('c1');
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
-    await act(async () => { await result.current.regenerate('c1-q'); });
+    await act(async () => { await result.current.regenerate('11'); });
     const retry = latestStream().submission;
     act(() => {
       retry.onMessage('Partial', '202');
@@ -224,7 +227,8 @@ describe('daily answer retry identity', () => {
     await act(async () => { await result.current.sendMessage('Project question'); });
     act(() => { latestStream().submission.onError('Failed'); latestStream().submission.onEnd(); });
     let retry: Promise<void> | undefined;
-    act(() => { retry = result.current.regenerate(result.current.messages[0].messageId); });
+    mockConfirmMaterials.mockResolvedValue(true);
+    await act(async () => { retry = result.current.regenerate(result.current.messages[0].messageId); });
     window.history.replaceState({}, '', '/workspace/c/new?projectId=22222222-2222-4222-8222-222222222222');
     await act(async () => { grant({ leaseId: 'retry-lease', blocked: false }); await retry; });
     expect(latestStream().submission.projectDraft).toEqual({ projectId: firstProject });
@@ -721,12 +725,13 @@ describe("conversation knowledge isolation", () => {
     await waitFor(() => expect(chat.result.current.messages).toHaveLength(1));
     act(() => chat.result.current.setSelectedOrgKbs(k1));
     chat.rerender({ cid: "c2" });
-    await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe("c2-q"));
+    await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe("12"));
     act(() => chat.result.current.setSelectedOrgKbs(k2));
     chat.rerender({ cid: "c1" });
-    await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe("c1-q"));
-    await act(async () => { await chat.result.current.regenerate("c1-q"); });
-    expect(scope()).toMatchObject({ knowledge_space_ids: [101] });
+    await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe("11"));
+    await act(async () => { await chat.result.current.regenerate("11"); });
+    expect(scope()).toBeUndefined();
+    expect(latestStream().submission.payload).toMatchObject({ isRegenerate: true, messageId: "11", useCurrentMaterials: false });
     act(() => {
       latestStream().submission.onEnd();
       chat.result.current.setSelectedOrgKbs([]);
@@ -852,6 +857,7 @@ test("knowledge handoff submits the chosen model ID and space in the real chat p
           personal_knowledge_enabled: false,
           organization_knowledge_ids: [],
           knowledge_space_ids: [28],
+          knowledge_space_tag_filters: {},
         },
       }),
     );
@@ -868,9 +874,14 @@ test('preserves a space tag across send, regeneration and conversation reload', 
   act(() => result.current.setSelectedOrgKbs(tagged));
   await act(async () => { await result.current.sendMessage('tagged question'); });
   expect(latestStream().submission.payload.use_knowledge_base.knowledge_space_tag_filters).toEqual({ '12': 7 });
-  act(() => latestStream().submission.onEnd());
-  await act(async () => { await result.current.regenerate(result.current.messages[result.current.messages.length - 1].messageId); });
-  expect(latestStream().submission.payload.use_knowledge_base.knowledge_space_tag_filters).toEqual({ '12': 7 });
+  act(() => {
+    latestStream().submission.onCreated('c1', { ...latestStream().submission.userMessage, messageId: '107', knowledge_scope_recorded: true });
+    latestStream().submission.onEnd();
+  });
+  await act(async () => { await result.current.regenerate(result.current.messages.at(-1)!.parentMessageId); });
+  expect(mockOpenedStreams).toHaveLength(2);
+  expect(latestStream().submission.payload).toMatchObject({ messageId: '107', isRegenerate: true, useCurrentMaterials: false });
+  expect(latestStream().submission.payload).not.toHaveProperty('use_knowledge_base');
   act(() => latestStream().submission.onEnd());
   unmount();
   const restored = renderChat('c1');
@@ -902,7 +913,7 @@ test('does not regenerate an image turn with a model that has lost image support
   mockGetAgentMessages.mockResolvedValue([{ ...historyOf('c1')[0], files: [{ name: 'image.png', filepath: 'image.png' }] }]);
   const { result } = renderChat('c1');
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
-  await act(async () => { await result.current.regenerate('c1-q'); });
+  await act(async () => { await result.current.regenerate('11'); });
   expect(mockOpenedStreams).toHaveLength(0);
   expect(result.current.messages).toHaveLength(1);
 });

@@ -3,6 +3,7 @@ import json
 import os
 import re
 import ssl
+from ipaddress import IPv4Address, IPv4Network
 from typing import Union
 from urllib.parse import quote, urlparse, urlunparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -22,6 +23,7 @@ from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
 from bisheng.core.config.sso_sync import SSOSyncConf
 from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
+from bisheng.core.config.weknora import WeKnoraSettings
 
 secret_key = "TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E="
 
@@ -1015,6 +1017,24 @@ class Settings(BaseModel):
         default_factory=DshSettings,
         description="BS Client deployment settings, native Desktop access and quota/audit bounds.",
     )
+    weknora: WeKnoraSettings | None = Field(default=None, repr=False, exclude=True)
+    weknora_http_endpoint: str | None = Field(
+        default=None, description="Optional trusted private HTTP origin for WeKnora"
+    )
+
+    @field_validator("weknora_http_endpoint")
+    @classmethod
+    def validate_weknora_http_endpoint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        match = re.fullmatch(r"http://([0-9.]+)(?::([1-9][0-9]{0,4}))?/?", value)
+        if not match or (match[2] and int(match[2]) > 65535):
+            raise ValueError("Expected one private WeKnora HTTP origin without a path or credentials")
+        host = IPv4Address(match[1])
+        if not any(host in IPv4Network(net) for net in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")):
+            raise ValueError("WeKnora cleartext HTTP requires an RFC1918 IPv4 address")
+        return value.removesuffix("/")
+
     database_url: str | None = None
     redis_url: Union[str, dict] | None = None
     celery_redis_url: Union[str, dict] | None = None

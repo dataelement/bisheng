@@ -20,7 +20,7 @@ beforeEach(() => {
 
 it('reports a failed tag request and can load tags on the next interaction', async () => {
     getTags.mockRejectedValueOnce(normalizeApiError({ code: 'ERR_NETWORK' }, { message: 'Tags unavailable' }));
-    render(<CompoundSearchInput spaceId="one" isRoot pageMode />);
+    render(<CompoundSearchInput tagScope={{ kind: 'native', key: 'member' }} spaceId="one" isRoot pageMode />);
     await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: messages.network_error })));
 
     getTags.mockResolvedValueOnce([{ id: 1, name: 'Reports' }]);
@@ -32,16 +32,16 @@ it.each(['canceled', 'global'] as const)('does not duplicate feedback for a %s r
     const error = normalizeApiError(kind === 'canceled' ? { code: 'ERR_CANCELED' } : { status_code: 500 }, { message: 'Already handled' });
     if (kind === 'global') error.presentation = 'global';
     getTags.mockRejectedValueOnce(error);
-    await act(async () => { render(<CompoundSearchInput spaceId="one" isRoot pageMode />); });
+    await act(async () => { render(<CompoundSearchInput tagScope={{ kind: 'native', key: 'member' }} spaceId="one" isRoot pageMode />); });
     expect(notify).not.toHaveBeenCalled();
 });
 
 it('ignores a failed request from the space that has already been left', async () => {
     let failOldRequest!: (reason: unknown) => void;
     getTags.mockReturnValueOnce(new Promise((_resolve, reject) => { failOldRequest = reject; }));
-    const view = render(<CompoundSearchInput spaceId="one" isRoot pageMode />);
+    const view = render(<CompoundSearchInput tagScope={{ kind: 'native', key: 'member' }} spaceId="one" isRoot pageMode />);
     getTags.mockResolvedValueOnce([{ id: 2, name: 'Current tags' }]);
-    view.rerender(<CompoundSearchInput spaceId="two" isRoot pageMode />);
+    view.rerender(<CompoundSearchInput tagScope={{ kind: 'native', key: 'member' }} spaceId="two" isRoot pageMode />);
     await screen.findByRole('button', { name: 'Current tags' });
     await act(async () => { failOldRequest(new Error('Old space failed')); });
     expect(notify).not.toHaveBeenCalled();

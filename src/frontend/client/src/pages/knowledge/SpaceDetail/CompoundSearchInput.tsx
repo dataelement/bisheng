@@ -14,7 +14,11 @@ export interface SearchParams {
     keyword: string;
 }
 
+import type { TagScope } from '../hooks/useSpaceCapabilities';
+import { TAG_PAGE_SIZE, TagPagination } from './TagPagination';
+
 export interface CompoundSearchInputProps {
+    tagScope: TagScope;
     spaceId: string;
     isRoot?: boolean;
     onSearch?: (params: SearchParams) => void;
@@ -33,7 +37,12 @@ export interface CompoundSearchInputProps {
     trailing?: React.ReactNode;
 }
 
-export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, toolbarMode = false, pageMode = false, trailing }: CompoundSearchInputProps) {
+export function CompoundSearchInput(props: CompoundSearchInputProps) {
+    const scopeKey = props.tagScope.kind === 'unavailable' ? 'unavailable' : props.tagScope.key;
+    return <ScopedSearchInput key={JSON.stringify([props.spaceId, props.tagScope.kind, scopeKey])} {...props} />;
+}
+
+function ScopedSearchInput({ spaceId, tagScope, isRoot = false, onSearch, className, collapsible = false, toolbarMode = false, pageMode = false, trailing }: CompoundSearchInputProps) {
     const localize = useLocalize();
     const selectCopy = useSelectCopy();
     const [scope, setScope] = useState<'current' | 'all'>('current');
@@ -41,6 +50,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const [keyword, setKeyword] = useState('');
     const [isFocused, setIsFocused] = useState(false);
     const [isScopeMenuOpen, setIsScopeMenuOpen] = useState(false);
+    const [page, setPage] = useState(1);
+    const nativeTags = tagScope.kind === 'native';
     const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
 
     // The search field is "expanded" whenever the user is interacting with it,
@@ -60,14 +71,14 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
     // Fetch space tags from API
     const refreshTags = useCallback(() => {
-        if (!spaceId) return;
+        if (!spaceId || !nativeTags) return;
         const revision = ++tagsRequestRef.current;
         void getSpaceTagsApi(spaceId).then(tags => {
             if (revision === tagsRequestRef.current) setSpaceTags(tags);
         }).catch(error => {
             if (revision === tagsRequestRef.current) showApiError(error);
         });
-    }, [spaceId]);
+    }, [spaceId, nativeTags]);
 
     // Reset search state when switching to a different space
     useEffect(() => {
@@ -277,10 +288,11 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         )}>
             <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
             <div className="flex flex-wrap gap-2">
-                {spaceTags.length === 0 && (
+                {!nativeTags && <p role="status" className="text-body-sm text-text-3">{localize("com_knowledge.provider_tags.filter_unavailable")}</p>}
+                {nativeTags && spaceTags.length === 0 && (
                     <span className="text-sm text-text-3">{localize("com_knowledge.no_tags")}</span>
                 )}
-                {spaceTags.map((tag) => {
+                {spaceTags.slice((page - 1) * TAG_PAGE_SIZE, page * TAG_PAGE_SIZE).map((tag) => {
                     const isSelected = selectedTags.some((t) => t.id === tag.id);
                     const atLimit = !isSelected && selectedTags.length >= 5;
                     return (
@@ -317,6 +329,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     );
                 })}
             </div>
+            {spaceTags.length > TAG_PAGE_SIZE && <TagPagination page={page} total={spaceTags.length} onChange={setPage} />}
         </div>
     ) : null;
 

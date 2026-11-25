@@ -69,13 +69,15 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
       {" "}
       {/* Edit Tags Modal */}
       <EditTagsModal
+        tagScope={model.providerUploads.tagScope}
+        canEditFileTags={!!editingTagsFileId && model.renameEntryIds.has(editingTagsFileId)}
         canManageSpaceTags={canEditSpace}
         canReadSpaceTags={canReadSpaceTags}
         isOpen={!!editingTagsFileId || isBatchTagging}
         onClose={handleCloseEditTags}
         onSaved={handleTagsSaved}
         onBatchSaved={model.handleBatchTagsSaved}
-        availableTags={displayFiles
+        availableTags={model.providerUploads.tagScope.kind !== 'native' ? undefined : displayFiles
           .filter((file) => selectedFiles.has(file.id))
           .flatMap((file) => file.tags ?? [])}
         spaceId={space.id}
@@ -93,12 +95,12 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
             : undefined
         }
         initialTagIds={
-          editingTagsFileId && !isBatchTagging
+          model.providerUploads.tagScope.kind === 'native' && editingTagsFileId && !isBatchTagging
             ? displayFiles.find((f) => f.id === editingTagsFileId)?.tags?.map((t) => t.id) || []
             : []
         }
       />
-      {knowledgeUploadCapabilities.webLink && (
+      {model.canUploadNativeExtras && knowledgeUploadCapabilities.webLink && (
         <Dialog
           open={webLinkDialogOpen}
           onOpenChange={(open) => {

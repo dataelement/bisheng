@@ -24,6 +24,10 @@ from loguru import logger
 from pydantic import Field
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.knowledge.application.provider_runtime import request_provider_retrieval
+from bisheng.knowledge.application.provider_retrieval import RetrievalSelection
+from bisheng.knowledge.application.provider_resolver import CapabilityUnavailable
+from bisheng.permission.application.identity import get_current_permission_actor, set_current_permission_actor, reset_current_permission_actor
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool, KnowledgeRetrieverTool
 from bisheng.user.domain.models.user import UserDao
 
@@ -183,6 +187,7 @@ async def aretrieve_space_documents(
     identity_user: UserPayload | None,
     max_content: int,
     metadata_filter_fn: Any = None,
+    external_selection_fn: Any = None,
     rrf_weights: list | None = None,
     rerank: Any = None,
     sort_by_source_and_index: bool = True,
@@ -210,29 +215,43 @@ async def aretrieve_space_documents(
 
     from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
+    from bisheng.knowledge.domain.services.knowledge_file_visibility_service import KnowledgeFileVisibilityService
+
     docs: list[Document] = []
-    for raw_id in space_ids:
-        try:
-            space = await KnowledgeDao.aquery_by_id(int(raw_id))
-        except (TypeError, ValueError):
-            continue
-        if not space:
-            continue
-        docs.extend(
-            await _aretrieve_one_space(
-                space=space,
-                query=query,
-                identity_user=identity_user,
-                max_content=max_content,
-                metadata_filter_fn=metadata_filter_fn,
-                rrf_weights=rrf_weights,
-                rerank=rerank,
-                sort_by_source_and_index=sort_by_source_and_index,
-                version_repo=version_repo,
-                request=request,
-                **({"retrieval_multipliers": retrieval_multipliers} if retrieval_multipliers is not None else {}),
-            )
-        )
+    contextual = get_current_permission_actor()
+    token = None
+    if contextual is not None and access_scope == 'shared' and (contextual.subject_type != 'user' or contextual.subject_id != identity_user.user_id):
+        # Shared author path is an explicit identity switch; do not inherit the invoker.
+        token = set_current_permission_actor(None)
+    try:
+        async with request_provider_retrieval() as providers:
+            for raw_id in space_ids:
+                try:
+                    ident = int(raw_id)
+                except (TypeError, ValueError):
+                    continue
+                space = await KnowledgeDao.aquery_by_id(ident)
+                if not space:
+                    continue
+                route = await providers.route(space)
+                if route is not None:
+                    if metadata_filter_fn is not None and external_selection_fn is None:
+                        raise CapabilityUnavailable('provider metadata equivalence not verified')
+                    selection = external_selection_fn(space) if external_selection_fn else RetrievalSelection()
+                    visibility = KnowledgeFileVisibilityService(request, identity_user)
+                    visibility.version_repo = version_repo
+                    hits = await providers.retrieve(space, route, selection, query, max_content, visibility)
+                    docs.extend(doc for _, doc in hits)
+                    continue
+                docs.extend(await _aretrieve_one_space(
+                    space=space, query=query, identity_user=identity_user, max_content=max_content,
+                    metadata_filter_fn=metadata_filter_fn, rrf_weights=rrf_weights, rerank=rerank,
+                    sort_by_source_and_index=sort_by_source_and_index, version_repo=version_repo, request=request,
+                    retrieval_multipliers=retrieval_multipliers,
+                ))
+    finally:
+        if token is not None:
+            reset_current_permission_actor(token)
     # Stamp the access gate so the citation registry (T008) persists it per source.
     for d in docs:
         if d.metadata is None:

@@ -12,6 +12,7 @@ import { getMyResourcePermissions } from "~/api/permission";
 import { useKnowledgeSpaceSettingsForm } from "./useKnowledgeSpaceSettingsForm";
 
 jest.mock("~/api/knowledge");
+jest.mock("~/api/knowledgeProviderSettings", () => ({ getSpaceProvider: async () => 'native' }));
 jest.mock("~/api/permission");
 jest.mock("~/utils", () => ({ generateUUID: () => "settings-test-id" }));
 

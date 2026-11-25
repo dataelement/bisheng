@@ -185,28 +185,12 @@ class KnowledgeSpaceChatService:
                     user_id=self.login_user.user_id,
                 )
             )
-        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(
-            search_kwargs={"k": 100, "param": {"ef": 110}, "expr": f"document_id == {file_id}"}
-        )
-        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        es_retriever = es_vector.as_retriever(search_kwargs={"filter": [{"term": {"metadata.document_id": file_id}}]})
-        async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, None):
-            yield one
-
-    async def space_rag(
-        self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None
-    ) -> AsyncIterator[ChatResponse]:
         _, space_conf = await self.get_space_llm_config(model_id=model_id)
-
-        retriever_tool = KnowledgeRetrieverTool(
-            vector_retriever=vector_retriever,
-            elastic_retriever=es_retriever,
-            max_content=space_conf.max_chunk_size,
-            sort_by_source_and_index=True,
+        docs = await self._retrieve_and_filter(
+            space=space, query=query, candidate_file_ids=[file_id], max_content=space_conf.max_chunk_size,
+            single_physical_file=True,
         )
-        finally_docs: list[Document] = await retriever_tool.ainvoke(query)
-        async for one in self._render_rag_response(session, finally_docs, query, model_id, tags):
+        async for one in self._render_rag_response(session, docs, query, model_id, None):
             yield one
 
     @staticmethod
@@ -406,19 +390,41 @@ class KnowledgeSpaceChatService:
         candidate_file_ids: list[int] | None,
         max_content: int,
         sort_by_source_and_index: bool = True,
+        single_physical_file: bool = False,
+        tags: list[dict] | None = None,
     ) -> list[Document]:
-        """F029 two-layer ``visible`` filter — implementation lives in the engine.
+        from bisheng.knowledge.application.provider_retrieval import RetrievalSelection
+        from bisheng.knowledge.application.provider_runtime import request_provider_retrieval
 
-        Kept as a method because the folder-chat path calls it; the body moved
-        to ``RetrievalEngine.retrieve_and_filter`` (F052 T101) so the open face
-        filters through the same code instead of a second copy of it.
-        """
+        async with request_provider_retrieval() as providers:
+            route = await providers.route(space)
+            if route is not None:
+                selection = RetrievalSelection(
+                    file_ids=None if candidate_file_ids is None else tuple(candidate_file_ids),
+                    tag_ref_ids=tuple(tag['id'] for tag in tags or ()),
+                )
+                hits = await providers.retrieve(space, route, selection, query, max_content, self._visibility_service())
+                return [doc for _, doc in hits]
+
+        if single_physical_file:
+            # Native single-file chat can consult a specifically selected historical
+            # file. The whole-space primary-only filter must not replace that file.
+            file_id, = candidate_file_ids
+            milvus = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
+            es = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+            tool = KnowledgeRetrieverTool(
+                vector_retriever=milvus.as_retriever(search_kwargs={"k":100, "param":{"ef":110}, "expr":f"document_id == {file_id}"}),
+                elastic_retriever=es.as_retriever(search_kwargs={"filter":[{"term":{"metadata.document_id":file_id}}]}),
+                max_content=max_content, sort_by_source_and_index=True,
+            )
+            return await tool.ainvoke(query)
+        if tags:
+            tagged = await TagDao.aget_resources_by_tags([one['id'] for one in tags], resource_type=ResourceTypeEnum.SPACE_FILE)
+            ids = {int(one.resource_id) for one in tagged}
+            candidate_file_ids = sorted(ids if candidate_file_ids is None else ids.intersection(candidate_file_ids))
         return await self._retrieval_engine().retrieve_and_filter(
-            space=space,
-            query=query,
-            candidate_file_ids=candidate_file_ids,
-            max_content=max_content,
-            sort_by_source_and_index=sort_by_source_and_index,
+            space=space, query=query, candidate_file_ids=candidate_file_ids,
+            max_content=max_content, sort_by_source_and_index=sort_by_source_and_index,
         )
 
     async def _render_rag_response(
@@ -596,17 +602,6 @@ class KnowledgeSpaceChatService:
             folder_files = await SpaceFileDao.get_children_by_prefix(space.id, file_level_path)
             target_file_ids = [one.id for one in folder_files]
 
-        if tags:
-            tag_file_ids = await TagDao.aget_resources_by_tags(
-                [one.get("id") for one in tags], resource_type=ResourceTypeEnum.SPACE_FILE
-            )
-            tag_file_ids = [int(one.resource_id) for one in tag_file_ids]
-
-            if target_file_ids is not None:
-                target_file_ids = list(set(target_file_ids) & set(tag_file_ids))
-            else:
-                target_file_ids = tag_file_ids
-
         # F029: two-layer view_file filter retrieval (AD-01 / AD-02 / AD-03).
         # `_retrieve_and_filter` consults KnowledgeFileVisibilityService for
         # both the index-layer IN/NOT-IN/none strategy and the result-layer
@@ -618,6 +613,7 @@ class KnowledgeSpaceChatService:
             query=query,
             candidate_file_ids=target_file_ids,
             max_content=space_conf.max_chunk_size,
+            tags=tags,
         )
 
         async for one in self._render_rag_response(session, finally_docs, query, model_id, tags):
@@ -692,21 +688,29 @@ class KnowledgeSpaceChatService:
                     )
                 filters_by_kb[kb_id] = spec
 
-        engine = self._retrieval_engine()
-        flattened: list[tuple[int, Document]] = []
-        # Version visibility uses one request-scoped AsyncSession across spaces.
-        for kb_id in knowledge_base_ids:
-            chunks = await self._aretrieve_chunks_for_one(
-                engine,
-                kb_id,
-                query=query,
-                tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
-                max_content=max_content,
-            )
-            flattened.extend(chunks)
-        flattened = flattened[:top_k]
-        await engine.attach_document_update_time(flattened)
-        return flattened
+        from copy import copy
+
+        from bisheng.knowledge.application.provider_runtime import request_provider_retrieval
+
+        async with request_provider_retrieval() as providers:
+            # Keep this request's identity and visibility collaborators, without
+            # putting a provider with a bounded client lifetime on the cached engine.
+            engine = copy(self._retrieval_engine())
+            engine.provider_retrieval = providers
+            flattened: list[tuple[int, Document]] = []
+            # Version visibility uses one request-scoped AsyncSession across spaces.
+            for kb_id in knowledge_base_ids:
+                chunks = await self._aretrieve_chunks_for_one(
+                    engine,
+                    kb_id,
+                    query=query,
+                    tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
+                    max_content=max_content,
+                )
+                flattened.extend(chunks)
+            flattened = flattened[:top_k]
+            await engine.attach_document_update_time(flattened)
+            return flattened
 
     async def _aretrieve_chunks_for_one(
         self,

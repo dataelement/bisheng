@@ -24,10 +24,12 @@ deletion_tenant, db = native.deletion_tenant, native.db
 
 @pytest.fixture
 async def batch(db, monkeypatch):
+    from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding
+
     async with db.engine.begin() as conn:
         await conn.run_sync(
             lambda sync: Knowledge.metadata.create_all(
-                sync, tables=[row.__table__ for row in (Tag, TagLink, KnowledgeOperationPlan)]
+                sync, tables=[row.__table__ for row in (Tag, TagLink, KnowledgeOperationPlan, KnowledgeProviderBinding)]
             )
         )
     user = UserPayload(user_id=7, user_name="operator", tenant_id=101, user_role=[], is_global_super=True)
@@ -344,3 +346,19 @@ async def test_unsupported_folder_tag_name_uses_folder_visibility(batch, monkeyp
     assert not result.can_execute
     assert result.invalid_items[0].reason == "unsupported"
     assert result.invalid_items[0].name == (name if visible else None)
+
+
+async def test_tag_plan_cannot_cross_external_binding(batch):
+    from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding
+
+    app = batch.application()
+    cmd = command("tag", ("file", 30), new_tag_names=["never-create"])
+    plan = await app.aprecheck(identity=batch.user, space_id=1, command=cmd)
+    async with batch.db.sessions() as session, session.begin():
+        session.add(KnowledgeProviderBinding(tenant_id=101, space_id=1, provider_key="weknora", state="provisioning"))
+    with pytest.raises(KnowledgeOperationPlanChangedError):
+        await app.aconfirm(identity=batch.user, space_id=1, operation="tag", request=confirmation(plan))
+    with pytest.raises(KnowledgeOperationPlanChangedError):
+        await app.aprecheck(identity=batch.user, space_id=1, command=cmd)
+    async with batch.db.sessions() as session:
+        assert await session.scalar(select(Tag).where(Tag.name == "never-create")) is None

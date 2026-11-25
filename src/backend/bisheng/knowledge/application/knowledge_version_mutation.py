@@ -22,6 +22,7 @@ from bisheng.core.context.tenant import (
     get_visible_tenant_ids,
     is_tenant_filter_bypassed,
 )
+from bisheng.knowledge.application.provider_transfer import require_native_mutation
 from bisheng.knowledge.domain.repositories.knowledge_version_mutation_repository import (
     KnowledgeVersionMutationRepository,
 )
@@ -136,6 +137,7 @@ class KnowledgeVersionMutationApplication:
             self._current(user, identity)
             if state.space is None or (state.space.id, state.space.tenant_id) != (space.id, space.tenant_id):
                 _blocked("authorized_space_changed")
+            await require_native_mutation(session, tenant_id=space.tenant_id, space_id=space.id, operation=operation)
             require_space_processing_idle(
                 state.space,
                 operation={"link": "link_version", "merge": "merge_versions", "primary": "set_primary_version"}[

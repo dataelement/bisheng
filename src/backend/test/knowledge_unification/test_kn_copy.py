@@ -641,3 +641,16 @@ async def test_current_source_retry_does_not_overwrite_target_user_edits(copying
         items = (await session.execute(sa.select(Item).where(Item.job_id == jid))).scalars().all()
         assert next(item for item in items if item.file_id == kept_id).state == "failed"
         assert sum(item.state == "pending" for item in items) == 1
+
+
+async def test_external_copy_source_refused_before_creation_and_quota(copying):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+    from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding as Binding
+
+    async with copying.ctx.sessions() as s, s.begin():
+        await (await s.connection()).run_sync(Binding.__table__.create, checkfirst=True)
+        s.add(Binding(tenant_id=101, space_id=40, provider_key="weknora", state="provisioning"))
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await copying.app.aprecheck(40, name="External", identity=copying.ctx.user)
+    copying.app.quota.assert_not_awaited()
+    copying.app.creation_policy.prepare.assert_not_awaited()

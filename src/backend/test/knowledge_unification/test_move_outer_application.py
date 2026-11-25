@@ -151,3 +151,17 @@ async def test_invalid_processing_names_require_actual_visibility(outer, monkeyp
         )
     assert not plan.can_execute and plan.invalid_items[0].reason == "processing"
     assert plan.invalid_items[0].name == (name if visible else None)
+
+
+async def test_external_move_target_refused_without_confirmation(outer):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+    from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding as Binding
+
+    app, service = outer
+    async with app.built.sessions() as s, s.begin():
+        await (await s.connection()).run_sync(Binding.__table__.create, checkfirst=True)
+        s.add(Binding(tenant_id=101, space_id=11, provider_key="weknora", state="provisioning"))
+    with request_context(app.actor), pytest.raises(KnowledgeOperationPlanConflictError):
+        await service.aprecheck(
+            10, FileMoveReq(items=[{"id": 81, "type": "file"}], target_space_id=11), identity=app.current
+        )

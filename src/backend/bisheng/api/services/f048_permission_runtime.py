@@ -28,6 +28,7 @@ from bisheng.channel.domain.services.f048_channel_permission import (
     F048ChannelPermissionAdapter,
 )
 from bisheng.department.domain.services.permission_context import DepartmentPermissionContextProvider
+from bisheng.knowledge.application.provider_reads import ReadAuthority
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeContainerPermissionAdapter,
     F048KnowledgeFilePermissionAdapter,
@@ -188,6 +189,8 @@ def build_f048_resource_composition(
         "channel": channel,
         "knowledge_space": knowledge_container,
         "knowledge_library": knowledge_container,
+        # Application-only port, not a new grantable resource type.
+        "provider_reads": ReadAuthority(spaces=knowledge_container, files=knowledge_file, runtime=runtime),
         "folder": knowledge_file,
         "knowledge_file": knowledge_file,
         "tool": tool,

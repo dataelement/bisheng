@@ -28,6 +28,7 @@ function mount(canManageSpaceTags = true, canReadSpaceTags = false) {
   const client = new QueryClient();
   const content = (spaceId = "3") => <QueryClientProvider client={client}>
       <EditTagsModal
+        tagScope={{ kind: 'native', key: 'member' }}
         canManageSpaceTags={canManageSpaceTags}
         canReadSpaceTags={canReadSpaceTags}
         isOpen

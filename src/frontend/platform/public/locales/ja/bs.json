@@ -1,4 +1,16 @@
 {
+  "departmentSpace": {
+    "batchMode": "WeKnora 部門スペース",
+    "batchPreview": "作成設定を確認",
+    "batchRefresh": "前回の結果を更新",
+    "createAction": "作成を確定",
+    "batchUnavailable": "管理者または管理対象のテナントを確認できません。",
+    "batchItem": "部門 {{id}}",
+    "batchPreset": "プリセット {{revision}}：要約 {{summary}}、埋め込み {{embedding}}、画像認識 {{vision}}。",
+    "batchSeparate": "非表示または再表示の変更は、作成とは別に送信してください。",
+    "batchSpaceName": "{{name}}のナレッジスペース",
+    "batchStatus": {"confirmed": "作成・権限確認済み", "failed": "作成失敗", "unconfirmed": "権限未確認"}
+  },
   "memberRoleIssues": {
     "inactive": "無効",
     "missingRole": "ロール {{id}}",

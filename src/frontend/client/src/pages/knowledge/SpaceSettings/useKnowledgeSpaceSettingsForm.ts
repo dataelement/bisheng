@@ -26,6 +26,9 @@ import type { GrantablePermissionModel } from "~/api/permission";
 import { usePermissionDraft } from "~/components/permission/usePermissionDraft";
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
 
+import { createProviderSpace, getSpaceProvider, readProviderSettings, type SpaceProvider } from '~/api/knowledgeProviderSettings';
+import { useProviderPreset } from './useProviderPreset';
+
 const MAX_CUSTOM_TAGS = 200;
 
 export type KnowledgeSpaceSettingsMode = "create" | "edit";
@@ -100,6 +103,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   } = permissionDraft;
   const [form, setForm] =
     useState<KnowledgeSpaceSettingsFormState>(INITIAL_FORM);
+  const [provider, setProvider] = useState<SpaceProvider | null>(mode === 'create' ? 'native' : null);
+  const [observed, setObserved] = useState<Awaited<ReturnType<typeof readProviderSettings>> | null>(null);
+  const baseline = useRef(INITIAL_FORM);
+  const preview = useProviderPreset(mode === 'create' && provider === 'weknora');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -131,6 +138,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
 
   useEffect(() => {
     let cancelled = false;
+    if (provider !== 'native') return;
     getKnowledgeSpaceAutoTagVisibilityApi()
       .then(async ({ visible }) => {
         if (cancelled) return;
@@ -152,12 +160,12 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     return () => {
       cancelled = true;
     };
-  }, [mode, updateForm]);
+  }, [mode, provider, updateForm]);
 
   useEffect(() => {
     let cancelled = false;
     if (
-      !autoTagFeatureVisible ||
+      provider !== "native" || !autoTagFeatureVisible ||
       form.autoTagMode !== "library" ||
       !form.autoTagLibraryId
     ) {
@@ -176,7 +184,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     return () => {
       cancelled = true;
     };
-  }, [autoTagFeatureVisible, form.autoTagLibraryId, form.autoTagMode]);
+  }, [provider, autoTagFeatureVisible, form.autoTagLibraryId, form.autoTagMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,20 +218,27 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         // so authorization for this settings page is resolved via the F048
         // my-permissions summary. Both reads are independent, so run them
         // together to keep the page open fast.
-        const [space, myPermissions] = await Promise.all([
+        const [space, myPermissions, actualProvider] = await Promise.all([
           getSpaceInfoApi(spaceId),
           getMyResourcePermissions("knowledge_space", spaceId),
+          getSpaceProvider(spaceId),
         ]);
         if (cancelled) return;
         const canEditSpace = myPermissions.actions.includes("edit");
         const canManageSpace =
           myPermissions.actions.includes("manage_permission");
-        if (!canEditSpace && !canManageSpace) {
+        if (!canEditSpace && !canManageSpace && !myPermissions.actions.includes("visible")) {
           throw new Error("Knowledge space settings access denied");
         }
-        setCanEdit(canEditSpace);
+        if (actualProvider === 'weknora') {
+          const settings = await readProviderSettings(spaceId);
+          if (cancelled) return;
+          setObserved(settings);
+        }
+        setProvider(actualProvider);
+        setCanEdit(actualProvider === 'native' && canEditSpace);
         setIsDepartmentSpace(space.departmentId != null || space.spaceKind === "department");
-        setForm({
+        baseline.current = {
           name: space.name,
           description: space.description ?? "",
           visibility: space.visibility,
@@ -232,7 +247,8 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           autoTagMode: space.autoTagMode ?? "library",
           autoTagLibraryId: space.autoTagLibraryId ?? null,
           autoTagCustomText: (space.autoTagCustomTags ?? []).join("\n"),
-        });
+        };
+        setForm(baseline.current);
 
         if (!canManageSpace) {
           setCanManagePermissions(false);
@@ -269,32 +285,43 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     };
   }, [mode, resetPermissionDraft, spaceId]);
 
+  const tagsChanged = form.autoTagEnabled !== baseline.current.autoTagEnabled ||
+    form.autoTagLibraryId !== baseline.current.autoTagLibraryId || form.autoTagMode !== baseline.current.autoTagMode ||
+    form.autoTagCustomText !== baseline.current.autoTagCustomText;
+  const includeTags = provider === 'native' && (mode === 'create' || (autoTagFeatureVisible && tagsChanged));
   const buildResourcePayload = useCallback(() => {
-    const customTags = parseKnowledgeSpaceCustomTags(form.autoTagCustomText);
+    const creating = mode === 'create';
+    const previous = baseline.current;
     const autoTagEnabled = autoTagFeatureVisible && form.autoTagEnabled;
     return {
-      name: form.name.trim(),
-      description: form.description.trim(),
-      auth_type: form.visibility,
-      is_released:
-        form.visibility === VisibilityType.PRIVATE ? false : form.isReleased,
-      auto_tag_enabled: autoTagEnabled,
-      auto_tag_library_id:
-        autoTagEnabled && form.autoTagMode === "library"
-          ? form.autoTagLibraryId
-          : null,
-      auto_tag_custom_tags:
-        autoTagEnabled && form.autoTagMode === "custom" ? customTags : null,
+      ...(creating || form.name !== previous.name ? { name: form.name.trim() } : {}),
+      ...(creating || form.description !== previous.description ? { description: form.description.trim() } : {}),
+      ...(creating || form.visibility !== previous.visibility ? { auth_type: form.visibility } : {}),
+      ...(creating || form.visibility !== previous.visibility || form.isReleased !== previous.isReleased
+        ? { is_released: form.visibility !== VisibilityType.PRIVATE && form.isReleased } : {}),
+      ...(includeTags ? {
+        auto_tag_enabled: autoTagEnabled,
+        auto_tag_library_id: autoTagEnabled && form.autoTagMode === 'library' ? form.autoTagLibraryId : null,
+        auto_tag_custom_tags: autoTagEnabled && form.autoTagMode === 'custom' ? parseKnowledgeSpaceCustomTags(form.autoTagCustomText) : null,
+      } : {}),
     };
-  }, [autoTagFeatureVisible, form]);
+  }, [autoTagFeatureVisible, form, includeTags, mode]);
 
   const submit = useCallback(async () => {
-    if (!form.name.trim() || submitting || (!canEdit && !canManagePermissions))
-      return null;
+    if (loading || loadError || !provider || !form.name.trim() || submitting || (!canEdit && !(canManagePermissions && permissionHasChanges))) return null;
     setSubmitting(true);
     try {
       const payload = buildResourcePayload();
       if (mode === "create") {
+        if (provider === 'weknora') {
+          if (!preview.preset) return null;
+          const receipt = await createProviderSpace(preview.preset, creationRequestIdRef.current, {
+            name: form.name.trim(), description: form.description.trim(), auth_type: form.visibility,
+            is_released: form.visibility !== VisibilityType.PRIVATE && form.isReleased,
+          });
+          await queryClient.invalidateQueries({ queryKey: ['knowledgeSpaces'] });
+          return receipt;
+        }
         const grants =
           form.visibility === VisibilityType.PRIVATE
             ? []
@@ -313,7 +340,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
                   },
                 }));
         const result = await createSpaceApi({
-          ...payload,
+          ...payload, name: form.name.trim(), auth_type: form.visibility,
           creationRequestId: creationRequestIdRef.current,
           ...(grants.length > 0 && catalogReleaseId != null
             ? {
@@ -331,7 +358,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
 
       if (!spaceId) return null;
       let result: KnowledgeSpace | null = null;
-      if (canEdit) result = await updateSpaceApi(spaceId, payload);
+      if (provider === 'native' && canEdit && Object.keys(payload).length) result = await updateSpaceApi(spaceId, payload);
       if (
         form.visibility !== VisibilityType.PRIVATE &&
         canManagePermissions &&
@@ -357,8 +384,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     buildResourcePayload,
     canEdit,
     canManagePermissions,
-    form.name,
-    form.visibility,
+    form, loading, loadError, provider, preview.preset,
     mode,
     permissionDiff.changes,
     permissionHasChanges,
@@ -391,6 +417,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
 
   return {
     mode,
+    provider, setProvider, preview, observed, includeTags,
     form,
     updateForm,
     loading,
@@ -409,7 +436,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     createdSpace,
     permissionRetryStatus,
     retryInitialPermissions,
-    autoTagFeatureVisible,
+    autoTagFeatureVisible: provider === 'native' && autoTagFeatureVisible,
     tagLibraries,
     autoTagPreview,
     submit,

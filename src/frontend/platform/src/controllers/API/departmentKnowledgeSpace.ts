@@ -26,6 +26,38 @@ export async function batchCreateDepartmentKnowledgeSpacesApi(
   });
 }
 
+export type DepartmentReceipt = { departmentId: number; status: 'confirmed' | 'failed' | 'unconfirmed' };
+type WireItem = { department_id: number; state?: string; admission?: string; authorization?: string; operation_id?: string };
+const base = '/api/v1/knowledge/space/department';
+const pinned = (tenant: number) => ({ headers: { 'X-Management-Tenant': String(tenant) } });
+
+function receipts(ids: number[], data: { items: WireItem[] }): DepartmentReceipt[] {
+  return ids.map(departmentId => {
+    const matches = data.items.filter(item => item.department_id === departmentId);
+    const item = matches.length === 1 ? matches[0] : undefined;
+    const failed = item?.admission === 'conflict' || ['failed', 'manual_review'].includes(item?.state ?? '');
+    const confirmed = item?.operation_id && item.state === 'succeeded' && item.authorization === 'confirmed';
+    return { departmentId, status: failed ? 'failed' : confirmed ? 'confirmed' : 'unconfirmed' };
+  });
+}
+
+export async function previewDepartmentPreset(tenant: number, departmentId: number): Promise<Record<string, unknown>> {
+  const response: { preset_summary: Record<string, unknown> } = await axios.post(`${base}/provider-preview`, { department_id: departmentId }, pinned(tenant));
+  return response.preset_summary;
+}
+
+export async function createExternalDepartmentBatch(tenant: number, ids: number[], key: string, preset: Record<string, unknown>) {
+  const result: { items: WireItem[] } = await axios.post(`${base}/batch-create`, {
+    provider_key: 'weknora', request_key: key, preset_summary: preset, items: ids.map(department_id => ({ department_id })),
+  }, pinned(tenant));
+  return receipts(ids, result);
+}
+
+export async function getExternalDepartmentBatchStatus(tenant: number, ids: number[], key: string) {
+  const result: { items: WireItem[] } = await axios.post(`${base}/batch-status`, {request_key: key, department_ids: ids}, pinned(tenant));
+  return receipts(ids, result);
+}
+
 // Hide (is_hidden=true) or restore (is_hidden=false) department knowledge spaces
 // from the management list. Data, files and member permissions are preserved.
 export async function setDepartmentKnowledgeSpacesVisibilityApi(

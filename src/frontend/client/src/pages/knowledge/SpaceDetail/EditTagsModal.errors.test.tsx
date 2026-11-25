@@ -66,6 +66,7 @@ function mount(batch = false) {
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
       <EditTagsModal
+        tagScope={{ kind: 'native', key: 'member' }}
         canManageSpaceTags
         isOpen
         spaceId="3"

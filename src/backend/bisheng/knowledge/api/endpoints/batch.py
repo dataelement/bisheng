@@ -7,12 +7,46 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import Field, ValidationError
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
 from bisheng.common.schemas.api import resp_200
 from bisheng.knowledge.api.endpoints.processing import _write_scope
-from bisheng.knowledge.application.knowledge_batch import get_batch_application
+from bisheng.knowledge.application.knowledge_batch import KnowledgeBatchApplication
+from bisheng.knowledge.application.provider_batch import ProviderBatchApplication
+from bisheng.knowledge.application.provider_v1_runtime import ProviderFeatureUnavailable, resolve_space_route
 from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand, BatchSelection
 from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
 from bisheng.knowledge.domain.schemas.processing_settings import PositiveInteger, ProcessingSchema
+
+
+async def get_batch_application(request: Request, space_id: int, operation: str):
+    route = await resolve_space_route(space_id)
+    if route is not None:
+        # Both seams come from the deployment composition: a write port and the
+        # control-plane session factory. Defaults keep the request on the shared
+        # DB; tests inject a disposable one instead of touching an ambient DB.
+        return ProviderBatchApplication(
+            resolver=getattr(request.app.state, "provider_batch_resolver", None),
+            session_factory=getattr(request.app.state, "provider_batch_session_factory", None),
+        )
+    if operation == "delete":
+        # Native deletion uses its dedicated reference-impact precheck.
+        raise ProviderFeatureUnavailable()
+    return KnowledgeBatchApplication()
+
+
+# Without a registered durable port the provider refuses the operation as unsafe.
+# Report that as an unavailable capability rather than a stale plan: re-running
+# inspect/precheck would never make it executable, and no native batch may run.
+_UNSUPPORTED_REASON = "provider_batch_unsupported"
+
+
+async def _offered(call):
+    try:
+        return await call
+    except KnowledgeOperationPlanChangedError as error:
+        if error.kwargs.get("reason") == _UNSUPPORTED_REASON:
+            raise ProviderFeatureUnavailable() from None
+        raise
 
 
 def command_from(operation, change):
@@ -23,7 +57,7 @@ def command_from(operation, change):
 
 
 router = APIRouter(tags=["knowledge_batch"])
-BatchOperation = Literal["download", "tag", "retry"]
+BatchOperation = Literal["download", "tag", "retry", "delete"]
 
 
 class BatchRequest(ProcessingSchema):
@@ -41,7 +75,7 @@ async def inspect_batch(
     application=Depends(get_batch_application),
 ):
     command = command_from(operation, change)
-    return resp_200(await application.ainspect(identity=identity, space_id=space_id, command=command))
+    return resp_200(await _offered(application.ainspect(identity=identity, space_id=space_id, command=command)))
 
 
 @router.post("/{space_id}/files/batch/{operation}/precheck")
@@ -55,7 +89,7 @@ async def precheck_batch(
 ):
     await _write_scope(request, identity)
     command = command_from(operation, change)
-    return resp_200(await application.aprecheck(identity=identity, space_id=space_id, command=command))
+    return resp_200(await _offered(application.aprecheck(identity=identity, space_id=space_id, command=command)))
 
 
 @router.post("/{space_id}/files/batch/{operation}/confirm")
@@ -69,5 +103,5 @@ async def confirm_batch(
 ):
     await _write_scope(request, identity)
     return resp_200(
-        await application.aconfirm(identity=identity, space_id=space_id, operation=operation, request=change)
+        await _offered(application.aconfirm(identity=identity, space_id=space_id, operation=operation, request=change))
     )

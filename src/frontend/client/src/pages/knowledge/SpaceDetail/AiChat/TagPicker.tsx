@@ -1,4 +1,3 @@
-// @ts-strict-ignore
 /**
  * TagPicker — floating popup that displays available tags.
  * Triggered when user types '#' in the chat input.
@@ -11,6 +10,7 @@ import { useLocalize, useScrollRevealRef } from "~/hooks";
 
 interface TagPickerProps {
     tags: string[];
+    unavailable?: boolean;
     loading?: boolean;
     failed?: boolean;
     onRetry?: () => void;
@@ -19,10 +19,10 @@ interface TagPickerProps {
     onClose: () => void;
 }
 
-export function TagPicker({ tags, searchText, onSelect, onClose, loading = false, failed = false, onRetry }: TagPickerProps) {
+export function TagPicker({ tags, searchText, onSelect, onClose, unavailable = false, loading = false, failed = false, onRetry }: TagPickerProps) {
     const localize = useLocalize();
     const [activeIndex, setActiveIndex] = useState(0);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
 
     // Filter tags by search text
@@ -38,7 +38,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose, loading = false
     // Keyboard navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (loading || failed) { if (e.key === "Escape") onClose(); return; }
+            if (unavailable || loading || failed) { if (e.key === "Escape") onClose(); return; }
             if (e.key === "ArrowDown") {
                 e.preventDefault();
                 setActiveIndex(prev => Math.max(0, Math.min(prev + 1, filtered.length - 1)));
@@ -56,9 +56,9 @@ export function TagPicker({ tags, searchText, onSelect, onClose, loading = false
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [filtered, activeIndex, onSelect, onClose, loading, failed]);
+    }, [filtered, activeIndex, onSelect, onClose, unavailable, loading, failed]);
 
-    if (loading || failed || filtered.length === 0) {
+    if (unavailable || loading || failed || filtered.length === 0) {
         return (
             <div
                 ref={(el) => {
@@ -66,7 +66,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose, loading = false
                 }}
                 className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-border-base rounded-lg shadow-lg p-3 z-50"
             >
-                {loading ? <p role="status" className="text-body-sm text-text-3 text-center">{localize("com_ui_loading")}</p>
+                {unavailable ? <p role="status" className="text-body-sm text-text-3">{localize("com_knowledge.provider_tags.filter_unavailable")}</p> : loading ? <p role="status" className="text-body-sm text-text-3 text-center">{localize("com_ui_loading")}</p>
                     : failed ? <div role="alert" className="text-body-sm text-danger text-center">
                         {localize("com_knowledge.load_tags_failed")}
                         <Button type="button" color="primary" variant="text" size="small" className="ml-2" onClick={onRetry}>{localize("com_ui_retry")}</Button>

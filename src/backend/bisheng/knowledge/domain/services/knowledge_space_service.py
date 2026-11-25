@@ -1881,7 +1881,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         description: str | None = None,
         icon: str | None = None,
         auth_type: AuthTypeEnum | None = None,
-        is_released: bool = False,
+        is_released: bool | None = None,
         auto_tag_enabled: bool | None = None,
         auto_tag_library_id: int | None = None,
         auto_tag_custom_tags: list[str] | None = None,
@@ -1905,7 +1905,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.icon = icon
         if auth_type is not None:
             space.auth_type = auth_type
-        space.is_released = is_released
+        if is_released is not None:
+            space.is_released = is_released
 
         auto_tag_touched = (
             auto_tag_enabled is not None or auto_tag_library_id is not None or auto_tag_custom_tags is not None

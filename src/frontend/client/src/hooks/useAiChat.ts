@@ -12,6 +12,7 @@ import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
 import type { SelectedOrgKb } from "~/store/modeltype";
 import { useAuthContext } from "~/hooks/AuthContext";
+import { useDailyRegenerate, type SendOptions } from "./useDailyRegenerate";
 import { knowledgeSpaceTagFilters } from "~/utils/knowledgeTagSelection";
 import { canProcessChatImage } from "~/common/chatAccept";
 import { useKnowledgeSpaceAccess } from "~/hooks/useKnowledgeSpaceAccess";
@@ -578,14 +579,22 @@ export default function useAiChat(
     }, [setParsingMediaFor, setMessagesFor]);
 
     const sendMessage = useCallback(
-        async (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
+        async (text: string, files?: any[] | null, opts?: SendOptions) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return false;
             // The lease may take time. Keep this send's original project even if
             // the user opens another draft before the request can be submitted.
             const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
             const turnMessages = messagesRef.current;
-            if (knowledgeAccessBlocked) {
+            if (knowledgeAccessBlocked && opts?.retry?.materials !== "original") {
                 showToast({ message: knowledgeAccessMessage, status: "warning" });
+                return false;
+            }
+            // A malformed saved tag serializes to an empty filter if its ID is undefined.
+            // Do not silently turn that into permission to search the whole space.
+            if (opts?.retry?.materials !== 'original' && selectedOrgKbs.some(item =>
+                item.type === 'space' && item.tag !== undefined &&
+                (!Number.isSafeInteger(item.tag?.id) || !(item.tag?.id > 0)))) {
+                showToast({ message: localize('com_message.reselect_material_tag'), status: 'warning' });
                 return false;
             }
             if (opts?.taskMode && selectedOrgKbs.some(item => item.type === 'space' && item.tag)) {
@@ -614,7 +623,7 @@ export default function useAiChat(
             // is the single place the id lives, so a mid-stream promotion from
             // "new" to a real id carries the whole turn with it.
             const turn = { cid: conversationId, bucketId: activeBucketId, knowledge: selectedOrgKbs };
-            if (activeBucketRef.current === turn.bucketId) setSelectedOrgKbs(turn.knowledge);
+            if (activeBucketRef.current === turn.bucketId && opts?.retry?.materials !== "original") setSelectedOrgKbs(turn.knowledge);
             const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
                 setMessagesFor(turn.bucketId, updater);
             const setTitle = (updater: string | ((prev: string) => string)) =>
@@ -708,16 +717,17 @@ export default function useAiChat(
                 clientTimestamp: new Date().toLocaleString("sv").replace(" ", "T"),
                 parentMessageId,
                 conversationId: currentConvoId,
-                messageId: userMessageId,
+                messageId: opts?.retry?.questionId ?? userMessageId,
+                ...(opts?.retry && { isRegenerate: true, useCurrentMaterials: opts.retry.materials === "current" }),
                 endpoint: "",
                 endpointType: "custom",
                 model: chatModel.id + "",
-                use_knowledge_base: {
+                ...(opts?.retry?.materials === "original" ? {} : { use_knowledge_base: {
                     personal_knowledge_enabled: false,
                     organization_knowledge_ids: orgKbs,
                     knowledge_space_ids: spaceKbs,
-                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(selectedOrgKbs),
-                },
+                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(selectedOrgKbs) ?? {},
+                } }),
                 isContinued: false,
                 isTemporary: false,
                 files: cleanFiles,
@@ -1177,6 +1187,14 @@ export default function useAiChat(
                 // that already produced an answer would lose it if we overwrote `text`
                 // (and the bubble would then render that answer as raw error text).
                 onError: (error, errorCode, meta) => {
+                    if (errorCode === 12048 && opts?.retry?.materials === 'original') {
+                        const originalId = opts.retry.questionId;
+                        // Rejection before `created` has no new question row. Keep the
+                        // error's re-ask action anchored to the real original question.
+                        setMessages(prev => prev.filter(row => row.messageId !== userMessageId).map(row =>
+                            row.messageId === originalId ? { ...row, knowledge_scope_recorded: false }
+                                : row.parentMessageId === userMessageId ? { ...row, parentMessageId: originalId } : row));
+                    }
                     finishMediaParsing(realUserMessageId, turn.bucketId);
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -1228,183 +1246,10 @@ export default function useAiChat(
         setTitle("");
     }, [setMessages, setTitle, stopGenerating]);
 
-    // --- Regenerate: add a new sibling response under the same parent ---
-    const regenerate = useCallback(
-        async (parentMessageId: string) => {
-            if (isStreaming) return;
-            const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
-            const turnMessages = messagesRef.current;
-            if (knowledgeAccessBlocked) {
-                showToast({ message: knowledgeAccessMessage, status: "warning" });
-                return;
-            }
-            // Department concurrency: same rule as a fresh send — check before the
-            // placeholder bubble is added, so a full department leaves no stray
-            // empty answer behind.
-            const presence = ensureFlowLeaseId ? await ensureFlowLeaseId() : null;
-            if (presence?.blocked) {
-                return;
-            }
-            // This turn belongs to the conversation it started in, and every
-            // write below must land there even if the user walks away mid-answer.
-            // Shadowing the viewed-conversation writers with turn-scoped ones is
-            // what makes that true for all of the callbacks at once: `turn.cid`
-            // is the single place the id lives, so a mid-stream promotion from
-            // "new" to a real id carries the whole turn with it.
-            const turn = { cid: conversationId, bucketId: activeBucketId, knowledge: selectedOrgKbs };
-            if (activeBucketRef.current === turn.bucketId) setSelectedOrgKbs(turn.knowledge);
-            const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
-                setMessagesFor(turn.bucketId, updater);
-            const setIsStreaming = (value: boolean) => setStreamingFor(turn.bucketId, value);
-
-
-
-            // Find the parent (user) message
-            const parentMsg = turnMessages.find(
-                (m) => m.isCreatedByUser && m.messageId === parentMessageId
-            );
-            if (!parentMsg) return;
-            const vision = bsConfig?.models?.some(model => String(model.id) === String(chatModel.id) && model.visual) ?? false;
-            if (parentMsg.files?.some(file => !canProcessChatImage(
-                file.name || file.filename || file.file_name || '', vision, !!bsConfig?.enable_etl4lm,
-            ))) {
-                showToast({ message: localize("chatImage.processingRequired"), status: "warning" });
-                return;
-            }
-
-            // Create a new placeholder response as sibling
-            const newResponseId = v4();
-            const newResponse: ChatMessage = {
-                text: "",
-                sender: chatModel.name || "AI",
-                isCreatedByUser: false,
-                parentMessageId,
-                conversationId: conversationId === "new" ? "" : conversationId,
-                messageId: newResponseId,
-                error: false,
-            };
-
-            // Add the new response to messages (as a sibling of existing responses)
-            setMessages((prev) => [...prev, newResponse]);
-
-            // Each server event can replace the temporary answer ID. Capture
-            // the preceding ID so batched updates keep targeting the same row.
-            let responseMessageId = newResponseId;
-            const updateResponse = (patch: Partial<ChatMessage>) => {
-                const previousId = responseMessageId;
-                responseMessageId = patch.messageId || responseMessageId;
-                setMessages((prev) => prev.map((message) =>
-                    message.messageId === previousId ? { ...message, ...patch } : message,
-                ));
-            };
-
-            // Build SSE payload
-            const payload = {
-                text: parentMsg.text?.trim() || "",
-                clientTimestamp: new Date()
-                    .toLocaleString("sv")
-                    .replace(" ", "T"),
-                parentMessageId:
-                    parentMsg.parentMessageId || NO_PARENT,
-                conversationId:
-                    conversationId === "new" ? null : conversationId,
-                messageId: parentMsg.messageId,
-                endpoint: "",
-                endpointType: "custom",
-                model: chatModel.id + "",
-                use_knowledge_base: {
-                    organization_knowledge_ids: (bsConfig as any)?.knowledgeBase?.enabled === false
-                        ? []
-                        : selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id)),
-                    knowledge_space_ids: selectedOrgKbs
-                        .filter((kb) => kb.type === 'space')
-                        .map((kb) => Number(kb.id)),
-                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(selectedOrgKbs),
-                },
-                isContinued: false,
-                isRegenerate: true,
-                isTemporary: false,
-                files: parentMsg.files ?? [],
-                tools: selectedAgentTools.flatMap((g) =>
-                    (g.children || []).map((c) => ({
-                        id: c.id,
-                        tool_key: c.tool_key,
-                        type: "tool",
-                    })),
-                ),
-                linsight: isLingsi,
-            };
-
-            // Department concurrency: the lease was checked at the top of this
-            // callback, before any placeholder was added.
-            const submission: SSESubmission = {
-                payload,
-                projectDraft: projectDraft ?? null,
-                userMessage: parentMsg,
-                flowLeaseId: presence?.leaseId ?? undefined,
-                onStart: () => {
-                    console.log("[AiChat] Regenerate SSE started");
-                    setIsStreaming(true);
-                },
-                onCreated: (newConvoId, mergedUser) => {
-                    if (newConvoId && newConvoId !== "") {
-                        adoptConversationId(turn, newConvoId);
-                    }
-                    const questionId = String(mergedUser.messageId || parentMsg.messageId);
-                    setMessages((prev) => prev.map((message) =>
-                        message.messageId === parentMsg.messageId
-                            ? { ...message, ...mergedUser, messageId: questionId }
-                            : message.parentMessageId === parentMsg.messageId
-                                ? { ...message, parentMessageId: questionId }
-                                : message,
-                    ));
-                },
-                onMessage: (text, messageId) => {
-                    updateResponse({
-                        text,
-                        ...(messageId ? { messageId } : {}),
-                    });
-                },
-                onAgentUpdate: (patch) => {
-                    updateResponse({
-                        category: patch.category ?? "agent_answer",
-                        ...(patch.messageId ? { messageId: patch.messageId } : {}),
-                        ...(patch.text != null ? { text: patch.text } : {}),
-                        ...(patch.events ? { events: patch.events } : {}),
-                        ...(patch.files ? { files: patch.files } : {}),
-                        ...(patch.finalised ? { unfinished: false } : {}),
-                    });
-                },
-
-                onFinal: (data) => {
-                    if (data.responseMessage) updateResponse(data.responseMessage);
-                    if (data.conversation?.conversationId) {
-                        adoptConversationId(turn, data.conversation.conversationId);
-                    }
-                },
-                // Same as the send path: failure copy goes to `errorText` so a
-                // partially-streamed answer survives the error.
-                onError: (error, errorCode, meta) => {
-                    updateResponse({
-                        errorText: error || localize("workstation.chat.answer_failed"),
-                        error: true,
-                        errorCode,
-                        errorType: meta?.errorType,
-                        errorDetail: meta?.errorDetail,
-                        referenceId: meta?.referenceId,
-                        failureInfo: meta?.failureInfo,
-                    });
-                },
-                onEnd: () => {
-                    setIsStreaming(false);
-                },
-            };
-
-            setIsStreaming(true);
-            beginStream(turn.bucketId, submission);
-        },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId]
-    );
+    const regenerate = useDailyRegenerate({
+        bucket: activeBucketId, userId: user?.id == null ? undefined : String(user.id),
+        readOnly: !!shareToken, streaming: isStreaming, messages, send: sendMessage,
+    });
 
     return {
         historyError,

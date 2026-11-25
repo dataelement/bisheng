@@ -27,6 +27,7 @@ jest.mock('~/hooks', () => ({
   usePrefersMobileLayout: () => mockMobile,
   useScrollRevealRef: () => () => {},
 }));
+jest.mock('../../hooks/useSpaceCapabilities', () => ({ useSpaceCapabilities: () => ({ tagScope: { kind: 'native', key: 'member' } }) }));
 jest.mock('recoil', () => ({ useRecoilValue: () => ({ id: 1 }) }));
 jest.mock('~/store', () => ({ __esModule: true, default: { chatModel: 'model' } }));
 jest.mock('~/hooks/queries/endpoints/queries', () => ({ useGetBsConfig: () => ({ data: { models: mockModels } }) }));
@@ -58,7 +59,7 @@ test.each([false, true])('the space dock hands off to the main chat without loca
 });
 
 test('picking a model updates the trigger and hands its ID to the fresh conversation', async () => {
-  render(<KnowledgeAskBar spaceId="space-1" spaceName="Knowledge" modelValue={1} />);
+  render(<KnowledgeAskBar nativeTagScope="member" spaceId="space-1" spaceName="Knowledge" modelValue={1} />);
   fireEvent.click(screen.getByRole('combobox', { name: 'com_ui_select_model' }));
   fireEvent.click(await screen.findByRole('treeitem', { name: 'modelPicker.unknownProvider' }));
   fireEvent.click(await screen.findByRole('treeitem', { name: mockModels[1].displayName }));
@@ -74,10 +75,10 @@ test('picking a model updates the trigger and hands its ID to the fresh conversa
 test('catalog arrival repairs an unavailable initial model and sends the displayed model', async () => {
   const models = mockModels;
   mockModels = [];
-  const view = render(<KnowledgeAskBar spaceId="space-1" spaceName="Knowledge" modelValue={99} />);
+  const view = render(<KnowledgeAskBar nativeTagScope="member" spaceId="space-1" spaceName="Knowledge" modelValue={99} />);
   expect(screen.getByTestId('knowledge-ai-input')).toBeDisabled();
   mockModels = models;
-  view.rerender(<KnowledgeAskBar spaceId="space-1" spaceName="Knowledge" modelValue={99} />);
+  view.rerender(<KnowledgeAskBar nativeTagScope="member" spaceId="space-1" spaceName="Knowledge" modelValue={99} />);
   await waitFor(() => expect(screen.getByRole('combobox', { name: 'com_ui_select_model' }).parentElement).toHaveTextContent(models[1].displayName));
   fireEvent.change(screen.getByTestId('knowledge-ai-input'), { target: { value: 'Count' } });
   fireEvent.keyDown(screen.getByTestId('knowledge-ai-input'), { key: 'Enter' });
@@ -86,7 +87,7 @@ test('catalog arrival repairs an unavailable initial model and sends the display
 
 
 test('loads real space tags and transfers the selected tag when asking', async () => {
-  render(<KnowledgeAskBar spaceId="12" spaceName="Knowledge" modelValue={1} />);
+  render(<KnowledgeAskBar nativeTagScope="member" spaceId="12" spaceName="Knowledge" modelValue={1} />);
   const input = screen.getByTestId('knowledge-ai-input');
   fireEvent.change(input, { target: { value: '#' } });
   fireEvent.click(await screen.findByRole('button', { name: /#\s*Report/ }));
@@ -98,7 +99,7 @@ test('loads real space tags and transfers the selected tag when asking', async (
 
 test('shows loading instead of an empty tag list while the request is pending', async () => {
   jest.mocked(getSpaceTagsApi).mockReturnValue(new Promise(() => {}));
-  render(<KnowledgeAskBar spaceId="12" spaceName="Knowledge" modelValue={1} />);
+  render(<KnowledgeAskBar nativeTagScope="member" spaceId="12" spaceName="Knowledge" modelValue={1} />);
   fireEvent.change(screen.getByTestId('knowledge-ai-input'), { target: { value: '#' } });
   expect(await screen.findByText('com_ui_loading')).toBeInTheDocument();
   expect(screen.queryByText('com_knowledge.no_matched_tags')).not.toBeInTheDocument();
@@ -106,7 +107,7 @@ test('shows loading instead of an empty tag list while the request is pending', 
 
 test('shows tag request failure and lets the user retry', async () => {
   jest.mocked(getSpaceTagsApi).mockRejectedValueOnce(new Error('network'));
-  render(<KnowledgeAskBar spaceId="12" spaceName="Knowledge" modelValue={1} />);
+  render(<KnowledgeAskBar nativeTagScope="member" spaceId="12" spaceName="Knowledge" modelValue={1} />);
   fireEvent.change(screen.getByTestId('knowledge-ai-input'), { target: { value: '#' } });
   expect(await screen.findByRole('alert')).toHaveTextContent('com_knowledge.load_tags_failed');
   jest.mocked(getSpaceTagsApi).mockResolvedValue([{ id: 7, name: 'Report' }]);

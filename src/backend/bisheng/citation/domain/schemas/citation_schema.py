@@ -56,7 +56,12 @@ class RagCitationPayloadSchema(CitationSchemaBase):
     knowledgeId: int | None = Field(default=None, description="Knowledge space identifier")
     knowledgeName: str | None = Field(default=None, description="Knowledge space display name")
     fileType: str | None = Field(default=None, description="Knowledge file type")
-    documentId: int | None = Field(default=None, description="Document identifier")
+    documentId: int | None = Field(default=None, description="Physical local file identifier")
+    logicalDocumentId: int | None = None
+    versionId: int | None = None
+    versionNo: int | None = None
+    generation: int | None = None
+    operationEpoch: int | None = None
     documentName: str | None = Field(default=None, description="Document display name")
     snippet: str | None = Field(default=None, description="Matched chunk text snippet")
     previewUrl: str | None = Field(default=None, description="Document preview URL")

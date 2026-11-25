@@ -32,7 +32,7 @@ def custom_json_serializer(obj):
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
-def user_message(msg_id, conversation_id, sender, text):
+def user_message(msg_id, conversation_id, sender, text, *, knowledge_scope_recorded: bool | None = None):
     msg = json.dumps(
         {
             "message": {
@@ -40,6 +40,11 @@ def user_message(msg_id, conversation_id, sender, text):
                 "conversationId": conversation_id,
                 "sender": sender,
                 "text": text,
+                **(
+                    {"knowledge_scope_recorded": knowledge_scope_recorded}
+                    if knowledge_scope_recorded is not None
+                    else {}
+                ),
             },
             "created": True,
         }
@@ -355,6 +360,12 @@ def _format_new_message(msg: ChatMessage) -> dict:
             extra = {}
     except (json.JSONDecodeError, TypeError):
         extra = {}
+    from bisheng.knowledge.domain.schemas.round_scope import RecordedRoundScope
+
+    # Do not disclose the material ids in shared histories. Regeneration resolves
+    # the scope on the server; the picker only needs the availability flag.
+    scope = extra.pop("knowledge_scope", None)
+    recorded = msg.category == "question" and RecordedRoundScope.recover(scope) is not None
     extra = FailureContextAdapter.public_payload(extra)
     if isinstance(message_content, dict):
         for event in message_content.get("events") or []:
@@ -372,6 +383,7 @@ def _format_new_message(msg: ChatMessage) -> dict:
     return {
         **_message_base_fields(msg),
         "message": message_content,
+        **({"knowledge_scope_recorded": recorded} if msg.category == "question" else {}),
         "category": msg.category,
         "extra": extra,
         "linsight_session_version_id": extra.get("linsight_session_version_id"),
@@ -396,6 +408,7 @@ def _convert_legacy_message(msg: ChatMessage) -> dict:
         return {
             **base,
             "message": {"query": msg.message or "", "files": base["files"]},
+            "knowledge_scope_recorded": False,
             "category": "question",
             "type": "over",
         }

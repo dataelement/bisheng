@@ -4,7 +4,9 @@
  * Each node with multiple children shows SiblingSwitch for navigation.
  */
 import { ArrowDownIcon, CornerDownRightIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { DailyMaterialActions } from './DailyMaterialActions';
+import type { RetryMaterials } from '~/hooks/useDailyRegenerate';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
@@ -64,6 +66,7 @@ interface AiChatMessagesProps {
     contentWidthClassName?: string;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
+    onDailyMaterialAction?: (questionId: string, materials: RetryMaterials) => void;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
     /** F035: open the task-mode workspace drawer (entry rendered in HeaderTitle) */
@@ -197,6 +200,7 @@ export default function AiChatMessages({
     contentWidthClassName,
     onPresetClick,
     onRegenerate,
+    onDailyMaterialAction,
     onOpenCitationPanel,
     activeCitationMessageId,
     onOpenWorkspace,
@@ -433,24 +437,29 @@ export default function AiChatMessages({
                             const isLast = idx === messages.length - 1;
                             const isLastBot = isLast && !message.isCreatedByUser;
                             return (
-                                <AiMessageBubble
-                                    key={message.messageId}
-                                    message={message}
-                                    isLatest={isLastBot}
-                                    isStreaming={isStreaming && isLastBot}
-                                    onRegenerate={
-                                        !message.isCreatedByUser && isLastBot && !isStreaming
-                                            ? () => onRegenerate?.(message.parentMessageId)
-                                            : undefined
-                                    }
-                                    knowledgeChatLayout={knowledgeChatLayout}
-                                    allowExport={allowExport}
-                                    stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
-                                    allowFeedback={allowFeedback}
-                                    onOpenCitationPanel={onOpenCitationPanel}
-                                    activeCitationMessageId={activeCitationMessageId}
-                                    onPreviewFile={onPreviewFile}
-                                />
+                                <Fragment key={message.messageId}>
+                                    <AiMessageBubble
+                                        message={message}
+                                        isLatest={isLastBot}
+                                        isStreaming={isStreaming && isLastBot}
+                                        onRegenerate={
+                                            onRegenerate && !shareToken && isLastBot && !isStreaming
+                                                ? () => onRegenerate?.(message.parentMessageId)
+                                                : undefined
+                                        }
+                                        knowledgeChatLayout={knowledgeChatLayout}
+                                        allowExport={allowExport}
+                                        stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
+                                        allowFeedback={allowFeedback}
+                                        onOpenCitationPanel={onOpenCitationPanel}
+                                        activeCitationMessageId={activeCitationMessageId}
+                                        onPreviewFile={onPreviewFile}
+                                    />
+                                    {onDailyMaterialAction && !shareToken && !isStreaming && !message.isCreatedByUser &&
+                                        message.category !== 'task' && message.parentMessageId && !isActiveForChat(conversationId) && (
+                                        <DailyMaterialActions questionId={message.parentMessageId} onRegenerate={onDailyMaterialAction} />
+                                    )}
+                                </Fragment>
                             );
                         })
                     ) : (

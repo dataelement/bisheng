@@ -65,7 +65,7 @@ class KnowledgeBatchApplication:
             await capture_processing_actor(
                 identity,
                 space_id=space_id,
-                required_action="download" if operation == "download" else "rename",
+                required_action=operation if operation in {"download", "delete"} else "rename",
                 entry_kind="open_api" if get_current_open_api_principal() else "web",
             )
         ).reference
@@ -75,11 +75,19 @@ class KnowledgeBatchApplication:
             yield actual, reference, pin
             self._check(pin)
 
+    async def _read_facts(self, session, *, space_id, command, lock=False):
+        from bisheng.knowledge.domain.repositories.provider_tag_repository import native_tag_batch
+
+        if not await native_tag_batch(session, get_current_tenant_id(), space_id, lock=lock):
+            # Includes ordinary/direct callers and confirmation of old native plans.
+            raise KnowledgeOperationPlanChangedError(reason=f"provider_{command.operation}_batch_required")
+        return await self.repo.aread(session, space_id=space_id, command=command, lock=lock)
+
     async def _read(self, space_id, command, pin):
         self._check(pin)
         async with self.sessions() as session, session.begin():
             tx = TransactionIdentity.capture(session)
-            value = await self.repo.aread(session, space_id=space_id, command=command)
+            value = await self._read_facts(session, space_id=space_id, command=command)
             self._check(pin, session, tx)
         self._check(pin)
         return value
@@ -135,7 +143,7 @@ class KnowledgeBatchApplication:
             review, positions, files = await self._classify(actual, scope, command, pin)
             async with self.sessions() as session, session.begin(), session.begin_nested():
                 tx = TransactionIdentity.capture(session)
-                current = await self.repo.aread(session, space_id=space_id, command=command, lock=True)
+                current = await self._read_facts(session, space_id=space_id, command=command, lock=True)
                 self._check(pin, session, tx)
                 if current != scope:
                     raise KnowledgeOperationPlanChangedError()
@@ -203,7 +211,7 @@ class KnowledgeBatchApplication:
                 raise KnowledgeOperationPlanChangedError()
             async with self.sessions() as session, session.begin(), session.begin_nested():
                 tx = TransactionIdentity.capture(session)
-                current = await self.repo.aread(session, space_id=space_id, command=command, lock=True)
+                current = await self._read_facts(session, space_id=space_id, command=command, lock=True)
                 self._check(pin, session, tx)
                 if current != scope:
                     raise KnowledgeOperationPlanChangedError()
@@ -259,7 +267,7 @@ class KnowledgeBatchApplication:
         eligible = [current[row["id"]] for row in originals if current[row["id"]]["status"] == 5]
         async with self.sessions() as session, session.begin(), session.begin_nested():
             tx = TransactionIdentity.capture(session)
-            locked = await self.repo.aread(session, space_id=params["scope"]["root"]["id"], command=command, lock=True)
+            locked = await self._read_facts(session, space_id=params["scope"]["root"]["id"], command=command, lock=True)
             self._check(pin, session, tx)
             if locked != scope:
                 raise KnowledgeOperationPlanChangedError()

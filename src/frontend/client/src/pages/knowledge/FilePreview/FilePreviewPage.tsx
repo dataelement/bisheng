@@ -108,9 +108,18 @@ export default function FilePreviewPage() {
         setLoading(true);
         setConversionFailed(false);
         setPreviewData(null);
+        setFileUrl("");
         getFilePreviewApi(spaceId, fileId)
             .then((data) => {
                 if (cancelled) return;
+                // A controlled text excerpt is never an original-file URL, even for a PDF or DOCX.
+                if (data.media_kind === "text_excerpt") {
+                    const expected = `/api/v1/knowledge/space/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileId)}/content/preview?`;
+                    const url = data.preview_url;
+                    setFileType("txt");
+                    setFileUrl(url.startsWith(expected) ? `${__APP_ENV__.BASE_URL.replace(/\/$/, "")}${url}` : "");
+                    return;
+                }
                 const resolvedPreview = {
                     ...data,
                     original_url: resolveKnowledgePreviewUrl(data.original_url),

@@ -1,4 +1,51 @@
 {
+    "provider_operations": {
+        "error": "エラー",
+        "errors": {
+            "not_received": "リモートサービスで未受信",
+            "manual_review_required": "確認が必要",
+            "unknown": "原因不明"
+        },
+        "title": "外部サービスの操作",
+        "unavailable": "操作履歴を読み込めませんでした。",
+        "empty": "このスペースの外部サービス操作履歴はありません。",
+        "unverified": "この履歴だけでは現在の権限と内容の整合性を確認できません。手動で公開することはできません。",
+        "space": "ローカルスペース ID",
+        "versions": "ローカルバージョン ID",
+        "target": "リモート対象（匿名化済み）",
+        "generation": "対象世代",
+        "phase": "処理段階",
+        "attempt": "試行回数",
+        "operation": "操作 ID",
+        "capability_revision": "要求時の機能バージョン",
+        "kinds": {
+            "create_space": "スペース作成",
+            "update_space_settings": "設定更新",
+            "upload": "アップロード",
+            "provider_transfer": "文書移行",
+            "unknown": "不明な操作"
+        },
+        "phases": {
+            "create": "スペース作成",
+            "settings": "設定更新",
+            "projected": "ローカル記録更新済み",
+            "upload": "アップロード",
+            "reingest": "文書の再取り込み",
+            "cutover": "移行先への切り替え",
+            "unknown": "段階不明"
+        },
+        "states": {
+            "pending": "処理待ち",
+            "sending": "送信中",
+            "waiting_remote": "リモート確認待ち",
+            "reconciling": "結果照合中",
+            "applying": "結果を適用中",
+            "succeeded": "成功",
+            "failed": "失敗",
+            "manual_review": "確認が必要",
+            "unknown": "状態不明"
+        }
+    },
     "predefinedRules": {
         "singleNewlineRule": {
             "label": "単一行間後分割",

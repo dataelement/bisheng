@@ -14,7 +14,7 @@ class BatchSelection(ProcessingSchema):
 
 
 class BatchCommand(ProcessingSchema):
-    operation: Literal["download", "tag", "retry"]
+    operation: Literal["download", "tag", "retry", "delete"]
     items: list[BatchSelection] = Field(min_length=1)
     tag_ids: list[PositiveInteger] = Field(default_factory=list)
     new_tag_names: list[str] = Field(default_factory=list)

@@ -16,6 +16,9 @@ import pytest
 from langchain_core.documents import Document
 
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+from bisheng.knowledge.domain.repositories.provider_retrieval_repository import (
+    ProviderRetrievalRepository,
+)
 
 _PROXY_ENV_VARS = (
     "ALL_PROXY",
@@ -25,6 +28,31 @@ _PROXY_ENV_VARS = (
     "HTTPS_PROXY",
     "https_proxy",
 )
+
+
+@pytest.fixture(autouse=True)
+def _native_route_without_provider_db(monkeypatch):
+    """These suites are Native-ranking/permission tests with no provider DB.
+
+    F026 resolves a real binding to decide Native vs external, which would open
+    an ambient MySQL connection (and fail on a DB without the F026 tables) in
+    every Native unit test here. The F026 suites that need real routing patch
+    this repository themselves with a SQLite fixture; this default only says
+    "no external binding", which is exactly the Native case under test.
+    """
+    real = ProviderRetrievalRepository.route
+
+    async def native_only(self, space):
+        try:
+            return await real(self, space)
+        except Exception as exc:  # noqa: BLE001 - no provider DB in unit tests
+            from sqlalchemy.exc import SQLAlchemyError
+
+            if isinstance(exc, SQLAlchemyError):
+                return None
+            raise
+
+    monkeypatch.setattr(ProviderRetrievalRepository, "route", native_only)
 
 
 @pytest.fixture(autouse=True)
@@ -113,8 +141,11 @@ def fake_engine(monkeypatch):
 
     created: list[FakeEngine] = []
 
-    def factory(login_user, *, version_repo=None):
+    def factory(login_user, *, version_repo=None, provider_retrieval=None):
+        # F026: the facade now always passes a request-scoped provider runtime;
+        # this fake only exercises the facade's own decisions.
         engine = FakeEngine(login_user, version_repo=version_repo)
+        engine.provider_retrieval = provider_retrieval
         created.append(engine)
         FakeEngine.instances = created
         return engine

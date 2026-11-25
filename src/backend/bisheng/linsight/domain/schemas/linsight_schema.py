@@ -1,6 +1,13 @@
-from pydantic import BaseModel, Field, field_validator
+from typing import Annotated, Any
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from bisheng_langchain.linsight.event import NeedUserInput
+
+# ``{space_id: tag_ref_id}`` — fixed per-space tag references. Positive int keys,
+# strict positive int values: a bool/float/tag-name ref is a client bug, and
+# silently coercing it would turn a pinned scope into a different scope.
+SpaceTagRefs = dict[Annotated[int, Field(gt=0)], Annotated[int, Field(strict=True, gt=0)]]
 
 
 class ToolChildrenSchema(BaseModel):
@@ -53,6 +60,24 @@ class LinsightQuestionSubmitSchema(BaseModel):
     # drive knowledge injection.
     organization_knowledge_ids: list[int] | None = Field(None, description="Selected organization knowledge base ids")
     knowledge_space_ids: list[int] | None = Field(None, description="Selected knowledge space ids")
+    # F026 T042: the per-space FIXED tag reference the user pinned in the picker
+    # (``space_id -> tag_ref_id``), carried with the space selection into the task
+    # version. Three states, and they must never collapse into each other:
+    #
+    # * ``None``     — no record: a task version / client that predates this field.
+    #   The task keeps its historical no-tag behaviour, but nothing may *reuse*
+    #   this as an agreed range (a regenerate has to ask for a new one).
+    # * ``{}``       — the user explicitly pinned no tag: the selected spaces are
+    #   searched without a tag condition.
+    # * non-empty    — the fixed references; retrieval must honour them exactly
+    #   and may only narrow further (file permissions, current versions).
+    #
+    # Note this is deliberately NOT the daily request's plain ``dict`` default:
+    # "the request never said" and "the user chose none" are different facts.
+    knowledge_space_tag_filters: SpaceTagRefs | None = Field(
+        None,
+        description="Fixed per-space tag reference ids (space id -> tag ref id); None means 'never recorded'",
+    )
     files: list[SubmitFileSchema] | None = Field(None, description="Uploaded files list:")
     tools: list[LinsightToolSchema] | None = Field(None, description="List of available tools")
     # F035: per-task selected execution model id; None falls back to the tenant
@@ -81,6 +106,50 @@ class LinsightQuestionSubmitSchema(BaseModel):
             return []
         # Convert tool to dictionary format
         return [tool.model_dump() for tool in v]
+
+    @field_validator("knowledge_space_tag_filters", mode="before")
+    @classmethod
+    def validate_space_tag_refs(cls, value: Any):
+        if value is None:
+            # No record. Kept as None so ``scope_state`` can tell it apart from {}.
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("Knowledge space tag references must be a mapping of space id to tag reference id")
+        if any(
+            isinstance(key, bool) or not (isinstance(key, int) or (isinstance(key, str) and key.isdecimal()))
+            for key in value
+        ):
+            raise ValueError("Knowledge space ids must be positive integers")
+        return value
+
+    @model_validator(mode="after")
+    def validate_selected_space_tag_filters(self):
+        if self.knowledge_space_tag_filters is not None and not set(self.knowledge_space_tag_filters).issubset(
+            self.knowledge_space_ids or []
+        ):
+            raise ValueError("Tag filters must belong to selected knowledge spaces")
+        return self
+
+    @property
+    def tag_scope_recorded(self) -> bool:
+        """Whether this task version carries a recorded tag scope at all."""
+        return self.knowledge_space_tag_filters is not None
+
+    @property
+    def scope_state(self) -> str:
+        """``unrecorded`` | ``unspecified`` (no fixed tag) | ``fixed``."""
+        if self.knowledge_space_tag_filters is None:
+            return "unrecorded"
+        return "fixed" if self.knowledge_space_tag_filters else "unspecified"
+
+    @property
+    def fixed_tag_refs(self) -> dict[int, int]:
+        """Normalised references for retrieval; empty means "no tag condition"."""
+        return dict(self.knowledge_space_tag_filters or {})
+
+    def tag_ref_for(self, space_id: int) -> int | None:
+        """The fixed tag reference pinned for one space, or None."""
+        return (self.knowledge_space_tag_filters or {}).get(int(space_id))
 
 
 class DownloadFilesSchema(BaseModel):

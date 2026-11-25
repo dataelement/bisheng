@@ -25,13 +25,14 @@ import desktopLayout from "../KnowledgeSpaceLayout.module.css";
 const noop = () => undefined;
 
 interface KnowledgeAskBarProps {
+    nativeTagScope?: string;
     spaceId: string;
     spaceName: string;
     /** Initial model inherited from the main chat. Picks belong to this draft. */
     modelValue?: number;
 }
 
-export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAskBarProps) {
+export function KnowledgeAskBar({ nativeTagScope, spaceId, spaceName, modelValue }: KnowledgeAskBarProps) {
     const navigate = useNavigate();
     const localize = useLocalize();
     const { data: bsConfig } = useGetBsConfig();
@@ -41,15 +42,15 @@ export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAsk
     const handleModelChange = (value: string) => setSelectedModelId(Number(value));
 
     const { data: tags = [], isFetching, isError, refetch } = useQuery({
-        queryKey: ["spaceTags", spaceId],
+        queryKey: ["spaceTags", spaceId, nativeTagScope],
         queryFn: () => getSpaceTagsApi(spaceId),
-        enabled: !!spaceId,
+        enabled: !!spaceId && !!nativeTagScope,
         retry: false,
     });
-    const refreshTags = useCallback(() => { void refetch(); }, [refetch]);
+    const refreshTags = useCallback(() => { if (nativeTagScope) void refetch(); }, [nativeTagScope, refetch]);
     const handleSend = (text: string, _files?: unknown[] | null, tag?: KnowledgeInputTag) => {
         const question = text.trim();
-        if (!question || !model) return;
+        if (!question || !model || (tag && !nativeTagScope)) return;
         parkChatAsk({ text: question, modelId: Number(model.id), space: { id: spaceId, name: spaceName, ...(tag ? { tag } : {}) } });
         // Same pair the 新建对话 entry uses to land on an empty conversation.
         newConversation();
@@ -60,8 +61,9 @@ export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAsk
         <div className={`${desktopLayout.dock} pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-10`}>
             <div className="pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col">
                 <KnowledgeAiInput
-                    key={spaceId}
-                    availableTags={tags}
+                    key={JSON.stringify([spaceId, nativeTagScope])}
+                    tagsUnavailable={!nativeTagScope}
+                    availableTags={nativeTagScope ? tags : []}
                     tagsLoading={isFetching}
                     tagsError={isError}
                     onTagPickerOpen={refreshTags}

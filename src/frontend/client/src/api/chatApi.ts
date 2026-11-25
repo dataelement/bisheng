@@ -104,6 +104,8 @@ export interface ChatMessage {
     sender: "user" | "assistant" | string;
     text: string;
     clientTimestamp?: string;
+    /** True only when the server confirms a persisted, recoverable material selection. */
+    knowledge_scope_recorded?: boolean;
     content?: ContentPart[];
     error?: boolean;
     /** backend status_code on an errored assistant row — lets the UI show the calm
@@ -291,6 +293,7 @@ function mapAgentResponseItem(row: any): ChatMessage {
         Object.assign(base, dailyFailureMetadata(failureExtra));
     }
     if (category === "question" && raw && typeof raw === "object") {
+        base.knowledge_scope_recorded = row.knowledge_scope_recorded === true;
         base.text = raw.query ?? "";
         if (!base.files?.length && Array.isArray(raw.files)) {
             base.files = normalizeHistoryMediaFiles(raw.files);

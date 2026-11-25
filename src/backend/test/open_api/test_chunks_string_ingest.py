@@ -284,7 +284,8 @@ async def test_endpoint_duplicate_file_keeps_the_200_status_3_contract(api, monk
     ingest.assert_not_awaited()
 
 
-@pytest.mark.parametrize("knowledge_type", [1, 3])
+# SPACE (3) has a dedicated native ingestion contract in test_legacy_space_chunks.
+@pytest.mark.parametrize("knowledge_type", [1, 2])
 async def test_endpoint_rejects_non_document_knowledge(api, monkeypatch, knowledge_type):
     monkeypatch.setattr(
         filelib.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=SimpleNamespace(type=knowledge_type))

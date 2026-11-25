@@ -89,7 +89,7 @@ class DepartmentKnowledgeSpaceService:
         space_id: int,
         admin_user_ids: Iterable[int],
     ) -> None:
-        for admin_user_id in sorted(set(int(uid) for uid in admin_user_ids if int(uid) != login_user.user_id)):
+        for admin_user_id in sorted({int(uid) for uid in admin_user_ids if int(uid) != login_user.user_id}):
             existing = await SpaceChannelMemberDao.async_find_member(space_id, admin_user_id)
             if existing is not None:
                 if existing.user_role == UserRoleEnum.CREATOR:
@@ -361,6 +361,115 @@ class DepartmentKnowledgeSpaceService:
             operator_user_id=operator_user_id,
         )
 
+    @staticmethod
+    def _external_receipt(department_id, op):
+        return {
+            "department_id": department_id,
+            "operation_id": op.operation_id,
+            "state": op.state,
+            "authorization": "confirmed" if op.state == "succeeded" else "not_confirmed",
+        }
+
+    @classmethod
+    async def read_external_batch_status(cls, *, login_user, tenant_id, key, department_ids):
+        from bisheng.core.context.tenant import is_tenant_filter_bypassed
+        from bisheng.knowledge.application.provider_provisioning import create_item_key
+        from bisheng.knowledge.domain.repositories.provider_provision_repository import ProvisionRepository
+
+        if tenant_id != get_current_tenant_id() or is_tenant_filter_bypassed():
+            raise UnAuthorizedError()
+        await cls._ensure_tenant_admin(login_user)
+        keys = [create_item_key(key, department_id) for department_id in department_ids]
+        rows = await ProvisionRepository().read_create_receipts(tenant_id, login_user.user_id, keys)
+        # Pre-admission failures have no ledger row. Do not infer failure or disclose
+        # another actor's request-key conflict; both look like an absent receipt.
+        return [
+            cls._external_receipt(department_id, rows[item_key])
+            if item_key in rows
+            else {"department_id": department_id, "state": "not_confirmed", "authorization": "not_confirmed"}
+            for department_id, item_key in zip(department_ids, keys, strict=True)
+        ]
+
+    @classmethod
+    async def accept_external_spaces(cls, *, login_user, expected_tenant, items, preset, key, provisioning):
+        """Separate entry from Native batch creation. Each (SpaceSpec, summary)
+        freezes one department and can resume without touching another item.
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        from bisheng.admin.application.tenant_scope import require_expected_management_tenant, resolve_management_scope
+
+        scope = await resolve_management_scope(login_user.user_id, is_super=login_user.is_global_super, for_write=True)
+        require_expected_management_tenant(expected_tenant, scope)
+        if scope.tenant_id != get_current_tenant_id() or scope.tenant_id != preset.tenant_id:
+            raise UnAuthorizedError()
+        await cls._ensure_tenant_admin(login_user)
+        ids = [space.department_id for space, _ in items]
+        if None in ids or len(set(ids)) != len(ids):
+            raise ValueError("expected distinct departments")
+        from bisheng.common.errcode.department import DepartmentPermissionDeniedError
+
+        results = []
+        for space, summary in items:
+            try:
+                await cls._load_departments([space.department_id])
+                op = await provisioning.create(
+                    tenant_id=scope.tenant_id,
+                    expected_tenant=scope.tenant_id,
+                    actor=login_user.user_id,
+                    key=key,
+                    space=space,
+                    preset=preset,
+                    summary=summary,
+                )
+            except (
+                ValueError,
+                IntegrityError,
+                DepartmentNotFoundError,
+                DepartmentPermissionDeniedError,
+                PermissionError,
+                TimeoutError,
+                ConnectionError,
+            ):
+                # Only this item was rolled back. Do not expose provider/SQL errors.
+                results.append(
+                    {"department_id": space.department_id, "admission": "conflict", "authorization": "not_confirmed"}
+                )
+                continue
+            results.append(cls._external_receipt(space.department_id, op))
+        return results
+
+    @classmethod
+    async def project_external_space(cls, op, *, request, login_user):
+        """Project the actual reserved shell. Re-read grants; never resurrect removed admins."""
+        if get_current_tenant_id() != op.tenant_id or login_user.user_id != op.actor_user_id:
+            raise UnAuthorizedError()
+        shell = await KnowledgeDao.async_query_by_id(op.space_id)
+        if not shell or shell.tenant_id != op.tenant_id or shell.user_id != op.actor_user_id:
+            raise UnAuthorizedError()
+        department_id = op.target_manifest[0]["department_id"]
+        if department_id is not None:
+            await cls._ensure_tenant_admin(login_user)
+            dept = (await cls._load_departments([department_id]))[department_id]
+            link = await DepartmentKnowledgeSpaceDao.aget_by_space_id(op.space_id)
+            if not link or (link.tenant_id, link.department_id) != (op.tenant_id, department_id):
+                raise UnAuthorizedError()
+        service = KnowledgeSpaceService(request=request, login_user=login_user)
+        await service._project_space_created(shell)
+        if department_id is not None:
+            await cls._grant_department_members_viewer(
+                space_id=op.space_id, department_id=department_id, operator_user_id=op.actor_user_id
+            )
+            async with organization_directory_scope():
+                admins = await DepartmentService.aget_admins(dept.dept_id, login_user)
+            await cls._grant_default_department_admins(
+                request=request,
+                login_user=login_user,
+                space_id=op.space_id,
+                admin_user_ids=[row["user_id"] for row in admins],
+            )
+        return True
+
     @classmethod
     async def batch_create_spaces(
         cls,
@@ -436,7 +545,7 @@ class DepartmentKnowledgeSpaceService:
         if request is None:
             request = Request(scope={"type": "http"})
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
-        for user_id in sorted(set(int(uid) for uid in added_user_ids)):
+        for user_id in sorted({int(uid) for uid in added_user_ids}):
             await cls._sync_added_admin(
                 space_service=space_service,
                 space_id=space_id,
@@ -444,7 +553,7 @@ class DepartmentKnowledgeSpaceService:
                 user_id=user_id,
             )
 
-        for user_id in sorted(set(int(uid) for uid in removed_user_ids)):
+        for user_id in sorted({int(uid) for uid in removed_user_ids}):
             await cls._sync_removed_admin(
                 space_service=space_service,
                 space_id=space_id,
@@ -472,7 +581,7 @@ class DepartmentKnowledgeSpaceService:
         space_id = await DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id(department_id)
         if not space_id:
             return
-        for user_id in sorted(set(int(uid) for uid in user_ids)):
+        for user_id in sorted({int(uid) for uid in user_ids}):
             await cls._sync_removed_admin(space_id=space_id, user_id=user_id)
 
     @classmethod

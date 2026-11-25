@@ -6,6 +6,7 @@ import { Dropdown, DropdownGroup, DropdownItem } from "@bisheng/ui";
 import { CompoundSearchInput } from "./CompoundSearchInput";
 import { FileListToolbar } from "./FileListToolbar";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
+import { ProviderWikiEntry } from "./ProviderWikiPage";
 import { cn } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import type { KnowledgeSpaceModel } from "./index";
@@ -79,6 +80,9 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
     searchMode,
     onCloseSearch,
   } = model;
+  const wikiEntry = <ProviderWikiEntry spaceId={space.id} canRead={model.canReadSpaceTags} discovery={model.providerUploads.wikiDiscovery} />;
+  // Read-only settings use the same visible action as reading space tags.
+  const openSettings = canEditSpace || canManageMembers || model.canReadSpaceTags ? onEditSpace : undefined;
   return (
     <>
       {/* Hidden File Input */}
@@ -86,6 +90,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
         type="file"
         multiple
         className="hidden"
+        disabled={!canUploadFile}
         ref={fileInputRef}
         onChange={handleFileChange}
         accept={fileInputAccept}
@@ -97,6 +102,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
         type="file"
         multiple
         className="hidden"
+        disabled={!model.canUploadNativeExtras}
         ref={folderInputRef}
         onChange={handleFolderChange}
         // `webkitdirectory`/`directory` are non-standard but accepted by
@@ -110,6 +116,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
       {isH5 && searchMode && (
         <div className="shrink-0 rounded-t-xl bg-white px-4">
           <CompoundSearchInput
+            tagScope={model.providerUploads.tagScope}
             pageMode
             spaceId={space.id}
             isRoot={currentPath.length === 0}
@@ -178,6 +185,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
             </button>
             {/* Right group — same fixed width as the left group */}
             <div className="flex min-w-[84px] shrink-0 items-center justify-end gap-3">
+              {!spaceListOpen && wikiEntry}
               <button
                 type="button"
                 aria-label={localize("com_knowledge.search")}
@@ -247,7 +255,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
               {(canUploadFile ||
                 canCreateFolder ||
                 showShareInMenu ||
-                canManageMembers ||
+                openSettings ||
                 canDeleteSpace ||
                 canLeaveSpace) && (
                 <Dropdown
@@ -266,7 +274,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
                           {localize("com_knowledge.upload_file")}
                         </DropdownItem>
                       )}
-                      {canUploadFile && knowledgeUploadCapabilities.webLink && (
+                      {model.canUploadNativeExtras && knowledgeUploadCapabilities.webLink && (
                         <DropdownItem
                           icon={<Link2 />}
                           onSelect={triggerWebLink}
@@ -282,10 +290,10 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
                           {localize("com_knowledge.new_folder")}
                         </DropdownItem>
                       )}
-                      {(canEditSpace || canManageMembers) && onEditSpace && (
+                      {openSettings && (
                         <DropdownItem
                           icon={<Outlined.Edit />}
-                          onSelect={() => onEditSpace()}
+                          onSelect={openSettings}
                         >
                           {localize("com_knowledge.space_settings")}
                         </DropdownItem>
@@ -339,6 +347,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
       {!isH5 && (
         <div className="shrink-0">
           <KnowledgeSpaceHeader
+            wikiEntry={wikiEntry}
             space={space}
             currentPath={currentPath}
             onNavigateFolder={onNavigateFolder}
@@ -349,6 +358,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
             onTriggerWebLink={triggerWebLink}
             canCreateFolder={canCreateFolder}
             canUploadFile={canUploadFile}
+            canUploadNativeExtras={model.canUploadNativeExtras}
             selectedCount={selectedFiles.size}
             hasFoldersSelected={hasFoldersSelected}
             hasFailedFiles={hasFailedFiles}
@@ -369,7 +379,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
             hasSimilarSelected={hasSimilarSelected}
             onProcessSimilar={handleProcessSimilar}
             canManageMembers={canManageMembers}
-            onOpenSettings={onEditSpace}
+            onOpenSettings={openSettings}
             onDeleteSpace={onDeleteSpace}
             onLeaveSpace={onLeaveSpace}
             canEditSpace={canEditSpace}
@@ -383,6 +393,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
                 Hidden in the full-page search view, which carries its own search box. */}
       {!isH5 && !searchMode && (
         <FileListToolbar
+          tagScope={model.providerUploads.tagScope}
           spaceId={space.id}
           isRoot={currentPath.length === 0}
           onSearch={handleSearch}

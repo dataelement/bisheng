@@ -32,8 +32,10 @@ async def application(context, service, monkeypatch):
         KnowledgeProcessingArtifact,
         KnowledgeProcessingFence,
     )
+    from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding
 
     tables = (
+        KnowledgeProviderBinding,
         KnowledgeProcessingFence,
         KnowledgeProcessingArtifact,
         KnowledgeOperationPlan,

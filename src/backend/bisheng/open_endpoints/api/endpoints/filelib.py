@@ -375,6 +375,19 @@ async def clear_knowledge_files(
     raise KnowledgeTypeNotSupportedError.http_exception()
 
 
+async def _legacy_write_target(knowledge_id):
+    """Resolve before fetching a URL, saving bytes, or entering native processing."""
+    from bisheng.knowledge.application import provider_v1_runtime as provider
+
+    operator = await get_open_api_operator_async()
+    knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if knowledge is None:
+        raise NotFoundError.http_exception()
+    if knowledge.type == KnowledgeTypeEnum.SPACE.value and await provider.resolve_space_route(knowledge_id) is not None:
+        raise provider.ProviderFeatureUnavailable()
+    return operator, knowledge
+
+
 @router.post("/file/{knowledge_id}")
 @open_api_scope("knowledge:write")
 async def upload_file(
@@ -413,6 +426,7 @@ async def upload_file(
     ignored). Knowledge space (3) → ``KnowledgeSpaceService.add_file`` which
     natively places the file under ``parent_id`` (must exist, else 18010).
     """
+    loging_user, db_knowledge = await _legacy_write_target(knowledge_id)
     if file:
         file_name = file.filename
         if not file_name:
@@ -429,12 +443,6 @@ async def upload_file(
             # malformed URL, a disallowed local path, or a remote host that is
             # unreachable or answers non-200. Storage errors still surface as 5xx.
             raise HTTPException(status_code=400, detail=f"file_url cannot be downloaded: {exc}") from exc
-
-    loging_user = await get_open_api_operator_async()
-
-    db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
-    if not db_knowledge:
-        raise NotFoundError.http_exception()
 
     # Knowledge space: delegate to the space file-add path (handles parent_id).
     if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
@@ -606,6 +614,7 @@ async def post_chunks(
     file: UploadFile = File(...),
 ):
     """Upload files to the knowledge base and sync the interface"""
+    login_user, knowledge = await _legacy_write_target(knowledge_id)
     file_name = file.filename
     if not file_name:
         raise HTTPException(status_code=400, detail="file name must be not empty")
@@ -648,9 +657,7 @@ async def post_chunks(
 async def post_string_chunks(request: Request, document: ChunkInput):
     """Write caller-prepared text into a document knowledge base as one file."""
 
-    db_knowledge = await KnowledgeDao.aquery_by_id(document.knowledge_id)
-    if not db_knowledge:
-        raise NotFoundError.http_exception()
+    login_user, db_knowledge = await _legacy_write_target(document.knowledge_id)
     # The chunks use the document knowledge base schema; QA libraries and
     # knowledge spaces store files differently.
     if db_knowledge.type not in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value):

@@ -13,6 +13,7 @@ from bisheng.channel.domain.repositories.interfaces.channel_knowledge_sync_repos
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.channel.domain.schemas.channel_manager_schema import AddArticlesToKnowledgeSpaceRequest
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
+from bisheng.channel.domain.services.channel_service import CHANNEL_SNAPSHOT_UNSUPPORTED_REASON
 from bisheng.common.errcode.channel import ArticleSensitiveViolationError
 from bisheng.common.errcode.knowledge import KnowledgeUnificationError, ReferenceCoverageNotReadyError
 from bisheng.common.errcode.knowledge_space import (
@@ -213,6 +214,8 @@ class InformationKnowledgeDeliveryService:
     @staticmethod
     def _classify_failure(exc: Exception) -> str:
         if isinstance(exc, KnowledgeUnificationError):
+            if exc.kwargs.get("reason") == CHANNEL_SNAPSHOT_UNSUPPORTED_REASON:
+                return "snapshot_upload_unsupported"
             return "reference_not_ready" if exc.code == 10994 else "invalid_reference"
         if isinstance(exc, SpaceFileNameDuplicateError):
             return "duplicate_name"

@@ -1,4 +1,51 @@
 {
+    "provider_operations": {
+        "error": "Error",
+        "errors": {
+            "not_received": "Not received by the remote service",
+            "manual_review_required": "Review required",
+            "unknown": "Unknown error"
+        },
+        "title": "External operations",
+        "unavailable": "Operation history could not be read.",
+        "empty": "No external operations recorded for this space.",
+        "unverified": "These records do not verify current permissions or content. Manual release is not available.",
+        "space": "Local space ID",
+        "versions": "Local version IDs",
+        "target": "Remote target (masked)",
+        "generation": "Target generation",
+        "phase": "Stage",
+        "attempt": "Attempts",
+        "operation": "Operation ID",
+        "capability_revision": "Capability revision at request time",
+        "kinds": {
+            "create_space": "Create space",
+            "update_space_settings": "Update settings",
+            "upload": "Upload",
+            "provider_transfer": "Transfer documents",
+            "unknown": "Unknown operation"
+        },
+        "phases": {
+            "create": "Creating space",
+            "settings": "Updating settings",
+            "projected": "Local record updated",
+            "upload": "Uploading",
+            "reingest": "Reimporting documents",
+            "cutover": "Switching to target",
+            "unknown": "Unknown stage"
+        },
+        "states": {
+            "pending": "Pending",
+            "sending": "Sending",
+            "waiting_remote": "Waiting for remote confirmation",
+            "reconciling": "Verifying result",
+            "applying": "Applying result",
+            "succeeded": "Succeeded",
+            "failed": "Failed",
+            "manual_review": "Review required",
+            "unknown": "Unknown status"
+        }
+    },
     "predefinedRules": {
         "singleNewlineRule": {
             "label": "\\n",

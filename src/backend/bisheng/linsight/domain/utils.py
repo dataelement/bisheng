@@ -1061,6 +1061,7 @@ async def persist_task_user_turn(
     question: str,
     files: list | None = None,
     session_version_id: str | None = None,
+    knowledge_scope: dict | None = None,
 ) -> ChatMessage:
     """F035 Track J (TJ-3): persist the task user turn into the unified conversation.
 
@@ -1084,7 +1085,12 @@ async def persist_task_user_turn(
             category="question",
             message=json.dumps({"query": question or "", "files": files or []}, ensure_ascii=False),
             files=json.dumps(files) if files else None,
-            extra=json.dumps({"linsight_session_version_id": session_version_id}) if session_version_id else "{}",
+            extra=json.dumps(
+                {
+                    **({"linsight_session_version_id": session_version_id} if session_version_id else {}),
+                    **({"knowledge_scope": knowledge_scope} if knowledge_scope is not None else {}),
+                }
+            ),
             source=0,
         )
     )

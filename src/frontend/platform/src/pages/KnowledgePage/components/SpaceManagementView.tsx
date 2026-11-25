@@ -3,9 +3,11 @@ import { directoryTitleClass } from "@bisheng/knowledge";
 import { Breadcrumb, Button, Dropdown, DropdownItem, DropdownSeparator, Tooltip, type BreadcrumbItem } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { userContext } from "@/contexts/userContext";
+import type { User } from "@/types/api/user";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import type { SpaceFolderParent } from "@/controllers/API/knowledgeFiles";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
@@ -64,7 +66,7 @@ interface SpaceManagementViewProps {
   spaceId: number;
   title?: string;
   description?: string;
-  spaceInfo?: Pick<KnowledgeSpaceInfo, "name" | "description">;
+  spaceInfo?: Pick<KnowledgeSpaceInfo, "id" | "tenant_id" | "name" | "description">;
   parentId?: number | null;
   folderPath?: {
     parents: readonly SpaceFolderParent[];
@@ -86,6 +88,7 @@ export function SpaceManagementView({
   children,
 }: SpaceManagementViewProps) {
   const { t } = useTranslation("knowledge");
+  const { user }: { user: Partial<User> | null } = useContext(userContext);
   const location = useLocation();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -95,7 +98,7 @@ export function SpaceManagementView({
   );
   const [permissionOpen, setPermissionOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
-  const [taskRecordsOpen, setTaskRecordsOpen] = useState(false);
+  const [openRecordsScope, setOpenRecordsScope] = useState<string | null>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
   const deletionScope = JSON.stringify([scope, spaceId]);
   const currentDeletionScope = useRef<string | null>(deletionScope);
@@ -160,10 +163,19 @@ export function SpaceManagementView({
     { enabled: canShowTaskRecords },
   );
   const hasProcessing = canShowTaskRecords && canEdit && (processingJobs.data?.total ?? 0) > 0;
-  const hasTaskRecords = hasProcessing || (canShowTaskRecords && (moveJobs.data?.total ?? 0) > 0);
+  const hasMoves = canShowTaskRecords && (moveJobs.data?.total ?? 0) > 0;
+  const canReadProviderOperations = canShowTaskRecords && canEdit && !permission.isError && scope.view === "admin" &&
+    Number.isSafeInteger(user?.user_id) && Number(user?.user_id) > 0 && scope.identityKey === `user:${user?.user_id}` &&
+    rootInfo?.id === spaceId && Number.isSafeInteger(scope.tenantId) && scope.tenantId > 0 &&
+    scope.managementTenantId === scope.tenantId && rootInfo.tenant_id === scope.tenantId &&
+    (user?.is_global_super === true || (user?.is_child_admin === true && user.leaf_tenant_id === scope.tenantId));
+  const hasTaskRecords = hasProcessing || hasMoves || canReadProviderOperations;
+  const recordsScope = JSON.stringify([deletionScope, canReadProviderOperations]);
+  const taskRecordsOpen = openRecordsScope === recordsScope;
+
   useEffect(() => {
-    if (!hasTaskRecords) setTaskRecordsOpen(false);
-  }, [hasTaskRecords]);
+    if (!hasTaskRecords || openRecordsScope !== recordsScope) setOpenRecordsScope(null);
+  }, [hasTaskRecords, openRecordsScope, recordsScope]);
   const rootName = rootInfo?.name;
   const spaceTitle = rootName ?? title;
   const spaceDescription = rootInfo ? rootInfo.description : description;
@@ -306,7 +318,7 @@ export function SpaceManagementView({
                   {hasTaskRecords && (
                     <DropdownItem
                       icon={<Outlined.History aria-hidden />}
-                      onSelect={() => setTaskRecordsOpen(true)}
+                      onSelect={() => setOpenRecordsScope(recordsScope)}
                     >
                       {t("detail.view_task_records")}
                     </DropdownItem>
@@ -404,11 +416,12 @@ export function SpaceManagementView({
           spaceId={spaceId}
           open={taskRecordsOpen}
           onOpenChange={(open) => {
-            setTaskRecordsOpen(open);
+            setOpenRecordsScope(open ? recordsScope : null);
             if (!open) requestAnimationFrame(() => moreButton.current?.focus({ preventScroll: true }));
           }}
           canReadProcessing={canEdit}
-          initialKind={hasProcessing ? "embedding_rebuild" : "move_index"}
+          canReadProviderOperations={canReadProviderOperations}
+          initialKind={hasProcessing ? "embedding_rebuild" : hasMoves ? "move_index" : "provider_operations"}
         />
       )}
       <KnowledgeDeletionDialog operation={deletion} />

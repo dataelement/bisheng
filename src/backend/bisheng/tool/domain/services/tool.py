@@ -3,6 +3,7 @@ import json
 from dataclasses import replace
 from hashlib import sha256
 from time import perf_counter
+from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import Request
@@ -765,7 +766,13 @@ class ToolServices(BaseModel):
         return res
 
     @classmethod
-    async def init_linsight_tools(cls, root_path: str, allowed_knowledge_ids: set[str] | None = None) -> list[BaseTool]:
+    async def init_linsight_tools(
+        cls,
+        root_path: str,
+        allowed_knowledge_ids: set[str] | None = None,
+        task_scope: Any | None = None,
+        login_user: Any | None = None,
+    ) -> list[BaseTool]:
         """Initialize Linsight task-mode built-in tools.
 
         Only the knowledge-retrieval tool is injected here. The legacy local_file
@@ -787,7 +794,13 @@ class ToolServices(BaseModel):
         """
         if allowed_knowledge_ids is not None and not allowed_knowledge_ids:
             return []
-        return [SearchKnowledgeBase(allowed_knowledge_ids=allowed_knowledge_ids)]
+        return [
+            SearchKnowledgeBase(
+                allowed_knowledge_ids=allowed_knowledge_ids,
+                task_scope=task_scope,
+                login_user=login_user,
+            )
+        ]
 
     @classmethod
     async def get_linsight_tools(cls) -> list[GptsToolsTypeRead]:

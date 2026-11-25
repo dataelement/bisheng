@@ -1,4 +1,6 @@
 import json
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.tools import BaseTool
@@ -11,12 +13,34 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_rag_citation_registry_items,
 )
 from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
+from bisheng.knowledge.application.provider_runtime import request_provider_retrieval
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.share_fallback import (
     get_model_by_id_with_share_fallback,
 )
+
+
+@dataclass(frozen=True)
+class TaskKnowledgeScope:
+    """The material range frozen on the TASK record, never the live picker.
+
+    ``recorded=False`` marks a task created before the scope was persisted: it
+    keeps the historical chain. A recorded scope pins the exact spaces and the
+    per-space fixed tag references; the model can narrow, never widen them.
+    """
+
+    recorded: bool | None = None
+    knowledge_ids: tuple[int, ...] = ()
+    tag_refs: Mapping[int, int] = field(default_factory=dict)
+
+    def __post_init__(self):
+        # A task that carries a frozen space/tag range IS recorded; only a task
+        # that explicitly says otherwise (pre-F026 rows) keeps the legacy chain.
+        if self.recorded is None:
+            object.__setattr__(self, "recorded", bool(self.knowledge_ids) or bool(self.tag_refs))
 
 
 class ToolInput(BaseModel):
@@ -55,6 +79,10 @@ class SearchKnowledgeBase(BaseTool):
     # graph and the researcher sub-graph (they share this tool instance). None
     # keeps the pre-F069 behaviour.
     citation_scope: Any | None = None
+    # F026 AC-26/27: the trusted identity and the frozen task range. ``None``
+    # keeps every pre-F026 caller on the historical behaviour.
+    login_user: Any | None = None
+    task_scope: TaskKnowledgeScope | None = None
 
     def _run(self, query: str, knowledge_id: str | None = None, **kwargs) -> str:
         """Use the tool."""
@@ -89,7 +117,33 @@ class SearchKnowledgeBase(BaseTool):
                     {"状态": "无结果", "错误信息": "knowledge_id 不是有效的知识库/知识空间 id"},
                     ensure_ascii=False,
                 )
-            return await self.search_knowledge(query, kid, limit)
+            tag_ref = None
+            scope = self.task_scope
+            if scope is not None and scope.recorded:
+                frozen = {int(i) for i in scope.knowledge_ids}
+                if frozen and kid not in frozen:
+                    return json.dumps(
+                        {"状态": "无权限", "错误信息": "该知识库不在当前任务冻结的资料范围内"},
+                        ensure_ascii=False,
+                    )
+                tag_ref = {int(k): int(v) for k, v in (scope.tag_refs or {}).items()}.get(kid)
+                if tag_ref is not None:
+                    if self.login_user is None:
+                        return json.dumps(
+                            {"状态": "失败", "错误信息": "缺少可信执行身份，无法校验固定标签范围"},
+                            ensure_ascii=False,
+                        )
+                    tag = await TagDao.get_tag(tag_ref)
+                    if (
+                        tag is None
+                        or tag.business_type != TagBusinessTypeEnum.KNOWLEDGE_SPACE
+                        or str(tag.business_id) != str(kid)
+                    ):
+                        return json.dumps(
+                            {"状态": "失败", "错误信息": "任务固定的标签已失效，请重新选择资料范围"},
+                            ensure_ascii=False,
+                        )
+            return await self.search_knowledge(query, kid, limit, tag_ref=tag_ref)
         except Exception as e:
             logger.warning(f"search_knowledge_base failed for knowledge_id={knowledge_id!r}: {e}")
             return json.dumps(
@@ -100,6 +154,41 @@ class SearchKnowledgeBase(BaseTool):
                 },
                 ensure_ascii=False,
             )
+
+    async def _format_provider_hits(self, hits, knowledge_info, knowledge_id: int) -> str:
+        documents = []
+        for _space_id, document in hits or []:
+            metadata = dict(document.metadata or {})
+            metadata.setdefault("knowledge_id", knowledge_id)
+            if knowledge_info.name:
+                metadata.setdefault("knowledge_name", knowledge_info.name)
+            metadata.setdefault("access_scope", "per_user")
+            document.metadata = metadata
+            documents.append(document)
+        if not documents:
+            return json.dumps({"状态": "无结果", "错误信息": "没有找到相关的知识内容"}, ensure_ascii=False)
+        try:
+            annotated = annotate_rag_documents_with_citations(documents)
+            items = collect_rag_citation_registry_items(annotated)
+            await cache_citation_registry_items(items)
+            handles: dict[str, str] = {}
+            if self.citation_scope is not None:
+                await self.citation_scope.record_seen(items)
+                if getattr(self.citation_scope, "enabled", False):
+                    from bisheng.citation.domain.services.citation_handle_service import assign_handles
+
+                    handles = await assign_handles(self.citation_scope, items)
+            formatted = [KnowledgeUtils.format_retrieved_chunk(doc, knowledge_info.name or "") for doc in annotated]
+            if handles:
+                from bisheng.citation.domain.services.citation_handle_service import swap_chunk_id_for_handle
+
+                formatted = [swap_chunk_id_for_handle(chunk, handles) for chunk in formatted]
+        except Exception:
+            # Same graceful degradation as the legacy chain: a citation-registry
+            # failure must not discard authorised content the model can still use.
+            logger.opt(exception=True).warning("provider hit citation annotate failed; returning bare chunks")
+            formatted = [doc.page_content for doc in documents]
+        return json.dumps({"状态": "成功", "结果": formatted}, ensure_ascii=False, indent=2)
 
     async def base_search(self, vector_client, query: str, k: int, **kwargs) -> str:
         knowledge_id = kwargs.pop("knowledge_id", None)
@@ -144,10 +233,26 @@ class SearchKnowledgeBase(BaseTool):
                 indent=2,
             )
 
-    async def search_knowledge(self, query: str, knowledge_id: int, limit: int) -> str:
+    async def search_knowledge(self, query: str, knowledge_id: int, limit: int, tag_ref: int | None = None) -> str:
         knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
         if not knowledge_info:
             raise Exception("Knowledgebase does not exist or has been deleted")
+        # A recorded task scope resolves the backend BEFORE any local embedding
+        # lookup: an external space has no local Milvus collection to open.
+        if self.task_scope is not None and self.task_scope.recorded:
+            from bisheng.knowledge.application.provider_retrieval import RetrievalSelection
+
+            async with request_provider_retrieval() as providers:
+                route = await providers.route(knowledge_info)
+                if route is not None:
+                    from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+                        KnowledgeFileVisibilityService,
+                    )
+
+                    selection = RetrievalSelection(tag_ref_ids=(tag_ref,) if tag_ref is not None else ())
+                    visibility = KnowledgeFileVisibilityService(request=None, login_user=self.login_user)
+                    hits = await providers.retrieve(knowledge_info, route, selection, query, 8000, visibility)
+                    return await self._format_provider_hits(hits, knowledge_info, knowledge_id)
         if not knowledge_info.model:
             # "Knowledge Base Not ConfiguredembeddingModels"
             raise Exception("Knowledge Base Not ConfiguredembeddingModels")

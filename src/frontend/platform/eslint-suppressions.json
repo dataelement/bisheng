@@ -1012,11 +1012,6 @@
       "count": 1
     }
   },
-  "src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/pages/BuildPage/bench/KnowledgeSpace.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1

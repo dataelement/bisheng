@@ -140,6 +140,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# A remote snapshot must persist the Markdown body and the HTML preview as one
+# unit with a verifiable receipt. Channel import has no such remote contract.
+CHANNEL_SNAPSHOT_UNSUPPORTED_REASON = "provider_transfer_unsupported_channel_snapshot_upload"
+
 # Maximum number of administrators per channel
 MAX_ADMIN_COUNT = 5
 CHANNEL_ADMIN_ASSIGNMENT_MESSAGE = "assigned_channel_admin"
@@ -2757,9 +2761,10 @@ class ChannelService:
 
         1. Validate articles exist in ES.
         2. Check write permission on the target knowledge space.
-        3. Upload article content as .md and content_html as .html to minio.
-        4. Call KnowledgeSpaceService.add_file to import into the space.
-        5. Update preview_file_object_name for successfully created files.
+        3. Resolve the actual target and reject a remote backend before staging.
+        4. Upload article content as .md and content_html as .html to minio.
+        5. Call KnowledgeSpaceService.add_file to import into the space.
+        6. Update preview_file_object_name for successfully created files.
         """
         # 1. Fetch all articles from ES and validate
         articles = []
@@ -2788,6 +2793,32 @@ class ChannelService:
 
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
         space_service.upload_application_factory = lambda: self.space_upload_factory(space_service)
+        # Both the HTTP import and admitted automatic delivery arrive here, so
+        # this admission covers both entries. Resolve the actual target before
+        # any MinIO object or native parse task exists. A remote space cannot
+        # accept the Markdown body and HTML preview as one verifiable snapshot
+        # through this generic document import, and unconfirmed target facts
+        # must not fall back to Native or leave a local copy.
+        target = await space_service.require_upload_container(req.knowledge_id, req.parent_id)
+        from bisheng.knowledge.application.provider_transfer import require_native_mutation
+
+        try:
+            async with get_async_db_session() as session:
+                await require_native_mutation(
+                    session,
+                    tenant_id=target.tenant_id,
+                    space_id=target.id,
+                    operation="channel_snapshot_upload",
+                )
+        except KnowledgeOperationPlanConflictError:
+            raise KnowledgeOperationPlanConflictError(
+                reason=CHANNEL_SNAPSHOT_UNSUPPORTED_REASON,
+                msg=(
+                    "Channel articles cannot be imported into a remote knowledge space: "
+                    "a paired snapshot receipt for the Markdown body and HTML preview cannot be "
+                    "verified. Import them into a native knowledge space instead."
+                ),
+            ) from None
 
         # 3. Upload articles to minio
         minio_client = await get_minio_storage()

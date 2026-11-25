@@ -25,7 +25,14 @@ import {
 import { useLocalize } from "~/hooks";
 import { getFullWidthLength } from "~/utils";
 
+import type { TagScope } from '../hooks/useSpaceCapabilities';
+import { TAG_PAGE_SIZE, TagPagination } from './TagPagination';
+
+import { ProviderTagEditor } from './ProviderTagEditor';
+
 interface EditTagsModalProps {
+  tagScope: TagScope;
+  canEditFileTags?: boolean;
   isOpen: boolean;
   canManageSpaceTags?: boolean;
   canReadSpaceTags?: boolean;
@@ -44,7 +51,25 @@ interface EditTagsModalProps {
   initialTagIds?: number[];
 }
 
-export function EditTagsModal({
+export function EditTagsModal(props: EditTagsModalProps) {
+  const localize = useLocalize();
+  if (!props.isOpen) return null;
+  if (props.tagScope.kind === 'native') {
+    return <NativeEditTagsModal key={JSON.stringify([props.tagScope.key, props.spaceId, props.fileId, props.fileIds])} {...props} />;
+  }
+  if (props.tagScope.kind === 'provider' && props.fileId && !props.fileIds?.length && props.canReadSpaceTags) {
+    return <ProviderTagEditor key={JSON.stringify([props.spaceId, props.tagScope.key, props.fileId, props.canEditFileTags, props.tagScope.editable])}
+      spaceId={props.spaceId} fileId={props.fileId} scope={props.tagScope} canEdit={props.canEditFileTags === true}
+      onClose={props.onClose} onSaved={props.onSaved} />;
+  }
+  return <Dialog open onOpenChange={(open) => !open && props.onClose(true)}><DialogContent>
+    <DialogHeader><DialogTitle>{localize('com_knowledge.edit_tags')}</DialogTitle></DialogHeader>
+    <p role="status">{localize('com_knowledge.provider_tags.edit_unavailable')}</p>
+    <DialogFooter><Button onClick={() => props.onClose(true)}>{localize('com_knowledge.close')}</Button></DialogFooter>
+  </DialogContent></Dialog>;
+}
+
+function NativeEditTagsModal({
   isOpen,
   canManageSpaceTags = false,
   canReadSpaceTags = false,
@@ -64,6 +89,7 @@ export function EditTagsModal({
   const [tagsLoadAttempt, setTagsLoadAttempt] = useState(0);
   // IDs of tags selected for this file
   const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
+  const [page, setPage] = useState(1);
   const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [deletingTagId, setDeletingTagId] = useState<number | null>(null);
@@ -359,7 +385,7 @@ export function EditTagsModal({
                     {localize("com_knowledge.no_tags")}
                   </span>
                 )}
-                {spaceTags.map((tag) => {
+                {spaceTags.slice((page - 1) * TAG_PAGE_SIZE, page * TAG_PAGE_SIZE).map((tag) => {
                   const isSelected = selectedTagIds.has(tag.id);
                   return (
                     <span
@@ -391,6 +417,7 @@ export function EditTagsModal({
                   );
                 })}
               </div>
+              {spaceTags.length > TAG_PAGE_SIZE && <TagPagination page={page} total={spaceTags.length} onChange={setPage} />}
             </div>
           </div>
 

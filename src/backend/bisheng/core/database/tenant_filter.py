@@ -94,6 +94,8 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.knowledge.domain.models.knowledge_file",
     "bisheng.knowledge.domain.models.knowledge_space_delete_job",
     "bisheng.knowledge.domain.models.knowledge_processing_job",
+    "bisheng.knowledge.domain.models.provider_control",
+    "bisheng.knowledge.domain.models.provider_tag_import",
     "bisheng.knowledge.domain.models.knowledge_processing_item",
     "bisheng.knowledge.domain.models.knowledge_processing_retry",
     "bisheng.knowledge.domain.models.knowledge_operation_plan",

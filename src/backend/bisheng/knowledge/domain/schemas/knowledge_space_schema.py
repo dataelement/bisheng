@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -65,7 +65,17 @@ class KnowledgeSpaceAdminListItemResp(KnowledgeSpaceListItemResp):
     space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
 
 
+class ProviderSettingsPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(gt=0)
+    request_key: str = Field(min_length=1, max_length=64)
+    patch: dict[Literal["summary_model_id", "vision_model_id", "tag_model_id", "wiki_model_id"], str | None]
+
+
 class KnowledgeSpaceCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider_key: Literal["native", "weknora"] = "native"
+    preset_summary: dict | None = None
     name: str = Field(..., max_length=200, description="Knowledge Space Name")
     description: str | None = Field(None, description="Knowledge Space Description")
     icon: str | None = Field(None, description="Icon Object Name")
@@ -147,7 +157,7 @@ class KnowledgeSpaceUpdateReq(BaseModel):
     description: str | None = Field(None, description="Knowledge Space Description")
     icon: str | None = Field(None, description="Icon Object Name")
     auth_type: AuthTypeEnum | None = Field(None, description="Authentication Type")
-    is_released: bool = Field(default=False, description="Knowledge Space Status")
+    is_released: bool | None = Field(default=None, description="Omit to preserve the existing release state")
     auto_tag_enabled: bool | None = Field(
         default=None, description="Whether uploaded files participate in auto tagging"
     )
@@ -171,7 +181,21 @@ class DepartmentKnowledgeSpaceBatchItem(BaseModel):
     is_released: bool | None = Field(None, description="Optional release override")
 
 
+class DepartmentProviderPreviewReq(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    department_id: int = Field(gt=0, le=2**63 - 1)
+
+
+class DepartmentProviderBatchStatusReq(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    request_key: str = Field(min_length=1, max_length=120)
+    department_ids: list[Annotated[int, Field(gt=0, le=2**63 - 1)]] = Field(min_length=1, max_length=200)
+
+
 class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
+    provider_key: Literal["native", "weknora"] = "native"
+    request_key: str | None = Field(default=None, min_length=1, max_length=120)
+    preset_summary: dict | None = None
     items: list[DepartmentKnowledgeSpaceBatchItem] = Field(
         default_factory=list,
         description="Department knowledge space batch create items",

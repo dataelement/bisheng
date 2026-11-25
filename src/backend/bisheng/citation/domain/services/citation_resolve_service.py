@@ -169,6 +169,53 @@ class CitationResolveService:
             return None
         return json.dumps(file_bbox, ensure_ascii=False)
 
+    # Fields only a Provider retrieval stamps on the persisted citation. Native
+    # chunk metadata is a fixed schema without any of them
+    # (``KNOWLEDGE_RAG_METADATA_SCHEMA``), so their presence marks a resource whose
+    # original lives remotely. A payload that keeps only part of the anchor is still
+    # provider-bound: it cannot be proven current, and must not be re-pointed at the
+    # local/native text (F026 AC-28).
+    _PROVIDER_ANCHORS = ("logicalDocumentId", "versionId", "generation", "operationEpoch")
+
+    @classmethod
+    def _provider_bound(cls, payload: RagCitationPayloadSchema) -> bool:
+        return any(getattr(payload, field) is not None for field in cls._PROVIDER_ANCHORS)
+
+    @staticmethod
+    async def _issue_provider_handle(user, space_id, file_id, operation):
+        from bisheng.knowledge.application.provider_v1_runtime import build_provider_reads
+        from bisheng.permission.application.identity import resolve_permission_actor
+
+        reads = await build_provider_reads()
+        return await reads.issue(await resolve_permission_actor(user), space_id, file_id, operation)
+
+    async def _enrich_provider_item(self, item, payload, user, url_allowed):
+        from bisheng.common.errcode.permission import PermissionDeniedError
+        from bisheng.knowledge.application.provider_resolver import BindingUnavailable, CapabilityUnavailable
+        from bisheng.knowledge.application.provider_v1_runtime import handle_url
+
+        # Persist a locator, never an authority or upstream URL. A shared citation
+        # may expose the permitted snippet, but not a full-file link.
+        payload = payload.model_copy(update={'previewUrl': None, 'downloadUrl': None, 'sourceUrl': None})
+        if url_allowed:
+            if user is None or None in (payload.knowledgeId, payload.documentId, payload.versionId,
+                                                payload.generation, payload.operationEpoch):
+                raise NotFoundError()
+            for operation, field in (('preview','previewUrl'), ('download','downloadUrl')):
+                try:
+                    handle = await self._issue_provider_handle(user, payload.knowledgeId, payload.documentId, operation)
+                except (CapabilityUnavailable, PermissionDeniedError):
+                    # The preview renderer and download permission are independent.
+                    continue
+                except BindingUnavailable:
+                    raise NotFoundError() from None
+                if (handle.version_id, handle.generation, handle.epoch) != (payload.versionId, payload.generation, payload.operationEpoch):
+                    raise NotFoundError()
+                setattr(payload, field, handle_url(handle))
+            if not payload.previewUrl and not payload.downloadUrl:
+                raise NotFoundError()
+        return item.model_copy(update={'sourcePayload':payload})
+
     async def _enrich_rag_item(
         self,
         item: CitationRegistryItemSchema,
@@ -183,8 +230,9 @@ class CitationResolveService:
         (documentName / knowledgeId) but withhold the full-file preview/download URLs
         and bbox (AC-21).
         """
-        del login_user  # filter step already enforced view_file for per_user
         payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
+        if self._provider_bound(payload):
+            return await self._enrich_provider_item(item, payload, login_user, url_allowed)
         file_id = payload.documentId
 
         if file_id is not None:

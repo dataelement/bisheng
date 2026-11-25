@@ -12,6 +12,7 @@ from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.knowledge.application import move_processing_admission as admission
 from bisheng.knowledge.application.move_processing_access import get_move_owner
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
+from bisheng.knowledge.application.provider_transfer import require_native_mutation
 from bisheng.knowledge.domain.repositories.move_batch_repository import MoveBatchRepository, conflict
 from bisheng.knowledge.domain.repositories.operation_plan_repository import _digest
 from bisheng.knowledge.domain.schemas.move_processing import MoveParentChange, MoveRoot
@@ -29,6 +30,11 @@ class KnowledgeMoveApplication:
     def __init__(self, *, owner, max_folder_level):
         self.owner = owner
         self.repository = MoveBatchRepository(max_folder_level=max_folder_level, clock=owner.clock)
+
+    @staticmethod
+    async def _require_native(session, source, destination):
+        for space_id in sorted({source, destination}):
+            await require_native_mutation(session, tenant_id=admission.tenant(), space_id=space_id, operation="move")
 
     async def _read(self, session, source, request, *, lock=False):
         return await self.owner._call(
@@ -125,6 +131,7 @@ class KnowledgeMoveApplication:
                 "target_folder_id": request.target_folder_id,
             }
             async with self.owner._session() as session:
+                await self._require_native(session, source, request.target_space_id)
                 if not roots:
                     parameters, targets = {}, []
                 elif same:
@@ -287,6 +294,7 @@ class KnowledgeMoveApplication:
                 move=tuple(root for root in roots if admission.resource(root) in required),
             )
             async with self.owner._session() as session:
+                await self._require_native(session, plan.space_id, plan.space_id)
                 await self.repository.same_phase(session, p, lock=True)
                 await self.owner.plans.aconsume(
                     session, plan.id, operation_id=operation_id, expected_digest=plan.plan_digest

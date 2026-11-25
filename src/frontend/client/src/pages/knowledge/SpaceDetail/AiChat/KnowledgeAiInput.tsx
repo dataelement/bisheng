@@ -41,6 +41,7 @@ export type KnowledgeInputTag = { id: number; name: string };
 
 interface KnowledgeAiInputProps {
   availableTags: { id: number; name: string }[];
+  tagsUnavailable?: boolean;
   tagsLoading?: boolean;
   tagsError?: boolean;
   onTagPickerOpen?: () => void;
@@ -73,6 +74,7 @@ const TAG_TEXT_CLASS = "text-text-1";
 
 export function KnowledgeAiInput({
   availableTags,
+  tagsUnavailable = false,
   tagsLoading = false,
   tagsError = false,
   onTagPickerOpen,
@@ -369,6 +371,7 @@ export function KnowledgeAiInput({
       {showPicker && (
         <div className="absolute bottom-full left-0 right-0 z-20 mb-2 px-3">
           <TagPicker
+            unavailable={tagsUnavailable}
             tags={availableTags
               .filter((t) => !selectedTag || t.id !== selectedTag.id)
               .map((t) => t.name)}

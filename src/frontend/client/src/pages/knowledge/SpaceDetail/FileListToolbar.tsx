@@ -8,6 +8,7 @@ import useSelectCopy from "~/hooks/useSelectCopy";
 import { cn } from "~/utils";
 import { CompoundSearchInput, type SearchParams } from "./CompoundSearchInput";
 import desktopLayout from "./KnowledgeSpaceLayout.module.css";
+import type { TagScope } from '../hooks/useSpaceCapabilities';
 
 /**
  * Toolbar shared by the list and card views (Figma 13198:75844).
@@ -45,6 +46,7 @@ const SORT_OPTIONS: Array<{ value: SortType; labelKey: string }> = [
 ];
 
 interface FileListToolbarProps {
+    tagScope: TagScope;
     spaceId: string;
     isRoot: boolean;
     onSearch: (params: SearchParams) => void;
@@ -65,6 +67,7 @@ interface FileListToolbarProps {
 }
 
 export function FileListToolbar({
+    tagScope,
     spaceId,
     isRoot,
     onSearch,
@@ -106,6 +109,7 @@ export function FileListToolbar({
 
             <div className="ml-auto flex min-w-0 items-center">
                 <CompoundSearchInput
+                    tagScope={tagScope}
                     collapsible
                     toolbarMode
                     spaceId={spaceId}

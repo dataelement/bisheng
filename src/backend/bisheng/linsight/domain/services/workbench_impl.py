@@ -404,6 +404,11 @@ class LinsightWorkbenchImpl:
                 personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
                 organization_knowledge_ids=submit_obj.organization_knowledge_ids,
                 knowledge_space_ids=submit_obj.knowledge_space_ids,
+                knowledge_space_tag_filters=(
+                    {str(int(k)): int(v) for k, v in (submit_obj.knowledge_space_tag_filters or {}).items()}
+                    if submit_obj.tag_scope_recorded
+                    else None
+                ),
                 files=processed_files,
                 pending_files=pending_files,
                 model=submit_obj.model,
@@ -416,7 +421,10 @@ class LinsightWorkbenchImpl:
             # F035 Track J: land the user question in the unified conversation
             # stream so the round reads as one Q→A pair regardless of task mode.
             # (The bot answer turn is written at completion in task_exec.)
+            from bisheng.knowledge.domain.schemas.round_scope import question_scope
+
             await linsight_execute_utils.persist_task_user_turn(
+                knowledge_scope=question_scope(submit_obj),
                 chat_id=chat_id,
                 user_id=login_user.user_id,
                 question=submit_obj.question,

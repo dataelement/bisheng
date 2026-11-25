@@ -549,7 +549,10 @@ class LinsightWorkflowTask:
             # researcher subagent's tool subset.
             allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
             linsight_tools = await ToolServices.init_linsight_tools(
-                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                root_path=self.file_dir,
+                allowed_knowledge_ids=allowed_knowledge_ids,
+                task_scope=self._task_knowledge_scope(session_model),
+                login_user=await self._task_tool_identity(session_model),
             )
             tools.extend(linsight_tools)
             # Rebuild on the SAME thread_id with a durable checkpointer so the
@@ -673,7 +676,10 @@ class LinsightWorkflowTask:
         try:
             allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
             linsight_tools = await ToolServices.init_linsight_tools(
-                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                root_path=self.file_dir,
+                allowed_knowledge_ids=allowed_knowledge_ids,
+                task_scope=self._task_knowledge_scope(session_model),
+                login_user=await self._task_tool_identity(session_model),
             )
             tools.extend(linsight_tools)
             agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
@@ -757,7 +763,10 @@ class LinsightWorkflowTask:
             # it has no access to.
             allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
             linsight_tools = await ToolServices.init_linsight_tools(
-                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+                root_path=self.file_dir,
+                allowed_knowledge_ids=allowed_knowledge_ids,
+                task_scope=self._task_knowledge_scope(session_model),
+                login_user=await self._task_tool_identity(session_model),
             )
             tools.extend(linsight_tools)
             # Create agent (deepagents CompiledStateGraph, F035 §2.1).
@@ -1700,6 +1709,34 @@ class LinsightWorkflowTask:
             return "\n".join(knowledge_strs) if knowledge_strs else None
         except Exception as e:
             logger.warning(f"Failed to resolve knowledge block: {e}")
+            return None
+
+    @staticmethod
+    def _task_knowledge_scope(session_model: LinsightSessionVersion):
+        """The tag range frozen on this task row, or None for legacy rounds.
+
+        ``None`` keeps the historical chain; an explicit empty mapping means the
+        user declared "no fixed tag" and must not be widened either.
+        """
+        from bisheng.tool.domain.langchain.linsight_knowledge import TaskKnowledgeScope
+
+        raw = getattr(session_model, "knowledge_space_tag_filters", None)
+        if raw is None:
+            return None
+        return TaskKnowledgeScope(
+            recorded=True,
+            knowledge_ids=tuple(int(i) for i in (session_model.knowledge_space_ids or [])),
+            tag_refs={int(k): int(v) for k, v in dict(raw).items()},
+        )
+
+    async def _task_tool_identity(self, session_model: LinsightSessionVersion):
+        """Re-authorise the task's owner; a fixed tag without identity fails closed."""
+        from bisheng.user.application.runtime_identity import resolve_preview_person
+
+        try:
+            return await resolve_preview_person(session_model.user_id)
+        except Exception as exc:
+            logger.warning(f"task tool identity unavailable for user={session_model.user_id}: {exc}")
             return None
 
     async def _resolve_allowed_knowledge_ids(self, session_model: LinsightSessionVersion) -> set[str]:

@@ -65,9 +65,12 @@ def iter_blocked_sse(
     files: list | None,
     auto_reply: str,
     answer_message_id: int,
+    knowledge_scope_recorded: bool = False,
 ) -> Iterator[str]:
     payload = blocked_answer_payload(auto_reply)
-    yield user_message(user_message_id, conversation_id, "User", user_text or "")
+    yield user_message(
+        user_message_id, conversation_id, "User", user_text or "", knowledge_scope_recorded=knowledge_scope_recorded
+    )
     yield _sse_resp("processing", "begin", "", conversation_id)
     yield _sse_resp(
         "question",

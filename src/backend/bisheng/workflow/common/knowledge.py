@@ -450,6 +450,25 @@ class RagUtils(BaseNode):
         es_clauses = es_filter.get("filter") if es_filter else None
         return (milvus_str or None), es_clauses
 
+    def _external_space_selection(self, space):
+        from bisheng.knowledge.application.provider_retrieval import MetadataPredicate, RetrievalSelection
+        from bisheng.knowledge.application.provider_resolver import CapabilityUnavailable
+
+        cases = self._metadata_filter
+        conditions = [c for c in cases.conditions if c.knowledge_id == space.id] if cases.enabled else []
+        if len(conditions) > 1 and cases.operator != 'and':
+            raise CapabilityUnavailable('provider metadata disjunction not verified')
+        operators = {ComparisonType.EQUAL: 'eq', ComparisonType.GREATER_THAN: 'gt', ComparisonType.LESS_THAN: 'lt'}
+        fields = {f['field_name']: f['field_type'] for f in (space.metadata_fields or [])}
+        predicates = []
+        for condition in conditions:
+            kind = fields.get(condition.metadata_field)
+            if kind not in (MetadataFieldType.NUMBER.value, MetadataFieldType.STRING.value) or condition.comparison_operation not in operators:
+                raise CapabilityUnavailable('provider metadata equivalence not verified')
+            rhs = condition.right_value if condition.right_value_type != 'ref' else self.get_other_node_variable(condition.right_value)
+            predicates.append(MetadataPredicate(condition.metadata_field, operators[condition.comparison_operation], condition.convert_right_value(kind, rhs, False)))
+        return RetrievalSelection(metadata=tuple(predicates))
+
     async def _aretrieve_space_docs(self, question: str) -> list[Document]:
         from bisheng.core.database import get_async_db_session
         from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
@@ -471,6 +490,7 @@ class RagUtils(BaseNode):
                 identity_user=identity_user,
                 max_content=self._max_chunk_size,
                 metadata_filter_fn=self._space_metadata_filter,
+                external_selection_fn=self._external_space_selection,
                 rrf_weights=[self._vector_weight, self._keyword_weight],
                 rerank=self._rerank_model,
                 version_repo=version_repo,

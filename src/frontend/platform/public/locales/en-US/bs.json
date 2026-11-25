@@ -1,4 +1,16 @@
 {
+  "departmentSpace": {
+    "batchMode": "WeKnora department spaces",
+    "batchPreview": "Review settings",
+    "batchRefresh": "Refresh last submission",
+    "createAction": "Confirm creation",
+    "batchUnavailable": "The management identity or tenant is not confirmed.",
+    "batchItem": "Department {{id}}",
+    "batchPreset": "Preset {{revision}}: summary {{summary}}, embedding {{embedding}}, vision {{vision}}.",
+    "batchSeparate": "Submit hide or restore changes separately from creation.",
+    "batchSpaceName": "{{name}} knowledge space",
+    "batchStatus": {"confirmed": "Created and access confirmed", "failed": "Creation failed", "unconfirmed": "Access not confirmed"}
+  },
   "memberRoleIssues": {
     "inactive": "Inactive",
     "missingRole": "Role {{id}}",

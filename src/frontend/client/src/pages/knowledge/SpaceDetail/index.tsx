@@ -22,6 +22,7 @@ import { useRefreshEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useStorageQuotaGuard } from "~/hooks/usePersonalStorageQuota";
 import { useKnowledgeFilePermissions } from "./useKnowledgeFilePermissions";
 import { useKnowledgeUploads } from "./useKnowledgeUploads";
+import { useProviderFileUploads } from "../hooks/useProviderFileUploads";
 import { useKnowledgeFileActions } from "./useKnowledgeFileActions";
 import { useKnowledgeCardColumns } from "./useKnowledgeCardColumns";
 import { KnowledgeSpacePresentation } from "./KnowledgeSpacePresentation";
@@ -154,7 +155,7 @@ function useKnowledgeSpaceDetail(
     canEditSpace,
     canReadSpaceTags,
     canLeaveSpace,
-    versionManagementEnabled,
+    versionManagementEnabled: nativeVersionsEnabled,
     queryClient,
     spaceIdNum,
     versionMgmtFile,
@@ -214,8 +215,8 @@ function useKnowledgeSpaceDetail(
     downloadEpoch,
   });
   const {
-    canCreateFolder,
-    canUploadFile,
+    canCreateFolder: hasCreateFolderAction,
+    canUploadFile: hasUploadAction,
     canMoveFile,
     ensureFilePermissions,
     permissionEntryIds,
@@ -224,6 +225,11 @@ function useKnowledgeSpaceDetail(
     renameEntryIds,
     downloadEntryIds,
   } = filePermissions;
+
+  const providerUploads = useProviderFileUploads(space.id, currentFolderId, hasUploadAction, onUploadFile, () => onDeleteFile(""));
+  const { canUploadFile, canUploadNativeExtras } = providerUploads;
+  const canCreateFolder = providerUploads.isNative && hasCreateFolderAction;
+  const versionManagementEnabled = providerUploads.isNative && nativeVersionsEnabled;
 
   // Blank-area right-click menu opens when the user can upload a file OR create a folder.
   const canUseContextMenuActions = (canUploadFile || canCreateFolder) && !isSearching;
@@ -242,6 +248,7 @@ function useKnowledgeSpaceDetail(
     setContextMenuPosition,
     queryClient,
     canUploadFile,
+    canUploadNativeExtras,
     canUseContextMenuActions,
     showToast,
     confirm,
@@ -252,7 +259,7 @@ function useKnowledgeSpaceDetail(
     enableEtl4lm,
     allowedExtensions,
     space,
-    onUploadFile,
+    onUploadFile: providerUploads.uploadFiles,
     onUploadFolder,
     onDeleteFile,
     currentFolderId,
@@ -424,6 +431,10 @@ function useKnowledgeSpaceDetail(
 
   return {
     ...filePermissions,
+    providerUploads,
+    canUploadFile,
+    canUploadNativeExtras,
+    canCreateFolder,
     ...uploadActions,
     ...fileActions,
     ...cardColumns,

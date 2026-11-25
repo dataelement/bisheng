@@ -29,6 +29,14 @@ beat_schedule.setdefault(
     "knowledge-processing-recovery",
     {"task": "bisheng.worker.knowledge.processing_jobs.dispatch_pending_processing_jobs", "schedule": 60.0},
 )
+beat_schedule.setdefault(
+    "knowledge-provider-operation-recovery",
+    {
+        "task": "bisheng.worker.knowledge.provider_dispatch.dispatch_due_provider_operations",
+        "schedule": 30.0,
+        "options": {"queue": "knowledge_celery"},
+    },
+)
 if settings.dsh.enabled:
     beat_schedule.setdefault(
         "dsh-content-safety-projection",

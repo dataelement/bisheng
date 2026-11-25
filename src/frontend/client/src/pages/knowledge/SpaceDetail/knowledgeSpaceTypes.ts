@@ -141,6 +141,7 @@ export interface UseKnowledgeUploadsOptions {
   setContextMenuPosition: KnowledgeStateSetter<{ x: number; y: number }>;
   queryClient: QueryClient;
   canUploadFile: boolean;
+  canUploadNativeExtras: boolean;
   canUseContextMenuActions: boolean;
   showToast: KnowledgeUiPorts["showToast"];
   confirm: KnowledgeUiPorts["confirm"];
