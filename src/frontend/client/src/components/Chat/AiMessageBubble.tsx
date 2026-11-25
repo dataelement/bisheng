@@ -16,10 +16,8 @@ import { AssistantBubble } from './AssistantBubble';
 import { CopyButton, SiblingSwitch } from './messageBubbleParts';
 
 /**
- * Uploaded-file list for a user message. Every attachment — pictures, media,
- * documents — is a square tile in one wrapping grid, right-aligned under the
- * bubble. No horizontal scroll and no cap of its own: the row wraps at the
- * bubble's width, exactly as the picture row always did.
+ * Uploaded attachments keep their type-specific presentation and wrap at the
+ * message width.
  */
 function UploadedFileList({ files, conversationId }: { files: any[]; conversationId?: string }) {
     if (!files || files.length === 0) return null;
