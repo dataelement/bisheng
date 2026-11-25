@@ -27,7 +27,7 @@ import { useLocalize } from "~/hooks";
 import { STOPPED_TOOL_NOTE } from "~/hooks/unifiedRun";
 import { cn } from "~/utils";
 import { toolCallDisplayName } from "~/utils/toolCallName";
-import { ToolCodeOutput } from "./ToolCodeOutput";
+import { hasToolCodeOutput, ToolCodeOutput } from "./ToolCodeOutput";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
@@ -354,8 +354,10 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall: storedCall, showC
     // Panel only renders when there is actual content: errors, or finished
     // knowledge/web variants with results. Inflight no longer surfaces raw
     // args JSON, so the panel would otherwise be an empty gap.
+    const hasCodeOutput = variant === "tool" && hasToolCodeOutput(toolCall);
     const hasDetails =
         !!toolCall.error ||
+        hasCodeOutput ||
         (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
     // Web variant stays open by default after finish (spec §3.2.4); errors
@@ -401,8 +403,6 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall: storedCall, showC
                 )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
-                {/* flex-wrap: the "view code and output" block takes its own line under the label. */}
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2">
                 <button
                     type="button"
                     onClick={hasDetails && !toolCall.inflight ? () => setExpanded((v) => !v) : undefined}
@@ -432,8 +432,6 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall: storedCall, showC
                         />
                     )}
                 </button>
-                {variant === "tool" && <ToolCodeOutput toolCall={toolCall} />}
-                </div>
                 <div
                     className={cn("grid transition-all duration-300 ease-out", expanded && "mt-2")}
                     style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
@@ -443,6 +441,8 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall: storedCall, showC
                         {toolCall.error && !toolCall.failure_info && (
                             <div className="leading-[22px]">{toolCall.error}</div>
                         )}
+
+                        {hasCodeOutput && expanded && <ToolCodeOutput toolCall={toolCall} />}
 
                         {!toolCall.inflight && !toolCall.error && variant === "knowledge" && knowledgeChips.length > 0 && (
                             <div className="flex flex-wrap gap-2">

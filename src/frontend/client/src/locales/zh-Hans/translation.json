@@ -3251,8 +3251,6 @@
     }
   },
   "runTool": {
-    "viewCodeOutput": "查看代码和输出",
-    "collapse": "收起",
     "code": "代码",
     "params": "参数",
     "output": "输出"
