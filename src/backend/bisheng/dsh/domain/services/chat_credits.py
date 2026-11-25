@@ -16,14 +16,54 @@ _runtimes = WeakKeyDictionary()
 # round are still admitted and settled in the ledger, but skip the monthly-limit
 # comparison, so an allowance that runs out mid-round never cuts the round off.
 _round_admitted: ContextVar[bool] = ContextVar("dsh_round_admitted", default=False)
+_billing_source_type: ContextVar[str | None] = ContextVar("dsh_billing_source_type", default=None)
+_billing_source_id: ContextVar[str | None] = ContextVar("dsh_billing_source_id", default=None)
+_open_api_unbilled: ContextVar[bool] = ContextVar("dsh_open_api_unbilled", default=False)
+
+
+@contextmanager
+def billing_context(
+    *,
+    source_type: str | None = None,
+    source_id: str | None = None,
+    open_api_unbilled: bool | None = None,
+):
+    """Propagate call attribution (source_type/source_id) and Open API exemption."""
+    tokens = []
+    if source_type is not None:
+        tokens.append(_billing_source_type.set(source_type))
+    if source_id is not None:
+        tokens.append(_billing_source_id.set(str(source_id)))
+    if open_api_unbilled is not None:
+        tokens.append(_open_api_unbilled.set(bool(open_api_unbilled)))
+    try:
+        yield
+    finally:
+        for token in reversed(tokens):
+            token.var.reset(token)
+
+
+def current_billing_source() -> tuple[str | None, str | None]:
+    return _billing_source_type.get(), _billing_source_id.get()
+
+
+def is_open_api_unbilled() -> bool:
+    return _open_api_unbilled.get()
 
 
 def governed(model) -> bool:
+    """Return True when this model invocation must go through the credit ledger."""
     from bisheng.common.services.config_service import settings
 
     # F016: knowledge-space Q&A (main chat and image view) is billed as well. rag_traceability
     # stays out because workflows use it too; the workbench passes daily_chat instead.
-    return settings.dsh.enabled and model.app_type in {"daily_chat", "linsight", "knowledge_space"}
+    # F001: assistant, workflow, and hosted-app model_gateway are also billed in real time.
+    app_type = getattr(model.app_type, "value", model.app_type)
+    return (
+        settings.credit_billing.enabled
+        and not _open_api_unbilled.get()
+        and app_type in {"daily_chat", "linsight", "knowledge_space", "assistant", "workflow", "model_gateway"}
+    )
 
 
 async def admit_round(model) -> None:
@@ -48,25 +88,39 @@ async def start(model, *, mode: str = ""):
     )
     from bisheng.common.services.config_service import settings
     from bisheng.core.context.tenant import get_current_tenant_id
-    from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
     from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
     from bisheng.dsh.domain.schemas.usage import UsageEvent
+    from bisheng.dsh.domain.services.model_access import require_model_operator
     from bisheng.dsh.domain.services.pricing import billing_snapshot
     from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
-    from bisheng.dsh.runtime import get_model_runtime, read_credit_setting, read_model_pricing, read_policy
+    from bisheng.dsh.runtime import (
+        get_model_runtime,
+        read_credit_setting,
+        read_ledger_policy,
+        read_model_pricing,
+        read_policy,
+    )
 
     tenant = get_current_tenant_id()
     if tenant is None:
         raise DshUserDisabledError()
-    identity = await CurrentIdentityRecords().get(str(tenant), str(model.user_id))
-    if not identity or not identity.active or not identity.tenant_active or not identity.natural_person:
-        raise DshUserDisabledError()
-    policy = await read_policy(model.user_id)
+    administrator = await require_model_operator(model.user_id)
     # Chat accepts string IDs; the loaded record provides the canonical ledger ID.
     model_id = model.model_info.id
+    if administrator:
+        from bisheng.llm.domain.services.llm import LLMService
+
+        # Revalidate actual ownership/sharing and online state at invocation.
+        # Super-admin qualification never grants access to a sibling's provider.
+        snapshots = await LLMService.get_dsh_model_catalog_snapshots([model_id])
+        if model_id not in snapshots:
+            raise DshModelNotAllowedError()
+        policy = await read_ledger_policy(model.user_id)
+    else:
+        policy = await read_policy(model.user_id)
     # Helper models chosen by administrators (traceability, image view) are not limited to the
     # user's selectable models; the user's own conversation model always is.
-    if model_id not in policy.allowed_model_ids and not getattr(model, "admin_selected", False):
+    if not administrator and model_id not in policy.allowed_model_ids and not getattr(model, "admin_selected", False):
         raise DshModelNotAllowedError()
     # F016: read prices fresh (never from the cached model_info) and freeze them for this call.
     # A model without a usable price is billed as free (never refused).
@@ -75,14 +129,18 @@ async def start(model, *, mode: str = ""):
     runtime = _runtimes.setdefault(loop, SimpleNamespace(settings=settings.dsh))
     service = await get_model_runtime(runtime)
     await service.activate()
-    if pricing.free:
+    if pricing.free or administrator:
         if mode == "probe":
-            # A free model never compares the allowance; nothing is written for a round probe.
+            # Free/admin probes do not compare a personal allowance or write a call.
             return service.model, None, None
-        # Free calls are still recorded, just never compared with the allowance (AC-11).
+        # Free/admin calls are recorded under the selected tenant and real user;
+        # a management operator does not consume a tenant member's allowance.
         mode = "unmetered"
     now = datetime.now(UTC)
     request_id = str(uuid4())
+    source_type, source_id = current_billing_source()
+    app_type_val = getattr(model.app_type, "value", model.app_type) if getattr(model, "app_type", None) is not None else None
+    app_id_val = getattr(model, "app_id", None)
     event = UsageEvent(
         request_id=request_id,
         trace_id=request_id,
@@ -98,6 +156,8 @@ async def start(model, *, mode: str = ""):
         event_version=1,
         status="RUNNING",
         started_at=now,
+        source_type=source_type or (str(app_type_val) if app_type_val else None),
+        source_id=source_id or (str(app_id_val) if app_id_val else None),
     )
     try:
         event = await service.usage.check_and_start(event, monthly_token_limit=policy.monthly_token_limit, mode=mode)

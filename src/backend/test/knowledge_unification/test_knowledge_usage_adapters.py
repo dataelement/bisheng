@@ -7,8 +7,6 @@ Successful primary-version filtering remains the existing retrieval contract.
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import pytest
-
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -30,8 +28,7 @@ async def test_rag_without_identity_never_checks_or_reads_candidates(monkeypatch
     check.assert_not_awaited()
 
 
-@pytest.mark.parametrize("action", ["use", "visible"])
-async def test_legacy_use_list_returns_the_same_visible_page_without_action_rematerialization(monkeypatch, action):
+async def test_visible_list_returns_the_page_without_action_rematerialization(monkeypatch):
     module = fixtures.ks_mod
     fixtures._stub_enrichment(monkeypatch)
     runtime = SimpleNamespace(list_visible_objects=AsyncMock(return_value=fixtures._visible("100", "101")))
@@ -46,7 +43,7 @@ async def test_legacy_use_list_returns_the_same_visible_page_without_action_rema
         login_user=fixtures._User(),
         knowledge_type=fixtures.KnowledgeTypeEnum.NORMAL,
         page_size=10,
-        action=action,
+        action="visible",
     )
     assert [item.id for item in page.data] == [100, 101]
     assert all(item.actions == ["visible"] for item in page.data)

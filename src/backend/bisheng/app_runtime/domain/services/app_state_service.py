@@ -65,7 +65,6 @@ from bisheng.database.models.app_version import TERMINAL_STATE_ONLINE, AppVersio
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.permission.application.access import get_f048_resource_adapter
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.contracts import SourceType
 from bisheng.resource_reference.application.source_contracts import SourceReadRequest
 
@@ -214,23 +213,11 @@ class AppStateService:
         from bisheng.app_publish.domain.repositories.reference_source_repository import (
             HostedAppReferenceSourceRepository,
         )
-        from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
-        from bisheng.app_publish.domain.services.reference_extractor import (
-            APP_REFERENCE_EXTRACTOR_VERSION,
-            extract_app_references,
-        )
         from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeDeliveryRepository
         from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
         from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
-        from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
-        from bisheng.resource_reference.application.batch import BatchReferenceBindings, SourceBindingRequest
-        from bisheng.resource_reference.application.contracts import (
-            SourceKey,
-            SourceRootKey,
-            SourceType,
-            TargetKey,
-            reference_set_digest,
-        )
+        from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+        from bisheng.resource_reference.application.source_sync import notify_reference_sync
 
         app = await cls._load(app_id)
         await cls._require_deleter(app, actor)
@@ -241,7 +228,6 @@ class AppStateService:
         adapter = await get_f048_resource_adapter("app")
         permission_record = await adapter.load_permission_record(app.id)
         repository = HostedAppReferenceSourceRepository()
-        runtime = await get_reference_binding_runtime()
         coordinator = RuntimeDeliveryCoordinator(repository=RuntimeDeliveryRepository(get_async_db_session))
         operation = None
         async with coordinator.repo.transaction() as session:
@@ -249,7 +235,6 @@ class AppStateService:
                 await session.begin()
             root = await repository.aget_root(session, app_id)
             versions = await repository.alist_versions(session, root)
-            root_key = SourceRootKey(root["tenant_id"], SourceType.HOSTED_APP_VERSION, root["id"])
             locked_root = None
             locked_versions = None
 
@@ -264,60 +249,8 @@ class AppStateService:
                     locked_root["state"], AppState.DELETED.value
                 ):
                     raise AppStateConflictError(app_id=app_id, action="delete")
-                return tuple(
-                    SourceKey(root_key.tenant_id, root_key.source_type, root_key.source_id, version["id"])
-                    for version in locked_versions
-                )
 
-            batch = BatchReferenceBindings(runtime.repository, runtime.verifier)
-            if versions:
-                requests = tuple(
-                    SourceBindingRequest(
-                        SourceKey(root_key.tenant_id, root_key.source_type, root_key.source_id, version["id"]),
-                        (),
-                        APP_REFERENCE_EXTRACTOR_VERSION,
-                        effective=False,
-                    )
-                    for version in versions
-                )
-                prepared = await batch.aprepare_source_batch(session, requests, lock_source_root=lock_root)
-            else:
-                await lock_root(session)
-                prepared = None
-            # The root (and batch guard when present) is held before reading
-            # all raw details. Orphan rows cannot hide behind a missing set.
-            indexed = await runtime.repository.alist_source_sets_for_root(session, root_key, for_update=True)
-            raw = await runtime.repository.alist_source_references_for_root(session, root_key, for_update=True)
-            version_by_id = {version["id"]: version for version in locked_versions}
-            if {item.source_version for item in indexed} != set(version_by_id) or any(
-                item.source_version not in version_by_id for item in raw
-            ):
-                raise ReferenceCoverageNotReadyError(reason="app_delete_inventory_incomplete")
-            prepared_by_version = (
-                {item.source_key.source_version: item for item in prepared.sources} if prepared else {}
-            )
-            for item in indexed:
-                details = [row for row in raw if row.source_version == item.source_version]
-                try:
-                    declaration = CapabilityDeclaration.model_validate(
-                        version_by_id[item.source_version]["capabilities"]
-                    )
-                    mapping = {row.slot_key: TargetKey(row.target_type, row.target_id) for row in details}
-                    references = extract_app_references(declaration, resolved_targets=mapping)
-                except (TypeError, ValueError) as error:
-                    raise ReferenceCoverageNotReadyError(reason="app_delete_configuration_drift") from error
-                planned = prepared_by_version[item.source_version]
-                if (
-                    not item.ready
-                    or not item.effective
-                    or len(mapping) != len(details)
-                    or item.extractor_version != APP_REFERENCE_EXTRACTOR_VERSION
-                    or item.digest != reference_set_digest(references)
-                    or any(row.source_revision != item.source_revision for row in details)
-                    or item.source_revision != planned.expected_revision
-                    or reference_set_digest(references) != planned.verified.context.old_references_digest
-                ):
-                    raise ReferenceCoverageNotReadyError(reason="app_delete_inventory_inconsistent")
+            await lock_root(session)
             await RuntimeProjectionService(coordinator.repo).block(app.id, "stopped")
             operation = await coordinator.submit(
                 SimpleNamespace(**locked_root),
@@ -325,11 +258,10 @@ class AppStateService:
                 key="destroy:" + uuid4().hex,
                 payload={"purge_volume": True, "delete_secret_config": True},
             )
-            if prepared is not None:
-                await batch.aapply_source_batch(session, prepared)
             # Existing durable FGA ledger/projection succeeds before SQL finalize.
             await cls._project_delete(adapter, permission_record, app, actor)
             await repository.aset_deleted(session, locked_root)
+        await notify_reference_sync(root["tenant_id"], "hosted_app_version", app_id)
         if permission_record is not None:
             await adapter.cleanup_deleted(
                 record=permission_record, actor=await AppAuthorizationService.resolve_actor(actor)

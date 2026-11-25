@@ -360,7 +360,7 @@ export async function getResourcePermissionGrantsApi(
 export async function getMyResourcePermissionsApi(
   resourceType: PermissionResourceType,
   resourceId: string,
-  config?: { showError?: boolean },
+  config?: { showError?: boolean; signal?: AbortSignal },
 ): Promise<MyResourcePermissions> {
   return await axios.get(
     `${permissionResourcePath(resourceType, resourceId)}/my-permissions`,

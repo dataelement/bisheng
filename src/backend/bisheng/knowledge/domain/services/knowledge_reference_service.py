@@ -4,12 +4,15 @@ The public inspection owns short target transactions. Its detached result is
 review data, not a target receipt or permission to execute a deletion.
 """
 
+import asyncio
 import json
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from hashlib import sha256
 
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
@@ -22,7 +25,6 @@ from bisheng.knowledge.application.direct_delete_reference_query import DirectDe
 from bisheng.knowledge.application.space_delete_reference_query import SpaceDeleteReferenceQuery
 from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
 from bisheng.permission.application.business_authorization import batch_check_business_actions, require_business_action
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.contracts import SourceType
 from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 from bisheng.resource_reference.application.source_disclosure import SourceDisclosure, SourceDisclosureRuntime
@@ -159,11 +161,8 @@ class KnowledgeReferenceService:
 
     async def _load(self, *, identity, space_id, selections, whole_space):
         original, stable = await self._authorize(identity, space_id, selections, whole_space)
-        if not callable(self.coverage_factory):
-            raise ReferenceCoverageNotReadyError(reason="knowledge_reference_coverage_unconfigured")
-        runtime = self.runtime or await get_reference_binding_runtime()
         query_type = SpaceDeleteReferenceQuery if whole_space else DirectDeleteReferenceQuery
-        query = query_type(runtime=runtime, coverage_factory=self.coverage_factory)
+        query = query_type()
         async with self.sessions() as session:
             if not isinstance(session, AsyncSession) or session.in_transaction():
                 raise ReferenceCoverageNotReadyError(reason="knowledge_reference_owned_session_required")
@@ -208,6 +207,35 @@ class KnowledgeReferenceService:
         )
 
     async def ainspect(self, *, identity, space_id, selections=(), whole_space=False, source_page_size=50):
+        # Identity and deletion authorization are business checks, outside best-effort handling.
+        await self._authorize(identity, space_id, selections, whole_space)
+        try:
+            async with asyncio.timeout(2):
+                return await self._inspect(
+                    identity=identity,
+                    space_id=space_id,
+                    selections=selections,
+                    whole_space=whole_space,
+                    source_page_size=source_page_size,
+                )
+        except (TimeoutError, SQLAlchemyError, ReferenceCoverageNotReadyError) as error:
+            logger.warning("Knowledge reference hints unavailable space={} error={}", space_id, type(error).__name__)
+            return KnowledgeReferenceInspection(
+                space_id,
+                whole_space,
+                "",
+                "",
+                (),
+                (),
+                (),
+                KnowledgeReferenceSourcePage((), source_page_size, False, None),
+                0,
+                "",
+                False,
+                False,
+            )
+
+    async def _inspect(self, *, identity, space_id, selections=(), whole_space=False, source_page_size=50):
         try:
             size = self._size(source_page_size)
             facts, original, stable = await self._load(
@@ -246,6 +274,21 @@ class KnowledgeReferenceService:
             raise ReferenceCoverageNotReadyError(reason="knowledge_reference_check_failed") from error
 
     async def alist_sources(self, *, identity, space_id, cursor, selections=(), whole_space=False, page_size=50):
+        await self._authorize(identity, space_id, selections, whole_space)
+        try:
+            async with asyncio.timeout(2):
+                return await self._list_sources(
+                    identity=identity,
+                    space_id=space_id,
+                    cursor=cursor,
+                    selections=selections,
+                    whole_space=whole_space,
+                    page_size=page_size,
+                )
+        except TimeoutError as error:
+            raise ReferenceCoverageNotReadyError(reason="knowledge_reference_timeout") from error
+
+    async def _list_sources(self, *, identity, space_id, cursor, selections=(), whole_space=False, page_size=50):
         try:
             size = self._size(page_size)
             facts, original, stable = await self._load(

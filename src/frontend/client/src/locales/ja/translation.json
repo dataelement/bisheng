@@ -65,7 +65,13 @@
     "copyFailed": "コピーできませんでした。アカウントを選択してコピーしてください。"
   },
   "project_sync": {
-    "reason": { "not_owned": "このアカウントの会話が含まれないため取り込みませんでした", "cloud_membership_kept": "クラウドの所属を保持", "conversation_unavailable": "会話は削除済み、または別アカウントに所属", "invalid_local_data": "ローカル記録が無効です", "unknown": "取り込まれませんでした" },
+    "reason": {
+      "not_owned": "このアカウントの会話が含まれないため取り込みませんでした",
+      "cloud_membership_kept": "クラウドの所属を保持",
+      "conversation_unavailable": "会話は削除済み、または別アカウントに所属",
+      "invalid_local_data": "ローカル記録が無効です",
+      "unknown": "取り込まれませんでした"
+    },
     "loading": "読み込み中…",
     "more": "さらに読み込む",
     "save_failed": "保存できませんでした。入力を保持しています。再試行してください。",
@@ -468,7 +474,7 @@
   "com_linsight_add_skill": "スキルを追加",
   "com_linsight_exit_task_mode": "詳細リサーチを終了",
   "com_linsight_input_placeholder": "タスクの目標を入力すると、$t(com_linsight_task_mode)が進めます",
-  "com_linsight_awaiting_reply": "上記の質問に回答してタスクを続行してください",
+  "com_linsight_answer_placeholder": "上の選択肢を選ぶか、回答を直接入力してください",
   "com_linsight_skill_empty": "利用可能なスキルはありません",
   "com_linsight_skill_search": "スキルを検索",
   "com_linsight_task_mode": "詳細リサーチ",
@@ -2598,7 +2604,14 @@
   "com_chat_image_expired": "画像は無効になり、表示できません",
   "com_error_file_upload_incomplete": "「{{0}}」のアップロードが完了していません。削除して再アップロードしてから送信してください。",
   "com_linsight_error_title_chat_unknown": "回答の生成に失敗しました",
-  "com_linsight_error_desc_chat_unknown": "回答の生成中に問題が発生したため、処理が中断されました。",
+  "com_linsight_error_desc_chat_unknown": "このメッセージの処理中にシステムエラーが発生し、回答は生成されませんでした。もう一度送信してください。繰り返し失敗する場合は管理者にお問い合わせください。",
+  "com_linsight_error_desc_chat_content_filter": "モデル提供元がこの内容を不適切の可能性があると判定したため、回答は生成されませんでした。言い換えるか、質問を分けてもう一度お試しください。",
+  "com_linsight_error_desc_chat_quota_exhausted": "現在のモデルの利用枠またはアカウント残高が不足しているため、回答は生成されませんでした。管理者にチャージを依頼するか、利用可能な別のモデルに切り替えて再送信してください。",
+  "com_linsight_error_desc_chat_credit_exhausted": "今月利用できるモデルクレジットを使い切ったため、回答は生成されませんでした。管理者にクレジット上限の調整を依頼してください。クレジットは来月初めに回復します。",
+  "com_linsight_error_desc_chat_auth_error": "現在のモデルの認証情報が無効、または権限がないため、回答は生成されませんでした。管理者にモデル設定の確認を依頼してください。",
+  "com_linsight_error_desc_chat_context_overflow": "今回の内容は現在のモデルが一度に処理できる長さを超えているため、回答は生成されませんでした。内容を短くするか添付を減らして再送信するか、コンテキストの長いモデルに切り替えてください。",
+  "com_linsight_error_desc_chat_context_compress_failed": "会話が長いため、以前の内容を要約する必要がありましたが、要約に失敗し、回答は生成されませんでした。もう一度送信してください。繰り返し失敗する場合は、管理者にモデルサービスの確認を依頼してください。",
+  "com_linsight_error_desc_chat_output_truncated": "モデルが今回の回答で長く思考し、1 回の出力上限に達したため、回答は生成されませんでした。もう一度送信してください。繰り返し発生する場合は、管理者にこのモデルの最大出力長の引き上げを依頼してください。",
   "com_linsight_error_hint_chat_unknown": "ヒント：メッセージを再送信してください。繰り返し失敗する場合は管理者にお問い合わせください。",
   "com_linsight_error_title_file_parse_busy": "ファイル解析サービスが混雑しています",
   "com_linsight_error_desc_file_parse_busy": "ファイル解析サービスへのリクエストが集中しているため、添付ファイルを処理できませんでした。",
@@ -2997,6 +3010,7 @@
     "noModelsConfigured": "利用できるモデルがまだ設定されていないため、メッセージを送信できません。管理者にモデルの追加を依頼してください。",
     "recommendedApps": "おすすめのアプリ",
     "scrollToBottom": "一番下へ",
+    "messageQueued": "送信しました。処理待ちです",
     "preview": "プレビュー",
     "source": "ソース",
     "closeResearch": "詳細リサーチを終了",
@@ -3101,6 +3115,22 @@
       "description": "データ表、集計表、予算表、財務モデル、見積書、台帳などの Excel ブック（.xlsx）を作成・編集します。.xlsx、.xls、.csv データの読み込みと整形、数式や書式の設定を行い、納品前にブックを再計算して確認します。"
     }
   },
+  "runPlan": {
+    "cancelled": "キャンセル済み",
+    "stopped": "停止しました",
+    "awaitingAnswer": "回答をお待ちしています",
+    "stoppedNote": "停止しました。完了したステップとファイルは残っています。"
+  },
+  "runMessage": {
+    "toolStopped": "{{name}}を停止しました"
+  },
+  "runComposer": {
+    "stoppedPlaceholder": "停止しました。メッセージを送ると続きから再開できます",
+    "runningPlaceholder": "回答中でもいつでも入力できます。Enter で送信",
+    "stopFailed": "停止できませんでした。もう一度お試しください",
+    "uploadLocked": "現在の回答が終わるとファイルをアップロードできます",
+    "modelLocked": "現在の回答が終わるとモデルを切り替えられます"
+  },
   "appChat": {
     "unknownApp": "不明なアプリ",
     "noDescription": "説明はありません",
@@ -3111,5 +3141,115 @@
     "checking": "ナレッジスペースのアクセス権を確認しています…",
     "failed": "ナレッジスペースの権限を読み込めませんでした。ページを更新して再試行してください。",
     "revoked": "次のナレッジスペースのアクセス権が失効しました：{{names}}。「コンテキストを追加」からアクセス可能なスペースを選び直してください。"
+  },
+  "memory": {
+    "nav_title": "メモリー",
+    "switch_label": "マイメモリー",
+    "switch_hint": "オンにすると、会話で役に立つ情報を自動で整理し、覚えるよう頼んだ内容を記憶します。オフにすると、会話でメモリーの読み書きを行いません。保存済みのメモリーは下で引き続き確認・管理できます。",
+    "list_title": "保存済みのメモリー",
+    "empty": "保存済みのメモリーはまだありません",
+    "add": "追加",
+    "add_title": "メモリーを追加",
+    "delete": "削除",
+    "clear": "すべてクリア",
+    "clear_confirm_title": "すべてのメモリーをクリアしますか？",
+    "clear_confirm_desc": "保存したすべてのメモリーが削除され、元に戻せません。",
+    "clear_confirm_ok": "クリア",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "save": "保存",
+    "content_placeholder": "覚えておく内容（200 文字以内）",
+    "type": {
+      "fact": "事実",
+      "preference": "好み",
+      "experience": "経験"
+    },
+    "updated_at": "最終更新",
+    "detail_label": "詳細",
+    "no_detail": "詳細はまだありません。下の入力欄で AI に追加を頼めます。",
+    "back": "すべてのメモリー",
+    "revise_label": "AI にこの記憶を修正してもらう",
+    "revise_placeholder": "この記憶をどう直すか AI に伝えてください（例：旅行は 1 月に変更）",
+    "revise_send": "送信",
+    "revising": "AI がこのメモリーを修正しています…",
+    "revised": "修正しました",
+    "undo": "元に戻す",
+    "revise_unchanged": "この記憶に修正が必要な箇所はありませんでした",
+    "revise_failed": "修正できませんでした。もう一度お試しください",
+    "detail_load_failed": "詳細を読み込めませんでした",
+    "source": {
+      "manual": "手動で追加",
+      "daily": "日常チャット",
+      "linsight": "ディープリサーチ",
+      "assistant": "アシスタント",
+      "workflow": "ワークフロー",
+      "unknown": "チャット",
+      "auto": "{{source}}（自動整理）"
+    },
+    "load_failed": "メモリーを読み込めませんでした",
+    "retry": "再試行",
+    "save_failed": "保存できませんでした。もう一度お試しください。",
+    "delete_failed": "削除できませんでした。もう一度お試しください。",
+    "clear_failed": "クリアできませんでした。もう一度お試しください。",
+    "switch_failed": "設定を保存できませんでした。もう一度お試しください。",
+    "loading": "読み込み中…",
+    "notice": {
+      "pending": "メモリーを更新しました",
+      "remember": "{{count}} 件のメモリーを記憶しました",
+      "correct": "{{count}} 件のメモリーを訂正しました",
+      "forget": "{{count}} 件のメモリーを忘れました",
+      "updated": "{{count}} 件のメモリーを更新しました",
+      "op_remember": "記憶",
+      "op_correct": "訂正",
+      "op_forget": "忘却",
+      "item_gone": "このメモリーはクリアされました",
+      "undo": "元に戻す",
+      "undone": "元に戻しました",
+      "undo_failed": "元に戻せませんでした。もう一度お試しください。"
+    },
+    "tool_operation": "メモリー操作",
+    "step": {
+      "running_remember": "メモリに記録しています",
+      "running_correct": "メモリを訂正しています",
+      "running_forget": "メモリを削除しています",
+      "running_search": "メモリを検索しています",
+      "running_write": "メモリを更新しています",
+      "done_remember": "メモリを 1 件記録しました",
+      "done_correct": "メモリを 1 件訂正しました",
+      "done_forget": "メモリを 1 件削除しました",
+      "done_write": "メモリを更新しました",
+      "done_search": "メモリを検索し、{{count}} 件見つかりました",
+      "done_search_empty": "メモリを検索しましたが、関連する内容はありません",
+      "hits_gone": "関連するメモリーは削除されました",
+      "failed_remember": "メモリの書き込みが拒否されました：{{reason}}",
+      "failed_correct": "メモリの訂正が拒否されました：{{reason}}",
+      "failed_forget": "メモリの削除が拒否されました：{{reason}}",
+      "failed_search": "メモリの検索に失敗しました：{{reason}}",
+      "failed_write": "メモリの更新が拒否されました：{{reason}}",
+      "reason_12100": "200 文字を超えています",
+      "reason_12101": "パスワード、身分証番号、カード番号のような内容です",
+      "reason_12102": "「明日」「来週火曜」のような相対的な日時が含まれています",
+      "reason_12103": "変更するメモリが存在しないか、変更されています",
+      "reason_12107": "メモリ検索は一時的に利用できません",
+      "reason_12110": "メモリの種類が正しくありません",
+      "reason_12111": "内容が空です",
+      "reason_other": "操作が完了しませんでした"
+    },
+    "field": {
+      "type": "分類",
+      "source": "出典"
+    },
+    "group": {
+      "preference": "好み",
+      "fact": "事実",
+      "experience": "経験"
+    }
+  },
+  "runTool": {
+    "viewCodeOutput": "コードと出力を表示",
+    "collapse": "折りたたむ",
+    "code": "コード",
+    "params": "パラメータ",
+    "output": "出力"
   }
 }

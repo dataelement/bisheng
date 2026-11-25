@@ -10,7 +10,7 @@ from redis.asyncio import ConnectionPool, Redis
 from redis.exceptions import RedisError
 
 from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig, validate_model_configs
-from bisheng.dsh.domain.schemas.usage import UsageEvent
+from bisheng.dsh.domain.schemas.usage import ToolUsageEvent, UsageEvent
 from bisheng.dsh.infrastructure.quota_topology import QuotaTopology
 from bisheng.dsh.infrastructure.usage_work import with_usage_schedule
 
@@ -100,8 +100,11 @@ class QuotaRedis:
                     raise QuotaRejected("event_epoch_mismatch")
                 source = self.script(script)
                 keys = self.keys(event)
-                keys.append(keys[0].removesuffix(":gate") + ":running")
-                keys.append(keys[0].removesuffix(":gate") + ":unknown_usage")
+                base = keys[0].removesuffix(":gate")
+                keys.append(base + ":running")
+                keys.append(base + ":unknown_usage")
+                if script == "admit.lua":
+                    keys.append(f"{base}:tools:{event.usage_month}")
                 keys.append(self.prefix + ":projection_work")
                 source = with_usage_schedule(source, stream_key=6)
                 result = await self.redis.eval(source, len(keys), *keys, *args)
@@ -261,7 +264,13 @@ class QuotaRedis:
                     if len(months) > 1000:
                         raise QuotaRejected("policy_month_inventory_too_large")
                     for key in sorted(months):
-                        keys.extend([key, key.replace(":month:", ":models:")])
+                        keys.extend(
+                            [
+                                key,
+                                key.replace(":month:", ":models:"),
+                                key.replace(":month:", ":tools:"),
+                            ]
+                        )
                 result = await self.redis.eval(
                     (Path(__file__).parent / "lua" / "policy.lua").read_text(),
                     len(keys),
@@ -370,7 +379,25 @@ class QuotaRedis:
             raise ValueError("Invalid policy ownership fencing arguments")
 
     @staticmethod
-    def _identity(event: UsageEvent) -> str:
+    def _identity(event: UsageEvent | ToolUsageEvent) -> str:
+        if isinstance(event, ToolUsageEvent):
+            data = {
+                "event_kind": "tool",
+                "request_id": event.request_id,
+                "tenant_id": event.tenant_id,
+                "user_id": event.user_id,
+                "tool_id": event.tool_id,
+                "tool_key": event.tool_key,
+                "usage_month": event.usage_month,
+                "billing_timezone": event.billing_timezone,
+                "quota_epoch": event.quota_epoch,
+                "billed_tokens": event.billed_tokens,
+            }
+            started = event.started_at
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=UTC)
+            data["started_at"] = started.astimezone(UTC).isoformat()
+            return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         fields = (
             "request_id",
             "tenant_id",
@@ -418,6 +445,79 @@ class QuotaRedis:
             if result[0] != "OK":
                 raise QuotaRejected(result[1])
 
+    async def check_tool_quota(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+        usage_month: str,
+        monthly_token_limit: int | None = None,
+        mode: str = "",
+    ) -> tuple[int, int]:
+        import re
+
+        if min(tenant_id, user_id) < 1 or re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", usage_month) is None:
+            raise ValueError("Invalid usage dimension")
+        await self.prepare(tenant_id, user_id, usage_month)
+        base = f"{self.prefix}:{{{tenant_id}:{user_id}}}"
+        async with self.topology.lock:
+            try:
+                await self.topology.check()
+                epoch = await self.ledger_epoch(tenant_id, user_id)
+                result = await self.redis.eval(
+                    self.script("check_tool_quota.lua"),
+                    3,
+                    base + ":gate",
+                    base + ":month:" + usage_month,
+                    base + ":blocks",
+                    str(epoch),
+                    mode,
+                    "" if monthly_token_limit is None else str(monthly_token_limit),
+                )
+            except QuotaRejected:
+                raise
+            except (RedisError, RuntimeError) as exc:
+                self.topology.close()
+                raise QuotaRejected("quota_unavailable") from exc
+        if result[0] != "OK":
+            raise QuotaRejected(result[1])
+        return int(result[1]), int(result[2])
+
+    async def record_tool_usage(self, event: ToolUsageEvent) -> ToolUsageEvent:
+        await self.prepare(event.tenant_id, event.user_id, event.usage_month)
+        base = f"{self.prefix}:{{{event.tenant_id}:{event.user_id}}}"
+        async with self.topology.lock:
+            try:
+                await self.topology.check()
+                epoch = await self.ledger_epoch(event.tenant_id, event.user_id)
+                effective = event if event.quota_epoch == epoch else event.model_copy(update={"quota_epoch": epoch})
+                source = with_usage_schedule(self.script("record_tool_usage.lua"), stream_key=5)
+                keys = [
+                    base + ":gate",
+                    base + ":month:" + effective.usage_month,
+                    base + ":tools:" + effective.usage_month,
+                    base + ":request:" + effective.request_id,
+                    base + ":events",
+                    self.prefix + ":projection_work",
+                ]
+                args = [
+                    str(epoch),
+                    str(effective.tool_id),
+                    str(effective.billed_tokens),
+                    effective.model_dump_json(),
+                    effective.usage_month,
+                    self._identity(effective),
+                ]
+                result = await self.redis.eval(source, len(keys), *keys, *args)
+            except QuotaRejected:
+                raise
+            except (RedisError, RuntimeError) as exc:
+                self.topology.close()
+                raise QuotaRejected("quota_unavailable") from exc
+        if result[0] != "OK":
+            raise QuotaRejected(result[1])
+        return effective
+
     async def read_usage(self, tenant_id: int, user_id: int, usage_month: str) -> dict:
         import re
         from datetime import UTC, datetime
@@ -431,7 +531,7 @@ class QuotaRedis:
                 await self.topology.check()
                 result = await self.redis.eval(
                     self.script("read_usage.lua"),
-                    7,
+                    8,
                     base + ":gate",
                     base + ":month:" + usage_month,
                     base + ":models:" + usage_month,
@@ -439,6 +539,7 @@ class QuotaRedis:
                     base + ":events",
                     base + ":running",
                     base + ":unknown_usage",
+                    base + ":tools:" + usage_month,
                     str(await self.ledger_epoch(tenant_id, user_id)),
                     *self.pressure_args(),
                 )

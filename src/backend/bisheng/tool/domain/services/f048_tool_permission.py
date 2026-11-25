@@ -17,6 +17,7 @@ from bisheng.permission.domain.services.permission_action_service import (
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 
+# Default system grant; delegated editing is authorized independently.
 SYSTEM_TOOL_ACTIONS = frozenset({"visible"})
 
 
@@ -104,7 +105,7 @@ class ToolPermissionPort(Protocol):
 
 
 class F048ToolPermissionAdapter:
-    """Reject invalid/preset tool facts before the sole permission facade."""
+    """Validate tool facts before the sole permission facade."""
 
     def __init__(
         self,
@@ -229,7 +230,7 @@ class F048ToolPermissionAdapter:
             or (not record.preset and not record.owner_user_id)
         ):
             raise PermissionInvalidResourceError()
-        if record.preset and action is not None and action not in SYSTEM_TOOL_ACTIONS | {"manage_permission"}:
+        if record.preset and action is not None and action not in SYSTEM_TOOL_ACTIONS | {"edit", "manage_permission"}:
             raise InvalidCatalogActionError(msg=f"Preset tool does not support action: {action}")
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=record.tenant_id,

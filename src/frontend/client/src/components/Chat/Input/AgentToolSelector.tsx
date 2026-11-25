@@ -127,8 +127,7 @@ export function useAgentToolSelection(availableTools: AvailableToolGroup[] | und
     const pruned = selected.flatMap(group => {
       const current = byId.get(group.id);
       if (!current) return [];
-      const refreshed = selectedToolGroup(current);
-      return [group.auto ? { ...refreshed, auto: true } : refreshed];
+      return [selectedToolGroup(current)];
     });
     if (JSON.stringify(pruned) !== JSON.stringify(selected)) setSelected(pruned);
   }, [availableTools, selected, setSelected]);

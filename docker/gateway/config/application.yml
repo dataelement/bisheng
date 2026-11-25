@@ -1,4 +1,4 @@
-# Contract: bisheng-gateway v1.8.0 (2995df6f); Docker-only addresses.
+# Deployment target: bisheng-gateway v1.9.3 (3674032d); Docker-only addresses.
 server:
   port: 8080
 spring:

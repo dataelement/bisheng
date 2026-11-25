@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import json
-import os.path
+import os
 import re
 import zipfile
 from typing import Any
@@ -20,6 +20,8 @@ from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_fil
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao
+from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+from bisheng.knowledge.domain.services.temp_upload_service import TempUploadService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.utils import generate_uuid
@@ -226,6 +228,7 @@ class FinetuneFileService(BaseModel):
         file_id = generate_uuid()
         object_name = f"finetune/dataset/{tenant_id}/{file_id}.json"
         await minio.put_object(bucket_name=minio.bucket, object_name=object_name, file=payload)
+        await PreviewSourceService.bind_owned_object(bucket=minio.bucket, object_name=object_name, login_user=user)
         file_info = PresetTrain(
             id=file_id, name=name, url=object_name, type=preset_type, user_id=user.user_id, user_name=user.user_name
         )
@@ -267,12 +270,65 @@ class FinetuneFileService(BaseModel):
             raise TrainFileNotExistError()
 
     @classmethod
-    async def get_download_url(cls, file_url: str, user: UserPayload) -> str:
-        dataset = await PresetTrainDao.find_by_url(file_url)
-        if dataset is None:
-            cls.validate_personal_file(file_url, user)
+    async def _download_owned_training_file(cls, object_name: str, login_user: UserPayload) -> str:
+        """Sign only a training-file key the caller owns, administers, or attached to their job."""
+        from bisheng.finetune.domain.repositories.file_download_repository import FileDownloadRepository
+        from bisheng.permission.application import is_tenant_admin
+
+        if (
+            not object_name.startswith("finetune/train_file/")
+            or any(part in {"", ".", ".."} for part in object_name.split("/"))
+            or "\\" in object_name
+            or "%" in object_name
+        ):
+            raise TrainFileNotExistError()
+        tenant_id = get_current_tenant_id() or getattr(login_user, "tenant_id", None)
         minio = await get_minio_storage()
-        return await minio.get_share_link(dataset.url if dataset else file_url, clear_host=False)
+        bound = await PreviewSourceService.is_owned_object(
+            bucket=minio.bucket, object_name=object_name, login_user=login_user
+        )
+        record = await FileDownloadRepository.preset_by_object(object_name)
+        if record is not None and record.tenant_id == tenant_id:
+            bound = (
+                bound
+                or str(record.user_id) == str(login_user.user_id)
+                or (callable(getattr(login_user, "is_admin", None)) and login_user.is_admin())
+                or await is_tenant_admin(login_user.user_id, tenant_id)
+            )
+        scoped = (
+            f"finetune/train_file/personal/{tenant_id}/{login_user.user_id}/",
+            f"finetune/train_file/preset/{tenant_id}/{login_user.user_id}/",
+        )
+        if not bound and object_name.startswith(scoped):
+            for job in await FileDownloadRepository.owned_jobs(login_user.user_id):
+                if job.tenant_id == tenant_id and any(
+                    isinstance(item, dict) and item.get("url") == object_name
+                    for item in (job.train_data or []) + (job.preset_data or [])
+                ):
+                    bound = True
+                    break
+        if not bound:
+            raise TrainFileNotExistError()
+        return await minio.get_share_link(object_name, clear_host=False)
+
+    @classmethod
+    async def get_download_url(cls, file_url: str, user: UserPayload) -> str:
+        if isinstance(file_url, str) and file_url.startswith("finetune/train_file/"):
+            return await cls._download_owned_training_file(file_url, user)
+        # Dataset catalog keys are not training-file keys. Only a tenant-scoped row may be signed.
+        if (
+            not isinstance(file_url, str)
+            or any(part in {"", ".", ".."} for part in file_url.split("/"))
+            or "\\" in file_url
+            or "%" in file_url
+            or not (file_url.startswith("finetune/dataset/") or file_url.startswith("dataset/"))
+        ):
+            raise TrainFileNotExistError()
+        dataset = await PresetTrainDao.find_by_url(file_url)
+        if dataset is None or dataset.url != file_url:
+            raise TrainFileNotExistError()
+        minio = await get_minio_storage()
+        return await minio.get_share_link(dataset.url, clear_host=False)
 
     @classmethod
     async def upload_validation_media(cls, job_id: str, modality: str, file: UploadFile, user: UserPayload):
@@ -309,16 +365,22 @@ class FinetuneFileService(BaseModel):
     async def upload_file_to_minio(
         cls, files: list[UploadFile], file_root: str, user: UserPayload
     ) -> list[PresetTrain]:
-        tenant_id = cls._tenant_id()
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None:
+            tenant_id = getattr(user, "tenant_id", None)
+        if isinstance(tenant_id, bool) or not isinstance(tenant_id, int) or tenant_id <= 0:
+            raise NoTenantContextError()
         minio_client = await get_minio_storage()
         ret = []
         for file in files:
+            suffix = TempUploadService._safe_suffix(file.filename or "")
+            if not suffix:
+                raise TrainFileNotExistError()
             file_id = generate_uuid()
-            file_ext = os.path.basename(file.filename).split(".")[-1]
             file_info = PresetTrain(
                 id=file_id,
                 name=file.filename,
-                url=f"{file_root}/{tenant_id}/{user.user_id}/{file_id}.{file_ext}",
+                url=f"{file_root}/{tenant_id}/{user.user_id}/{file_id}{suffix}",
                 user_id=user.user_id,
                 user_name=user.user_name,
             )
@@ -328,6 +390,9 @@ class FinetuneFileService(BaseModel):
                 file=file.file,
                 content_type=file.content_type,
                 length=file.size,
+            )
+            await PreviewSourceService.bind_owned_object(
+                bucket=minio_client.bucket, object_name=file_info.url, login_user=user
             )
             ret.append(file_info)
         return ret

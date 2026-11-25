@@ -16,6 +16,7 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.session_activity import business_activity
 from bisheng.database.models.assistant import Assistant
+from bisheng.memory.domain.services.gate import MemoryGate
 from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
@@ -38,8 +39,8 @@ async def get_assistant(
     status: int | None = Query(default=None, description="Is online status"),
     action: str = Query(
         default="visible",
-        pattern="^(visible|use)$",
-        description="Visibility required for each assistant; legacy use is interpreted as visible",
+        pattern="^visible$",
+        description="Visibility required for each assistant; Use visibility to admit resource access",
     ),
     cursor: str | None = Query(
         default=None,
@@ -61,7 +62,7 @@ async def get_assistant(
         tag_id=tag_id,
         cursor=cursor,
         page_size=page_size,
-        action="visible" if action == "use" else action,
+        action=action,
     )
     return resp_200(data=result)
 
@@ -261,6 +262,12 @@ async def chat(
             resource_id=assistant_id,
             action="visible",
         )
+
+        async def memory_register(session_chat_id: str) -> None:
+            # F132 (decision 6, R2): only this logged-in endpoint registers sessions
+            # for long-term memory; guest and open API endpoints pass nothing.
+            await MemoryGate.open(session_chat_id, login_user)
+
         # ``flow_lease_id`` is the page lease opened by the session page; without
         # it the connection takes its own execution lease.
         await chat_manager.dispatch_client(
@@ -273,6 +280,7 @@ async def chat(
             conversation_persistence=ConversationPersistence(login_user.user_id, user=login_user),
             message_admission=lambda: browser_message_identity_scope(login_user),
             flow_lease_id=flow_lease_id,
+            memory_register=memory_register,
         )
     except UnAuthorizedError:
         await websocket.close(

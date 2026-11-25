@@ -11,21 +11,66 @@ AccordionTrigger,
 } from "@/components/bs-ui/accordion";
 
 import { Tag,Tooltip } from "@bisheng/ui";
+import type { ToolPricingItem } from "@/controllers/API/toolPricing";
 import { Shield } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { currencySymbol } from "./ToolPriceDialog";
+
+interface ToolApiParam {
+    name: string;
+    required?: boolean;
+    schema?: { type?: string };
+}
+
+interface ToolChildItem {
+    id: number;
+    name: string;
+    tool_key?: string;
+    description?: string;
+    desc?: string;
+    extra?: string;
+    api_params?: ToolApiParam[];
+}
+
+interface ToolGroupData {
+    id: number | string;
+    name: string;
+    description?: string;
+    is_preset?: number;
+    write?: boolean;
+    children?: ToolChildItem[];
+}
+
+interface ToolItemProps {
+    type?: string;
+    select?: Array<{ id: number | string }> | null;
+    data: ToolGroupData;
+    onEdit?: (id: number | string) => void;
+    onSelect?: (tool: ToolChildItem) => void;
+    onSetClick?: (() => void) | null;
+    onPermission?: ((tool: ToolGroupData) => void) | null;
+    onHoverPermissions?: ((tool: ToolGroupData) => void) | null;
+    permissionBadge?: React.ReactNode;
+    showPricing?: boolean;
+    pricingMap?: Record<string, ToolPricingItem> | null;
+    onSetPrice?: ((tool: { id: number; name: string; tool_key?: string }) => void) | null;
+}
 
 export default function ToolItem({
     type,
     select,
     data,
-    onEdit = (id) => { },
+    onEdit = () => { },
     onSelect,
     onSetClick = null,
     onPermission = null,
     onHoverPermissions = null,
     permissionBadge = null,
-}) {
+    showPricing = false,
+    pricingMap = null,
+    onSetPrice = null,
+}: ToolItemProps) {
     const { t } = useTranslation('tool');
     const sortData = useMemo(() => {
         const { children, is_preset } = data;
@@ -106,6 +151,60 @@ export default function ToolItem({
                                     ))
                                 }
                             </p>
+                        }
+                        {
+                            showPricing && (
+                                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                    {(() => {
+                                        const item = pricingMap?.[String(api.id)];
+                                        if (!item || item.price_micro === 0) {
+                                            return <span>{t('pricing.free')}</span>;
+                                        }
+                                        if (item.pricing_mode === 'MONEY') {
+                                            return (
+                                                <span>
+                                                    {t('pricing.summaryMoney', {
+                                                        symbol: currencySymbol(item.currency),
+                                                        price: item.price,
+                                                        count: item.call_count,
+                                                        credits: item.estimated_credits,
+                                                    })}
+                                                </span>
+                                            );
+                                        }
+                                        return (
+                                            <span>
+                                                {item.call_count > 1
+                                                    ? t('pricing.summaryCredits', {
+                                                        price: item.price,
+                                                        count: item.call_count,
+                                                        credits: item.estimated_credits,
+                                                    })
+                                                    : t('pricing.summaryCreditsSingle', {
+                                                        price: item.price,
+                                                        count: item.call_count,
+                                                    })}
+                                            </span>
+                                        );
+                                    })()}
+                                    {onSetPrice && (
+                                        <Button
+                                            variant="link"
+                                            size="small"
+                                            className="h-auto px-0 text-xs"
+                                            onClick={() =>
+                                                onSetPrice({
+                                                    id: api.id,
+                                                    name: type ? api.name : t(`tools.${api.tool_key}.name`, { defaultValue: api.name }),
+                                                    tool_key: api.tool_key,
+                                                })
+                                            }
+                                        >
+                                            {t('pricing.setPrice')}
+                                        </Button>
+                                    )}
+                                </div>
+                            )
                         }
                         {
                             select && (select.some(_ => _.id === api.id) ?

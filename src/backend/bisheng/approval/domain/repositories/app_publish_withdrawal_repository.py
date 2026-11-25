@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from sqlalchemy import update
 from sqlmodel import select
 
 from bisheng.approval.domain.models.approval_instance import ApprovalActionLog, ApprovalInstance, ApprovalTask
@@ -15,6 +16,14 @@ class AppPublishWithdrawalRepository:
 
     async def withdraw(self, expected, *, operator_user_id, operator_user_name, reason, actor_metadata):
         async with self.factory() as session:
+            await session.exec(
+                update(ApprovalInstance)
+                .where(
+                    ApprovalInstance.id == expected["instance_id"], ApprovalInstance.tenant_id == expected["tenant_id"]
+                )
+                .values(status=ApprovalInstance.status)
+                .execution_options(synchronize_session=False)
+            )
             instance = (
                 await session.exec(
                     select(ApprovalInstance)

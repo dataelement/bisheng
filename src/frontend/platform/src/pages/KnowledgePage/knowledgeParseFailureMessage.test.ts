@@ -18,3 +18,12 @@ it('retains specific known messages without diagnostic interpolation', () => {
  const message = resolveKnowledgeParseFailure({ status_code: 10019, data: { exception: 'SECRET' } }, t);
  expect(message).toBe(catalog['10019']); expect(message).not.toContain('SECRET');
 });
+
+
+it('shows the missing referenced knowledge file instead of a generic parse failure', () => {
+ const message = resolveKnowledgeParseFailure({ code: 10996, data: {
+  reason: 'reference_target_invalid', exception: 'PRIVATE', reference_errors: [{ resource_type: 'knowledge_file', target_id: '17', state: 'invalid_deleted' }],
+ } }, t);
+ expect(message).toContain('knowledge file (ID: 17) has been deleted');
+ expect(message).not.toContain('PRIVATE');
+});

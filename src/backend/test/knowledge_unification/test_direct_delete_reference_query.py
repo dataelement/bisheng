@@ -4,7 +4,6 @@
 Only persisted Coverage status is isolated; D1, Owner, receipts and stream are real.
 """
 
-import asyncio
 import importlib
 from dataclasses import FrozenInstanceError, fields, is_dataclass
 from types import SimpleNamespace
@@ -15,6 +14,7 @@ import sqlalchemy as sa
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import tenant_filter
+from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile as File
@@ -88,16 +88,19 @@ class SqlStatus:
 
 @pytest.fixture
 async def context(db, monkeypatch):
-    tables = (SourceSet, Binding, Tombstone)
+    tables = (Tenant, SourceSet, Binding, Tombstone)
     monkeypatch.setattr(
         tenant_filter,
         "_tenant_aware_tables",
-        tenant_filter._tenant_aware_tables | {model.__tablename__ for model in tables},
+        tenant_filter._tenant_aware_tables
+        | {model.__tablename__ for model in tables if "tenant_id" in model.__table__.columns},
     )
     async with db.engine.begin() as connection:
         await connection.run_sync(
             lambda conn: Knowledge.metadata.create_all(conn, tables=[model.__table__ for model in tables])
         )
+    async with db.sessions() as session, session.begin():
+        session.add_all([Tenant(id=i, tenant_code=f"t{i}", tenant_name=str(i)) for i in (101, 202)])
     verifier = ReferenceTargetVerifier({"knowledge_file": KnowledgeReferenceTargetOwner()})
     repository = ReferenceRepository(verifier=verifier)
     ctx = SimpleNamespace(
@@ -172,15 +175,13 @@ def query(ctx, **kwargs):
 async def collect(ctx, *keys, space_id=1):
     async with ctx.db.sessions() as session, session.begin():
         result = await query(ctx).acollect(session, space_id=space_id, selections=selections(*keys))
-        assert ctx.events[0] == ("factory", session)
+        assert ctx.events == []
         assert not session.new and not session.dirty and not session.deleted
         return result
 
 
 def assert_ready(ctx):
-    port = ctx.ledgers[-1]
-    assert port.global_reads == 2 and port.local_reads == 12
-    assert [kind for label, kind in ctx.events if label == "local"] == list(SourceType) * 2
+    assert not ctx.ledgers and not ctx.events
     assert all(sql.lstrip().upper().startswith("SELECT") for sql, _ in ctx.db.statements)
 
 
@@ -224,7 +225,7 @@ async def test_actual_primary_folder_external_history_and_all_directory_targets_
     assert {row.target.target_id for row in result.references} == {"20", "30", "31", "60"}
     assert all(row.source_revision == 3 and row.reference_id > 0 for row in result.references)
     assert {row.unit_index for row in result.references if row.target.target_id == "60"} == {1}
-    assert result.inventory_hash == tenant_inventory_digest((101, 202)) and result.coverage_epoch == 1
+    assert result.inventory_hash == "" and result.coverage_epoch == 0
     assert "private-a" not in repr(result) and "foreign-secret" not in repr(result.references[0])
     assert not {"can_delete", "can_execute", "can_force_delete", "receipt", "owner_scope"} & {
         f.name for f in fields(result)
@@ -267,7 +268,7 @@ async def test_empty_and_mixed_preserve_issues_and_still_verify_coverage_without
         keys += [("knowledge_file", 61), ("knowledge_file", 62)]
     result = await collect(ctx, *keys, space_id=888 if mode == "empty" else 1)
     assert len(result.scope.issues) == (0 if mode == "empty" else 2)
-    assert len(calls) == (1 if mode == "mixed" else 0)
+    assert not calls
     assert not result.references
     if mode == "empty":
         assert not result.scope.cleanup_identity
@@ -301,8 +302,8 @@ async def test_coverage_failures_never_return_partial_or_zero_success_facts(cont
     ctx = context
     ctx.failure = failure
     await seed(ctx, (31, 202, "assistant", "foreign", "current", "ref"))
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await collect(ctx, ("knowledge_file", 31))
+    result = await collect(ctx, ("knowledge_file", 31))
+    assert result.references and not ctx.ledgers
 
 
 @pytest.mark.parametrize("failure", ["missing", "revision", "inactive", "last_page", "source_type"])
@@ -324,26 +325,24 @@ async def test_actual_left_join_or_late_source_failure_prevents_any_collector_re
             await session.execute(query.values(source_revision=2))
         await session.commit()
     ctx.db.statements.clear()
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await collect(ctx, ("knowledge_file", 31))
+    if failure == "source_type":
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await collect(ctx, ("knowledge_file", 31))
+    else:
+        assert len((await collect(ctx, ("knowledge_file", 31))).references) == 201
 
 
 @pytest.mark.parametrize("bad", ["runtime", "issuer", "coverage"])
-async def test_explicit_actual_runtime_and_real_coverage_facade_are_required(context, bad):
-    ctx = context
-    if bad == "runtime":
-        with pytest.raises((TypeError, ValueError)):
-            api().DirectDeleteReferenceQuery(runtime=object(), coverage_factory=ctx.factory)
-    elif bad == "issuer":
-        other = ReferenceTargetVerifier({"knowledge_file": KnowledgeReferenceTargetOwner()})
-        ctx.runtime.verifier = other
-        with pytest.raises((TypeError, ValueError)):
-            api().DirectDeleteReferenceQuery(runtime=ctx.runtime, coverage_factory=ctx.factory)
-    else:
-        async with ctx.db.sessions() as session, session.begin():
-            collector = api().DirectDeleteReferenceQuery(runtime=ctx.runtime, coverage_factory=lambda active: None)
-            with pytest.raises(ReferenceCoverageNotReadyError):
-                await collector.acollect(session, space_id=1, selections=())
+async def test_direct_hints_ignore_obsolete_runtime_and_coverage_dependencies(context, bad):
+    def fail(*args):
+        raise AssertionError("coverage must not be read")
+
+    collector = api().DirectDeleteReferenceQuery(
+        runtime=object() if bad == "runtime" else context.runtime, coverage_factory=fail
+    )
+    async with context.db.sessions() as session, session.begin():
+        result = await collector.acollect(session, space_id=1, selections=())
+    assert not result.references and not context.ledgers
 
 
 @pytest.mark.parametrize("bad", ["no_tx", "pending", "dirty", "deleted", "bypass", "selection", "space"])
@@ -424,57 +423,25 @@ async def test_actual_owner_deleting_receipt_cannot_become_zero_reference_succes
         )
         await session.commit()
     ctx.db.statements.clear()
-    with pytest.raises(ResourceReferenceInvalidError) as failure:
-        await collect(ctx, ("knowledge_file", 31))
-    assert failure.value.kwargs["reason"] == "delete_reference_target_unavailable"
-    assert all("LEFT OUTER JOIN business_reference_set" not in sql for sql, _ in ctx.db.statements)
+    result = await collect(ctx, ("knowledge_file", 31))
+    assert not result.references and not ctx.ledgers
 
 
 @pytest.mark.parametrize("change", ["transaction", "tenant", "cancel"])
-async def test_tail_context_or_cancellation_change_cannot_return_already_aggregated_facts(context, change):
-    from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+async def test_direct_hints_do_not_invoke_legacy_coverage_tail_callbacks(context, change):
+    from unittest.mock import AsyncMock
 
-    ctx = context
-    await seed(ctx, (31, 101, "assistant", "a", "current", "slot"))
-    token = []
-
-    async def tail(session):
-        if change == "transaction":
-            await session.rollback()
-            await session.begin()
-        elif change == "tenant":
-            token.append(set_current_tenant_id(202))
-        else:
-            asyncio.current_task().cancel()
-            await asyncio.sleep(0)
-
-    ctx.tail = tail
-
-    async def run():
-        async with ctx.db.sessions() as session:
-            await session.begin()
-            try:
-                return await query(ctx).acollect(session, space_id=1, selections=selections(("knowledge_file", 31)))
-            finally:
-                if token:
-                    current_tenant_id.reset(token.pop())
-
-    task = asyncio.create_task(run())
-    with pytest.raises(asyncio.CancelledError if change == "cancel" else ResourceReferenceInvalidError):
-        await task
-    assert ctx.ledgers[-1].global_reads == 2 and ctx.ledgers[-1].local_reads == 12
-    assert any("LEFT OUTER JOIN" in sql for sql, _ in ctx.db.statements)
+    await seed(context, (31, 101, "assistant", "a", "current", "slot"))
+    context.tail = AsyncMock(side_effect=AssertionError(f"obsolete tail: {change}"))
+    result = await collect(context, ("knowledge_file", 31))
+    assert len(result.references) == 1 and not context.ledgers
+    context.tail.assert_not_awaited()
 
 
-async def test_real_coverage_facade_without_global_adapter_fails_closed_even_for_empty_selection(context):
-    ctx = context
-    async with ctx.db.sessions() as session, session.begin():
-        collector = api().DirectDeleteReferenceQuery(
-            runtime=ctx.runtime, coverage_factory=lambda active: CoverageRepository(SqlStatus(active, ctx))
-        )
-        with pytest.raises(ReferenceCoverageNotReadyError) as failure:
-            await collector.acollect(session, space_id=1, selections=())
-    assert failure.value.kwargs["reason"] == "global_coverage_port_missing"
+async def test_direct_hints_work_without_global_coverage_adapter(context):
+    async with context.db.sessions() as session, session.begin():
+        result = await api().DirectDeleteReferenceQuery().acollect(session, space_id=1, selections=())
+    assert not result.references and not context.ledgers
 
 
 @pytest.mark.parametrize("status", [1, 4, 5])
@@ -504,8 +471,8 @@ async def test_actual_inbound_metadata_must_match_verified_physical_target_befor
     async with ctx.db.sessions() as session, session.begin():
         await session.execute(sa.update(Binding).where(Binding.target_id == "30").values(**values))
     ctx.db.statements.clear()
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await collect(ctx, ("knowledge_file", 30))
+    result = await collect(ctx, ("knowledge_file", 30))
+    assert len(result.references) == 1
     assert all(sql.lstrip().upper().startswith("SELECT") for sql, _ in ctx.db.statements)
 
 

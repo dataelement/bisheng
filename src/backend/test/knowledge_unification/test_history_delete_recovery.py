@@ -16,6 +16,7 @@ from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.errcode.permission import PermissionProjectionFailedError, PermissionVersionConflictError
 from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.repositories import unification_history_repository as implementation
 from bisheng.permission.domain.models import (
     PermissionProjectionOperation,
     PermissionProjectionTuple,
@@ -79,7 +80,7 @@ async def stop_like_old_script(history, plan, monkeypatch):
         )
 
     with monkeypatch.context() as patch:
-        patch.setattr(module, "project_history_delete", ordinary_delete)
+        patch.setattr(implementation, "project_history_delete", ordinary_delete)
         with pytest.raises(PermissionProjectionFailedError):
             await apply(history, plan)
     operation = await delete_operation(history, plan)
@@ -260,7 +261,7 @@ async def test_old_failure_still_refuses_changed_business_graph_pin_fence_and_le
     elif change == "pin":
         pin = deepcopy(plan["pin"])
         pin["model_id"] = "changed-model"
-        monkeypatch.setattr(module, "read_pin", AsyncMock(return_value=pin))
+        monkeypatch.setattr(implementation, "read_pin", AsyncMock(return_value=pin))
     else:
         async with history.db.engine.begin() as connection:
             if change in {"version", "fence"}:
@@ -321,7 +322,7 @@ async def test_recovery_rechecks_facts_and_checksum_after_failed_attempt(history
         elif change == "pin":
             pin = deepcopy(plan["pin"])
             pin["model_id"] = "changed-model"
-            monkeypatch.setattr(module, "read_pin", AsyncMock(return_value=pin))
+            monkeypatch.setattr(implementation, "read_pin", AsyncMock(return_value=pin))
         else:
             async with history.db.engine.begin() as connection:
                 await connection.execute(

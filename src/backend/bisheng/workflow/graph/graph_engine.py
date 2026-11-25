@@ -7,6 +7,8 @@ from langgraph.graph import StateGraph
 from loguru import logger
 from typing_extensions import TypedDict
 
+from bisheng.common.errcode.base import BaseErrorCode, encode_workflow_error
+from bisheng.common.errcode.flow import WorkFlowInvalidUserInputError
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import UserInputData
@@ -27,15 +29,17 @@ class TempState(TypedDict):
 class GraphEngine:
     def __init__(
         self,
-        user_id: int = None,
-        workflow_id: str = None,
+        user_id: int | None = None,
+        workflow_id: str | None = None,
         workflow_name: str = "",
-        workflow_data: dict = None,
+        workflow_data: dict | None = None,
         async_mode: bool = False,
         max_steps: int = 0,
         callback: BaseCallback = None,
-        tenant_id: int = None,
-        flow_user_id: int = None,
+        tenant_id: int | None = None,
+        flow_user_id: int | None = None,
+        chat_id: str = "",
+        memory_enabled: bool = False,
     ):
         self.user_id = user_id
         self.workflow_id = workflow_id
@@ -66,7 +70,8 @@ class GraphEngine:
         self.condition_nodes = []
 
         self.edges = None
-        self.graph_state = GraphState()
+        # F132 (R5): run values decided by the Celery task, frozen in the shared state
+        self.graph_state = GraphState(chat_id=chat_id or "", memory_enabled=bool(memory_enabled))
 
         # init langgraph state graph
         self.graph_builder = StateGraph(TempState)
@@ -277,7 +282,7 @@ class GraphEngine:
         self.build_node_level(start_node)
 
         # Link other nodes
-        for node_id, node_instance in self.nodes_map.items():
+        for node_instance in self.nodes_map.values():
             self.add_node_edge(node_instance)
 
         # Handle nodes with multiple fan-in nodes
@@ -304,6 +309,10 @@ class GraphEngine:
             logger.warning(f"graph ignore error: {e}")
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
+        except BaseErrorCode as e:
+            logger.warning(f"graph error code {e.code}: {e.message}")
+            self.status = WorkflowStatus.FAILED.value
+            self.reason = encode_workflow_error(e)
         except Exception as e:
             logger.exception("graph run error")
             self.status = WorkflowStatus.FAILED.value
@@ -319,6 +328,10 @@ class GraphEngine:
             logger.warning(f"graph ignore error: {e}")
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
+        except BaseErrorCode as e:
+            logger.warning(f"graph async error code {e.code}: {e.message}")
+            self.status = WorkflowStatus.FAILED.value
+            self.reason = encode_workflow_error(e)
         except Exception as e:
             logger.exception("graph arun error")
             self.status = WorkflowStatus.FAILED.value
@@ -330,16 +343,36 @@ class GraphEngine:
     async def arun(self):
         await self._arun({"flag": True})
 
+    def _validate_resume_input(self, data: Any):
+        """Validate the entire payload against the actual interrupted graph before mutation."""
+        if not data:
+            return
+        if not isinstance(data, dict):
+            raise WorkFlowInvalidUserInputError(msg="input must be an object")
+        waiting = {}
+        for node_id in self.graph.get_state(self.graph_config).next:
+            node = self.nodes_map[node_id]
+            if node.type == NodeType.INPUT.value:
+                waiting[node_id] = set(node.node_params)
+            elif node.type == NodeType.FAKE_OUTPUT.value and node.get_input_schema():
+                waiting[node.output_node.id] = {"output_result"}
+        if len(data) != 1 or not set(data).issubset(waiting):
+            raise WorkFlowInvalidUserInputError(msg="input must target only the interrupted input node")
+        for node_id, values in data.items():
+            if not isinstance(values, dict) or set(values) - waiting[node_id]:
+                raise WorkFlowInvalidUserInputError(msg="input contains undefined fields")
+
     def continue_run(self, data: Any = None):
         """
         Receive user input
-        data：{node_id: {key: value}}
+        data: {node_id: {key: value}}
         """
         # After receiving user input, proceed
         if data is None:
             data = {}
 
-        # Assign user input to the corresponding node
+        self._validate_resume_input(data)
+        # Assign user input only after all node/field checks succeeded.
         for node_id, node_params in data.items():
             node_instance = self.nodes_map[node_id]
             node_instance.handle_input(node_params)
@@ -350,13 +383,14 @@ class GraphEngine:
     async def acontinue_run(self, data: Any = None):
         """
         Receive user input
-        data：{node_id: {key: value}}
+        data: {node_id: {key: value}}
         """
         # After receiving user input, proceed
         if data is None:
             data = {}
 
-        # Assign user input to the corresponding node
+        self._validate_resume_input(data)
+        # Assign user input only after all node/field checks succeeded.
         for node_id, node_params in data.items():
             node_instance = self.nodes_map[node_id]
             node_instance.handle_input(node_params)

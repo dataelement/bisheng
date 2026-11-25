@@ -1,7 +1,7 @@
 """Knowledge lifecycle facts for saved source reads and unsaved previews."""
 
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.knowledge.domain.repositories.source_read_target_repository import KnowledgeSourceReadTargetRepository
+from bisheng.resource_reference.application.contracts import ReferenceState
 from bisheng.resource_reference.application.source_contracts import ReferenceTargetReadFact
 from bisheng.resource_reference.application.target_state import resolve_target_state
 
@@ -23,25 +23,9 @@ class KnowledgeSourceReadTargetOwner:
         )
         result = []
         for row in observations:
-            legacy = None
-            original = row.original
-            if original is not None and original.legacy_invalid_reason is not None:
-                if (
-                    original.legacy_invalid_reason != "target_missing"
-                    or not original.legacy_run_id
-                    or not original.legacy_evidence_key
-                ):
-                    raise ResourceReferenceInvalidError(reason="reference_legacy_evidence_mismatch")
-                if self.legacy_evidence is None:
-                    raise ReferenceCoverageNotReadyError(reason="reference_legacy_evidence_unavailable")
-                legacy = await self.legacy_evidence.aresolve(
-                    session,
-                    scope,
-                    row.key,
-                    run_id=original.legacy_run_id,
-                    evidence_key=original.legacy_evidence_key,
-                    identity=identity,
-                )
+            if not row.exists and row.deletion is None:
+                result.append(ReferenceTargetReadFact(row.key, ReferenceState.INVALID_MISSING, False))
+                continue
             target = resolve_target_state(
                 row.key,
                 exists=row.exists,
@@ -50,8 +34,7 @@ class KnowledgeSourceReadTargetOwner:
                 target_revision="source-read-v1",
                 deletion_evidence=row.deletion,
                 ancestor_deletion=row.ancestor_deletion,
-                legacy_evidence=legacy,
-                original_reference=original,
+                original_reference=None,
                 source_key=None if transient else snapshot.source_key,
             )
             result.append(

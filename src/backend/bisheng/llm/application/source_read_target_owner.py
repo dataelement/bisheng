@@ -5,7 +5,7 @@ from bisheng.common.errcode.permission import PermissionServiceUnavailableError
 from bisheng.llm.domain.repositories.source_read_target_repository import ModelSourceReadTargetRepository
 from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 from bisheng.permission.application.relation_api import get_permission_relation_api_sync
-from bisheng.resource_reference.application.contracts import is_preserved_foreign_model_reference
+from bisheng.resource_reference.application.contracts import ReferenceState
 from bisheng.resource_reference.application.source_contracts import ReferenceTargetReadFact
 from bisheng.resource_reference.application.target_state import resolve_target_state
 
@@ -51,42 +51,11 @@ class ModelSourceReadTargetOwner:
 
     @staticmethod
     def _eligible(row, tenant_id, allowed, snapshot, transient):
-        if not transient and is_preserved_foreign_model_reference(
-            row.original, source_key=snapshot.source_key, target=row.key, target_tenant_id=row.target_tenant_id
-        ):
-            return False
-        if (
+        return (
             not row.exists
-            or row.deletion is not None
             or row.target_tenant_id == tenant_id
-            or int(row.model_server_id) in allowed
-        ):
-            return True
-        original = row.original
-        if (
-            not transient
-            and original is not None
-            and original.legacy_invalid_reason is None
-            and original.target_tenant_id == row.target_tenant_id
-        ):
-            key = snapshot.source_key
-            if (
-                original.tenant_id,
-                original.source_type,
-                original.source_id,
-                original.source_version,
-                original.target_type,
-                original.target_id,
-            ) == (
-                key.tenant_id,
-                key.source_type.value,
-                key.source_id,
-                key.source_version,
-                row.key.target_type.value,
-                row.key.target_id,
-            ):
-                return False
-        return False
+            or (row.model_server_id is not None and int(row.model_server_id) in allowed)
+        )
 
     async def _inspect(self, session, scope, target_keys, identity, *, transient):
         get = self.verifier.aget_transient_snapshot if transient else self.verifier.aget_source_snapshot
@@ -96,24 +65,9 @@ class ModelSourceReadTargetOwner:
         result = []
         for row in plan.observations:
             eligible = self._eligible(row, plan.tenant_id, allowed, snapshot, transient)
-            legacy, original = None, row.original
-            if original is not None and original.legacy_invalid_reason is not None:
-                if (
-                    original.legacy_invalid_reason != "target_missing"
-                    or not original.legacy_run_id
-                    or not original.legacy_evidence_key
-                ):
-                    raise ResourceReferenceInvalidError(reason="reference_legacy_evidence_mismatch")
-                if self.legacy_evidence is None:
-                    raise ReferenceCoverageNotReadyError(reason="reference_legacy_evidence_unavailable")
-                legacy = await self.legacy_evidence.aresolve(
-                    session,
-                    scope,
-                    row.key,
-                    run_id=original.legacy_run_id,
-                    evidence_key=original.legacy_evidence_key,
-                    identity=identity,
-                )
+            if not row.exists and row.deletion is None:
+                result.append(ReferenceTargetReadFact(row.key, ReferenceState.INVALID_MISSING, False))
+                continue
             target = resolve_target_state(
                 row.key,
                 exists=row.exists,
@@ -121,13 +75,15 @@ class ModelSourceReadTargetOwner:
                 model_server_id=row.model_server_id,
                 target_revision="source-read-v1",
                 deletion_evidence=row.deletion,
-                legacy_evidence=legacy,
-                original_reference=original,
+                original_reference=None,
                 source_key=None if transient else snapshot.source_key,
             )
             result.append(
                 ReferenceTargetReadFact(
-                    target.key, target.state, target.state == "valid" and eligible, target.target_tenant_id
+                    target.key,
+                    target.state if eligible else ReferenceState.INVALID_SCOPE,
+                    target.state == "valid" and eligible,
+                    target.target_tenant_id,
                 )
             )
         await get(session, scope, identity)
@@ -183,24 +139,9 @@ class ModelSourceReadTargetOwner:
         result = []
         for row in plan.observations:
             eligible = self._eligible(row, plan.tenant_id, allowed, snapshot, False)
-            legacy, original = None, row.original
-            if original is not None and original.legacy_invalid_reason is not None:
-                if (
-                    original.legacy_invalid_reason != "target_missing"
-                    or not original.legacy_run_id
-                    or not original.legacy_evidence_key
-                ):
-                    raise ResourceReferenceInvalidError(reason="reference_legacy_evidence_mismatch")
-                if self.legacy_evidence is None:
-                    raise ReferenceCoverageNotReadyError(reason="reference_legacy_evidence_unavailable")
-                legacy = self.legacy_evidence.resolve(
-                    session,
-                    scope,
-                    row.key,
-                    run_id=original.legacy_run_id,
-                    evidence_key=original.legacy_evidence_key,
-                    identity=identity,
-                )
+            if not row.exists and row.deletion is None:
+                result.append(ReferenceTargetReadFact(row.key, ReferenceState.INVALID_MISSING, False))
+                continue
             target = resolve_target_state(
                 row.key,
                 exists=row.exists,
@@ -208,13 +149,15 @@ class ModelSourceReadTargetOwner:
                 model_server_id=row.model_server_id,
                 target_revision="source-read-v1",
                 deletion_evidence=row.deletion,
-                legacy_evidence=legacy,
-                original_reference=original,
+                original_reference=None,
                 source_key=snapshot.source_key,
             )
             result.append(
                 ReferenceTargetReadFact(
-                    target.key, target.state, target.state == "valid" and eligible, target.target_tenant_id
+                    target.key,
+                    target.state if eligible else ReferenceState.INVALID_SCOPE,
+                    target.state == "valid" and eligible,
+                    target.target_tenant_id,
                 )
             )
         get(session, scope, identity)

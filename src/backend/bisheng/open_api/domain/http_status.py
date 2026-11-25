@@ -5,6 +5,7 @@ from __future__ import annotations
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.dsh import DshMonthlyTokenLimitExceededError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeUnificationError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
@@ -55,6 +56,8 @@ def open_api_http_status(exc: BaseErrorCode | StarletteHTTPException) -> int:
         ),
     ):
         return 503
+    if issubclass(error_type, DshMonthlyTokenLimitExceededError):
+        return 429
     if issubclass(error_type, (UnAuthorizedError, PermissionDeniedError, SpacePermissionDeniedError)):
         return 403
     if issubclass(error_type, (NotFoundError, PermissionInvalidResourceError)):

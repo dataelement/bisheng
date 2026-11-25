@@ -1,0 +1,26 @@
+{
+  "id": "explicit-remember-meeting",
+  "acs": [
+    "AC-29",
+    "AC-31"
+  ],
+  "turns": [
+    {
+      "user": "我下周二要和财务部开预算评审会，你记录一下",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "我接下来有哪些重要会议？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "预算评审"
+    ]
+  },
+  "notes": "显式写入后新会话可读，回答给出换算后的日期",
+  "requires_consolidation": false
+}

@@ -1051,6 +1051,7 @@ class KnowledgeDao(KnowledgeBase):
                 Knowledge.user_id != exclude_creator_id,
             )
         )
+        statement = cls._exclude_department_spaces(statement)
         statement = cls._apply_space_order(statement, order_by)
         async with get_async_db_session() as session:
             result = await session.exec(statement)

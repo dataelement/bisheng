@@ -3,11 +3,11 @@ from datetime import datetime
 from urllib.parse import urlsplit
 
 from pydantic import model_validator
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint, false, func, text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint, case, false, func, text
 from sqlmodel import Field, Text, col, or_, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.utils import generate_uuid, md5_hash
@@ -203,11 +203,13 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
                 self.parameter_name = result.get("parameter_name")
 
     def mask_sensitive_data(self, *, search_category=False, ambiguous=False):
+        # Build fresh rows for the response. Deep-copying a loaded SQLModel
+        # also copies SQLAlchemy state which cannot track changes on the copy.
+        self.children = [GptsTools.model_validate(child) for child in self.children or []]
         if search_category or ambiguous:
             self.extra = _search_list_extra(self.extra) if search_category else "{}"
             self.api_location = None
             self.parameter_name = None
-            self.children = [child.model_copy(deep=True) for child in self.children or []]
             for child in self.children:
                 if child.tool_key == "web_search" and child.extra:
                     child.extra = _search_list_extra(child.extra)
@@ -219,7 +221,6 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
             extra_json = json_masker.mask_json(extra_json)
             self.extra = json.dumps(extra_json, ensure_ascii=False)
         # Historical child overrides can also contain the same configuration.
-        self.children = [child.model_copy(deep=True) for child in self.children or []]
         for child in self.children:
             if child.tool_key in ("image_generation", "dalle_image_generator") and child.extra:
                 try:
@@ -287,13 +288,28 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     def delete_tool(cls, data: GptsTools) -> GptsTools:
         data.is_delete = 1
-        return cls.update_tools(data)
+        with get_sync_db_session() as session:
+            session.add(data)
+            if data.id is not None:
+                from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
+                ToolPricingRepository.delete_for_tool_ids_sync(
+                    session, tenant_id=data.tenant_id, tool_ids=[int(data.id)]
+                )
+            session.commit()
+            session.refresh(data)
+            return data
 
     @classmethod
     def delete_tool_by_ids(cls, tool_ids: list[int]) -> None:
+        if not tool_ids:
+            return
         with get_sync_db_session() as session:
+            from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
             statement = update(GptsTools).where(GptsTools.id.in_(tool_ids)).values(is_delete=1)
             session.exec(statement)
+            ToolPricingRepository.delete_for_tool_ids_sync(session, tenant_id=None, tool_ids=[int(x) for x in tool_ids])
             session.commit()
 
     @classmethod
@@ -644,8 +660,22 @@ class GptsToolsDao(GptsToolsBase):
                 # Update tool category data
                 session.add(data)
                 # Delete a list of tools that don't exist
-                delete_old_tools = update(GptsTools).where(GptsTools.tenant_id == data.tenant_id, GptsTools.type == data.id, GptsTools.id.in_(del_tool_ids)).values(is_delete=1)
-                await session.exec(delete_old_tools)
+                if del_tool_ids:
+                    from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
+                    delete_old_tools = (
+                        update(GptsTools)
+                        .where(
+                            GptsTools.tenant_id == data.tenant_id,
+                            GptsTools.type == data.id,
+                            GptsTools.id.in_(del_tool_ids),
+                        )
+                        .values(is_delete=1)
+                    )
+                    await session.exec(delete_old_tools)
+                    await ToolPricingRepository.adelete_for_tool_ids(
+                        session, tenant_id=data.tenant_id, tool_ids=[int(x) for x in del_tool_ids]
+                    )
                 # Add Tool List
                 for one in add_tool_list:
                     one.tenant_id = data.tenant_id
@@ -661,7 +691,6 @@ class GptsToolsDao(GptsToolsBase):
                     finally_children.append(one)
                 await session.commit()
                 await session.refresh(data)
-
 
     @classmethod
     async def aset_tool_type_is_shared(cls, tool_type_id: int, is_shared: bool) -> None:
@@ -690,8 +719,23 @@ class GptsToolsDao(GptsToolsBase):
             .values(is_delete=1)
         )
         async with get_async_db_session() as session:
+            from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
+            deleted_rows = (
+                await session.exec(
+                    select(GptsTools.id, GptsTools.tenant_id).where(
+                        col(GptsTools.type) == tool_type_id, col(GptsTools.is_preset) != ToolPresetType.PRESET.value
+                    )
+                )
+            ).all()
             await session.exec(statement)
             await session.exec(tool_statement)
+            if deleted_rows:
+                await ToolPricingRepository.adelete_for_tool_ids(
+                    session,
+                    tenant_id=deleted_rows[0][1],
+                    tool_ids=[int(row[0]) for row in deleted_rows if row[0] is not None],
+                )
             await session.commit()
 
     @classmethod
@@ -736,15 +780,30 @@ class GptsToolsDao(GptsToolsBase):
             await session.commit()
             return True
 
+    @staticmethod
+    def _tool_by_key_statement(tool_key: str):
+        """Select one builtin row by tool_key, preferring the current tenant's own row.
+
+        Every tenant owns one row per builtin tool_key, and the tenant filter lets
+        a child tenant also see root rows. Without an order, ``.first()`` may return
+        the root row, whose id and tool type are not the ones the child tenant's
+        users select and are authorized against. A visible row from another
+        tenant is used only when the current tenant has none.
+        """
+        statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
+        tenant_id = get_current_tenant_id()
+        if tenant_id is not None:
+            statement = statement.order_by(case((GptsTools.tenant_id == tenant_id, 0), else_=1))
+        return statement.order_by(GptsTools.id)
+
     @classmethod
     def get_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
         with get_sync_db_session() as session:
-            statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
-            return session.exec(statement).first()
+            return session.exec(cls._tool_by_key_statement(tool_key)).first()
 
     @classmethod
     async def aget_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
-        statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
+        statement = cls._tool_by_key_statement(tool_key)
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.first()

@@ -2,9 +2,13 @@
 
 Emit ``BS_METRIC domain=... key=value`` log lines that the external monitoring
 layer (ELK / Loki / ES) parses into metrics. This module ONLY formats and emits
-lines; ALL aggregation (P95, QPS, success-rate) happens in the log pipeline —
+lines; online aggregation (P95, QPS, success-rate) happens in the log pipeline —
 see ``features/v2.6.0/042-metric-log-observability/design.md`` §6.1 for the
 contract and §3 for the rationale.
+
+An explicit maintenance scope may consume selected domains in its own bounded
+progress recorder. The callback and all aggregation remain owned by that
+command; leaving the scope restores the normal emission path.
 
 Design constraints (design §5):
 - **Zero-blocking, never breaks the business flow.** ``emit_metric`` wraps
@@ -22,10 +26,30 @@ clock itself, which keeps the histogram/pool windows deterministic and testable.
 
 import bisect
 import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from loguru import logger
 
 MARKER = "BS_METRIC"
+_scoped_sink = ContextVar("metric_log_scoped_sink", default=None)
+
+
+@contextmanager
+def scoped_metric_sink(sink):
+    """Let an explicit maintenance command consume selected metrics locally.
+
+    The callback returns true only for domains it aggregates. Outside this
+    context the established online logging contract is unchanged.
+    """
+    if not callable(sink):
+        raise TypeError("metric sink must be callable")
+    token = _scoped_sink.set(sink)
+    try:
+        yield
+    finally:
+        _scoped_sink.reset(token)
+
 
 # domain -> MetricLogConf attribute that gates it (design §6.1)
 _DOMAIN_SWITCH = {
@@ -85,6 +109,9 @@ def emit_metric(domain: str, **fields) -> None:
     try:
         conf = _get_conf()
         if not _domain_enabled(conf, domain):
+            return
+        sink = _scoped_sink.get()
+        if sink is not None and sink(domain, fields):
             return
         parts = [MARKER, f"domain={domain}"]
         for key, value in fields.items():

@@ -23,6 +23,7 @@ from bisheng.knowledge.domain.repositories.processing_owner_repository import Pr
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
 from bisheng.knowledge.domain.services.processing_job_service import ProcessingJobService
 from bisheng.permission.application.business_authorization import require_business_action
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.information.reconcile import _active_tenant_ids
 from bisheng.worker.knowledge import metadata_jobs
@@ -88,13 +89,13 @@ async def _failed(owner, job_id, revision, lease, error_code):
 
 
 async def _finalize(owner, job_id, lease):
-    # The item transaction has committed. Existing model/R2 finalization takes
-    # its target locks before root/job locks in this fresh transaction.
+    # Finalize the real model configuration after the item transaction commits.
     async with get_async_db_session() as session:
         job = await owner.jobs.aget(session, job_id)
         final = await owner.afinalize_and_ack(session, job, lease)
         result = _summary(final if final is not None else job)
         await session.commit()
+        await notify_reference_sync(get_current_tenant_id(), "knowledge", str(job.space_id))
         return result
 
 

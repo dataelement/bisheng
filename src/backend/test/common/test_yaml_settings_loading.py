@@ -7,8 +7,9 @@ from unittest.mock import Mock
 
 import pytest
 import yaml
-from pydantic import ValidationError
 
+from bisheng.core.config.credential_loader import config_path, load_config, validate_runtime
+from bisheng.core.config.secret_crypto import CredentialConfigurationError
 from bisheng.core.config.settings import Settings
 
 
@@ -24,7 +25,16 @@ def loader():
         for node in service.body
         if isinstance(node, ast.FunctionDef) and node.name in {"env_var_constructor", "load_settings_from_yaml"}
     ]
-    namespace = {"Settings": Settings, "yaml": yaml, "os": os, "logger": Mock(), "__file__": str(path)}
+    namespace = {
+        "Settings": Settings,
+        "yaml": yaml,
+        "os": os,
+        "logger": Mock(),
+        "__file__": str(path),
+        "load_config": load_config,
+        "config_path": config_path,
+        "validate_runtime": validate_runtime,
+    }
     isolated = ast.ClassDef(
         name="ConfigService",
         bases=[ast.Name(id="Settings", ctx=ast.Load())],
@@ -36,13 +46,19 @@ def loader():
     return namespace["ConfigService"], namespace["logger"]
 
 
+def _config(tmp_path, body: str):
+    """Write a config with the explicit database_url the runtime loader requires."""
+    path = tmp_path / "config.yaml"
+    path.write_text(f'database_url: "sqlite:///{tmp_path}/bisheng.db"\n{body}')
+    return str(path)
+
+
 @pytest.mark.parametrize("key", ["workflow_conf", "unknown_setting"])
 def test_unknown_top_level_keys_warn_without_blocking_startup(tmp_path, loader, key):
     service, logger = loader
-    path = tmp_path / "config.yaml"
-    path.write_text(f"debug: true\n{key}:\n  timeout: secret-value\n")
+    path = _config(tmp_path, f"debug: true\n{key}:\n  timeout: secret-value\n")
 
-    loaded = service.load_settings_from_yaml(str(path))
+    loaded = service.load_settings_from_yaml(path)
 
     assert loaded.debug is True
     assert key not in loaded.model_dump()
@@ -58,58 +74,68 @@ def test_retired_workflow_field_is_no_longer_declared():
 
 def test_known_fields_are_still_validated(tmp_path, loader):
     service, _ = loader
-    path = tmp_path / "config.yaml"
-    path.write_text("cookie_conf:\n  jwt_token_expire_time: not-an-integer\n")
+    path = _config(tmp_path, "cookie_conf:\n  jwt_token_expire_time: not-an-integer\n")
 
-    with pytest.raises(ValidationError):
-        service.load_settings_from_yaml(str(path))
+    # The runtime loader reports the failing field path, never its value.
+    with pytest.raises(CredentialConfigurationError, match="cookie_conf") as error:
+        service.load_settings_from_yaml(path)
+    assert "not-an-integer" not in str(error.value)
+
+
+def test_known_credential_fields_still_reject_plaintext(tmp_path, loader):
+    service, _ = loader
+    path = _config(
+        tmp_path,
+        "object_storage:\n  type: minio\n  minio:\n    access_key: user\n    secret_key: plain-secret\n",
+    )
+
+    with pytest.raises(CredentialConfigurationError, match="secret_key") as error:
+        service.load_settings_from_yaml(path)
+    assert "plain-secret" not in str(error.value)
 
 
 def test_known_environment_values_still_load(tmp_path, monkeypatch, loader):
     service, logger = loader
     monkeypatch.setenv("BISHENG_TEST_CACHE", "InMemoryCache")
-    path = tmp_path / "config.yaml"
-    path.write_text("cache: !env ${BISHENG_TEST_CACHE}\ndebug: true\n")
+    path = _config(tmp_path, "cache: !env ${BISHENG_TEST_CACHE}\ndebug: true\n")
 
-    assert service.load_settings_from_yaml(str(path)).cache == "InMemoryCache"
+    assert service.load_settings_from_yaml(path).cache == "InMemoryCache"
     logger.warning.assert_not_called()
 
 
 def test_missing_environment_variable_still_blocks_startup(tmp_path, monkeypatch, loader):
     service, _ = loader
     monkeypatch.delenv("BISHENG_TEST_MISSING_CACHE", raising=False)
-    path = tmp_path / "config.yaml"
-    path.write_text("cache: !env ${BISHENG_TEST_MISSING_CACHE}\n")
+    path = _config(tmp_path, "cache: !env ${BISHENG_TEST_MISSING_CACHE}\n")
 
-    with pytest.raises(ValueError, match="BISHENG_TEST_MISSING_CACHE"):
-        service.load_settings_from_yaml(str(path))
+    with pytest.raises(CredentialConfigurationError, match="BISHENG_TEST_MISSING_CACHE"):
+        service.load_settings_from_yaml(path)
 
 
 def test_invalid_yaml_still_blocks_startup(tmp_path, loader):
     service, _ = loader
-    path = tmp_path / "config.yaml"
-    path.write_text("cache: [unterminated\n")
+    path = _config(tmp_path, "cache: [unterminated\n")
 
-    with pytest.raises(yaml.YAMLError):
-        service.load_settings_from_yaml(str(path))
+    with pytest.raises(CredentialConfigurationError, match="invalid or unreadable YAML"):
+        service.load_settings_from_yaml(path)
 
 
 @pytest.mark.parametrize(
-    "document,enabled",
+    "document,billing_enabled,warns",
     [
-        ("bs_client: {}", True),
-        ("dsh: {enabled: false}", False),
-        ("bs_client: {}\ndsh: {enabled: false, obsolete: true}", True),
+        ("bs_client: {}", True, False),
+        ("dsh: {enabled: false}", True, True),
+        ("bs_client: {}\ndsh: {enabled: false, obsolete: true}", True, False),
+        ("credit_billing: {enabled: false}", False, False),
     ],
 )
-def test_client_keys_survive_yaml_filter(tmp_path, loader, document, enabled):
+def test_client_keys_survive_yaml_filter(tmp_path, loader, document, billing_enabled, warns):
     """覆盖 AC: AC-06, AC-08."""
     service, logger = loader
-    path = tmp_path / "config.yaml"
-    path.write_text(document)
-    loaded = service.load_settings_from_yaml(str(path))
-    assert loaded.bs_client.enabled is enabled
-    logger.warning.assert_not_called()
+    loaded = service.load_settings_from_yaml(_config(tmp_path, document + "\n"))
+    assert loaded.credit_billing.enabled is billing_enabled
+    if not warns:
+        logger.warning.assert_not_called()
 
 
 def test_shipped_compose_settings_connect_runtime_and_client(tmp_path, monkeypatch, loader):
@@ -123,8 +149,14 @@ def test_shipped_compose_settings_connect_runtime_and_client(tmp_path, monkeypat
     for variable in re.findall(r"!env \$\{([^}]+)\}", path.read_text()):
         raw = str(environment.get(variable, "test-deployment-value"))
         monkeypatch.setenv(variable, "test-deployment-value" if "${" in raw else raw)
-    loaded = service.load_settings_from_yaml(str(path))
-    assert loaded.bs_client.enabled and loaded.bs_client.platform_public_url is None
+    # The installer renders object_storage credentials from the credential bundle;
+    # the shipped template leaves them empty on purpose. This test covers only the
+    # runtime and client bindings, so drop that top-level block from a copy.
+    text = re.sub(r"(?ms)^object_storage:\n.*?(?=^\S)", "", path.read_text())
+    rendered = tmp_path / "config.yaml"
+    rendered.write_text(text)
+    loaded = service.load_settings_from_yaml(str(rendered))
+    assert loaded.credit_billing.enabled and loaded.bs_client.platform_public_url is None
     assert loaded.app_runtime.enabled
     assert loaded.app_runtime.manager_base_url == "http://runtime-manager:8091"
     assert loaded.app_runtime.manager_hmac_secret == "test-deployment-value"

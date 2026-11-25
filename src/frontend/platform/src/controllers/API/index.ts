@@ -352,14 +352,14 @@ export async function readFileLibDatabase({
   pageSize = 20,
   name = "",
   type = 0,
-  action = "use",
+  action = "visible",
   has_abnormal,
 }: {
   cursor?: string | null;
   pageSize?: number;
   name?: string;
   type?: number;
-  action?: "visible" | "use";
+  action?: "visible";
   has_abnormal?: boolean;
 }): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
   const response = await axios.get("/api/v1/knowledge", {
@@ -504,7 +504,7 @@ type UploadFileFc = {
   separator_rule: ("after" | "before")[]; // 必需
   chunk_size: number; // 必需
   chunk_overlap: number; // 必需
-  file_list: { file_path: string }[]; // 必需
+  file_list: { file_path: string; preview_upload_ref?: string }[]; // 必需
   retain_images?: boolean; //保留文档图片
   force_ocr?: boolean; //强制开启ocr
   enable_formula?: boolean; //开启公式识别
@@ -519,7 +519,7 @@ type UploadFileFc = {
 };
 type DefaultUploadFileFc = {
   knowledge_id: number; // 必需
-  file_list: { file_path: string }[]; // 必需
+  file_list: { file_path: string; preview_upload_ref?: string }[]; // 必需
 };
 ///
 export async function subUploadLibFile(data: UploadFileFc): Promise<any>;
@@ -832,16 +832,17 @@ export async function getQaFile(id): Promise<{ file_list: string[] }> {
  */
 export async function postImportQaFile(
   id,
-  params,
+  params: { url: string; preview_upload_ref: string },
 ): Promise<{
   result: {
     answers: string;
     questions: string[];
   }[];
 }> {
-  const { url } = params;
+  const { url, preview_upload_ref } = params;
   return await axios.post(`/api/v1/knowledge/qa/import/${id}`, {
     file_list: [url],
+    preview_upload_refs: [preview_upload_ref],
   });
 }
 
@@ -850,16 +851,17 @@ export async function postImportQaFile(
  */
 export async function getQaFilePreview(
   id,
-  params,
+  params: { url: string; preview_upload_ref: string; size?: number; offset?: number },
 ): Promise<{
   result: {
     answers: string;
     questions: string[];
   }[];
 }> {
-  const { url, size, offset } = params;
+  const { url, size, offset, preview_upload_ref } = params;
   return await axios.post(`/api/v1/knowledge/qa/preview/${id}`, {
     file_url: url,
+    preview_upload_ref,
     size,
     offset,
   });
@@ -1326,9 +1328,10 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
           }));
         const score = chunks[0].score;
 
-        // 兼容后端历史逻辑
+        // 兼容后端历史逻辑；无权限条目可能没有可解析的扩展名
         let fileUrl = "";
-        let suffix = fileName.split(".").pop().toLowerCase();
+        const rawName = fileName || "";
+        let suffix = (rawName.split(".").pop() || "").toLowerCase();
         let isNew = false;
         if (["uns", "local"].includes(other.parse_type)) {
           fileUrl = other.chunk_bboxes ? previewUrl : originUrl;

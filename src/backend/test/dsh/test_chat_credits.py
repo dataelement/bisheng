@@ -247,3 +247,10 @@ async def test_round_admission_failure_propagates_and_is_noop_when_ungoverned(mo
     with pytest.raises(DshMonthlyTokenLimitExceededError):
         await chat_credits.admit_round(object())
     assert chat_credits._round_admitted.get() is False
+
+
+@pytest.fixture(autouse=True)
+def ordinary_model_operator(monkeypatch):
+    from bisheng.dsh.domain.services import model_access
+
+    monkeypatch.setattr(model_access, "require_model_operator", AsyncMock(return_value=False))

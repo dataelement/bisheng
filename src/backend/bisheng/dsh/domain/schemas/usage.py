@@ -3,12 +3,65 @@
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
 from bisheng.dsh.domain.schemas.pricing import PricingSnapshot, price_usage
 
 INT64_MAX = 9_223_372_036_854_775_807
+
+
+class ToolPricingSnapshot(BaseModel):
+    """Frozen tool billing parameters recorded at execution time."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pricing_mode: Literal["MONEY", "CREDITS"]
+    currency: Literal["CNY", "USD"] | None = None
+    price_micro: int = Field(ge=0)
+    call_count: int = Field(ge=1, le=1_000_000)
+    credit_value_micro: int = Field(ge=1)
+    usd_cny_rate_micro: int | None = Field(default=None, ge=1)
+
+
+class ToolUsageEvent(BaseModel):
+    """Atomic tool call billing event persisted via Redis Stream to dsh_tool_call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_kind: Literal["tool"] = "tool"
+    request_id: str = Field(min_length=1, max_length=36)
+    tenant_id: int = Field(gt=0)
+    user_id: int = Field(gt=0)
+    usage_month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    billing_timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=64)
+    quota_epoch: int = Field(default=1, gt=0)
+    event_version: int = Field(default=1, gt=0)
+    tool_group_id: int = Field(ge=0)
+    tool_group_name: str | None = Field(default=None, max_length=256)
+    tool_id: int = Field(gt=0)
+    tool_key: str = Field(min_length=1, max_length=128)
+    engine: str | None = Field(default=None, max_length=64)
+    pricing_snapshot: ToolPricingSnapshot | dict | None = None
+    billed_tokens: int = Field(ge=0, le=INT64_MAX)
+    cost_micro: int | None = Field(default=None, ge=0, le=INT64_MAX)
+    currency: Literal["CNY", "USD"] | None = None
+    result: Literal["success", "failed", "timeout", "cancelled"] = "success"
+    status: Literal["SUCCEEDED"] = "SUCCEEDED"
+    source_type: str | None = Field(default=None, max_length=32)
+    source_id: str | None = Field(default=None, max_length=64)
+    started_at: datetime
+    ended_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def normalize_timestamps(self):
+        for key in ("started_at", "ended_at"):
+            value = getattr(self, key)
+            if value is not None:
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=UTC)
+                setattr(self, key, value.astimezone(UTC))
+        return self
 
 
 class UsageEvent(DshTokenUsage):
@@ -40,6 +93,8 @@ class UsageEvent(DshTokenUsage):
     latency_ms: int | None = Field(default=None, ge=0)
     operation_id: str | None = Field(default=None, max_length=36)
     operation_generation: int | None = Field(default=None, gt=0)
+    source_type: str | None = Field(default=None, max_length=32)
+    source_id: str | None = Field(default=None, max_length=64)
     payload_hash: str | None = Field(default=None, max_length=64)
 
     @property
@@ -81,3 +136,17 @@ class UsageEvent(DshTokenUsage):
                     value = value.replace(tzinfo=UTC)
                 setattr(self, key, value.astimezone(UTC))
         return self
+
+
+def parse_usage_event_json(raw: str, *, event_kind: str | None = None) -> "UsageEvent | ToolUsageEvent":
+    """Deserialize either a model UsageEvent or a ToolUsageEvent from JSON."""
+    if event_kind == "tool":
+        return ToolUsageEvent.model_validate_json(raw)
+    if event_kind in (None, "") and '"event_kind":"tool"' in raw.replace(" ", ""):
+        return ToolUsageEvent.model_validate_json(raw)
+    return UsageEvent.model_validate_json(raw)
+
+
+def parse_stream_usage_event(fields: dict) -> "UsageEvent | ToolUsageEvent":
+    """Parse one Redis Stream entry using optional event_kind discriminator."""
+    return parse_usage_event_json(fields["event"], event_kind=fields.get("event_kind"))

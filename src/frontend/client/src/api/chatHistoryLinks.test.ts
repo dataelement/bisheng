@@ -20,3 +20,22 @@ it('restores question links across answers, task turns and a reloaded failure ca
     expect(messages[2].linsightSessionVersionId).toBe('task-one');
     expect(request.get).toHaveBeenCalledWith(expect.any(String), { headers: { 'share-token': 'share' } });
 });
+
+// 114, 2026-11-18: the reloaded row of a failed direct run gives the bubble the
+// fields the live failure gave it (`failureFieldsOfRun`), so both render alike.
+it('maps the stored row of a failed direct run to the fields of the live failure', async () => {
+    (request.get as jest.Mock).mockResolvedValue({ data: [
+        { message_id: 1, category: 'question', is_bot: false, message: { query: 'hi' } },
+        {
+            message_id: 2, category: 'agent_answer', is_bot: true, message: { msg: '', events: [] },
+            extra: { error: true, error_code: 11091, error_type: 'chat_unknown', detail: 'ValueError: boom', reference_id: 'run-1', run_id: 'run-1' },
+        },
+    ] });
+
+    const [, answer] = await getAgentMessages('chat');
+
+    expect(answer).toMatchObject({
+        error: true, errorCode: 11091, errorType: 'chat_unknown', errorDetail: 'ValueError: boom', referenceId: 'run-1',
+    });
+    expect(answer.errorText).toBeUndefined();
+});

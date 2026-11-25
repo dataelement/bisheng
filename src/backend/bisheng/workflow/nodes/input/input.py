@@ -128,6 +128,7 @@ class InputNode(BaseNode):
             app_name=self.workflow_name,
             app_type=ApplicationTypeEnum.WORKFLOW,
             user_id=self.user_id,
+            admin_selected=True,
         )
         user_prompt = f"# Current Conversation Context\n{chat_history}"
         result = llm_obj.invoke([SystemMessage(content=recommended_system_prompt), HumanMessage(content=user_prompt)])

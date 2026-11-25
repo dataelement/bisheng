@@ -10,6 +10,7 @@ from starlette.websockets import WebSocketState
 from bisheng.api.services import report_template
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.office_callback import afetch_office_document
+from bisheng.api.services.report_editor_security import verify_callback
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
@@ -27,6 +28,7 @@ from bisheng.core.session_activity import business_activity
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowCreate, FlowDao, FlowStatus, FlowType, FlowUpdate
+from bisheng.memory.domain.services.gate import MemoryGate
 from bisheng.permission.application.business_authorization import (
     check_business_action,
     require_business_action,
@@ -323,15 +325,21 @@ async def force_save_report_file(
 
 @router.post("/report/callback", status_code=200)
 async def upload_report_file(request: Request, data: dict = Body(...)):
-    """office Callback interface save reportTemplate file for the node"""
-    status = data.get("status")
-    file_url = data.get("url")
-    key = data.get("key")
-    logger.debug(f"callback={data}")
+    """Verify document-server authenticity before consulting an editor ticket."""
+    authorization = request.headers.get("authorization")
+    authorization = authorization if isinstance(authorization, str) else None
+    if not isinstance(data.get("token"), str) and not authorization:
+        return {"error": 1}
+    secret = bisheng_settings.get_from_db("office_jwt_secret") or ""
+    body = verify_callback(data, secret, authorization)
+    if body is None:
+        return {"error": 1}
+    status = body.get("status")
+    file_url = body.get("url")
+    key = body.get("key")
     if status not in {2, 6}:
         # Non-saved callbacks are not processed
         return {"error": 0}
-    logger.info(f"office_callback url={file_url}")
     # The callback carries no user identity, so it cannot be authorized on its
     # own. It is accepted only for a template the backend handed to an editor,
     # and only when that editor was opened by someone with edit rights.
@@ -400,9 +408,16 @@ async def workflow_ws(
                 execution_user,
                 resource_type="workflow",
                 resource_id=workflow_id,
-                action="use",
+                action="visible",
             )
-            # The connection retains this target through dispatch and cleanup.
+
+            async def _memory_register(session_chat_id: str) -> None:
+                # F132: only logged-in connections register their sessions for memory
+                await MemoryGate.open(session_chat_id, execution_user)
+
+            # ``flow_lease_id`` is the page lease opened by the session page; without
+            # it the connection takes its own execution lease. The connection retains
+            # this target through dispatch and cleanup.
             await chat_manager.dispatch_client(
                 websocket,
                 workflow_id,
@@ -414,6 +429,7 @@ async def workflow_ws(
                 message_admission=lambda: browser_message_identity_scope(execution_user),
                 flow_lease_id=flow_lease_id,
                 workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, execution_user),
+                memory_register=_memory_register,
             )
     except UnAuthorizedError:
         await websocket.close(
@@ -597,8 +613,8 @@ async def read_flows(
         default=False, description="Whether to query the list of apps with administrative permissions"
     ),
     action: str = Query(
-        default="use",
-        pattern="^(visible|use)$",
+        default="visible",
+        pattern="^visible$",
         description="Concrete action required for non-managed app lists",
     ),
     cursor: str | None = Query(

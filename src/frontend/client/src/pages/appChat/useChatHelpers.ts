@@ -8,6 +8,8 @@ import { useMemo } from "react"
 import { useRecoilState, useRecoilValue } from "recoil"
 import { Chat } from "~/@types/chat"
 import { baseMsgItem } from "~/api/apps"
+import type { MemoryFlags } from "~/api/memory"
+import { attachMemoryFlags, queueMemoryFlags } from "./appMemory"
 import { formatDate, generateUUID } from "~/utils"
 import { FLOW_TYPES } from "."
 import { runLogsTypes, SkillMethod } from "./appUtils/skillMethod"
@@ -383,6 +385,16 @@ export default function useChatHelpers(flowLeaseId?: string | null) {
                 }, 0)
             }
         },
+        // F132: pin a memory signal onto its answer; queue it when the answer row is not there yet.
+        attachMemory: (chatid: string, flags: MemoryFlags, messageId?: string) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatid, (messages) => {
+                    const result = attachMemoryFlags(messages, flags, messageId)
+                    if (!result.attached) queueMemoryFlags(chatid, flags)
+                    return result.rows
+                }),
+            )
+        },
         insetSeparator: (chatid: string, msg: string) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
@@ -444,7 +456,27 @@ export default function useChatHelpers(flowLeaseId?: string | null) {
                     return updatedMessages
                 }),
             )
-        }
+        },
+        appendCreditExhaustedMsg: (chatid: string, info?: { statusCode?: number; message?: string }) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatid, (messages) => [
+                    ...messages,
+                    {
+                        ...baseMsgItem,
+                        category: "credit_exhausted",
+                        is_bot: true,
+                        end: true,
+                        id: 'credit-' + generateUUID(8),
+                        message: info?.message ?? "",
+                        extra: {
+                            status_code: info?.statusCode ?? 26121,
+                            error_type: "credit_exhausted",
+                        },
+                        create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
+                    },
+                ]),
+            )
+        },
     }
 
     return {

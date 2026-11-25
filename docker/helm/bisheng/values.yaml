@@ -5,6 +5,10 @@ global:
   clusterDomain: cluster.local
   credentials:
     existingPlatformSecret: ''
+    # Secret with key keys.json: {"version":1,"keys":["<Fernet key>",...]}.
+    # Empty = chart generates one on first install. Required when upgrading an
+    # install whose stored ciphertext predates the keyring (see helm README).
+    existingKeyringSecret: ''
     existingRuntimeSecret: ''
     existingIssuerSecret: ''
     existingDataSecret: ''
@@ -66,7 +70,7 @@ backend:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-backend
-    tag: v3.1.0-beta1
+    tag: v3.1.0-beta2
     digest: ''
     pullPolicy: IfNotPresent
   resources:
@@ -112,7 +116,7 @@ worker:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-backend
-    tag: v3.1.0-beta1
+    tag: v3.1.0-beta2
     digest: ''
     pullPolicy: IfNotPresent
   resources:
@@ -141,7 +145,7 @@ linsight:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-backend
-    tag: v3.1.0-beta1
+    tag: v3.1.0-beta2
     digest: ''
     pullPolicy: IfNotPresent
   resources:
@@ -171,7 +175,7 @@ beat:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-backend
-    tag: v3.1.0-beta1
+    tag: v3.1.0-beta2
     digest: ''
     pullPolicy: IfNotPresent
   resources:
@@ -199,7 +203,7 @@ frontend:
   replicaCount: 1
   image:
     repository: dataelement/bisheng-frontend
-    tag: v3.1.0-beta1
+    tag: v3.1.0-beta2
     digest: ''
     pullPolicy: IfNotPresent
   resources:
@@ -670,7 +674,7 @@ sandbox:
   nameOverride: code-runner
   image:
     repository: dataelement/bisheng-sandbox
-    tag: v3.1.0-beta1
+    tag: v3.1.0-beta2
     pullPolicy: IfNotPresent
     digest: ''
   imagePullSecrets: []

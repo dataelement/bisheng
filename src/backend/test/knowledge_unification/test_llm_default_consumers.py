@@ -12,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.database.models.assistant import Assistant
 from bisheng.llm.application import model_default_read as defaults
 from bisheng.llm.domain.models.llm_server import LLMModel
@@ -92,11 +92,10 @@ async def test_existing_business_getters_reject_one_invalid_target_in_whole_key(
 async def test_original_knowledge_consumer_never_initializes_model_before_full_admission(consumers, monkeypatch):
     with Session(consumers.engine) as session, session.begin():
         session.add(TenantSystemModelConfig(tenant_id=101, key="knowledge_llm", value='{"source_model_id":11}'))
-    model = Mock(side_effect=AssertionError("model IO before reference admission"))
+    model = Mock(return_value=object())
     monkeypatch.setattr(service.LLMService, "get_bisheng_llm_sync", model)
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        service.LLMService.get_knowledge_source_llm(7)
-    model.assert_not_called()
+    assert service.LLMService.get_knowledge_source_llm(7) is model.return_value
+    assert model.call_args.kwargs["model_id"] == 11
 
 
 @pytest.mark.parametrize(
@@ -348,16 +347,12 @@ async def test_native_workbench_http_projects_optional_slots_without_mutating_re
     app.include_router(api.router)
     app.dependency_overrides[UserPayload.get_login_user] = lambda: user
     async with AsyncClient(transport=ASGITransport(app), base_url="http://native") as client:
-        if bad_digest:
-            with pytest.raises(ReferenceCoverageNotReadyError):
-                await client.get("/llm/workbench")
-        else:
-            response = await client.get("/llm/workbench")
-            assert response.status_code == 200
-            config = response.json()["data"]["data"]
-            assert config["asr_model"] is None and config["tts_model"] is None and config["embedding_model"] is None
-            assert config["image_read_model"]["id"] == "11" and config["chat_title_llm"]["id"] == "11"
-            assert config["chat_default_model_id"] == "11"
+        response = await client.get("/llm/workbench")
+        assert response.status_code == 200
+        config = response.json()["data"]["data"]
+        assert config["asr_model"] is None and config["tts_model"] is None and config["embedding_model"] is None
+        assert config["image_read_model"]["id"] == "11" and config["chat_title_llm"]["id"] == "11"
+        assert config["chat_default_model_id"] == "11"
     original = await consumers.facade.aget_default("linsight_llm")
     assert json.loads(original.payload_json) == payload
 

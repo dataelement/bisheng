@@ -17,7 +17,7 @@ from test.dsh.pricing_fixtures import LEGACY_EQUIVALENT_PRICING
 def dsh_enabled(monkeypatch):
     from bisheng.common.services.config_service import settings
 
-    monkeypatch.setitem(settings.__dict__, "dsh", settings.dsh.model_copy(update={"enabled": True}))
+    monkeypatch.setattr(settings.credit_billing, "enabled", True)
 
 
 @pytest.mark.parametrize(
@@ -27,11 +27,11 @@ def dsh_enabled(monkeypatch):
         ("linsight", True),
         ("knowledge_space", True),  # F016
         ("rag_traceability", False),  # workflows use it too; the workbench passes daily_chat
-        ("workflow", False),
-        ("assistant", False),
+        ("workflow", True),
+        ("assistant", True),
         ("knowledge_base", False),
         ("evaluation", False),
-        ("model_gateway", False),
+        ("model_gateway", True),
         ("model_test", False),
     ],
 )
@@ -42,7 +42,7 @@ def test_governed_scenarios(dsh_enabled, app_type, billed):
 def test_nothing_is_governed_when_the_enterprise_client_is_off(monkeypatch):
     from bisheng.common.services.config_service import settings
 
-    monkeypatch.setitem(settings.__dict__, "dsh", settings.dsh.model_copy(update={"enabled": False}))
+    monkeypatch.setattr(settings.credit_billing, "enabled", False)
     assert not chat_credits.governed(SimpleNamespace(app_type="knowledge_space"))
 
 

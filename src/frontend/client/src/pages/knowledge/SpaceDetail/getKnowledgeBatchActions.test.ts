@@ -3,7 +3,7 @@ import type { GetKnowledgeBatchActionsOptions } from "./knowledgeSpaceTypes";
 
 jest.mock("bisheng-icons", () => ({ Outlined: new Proxy({}, { get: () => () => null }) }));
 
-it.each([true, false])("uses space edit permission for mobile batch similar documents (edit=%s)", (canEditSpace) => {
+it.each([true, false])("uses file edit eligibility for mobile batch similar documents (space edit=%s)", (canEditSpace) => {
   const handleProcessSimilar = jest.fn();
   const options: GetKnowledgeBatchActionsOptions = {
     selectedFiles: new Set(["11"]),
@@ -25,13 +25,13 @@ it.each([true, false])("uses space edit permission for mobile batch similar docu
     handleSingleDownload: jest.fn(),
     handleBatchDelete: jest.fn(),
     handleBatchRetry: jest.fn(),
-    hasSimilarSelected: true,
+    hasSimilarSelected: !canEditSpace,
     singleSelectedId: "11",
     canManageSinglePermission: false,
     localize: key => key,
   };
   const { batchActions } = getKnowledgeBatchActions(options);
-  expect(batchActions.map(action => action.key)).toEqual(canEditSpace ? ["similar"] : []);
+  expect(batchActions.map(action => action.key)).toEqual(!canEditSpace ? ["similar"] : []);
   batchActions.find(action => action.key === "similar")?.onClick();
-  expect(handleProcessSimilar).toHaveBeenCalledTimes(canEditSpace ? 1 : 0);
+  expect(handleProcessSimilar).toHaveBeenCalledTimes(!canEditSpace ? 1 : 0);
 });

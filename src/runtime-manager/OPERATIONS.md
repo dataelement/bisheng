@@ -45,7 +45,9 @@ OBO secret 必须独立于平台 JWT secret。manager/entry/egress/control 的 v
 
 ## 3. 镜像与目录发行
 
-`.github/workflows/runtime-images.yml` 在原生 amd64 和 arm64 分别构建、检查镜像内容并推送不可覆盖的版本标签到 Docker Hub 和 `cr.dataelem.com`；只有两侧成功才发布服务多架构索引及 `runtime-profiles.json`。已存在的标签不会被覆盖，发布失败后使用新 release 标识重试。
+`.github/workflows/runtime-images.yml` 在原生 amd64 和 arm64 分别构建、检查镜像内容并推送架构标签到 Docker Hub 和 `cr.dataelem.com`。同一 release 可重复构建并覆盖同名标签，无需强制更新 Git tag 或额外的覆盖参数，与前后端镜像一致；本地构建仍须显式设置 `RUNTIME_PUBLISH=1` 才推送。所有原生构建和隔离冒烟通过后才开始推送，CR 同步使用已验证的本地 Image ID，推送失败不生成成功清单。两架构及两个仓库成功后生成 digest 清单与 `runtime-profiles.json`；正式服务标签仍由 `release.yml` 在发布 GitHub Release 后生成。
+
+重复发布前后使用 digest 区分实际镜像内容，交付和部署保留本次目录及 digest。已导入的 profile 修订和已冻结运行版本继续使用原 digest，不随标签覆盖自动变更；需要采用新内容时生成新目录修订并按原流程导入。
 
 目录包含 Python 3.11、Node 20、static 的 runtime/preparer child digest、配置 Image ID、ABI、工具链和 UID/GID。官方 SDK 固定为镜像内的 0.1.1 wheel。镜像发布流水线保留镜像自身的架构、依赖导入及打包内容检查，不执行应用离线部署、复用和 SQLite 集成测试。部署、离线运行及 backend/审批/权限的完整验收由 QA 收到镜像后执行。
 

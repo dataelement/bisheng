@@ -31,7 +31,9 @@ def prepare_owner_boundaries(monkeypatch):
     monkeypatch.setattr(org_snapshot, "astamp_session", AsyncMock())
 
 
-@pytest.mark.parametrize("entry", ["initialize_chat", "_agent_initialize_chat"])
+# The two production entries that create a workbench session (F004: the unified
+# send entry, and the blocked-input path that records the turn without a run).
+@pytest.mark.parametrize("entry", ["run_send._open_conversation", "chat_service._agent_initialize_chat"])
 async def test_real_daily_entries_commit_project_binding_before_readback(repo, monkeypatch, entry):
     from bisheng.common.services import config_service
     from bisheng.workstation.domain.schemas.chat import APIChatCompletion
@@ -40,11 +42,22 @@ async def test_real_daily_entries_commit_project_binding_before_readback(repo, m
     repository, actor = repo
     project_id = create(repository, actor)
     prepare_owner_boundaries(monkeypatch)
-    monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=False)))
+    monkeypatch.setattr(
+        config_service,
+        "settings",
+        SimpleNamespace(dsh=SimpleNamespace(enabled=False), multi_tenant=SimpleNamespace(enabled=False)),
+    )
     monkeypatch.setattr(
         chat_service.WorkStationService,
         "aget_config",
         AsyncMock(return_value=SimpleNamespace(models=[SimpleNamespace(id="model")])),
+    )
+    from bisheng.dsh.domain.services import model_catalog
+
+    monkeypatch.setattr(
+        model_catalog,
+        "user_workbench_models",
+        AsyncMock(return_value=[SimpleNamespace(id="model", displayName="model")]),
     )
     monkeypatch.setattr(chat_service.telemetry_service, "log_event", AsyncMock())
     legacy_insert = AsyncMock()
@@ -65,7 +78,7 @@ async def test_real_daily_entries_commit_project_binding_before_readback(repo, m
     monkeypatch.setattr(chat_service.MessageSessionDao, "async_get_one", read_committed)
     data = APIChatCompletion(clientTimestamp="1", model="model", text="Hello", project_id=project_id)
     with pytest.raises(SessionBindingObserved):
-        await getattr(chat_service, entry)(data, SimpleNamespace(user_id=actor.user_id, tenant_id=actor.tenant_id))
+        await _entry(entry)(data, SimpleNamespace(user_id=actor.user_id, tenant_id=actor.tenant_id))
     assert len(observed) == 1
     legacy_insert.assert_not_awaited()
 
@@ -110,3 +123,10 @@ async def test_real_task_submit_commits_project_binding_before_enqueue(repo, mon
     assert session.chat_id == version.session_id
     assert session.flow_type == 15
     assert len(repository.snapshot(actor)["memberships"]) == 1
+
+
+def _entry(name: str):
+    from bisheng.workstation.domain.services import chat_service, run_send
+
+    module, function = name.split(".")
+    return getattr({"chat_service": chat_service, "run_send": run_send}[module], function)

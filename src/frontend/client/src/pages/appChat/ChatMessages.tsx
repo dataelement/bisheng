@@ -12,6 +12,7 @@ import appStore from "~/store";
 import { MessageCheckbox } from "~/components/Chat/MessageSelection";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useAuthContext } from "~/hooks";
+import { ChatErrorCard } from "~/components/ChatErrorCard";
 import { ClientMessageFooter } from "./components/ClientMessageFooter";
 import { ClientMessageAttachments } from "./components/ClientMessageAttachments";
 import { ClientUserActions } from "./components/ClientUserActions";
@@ -25,6 +26,9 @@ import { useLocalize } from "~/hooks";
 import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
 import { bishengConfState, currentChatState, currentRunningState } from "./store/atoms";
+import { memoryStepLabel } from "~/components/Memory/memoryStep";
+import { MemorySearchHits } from "~/components/Memory/MemorySearchHits";
+import { appMemoryEnabled, isMemoryRun, maskMemoryRuns, memoryRunItemIds } from "./appMemory";
 import { useMessage } from "./useMessages";
 
 // F028: only question + answer category rows are selectable. Intermediate
@@ -51,6 +55,7 @@ export default function ChatMessages({
   title,
   logo,
   disabledSearch = false,
+  isGuestMode = false,
   onOpenCitationPanel,
   activeCitationMessageId = null,
   selectionActive = false,
@@ -79,6 +84,8 @@ export default function ChatMessages({
   console.log("messages :>> ", chatState, messages, guideWord);
 
   const remark = chatState?.flow?.guide_word;
+  // F132: memory notice / attribution only under a signed-in assistant chat.
+  const memoryEnabled = appMemoryEnabled(chatState?.flow?.flow_type, Boolean(readOnly), isGuestMode);
 
   return (
     <div
@@ -89,11 +96,14 @@ export default function ChatMessages({
       <SelectionMessagesProvider messages={selectableMessages}>
         {selectionActive && messages.length > 0 && <SelectAllBelowBanner scrollRef={messageScrollRef} />}
         <ConversationMessages
-          messages={messagesForPresentation(
-            remark
-              ? [{ category: "guide_word", message: remark, chat_ui_key: `${chatId}:greeting` }, ...messages]
-              : messages,
-            { mode: chatState?.flow.flow_type === 10 ? "workflow" : "assistant", sessionKey: chatId ?? "" },
+          messages={maskMemoryRuns(
+            messagesForPresentation(
+              remark
+                ? [{ category: "guide_word", message: remark, chat_ui_key: `${chatId}:greeting` }, ...messages]
+                : messages,
+              { mode: chatState?.flow.flow_type === 10 ? "workflow" : "assistant", sessionKey: chatId ?? "" },
+            ),
+            (step) => memoryStepLabel(step, localize),
           )}
           canExecute={!readOnly}
           labels={{
@@ -116,7 +126,16 @@ export default function ChatMessages({
             });
           }}
           slots={{
-            runPresentation: (message) => describeRun(message, chatState?.flow, createRunLabels(localize)),
+            runPresentation: (message) =>
+              isMemoryRun(message)
+                ? { title: message.text || localize("memory.tool_operation"), unavailable: false }
+                : describeRun(message, chatState?.flow, createRunLabels(localize)),
+            // F132: a memory search run opens to the items it returned (owner's own list).
+            runDetail: (message) => {
+              if (!isMemoryRun(message)) return undefined;
+              const ids = memoryRunItemIds(message);
+              return ids.length ? <MemorySearchHits itemIds={ids} /> : undefined;
+            },
             title: (message) =>
               message.kind === "user" ? displayText(message.raw.user_name) || useName || "" : title,
             avatar: (message) =>
@@ -132,7 +151,9 @@ export default function ChatMessages({
                 logo
               ),
             content: (text, message) =>
-              ["divider", "separator"].includes(message.category) ? (
+              message.category === "credit_exhausted" ? (
+                <ChatErrorCard errorType="credit_exhausted" errorCode={26121} />
+              ) : ["divider", "separator"].includes(message.category) ? (
                 localize(text)
               ) : (
                 <ClientChatMarkdown
@@ -156,7 +177,7 @@ export default function ChatMessages({
                 />
               ) : undefined,
             footer: (message, contentRef) =>
-              message.kind === "user" ? (
+              message.category === "credit_exhausted" ? undefined : message.kind === "user" ? (
                 !readOnly && (
                   <ClientUserActions
                     createTime={displayText(message.raw.create_time)}
@@ -170,8 +191,10 @@ export default function ChatMessages({
                   message={message}
                   contentRef={contentRef}
                   readOnly={Boolean(readOnly)}
+                  hideFeedback={isGuestMode}
                   onOpenCitationPanel={onOpenCitationPanel}
                   activeCitationMessageId={activeCitationMessageId}
+                  memoryEnabled={memoryEnabled}
                 />
               ),
           }}

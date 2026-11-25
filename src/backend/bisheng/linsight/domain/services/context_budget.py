@@ -131,7 +131,7 @@ def count_context_tokens(messages: Sequence[BaseMessage], tools: Sequence[Any] |
 
 # What langchain returns instead of raising when the summary call fails, or when
 # trimming left nothing to summarise. Neither is a summary.
-_SUMMARY_FAILURE_PREFIXES = ("Error generating summary", "Previous conversation was too long to summarize")
+_SUMMARY_FAILURE_PREFIXES = ("Previous conversation was too long to summarize",)
 _SUMMARY_ATTEMPTS = 2
 
 # Set around the synchronous ``create_deep_agent`` assembly; per asyncio task.
@@ -209,6 +209,11 @@ class BishengSummarizationMiddleware(SummarizationMiddleware):
                 truncate_args_settings={"trigger": ("fraction", 0.85), "keep": ("fraction", 0.10)},
             )
         self._usable_input = usable_input
+        # langchain 1.5 wraps the summary model in ``with_retry`` (3 attempts with
+        # backoff) and raises when they run out. F087 AC-17 allows ONE retry and it
+        # is ours (``_create_summary``), so the hidden one is removed: left in, a
+        # failing summary would cost up to six model calls before the task fails.
+        self._lc_helper._summary_model = self._lc_helper.model
         if usable_input is not None:
             # langchain trims with start_on="human"; a task-mode history has a
             # human message only at its head, so the trimmed tail came back empty
@@ -296,19 +301,55 @@ class BishengSummarizationMiddleware(SummarizationMiddleware):
         )
         return False
 
+    # F132 (R3): the compaction file conversation_history/*.md gets memory tool
+    # calls redacted; the state passed on to the summary is left as it is (R4).
+    # ``session_id`` names the history file (deepagents 0.7; 0.6 derived the name
+    # from the thread id inside the base method).
+    def _offload_to_backend(self, backend: Any, messages: list, session_id: str) -> Any:
+        from bisheng.linsight.domain.services.memory_turns import redact_messages
+
+        return super()._offload_to_backend(backend, redact_messages(messages), session_id)
+
+    async def _aoffload_to_backend(self, backend: Any, messages: list, session_id: str) -> Any:
+        from bisheng.linsight.domain.services.memory_turns import redact_messages
+
+        return await super()._aoffload_to_backend(backend, redact_messages(messages), session_id)
+
+    def _summary_error(self, exc: Exception, attempt: int) -> str:
+        """Record a summary call that raised; returns the text kept for the error."""
+        logger.opt(exception=True).error(
+            "[linsight-context-window] summary generation failed (attempt {}/{})", attempt, _SUMMARY_ATTEMPTS
+        )
+        return f"{type(exc).__name__}: {exc}"
+
+    # A failed summary shows up in two ways. langchain 1.5 raises the model error
+    # (1.3 returned an "Error generating summary" string instead); the "too long to
+    # summarize" sentence is still returned as text. Both count as a failed attempt.
     def _create_summary(self, messages_to_summarize: list) -> str:
+        failure = ""
         for attempt in range(1, _SUMMARY_ATTEMPTS + 1):
-            summary = super()._create_summary(messages_to_summarize)
+            try:
+                summary = super()._create_summary(messages_to_summarize)
+            except Exception as exc:
+                failure = self._summary_error(exc, attempt)
+                continue
             if self._check_summary(summary, attempt):
                 return summary
-        raise LinsightContextCompressFailedError(msg=summary)
+            failure = summary
+        raise LinsightContextCompressFailedError(msg=failure)
 
     async def _acreate_summary(self, messages_to_summarize: list) -> str:
+        failure = ""
         for attempt in range(1, _SUMMARY_ATTEMPTS + 1):
-            summary = await super()._acreate_summary(messages_to_summarize)
+            try:
+                summary = await super()._acreate_summary(messages_to_summarize)
+            except Exception as exc:
+                failure = self._summary_error(exc, attempt)
+                continue
             if self._check_summary(summary, attempt):
                 return summary
-        raise LinsightContextCompressFailedError(msg=summary)
+            failure = summary
+        raise LinsightContextCompressFailedError(msg=failure)
 
 
 def _summarizer_guard() -> list[AgentMiddleware]:
@@ -370,6 +411,10 @@ _READ_FILE = "read_file"
 # Self-truncating listing/search tools: offloading their output would only invite
 # another listing, so they are clipped with a "narrow it down" hint instead.
 _SEARCH_TOOLS = ("ls", "glob", "grep")
+# F132: memory tool results are clipped in place, never offloaded to the workspace.
+# F132: the built-in memory tools (exact names; other "memory_*" tools are untouched).
+_MEMORY_TOOL_NAMES = frozenset({"memory_write", "memory_search"})
+_MEMORY_TRUNCATION_HINT = "\n\n（记忆检索结果过长，已截断；请缩小检索范围或减少条数后重试。）"
 _SEARCH_TRUNCATION_HINT = (
     "\n\n[结果超过本模型单次可读的长度，已截断。请缩小路径范围或改用更具体的匹配条件后重试。]"
     "\n[Output truncated: it exceeds what this model can read at once. Narrow the path or pattern.]"
@@ -465,9 +510,12 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
             return self._clip_read(request, result)
         if name in _SEARCH_TOOLS:
             return self._clip(result, _SEARCH_TRUNCATION_HINT)
+        if name in _MEMORY_TOOL_NAMES:
+            # F132 (R3): a memory result is never written to the workspace.
+            return self._clip(result, _MEMORY_TRUNCATION_HINT)
         if name in TOOLS_EXCLUDED_FROM_EVICTION:
             return result
-        return self._evictor._intercept_large_tool_result(result, request.runtime)
+        return self._evictor._intercept_large_tool_result(result)
 
     async def awrap_tool_call(self, request, handler):
         result = await handler(request)
@@ -476,6 +524,9 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
             return self._clip_read(request, result)
         if name in _SEARCH_TOOLS:
             return self._clip(result, _SEARCH_TRUNCATION_HINT)
+        if name in _MEMORY_TOOL_NAMES:
+            # F132 (R3): a memory result is never written to the workspace.
+            return self._clip(result, _MEMORY_TRUNCATION_HINT)
         if name in TOOLS_EXCLUDED_FROM_EVICTION:
             return result
-        return await self._evictor._aintercept_large_tool_result(result, request.runtime)
+        return await self._evictor._aintercept_large_tool_result(result)

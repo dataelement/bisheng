@@ -118,12 +118,12 @@ export default function AppChat({
     setChatId(cid!); // Switch the active conversation.
 
     const numericType = Number(type);
-    const ensureUseAppPermission = async (objectType: "workflow" | "assistant") => {
+    const ensureAppVisibility = async (objectType: "workflow" | "assistant") => {
       if (shareToken || isGuestMode) return true;
       const permission = await checkResourceAction({
         resource_type: objectType,
         resource_id: fid!,
-        action: "use",
+        action: "visible",
       });
       if (permission?.allowed) return true;
       showToast?.({
@@ -134,8 +134,8 @@ export default function AppChat({
       return false;
     };
 
-    if (numericType === FLOW_TYPES.WORK_FLOW && !(await ensureUseAppPermission("workflow"))) return;
-    if (numericType === FLOW_TYPES.ASSISTANT && !(await ensureUseAppPermission("assistant"))) return;
+    if (numericType === FLOW_TYPES.WORK_FLOW && !(await ensureAppVisibility("workflow"))) return;
+    if (numericType === FLOW_TYPES.ASSISTANT && !(await ensureAppVisibility("assistant"))) return;
 
     if (currentData) {
       // Do not reload a cached conversation.

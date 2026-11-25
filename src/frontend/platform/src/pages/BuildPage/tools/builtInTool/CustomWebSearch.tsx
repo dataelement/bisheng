@@ -2,7 +2,7 @@ import { Button, Textarea } from '@bisheng/ui';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { SearchOperation, SearchProof, WebSearchSecret } from '@/controllers/API/webSearch';
+import type { SearchOperation, WebSearchSecret } from '@/controllers/API/webSearch';
 import { parseWebSearchSchema, testWebSearch } from '@/controllers/API/webSearch';
 import type { OpenApiSchemaSource } from '@/controllers/API/tools';
 import { showApiError } from '@/controllers/request';
@@ -16,7 +16,6 @@ import { OpenApiRequestFields } from './OpenApiRequestFields';
 type Auth = { location: string; name: string };
 type OpenApiDraft = {
     operation: { version: 2; server: string; method: string; path: string; declaration: Record<string, unknown>; media_type: string; request: unknown; auth: Auth; response_mode: 'raw' | 'mapped' };
-    proof: SearchProof;
     mapping: Record<string, string>;
 };
 interface Props {
@@ -28,7 +27,7 @@ interface Props {
     secretConfigured: boolean;
 }
 export function draftFromOperation(item: SearchOperation): OpenApiDraft {
-    return { operation: { version: 2, server: item.server, method: item.method, path: item.path, declaration: item.declaration || {}, media_type: item.media_type || '', request: item.request || {}, auth: item.security || { location: 'none', name: '' }, response_mode: 'raw' }, proof: item.proof, mapping: normalizeSearchMapping() };
+    return { operation: { version: 2, server: item.server, method: item.method, path: item.path, declaration: item.declaration || {}, media_type: item.media_type || '', request: item.request || {}, auth: item.security || { location: 'none', name: '' }, response_mode: 'raw' }, mapping: normalizeSearchMapping() };
 }
 function isOpenApiDraft(value: Props['value']): value is OpenApiDraft {
     return Boolean(value?.operation && 'version' in value.operation && value.operation.version === 2);

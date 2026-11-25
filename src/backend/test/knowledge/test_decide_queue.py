@@ -78,3 +78,10 @@ def test_mineru_v4_configuration_enables_ocr_routing():
     disabled = KnowledgeConf(loader_provider="mineru_v4")
     assert enabled.image_parser_enabled is True
     assert disabled.image_parser_enabled is False
+
+
+def test_minicpm_ocr_configuration_enables_ocr_routing():
+    enabled = KnowledgeConf(loader_provider="minicpm_ocr", minicpm_ocr={"base_url": "https://minicpm.example/v1"})
+    disabled = KnowledgeConf(loader_provider="minicpm_ocr")
+    assert enabled.image_parser_enabled is True
+    assert disabled.image_parser_enabled is False

@@ -39,6 +39,8 @@ export interface AssistantDetail {
     reference_states?: ReferenceSlotState[] | null;
     /** F041: 用户知识库权限校验开关，默认关；开=按运行使用者 view_file 过滤知识空间检索，关=按配置者可见范围 */
     knowledge_auth?: boolean;
+    /** F132: assistant memory switch, default off; the assistant reads and writes each user's own memory when on */
+    memory_enabled?: boolean;
     max_token: number;
 }
 
@@ -46,7 +48,7 @@ export interface ReferenceSlotState {
     slot_key: string;
     target_type: 'model' | 'knowledge_space' | 'knowledge_file';
     target_id: string;
-    state: 'valid' | 'deleting' | 'invalid_deleted' | 'invalid_legacy';
+    state: 'valid' | 'deleting' | 'invalid_deleted' | 'invalid_legacy' | 'invalid_scope' | 'invalid_missing';
     is_valid: boolean;
 }
 

@@ -70,7 +70,7 @@ def moderation_add_scope(data, user):
             token = visible_tenant_ids.set(frozenset({target, DEFAULT_TENANT_ID, resource.tenant_id}))
             try:
                 run_async_safe(
-                    require_business_action(user, resource_type=kind, resource_id=data.flow_id, action="use"),
+                    require_business_action(user, resource_type=kind, resource_id=data.flow_id, action="visible"),
                     timeout=60,
                 )
             finally:

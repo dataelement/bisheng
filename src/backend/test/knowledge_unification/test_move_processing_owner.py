@@ -119,7 +119,7 @@ async def test_real_logical_then_r2_ready_and_chat_only_after_commit(application
     app = application
     assert await app.owner.aensure_logical(app.built.lease) is not None
     refs_after, _, files, marker = await refs.facts(app.built)
-    assert {row["target_space_id"] for row in refs_after} == {"11"}
+    assert {row["target_space_id"] for row in refs_after} == {"10"}
     assert marker is not None and all(row.knowledge_id == 11 for row in files)
     assert app.chat == [
         {

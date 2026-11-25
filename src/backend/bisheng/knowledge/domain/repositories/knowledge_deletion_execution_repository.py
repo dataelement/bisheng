@@ -137,8 +137,15 @@ class KnowledgeDeletionExecutionRepository:
         self.current(session, context)
         return job
 
-    async def arequire_transfer_idle(self, session, *, space_id):
+    async def arequire_transfer_idle(self, session, *, space_id, file_ids=None):
         from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+        from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
+
+        if file_ids is not None:
+            await SourceMoveInputRepository().arequire_destination_released(
+                session, space_id=space_id, file_ids=file_ids
+            )
+            return
 
         context = self.context(session)
         found = (

@@ -3,7 +3,10 @@ import { parseDshLaunchBase } from '@/utils/dshLaunch'
 import { notifyDshBrowserConfigChanged } from '@bisheng/api-client'
 
 export type DshManagementSettings = { enabled: boolean; download_url: string | null; launch_url: string }
-export type DshBrowserConfig = DshManagementSettings & { management_enabled: boolean }
+export type DshBrowserConfig = DshManagementSettings & {
+    management_enabled: boolean
+    credit_billing_enabled?: boolean
+}
 
 export function parseDshManagementSettings(raw: unknown): DshManagementSettings {
     if (!raw || typeof raw !== 'object' || !('enabled' in raw) || typeof raw.enabled !== 'boolean'
@@ -25,7 +28,14 @@ export async function getDshBrowserConfig(signal?: AbortSignal): Promise<DshBrow
     if (!raw || typeof raw !== 'object' || !('management_enabled' in raw) || typeof raw.management_enabled !== 'boolean') {
         throw new Error('Invalid DSH deployment response')
     }
-    return { ...settings, management_enabled: raw.management_enabled }
+    const creditBillingEnabled = 'credit_billing_enabled' in raw && typeof raw.credit_billing_enabled === 'boolean'
+        ? raw.credit_billing_enabled
+        : settings.enabled
+    return {
+        ...settings,
+        management_enabled: raw.management_enabled,
+        credit_billing_enabled: creditBillingEnabled,
+    }
 }
 
 export async function saveDshManagementSettings(value: DshManagementSettings): Promise<DshManagementSettings> {

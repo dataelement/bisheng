@@ -85,7 +85,6 @@ async def test_real_scope_owner_stream_and_complete_receipt_validation_have_sepa
     async with ctx.db.sessions() as session, session.begin():
         baseline = await ctx.scope.aread_delete_scope(session, space_id=1, selections=selections(("folder", 50)))
         assert len(baseline.resources) == count
-    d1_sql = len(ctx.db.statements)
     owner_sql, validation = [], []
     verify, validate = ctx.runtime.verifier.averify_owner_targets, ctx.runtime.verifier.validate_owner_receipts
 
@@ -108,31 +107,13 @@ async def test_real_scope_owner_stream_and_complete_receipt_validation_have_sepa
     )
     async with ctx.db.sessions() as session, session.begin():
         result = await collector.acollect(session, space_id=1, selections=selections(("folder", 50)))
-    stream = [(sql, params) for sql, params in ctx.db.statements if "LEFT OUTER JOIN business_reference_set" in sql]
-    status = [(sql, params) for sql, params in ctx.db.statements if "test-coverage" in sql]
-    groups, references = ceil(count / 200), len(selected) * 3
-    owner_budget = 2 * groups + 1 + ceil((count + 1) / 200)
-    # One clear/delete guard page for the single SPACE, independent of files.
-    clear_guard = [sql for sql, _ in owner_sql if "FROM knowledge_space_delete_job" in sql]
-    assert len(clear_guard) == 1
-    assert len(owner_sql) - len(clear_guard) == owner_budget
-    assert len(stream) <= groups + references // 200
-    assert len(status) == 14 and validation == [count, count, count]
+    hints = [(sql, params) for sql, params in ctx.db.statements if "FROM business_resource_reference" in sql]
+    references = len(selected) * 3
+    assert not owner_sql and not validation and not ctx.ledgers
     assert len(result.references) == references and len(result.sources) == 1
     assert dict(result.source_counts)["assistant"] == 1
     assert dict(result.slot_counts)["assistant"] == references
-    assert len(ctx.db.statements) == d1_sql + len(owner_sql) + len(stream) + len(status)
+    assert len(hints) <= ceil(count / 200)
+    assert max(len(params) for _, params in hints) <= 400
     assert all(sql.lstrip().upper().startswith("SELECT") for sql, _ in ctx.db.statements)
-    assert max(len(params) for _, params in owner_sql + stream) <= 250
-    assert ctx.ledgers[-1].local_reads == 12 and ctx.ledgers[-1].global_reads == 2
-    print(
-        {
-            "targets": count,
-            "refs": references,
-            "D1_SQL": d1_sql,
-            "Owner_SQL": len(owner_sql),
-            "stream_SQL": len(stream),
-            "coverage_SQL": len(status),
-            "receipt_candidates": validation,
-        }
-    )
+    assert not any("business_reference_set" in sql for sql, _ in hints)

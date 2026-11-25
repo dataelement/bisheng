@@ -124,7 +124,7 @@ class ModerationRepository:
     @staticmethod
     def resource(resource_id):
         # Resource ownership is not the conversation's tenant. The caller
-        # must run the existing use permission check before creating a session.
+        # must run the existing visibility permission check before creating a session.
         with bypass_tenant_filter(), get_sync_db_session() as db:
             flow = db.exec(select(Flow).where(Flow.id == resource_id)).one_or_none()
             if flow is not None:

@@ -21,6 +21,19 @@ for i=1,#models,2 do
     sum=add(sum,models[i+1])
   end
 end
+if #KEYS>=8 then
+  local tt=redis.call('TYPE',KEYS[8]).ok
+  if tt~='none' and tt~='hash' then return {'DENY','bad_counter'} end
+  if tt=='hash' then
+    local tools=redis.call('HGETALL',KEYS[8])
+    for i=1,#tools,2 do
+      if tools[i]~='_initialized' then
+        if not integer(tools[i+1]) then return {'DENY','bad_counter'} end
+        sum=add(sum,tools[i+1])
+      end
+    end
+  end
+end
 if sum~=used then return {'DENY','incomplete_model_ledger'} end
 local shared=redis.call('HGET',KEYS[1],'quota_limit_schema')=='shared'
 local limits={}; local total_limit='0'

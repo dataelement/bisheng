@@ -66,11 +66,11 @@ async def test_app_bucket_drops_share(action_probe):
     await WorkFlowService._application_action_map(
         object(),
         _rows(),
-        ("use", "edit", "share"),
+        ("visible", "edit", "share"),
     )
 
     assert "share" not in action_probe.asked["app"]
-    assert set(action_probe.asked["app"]) == {"use", "edit"}
+    assert set(action_probe.asked["app"]) == {"visible", "edit"}
 
 
 async def test_other_buckets_unchanged(action_probe):
@@ -78,11 +78,11 @@ async def test_other_buckets_unchanged(action_probe):
     await WorkFlowService._application_action_map(
         object(),
         _rows(),
-        ("use", "edit", "share"),
+        ("visible", "edit", "share"),
     )
 
-    assert action_probe.asked["workflow"] == ("use", "edit", "share")
-    assert action_probe.asked["assistant"] == ("use", "edit", "share")
+    assert action_probe.asked["workflow"] == ("visible", "edit", "share")
+    assert action_probe.asked["assistant"] == ("visible", "edit", "share")
 
 
 async def test_visible_never_filtered(action_probe):
@@ -120,15 +120,14 @@ async def test_enrich_can_share_no_error(action_probe):
     assert by_id["wf-1"]["can_share"] is True
 
 
-async def test_actions_by_type_override_is_opt_in(action_probe):
-    """The per-bucket override changes only the bucket named; the rest keep ``actions``."""
+async def test_all_resource_types_share_visibility_admission(action_probe):
+    """Every bucket asks visibility, with concrete actions limited to its scope."""
     await WorkFlowService._application_action_map(
         object(),
         _rows(),
         ("visible", "edit", "share"),
-        actions_by_type={"app": ("use", "edit")},
     )
 
-    assert set(action_probe.asked["app"]) == {"use", "edit"}
+    assert set(action_probe.asked["app"]) == {"visible", "edit"}
     assert action_probe.asked["workflow"] == ("visible", "edit", "share")
     assert action_probe.asked["assistant"] == ("visible", "edit", "share")

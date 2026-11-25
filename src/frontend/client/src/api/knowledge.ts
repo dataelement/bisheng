@@ -323,6 +323,7 @@ interface RawKnowledgeFile {
 export interface UploadFileResponse {
     file_name: string;
     file_path: string;
+    preview_upload_ref?: string | null;
     flowId: string | null;
     relative_path: string | null;
     repeat: boolean;
@@ -1456,7 +1457,7 @@ export { uploadFileToServerApi } from "./knowledgeUpload";
  */
 export async function addFilesApi(
     space_id: string,
-    data: { file_path: string[]; parent_id?: number | null }
+    data: { file_path: string[]; preview_upload_refs: string[]; parent_id?: number | null }
 ): Promise<KnowledgeFile[]> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
@@ -1502,6 +1503,7 @@ export async function importWebLinkApi(
 /** One file of a folder upload: uploaded body path + its path inside the picked folder. */
 export interface FolderUploadItemPayload {
     file_path: string;
+    preview_upload_ref: string;
     relative_path: string;
     size: number;
 }

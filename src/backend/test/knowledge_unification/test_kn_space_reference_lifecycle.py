@@ -528,7 +528,7 @@ async def test_actual_space_creation_commits_space_creator_and_reference_before_
     def index_after_commit(user_id, actual):
         facts = state(context)
         assert any(row["id"] == actual.id and row["tenant_id"] == 101 for row in facts["knowledge"])
-        assert any(row["source_id"] == str(actual.id) for row in facts["business_resource_reference"])
+        assert not any(row["source_id"] == str(actual.id) for row in facts["business_resource_reference"])
         member = next(row for row in facts["space_channel_member"] if row["business_id"] == str(actual.id))
         assert member["business_type"] == BusinessTypeEnum.SPACE and member["user_id"] == 7
         assert member["user_role"] == UserRoleEnum.CREATOR and member["status"] == MembershipStatusEnum.ACTIVE
@@ -561,10 +561,16 @@ async def test_space_create_failure_rolls_back_actual_resource_creator_and_bindi
         monkeypatch.setattr(
             context.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("bindings failed"))
         )
-    with pytest.raises(RuntimeError, match=f"{failure} failed"):
-        await service.create_knowledge_space(name="cancelled")
-    assert state(context) == before
-    KnowledgeService._init_knowledge_indices_sync.assert_not_called()
+    if failure == "bindings":
+        result = await service.create_knowledge_space(name="committed")
+        assert any(row["id"] == result.id for row in state(context)["knowledge"])
+        context.runtime.aapply_source_bindings.assert_not_awaited()
+        KnowledgeService._init_knowledge_indices_sync.assert_called_once()
+    else:
+        with pytest.raises(RuntimeError, match=f"{failure} failed"):
+            await service.create_knowledge_space(name="cancelled")
+        assert state(context) == before
+        KnowledgeService._init_knowledge_indices_sync.assert_not_called()
 
 
 @pytest.mark.parametrize("clear", [False, True])

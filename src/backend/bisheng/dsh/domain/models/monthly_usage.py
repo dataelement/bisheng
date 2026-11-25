@@ -14,7 +14,15 @@ class DshMonthlyUsage(SQLModelSerializable, table=True):
 
     __tablename__ = "dsh_monthly_usage"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "user_id", "usage_month", "model_id", name="uq_dsh_usage_user_model_month"),
+        UniqueConstraint(
+            "tenant_id",
+            "user_id",
+            "usage_month",
+            "usage_type",
+            "model_id",
+            name="uq_dsh_usage_user_type_model_month",
+        ),
+        CheckConstraint("usage_type IN ('MODEL', 'TOOL')", name="ck_dsh_usage_type"),
         CheckConstraint("used_tokens >= 0 AND version >= 0", name="ck_dsh_usage_counters"),
     )
     id: int | None = Field(
@@ -33,6 +41,7 @@ class DshMonthlyUsage(SQLModelSerializable, table=True):
         ),
     )
     model_id: int = Field(sa_column=Column(BigInteger, nullable=False))
+    usage_type: str = Field(default="MODEL", sa_column=Column(String(16), nullable=False, server_default=text("'MODEL'")))
     usage_month: str = Field(sa_column=Column(String(7), nullable=False))
     billing_timezone: str = Field(sa_column=Column(String(64), nullable=False))
     used_tokens: int = Field(default=0, sa_column=Column(BigInteger, nullable=False, server_default=text("0")))

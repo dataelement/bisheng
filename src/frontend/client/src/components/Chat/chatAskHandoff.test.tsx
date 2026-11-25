@@ -171,6 +171,7 @@ test('an article attachment is released once after the old knowledge selection c
 
 const space = { id: '101', name: 'K1' };
 const selection = [{ ...space, type: 'space' }];
+const spaceReferences = { composerReferences: [{ kind: 'space', label: space.name, offset: 0 }] };
 const strictWrapper = StrictMode;
 
 function renderHandoff(activeConversationId = 'new') {
@@ -199,7 +200,7 @@ test('waits for the sending conversation to reach the new route', () => {
   rerender({ activeId: 'new', locationKey: 'landing', send: sendMessage });
   expect(onTake).toHaveBeenCalledTimes(1);
   expect(sendMessage).toHaveBeenCalledTimes(1);
-  expect(sendMessage).toHaveBeenCalledWith('question');
+  expect(sendMessage).toHaveBeenCalledWith('question', null, spaceReferences);
 });
 
 test('keeps a rejected ask until a ready sender accepts it', async () => {
@@ -207,7 +208,7 @@ test('keeps a rejected ask until a ready sender accepts it', async () => {
   sendMessage.mockReturnValue(false);
   parkChatAsk({ text: 'question', space });
   await act(async () => mockActivate());
-  expect(sendMessage).toHaveBeenCalledWith('question');
+  expect(sendMessage).toHaveBeenCalledWith('question', null, spaceReferences);
   const readySend = jest.fn(() => true);
   rerender({ activeId: 'new', locationKey: 'landing', send: readySend });
   expect(readySend).toHaveBeenCalledTimes(1);
@@ -222,7 +223,7 @@ test('activation picks up consecutive asks with the same location and selection'
     act(() => mockActivate());
     act(() => mockActivate());
   }
-  expect(sendMessage.mock.calls).toEqual([['first'], ['second'], ['third']]);
+  expect(sendMessage.mock.calls).toEqual(['first', 'second', 'third'].map(text => [text, null, spaceReferences]));
 });
 
 test('strict effect replay submits a mounted ask exactly once', () => {
@@ -279,7 +280,8 @@ test.each([
     expect(sendMessage).toHaveBeenCalledTimes(0);
   } else {
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith(ask.text);
+    if (ask.space) expect(sendMessage).toHaveBeenCalledWith(ask.text, null, spaceReferences);
+    else expect(sendMessage).toHaveBeenCalledWith(ask.text);
   }
   act(() => { mockActivate(); mockActivate(); });
   expect(sendMessage).toHaveBeenCalledTimes('attachment' in ask ? 0 : 1);
@@ -341,4 +343,10 @@ test('hands the selected tag to its own space before sending', () => {
   const { result, sendMessage } = renderHandoff();
   expect(result.current.selectedKbs).toEqual([{ ...space, type: 'space', tag }]);
   expect(sendMessage).toHaveBeenCalledTimes(1);
+  expect(sendMessage).toHaveBeenCalledWith('tagged question', null, {
+    composerReferences: [
+      ...spaceReferences.composerReferences,
+      { kind: 'space', label: '#Report', offset: 0, is_tag: true },
+    ],
+  });
 });

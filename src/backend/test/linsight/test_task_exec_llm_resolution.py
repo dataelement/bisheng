@@ -40,7 +40,9 @@ def _session(*, model: str | None, svid: str = "SV-1") -> LinsightSessionVersion
 
 @pytest.fixture
 def patch_linsight_conf(monkeypatch: pytest.MonkeyPatch):
-    from bisheng.dsh.domain.services import model_catalog
+    from bisheng.dsh.domain.services import model_catalog, vision
+
+    monkeypatch.setattr(vision, "read_vision", AsyncMock(return_value=SimpleNamespace(vision=False)))
 
     monkeypatch.setattr(
         agent_factory,
@@ -61,8 +63,8 @@ async def test_get_llm_uses_per_task_model(monkeypatch: pytest.MonkeyPatch, patc
     # Tenant default is intentionally absent: only the per-task model can save us.
     monkeypatch.setattr(
         LLMService,
-        "get_workbench_llm",
-        AsyncMock(return_value=SimpleNamespace(linsight_default_model_id=None, models=[])),
+        "get_workbench_llm_candidates",
+        AsyncMock(return_value=SimpleNamespace(linsight_default_model_id=None, models=[SimpleNamespace(id="42")])),
     )
     fake_llm = object()
     get_llm_mock = AsyncMock(return_value=fake_llm)
@@ -70,27 +72,29 @@ async def test_get_llm_uses_per_task_model(monkeypatch: pytest.MonkeyPatch, patc
 
     task = LinsightWorkflowTask()
     task.session_version_id = "SV-1"
-    session_model = _session(model="frontend-model-xyz")
+    session_model = _session(model="42")
 
     result = await task._get_llm(session_model)
 
     assert result is fake_llm
-    assert get_llm_mock.await_args.kwargs["model_id"] == "frontend-model-xyz"
+    assert get_llm_mock.await_args.kwargs["model_id"] == "42"
 
 
 async def test_get_llm_preserves_original_exception(monkeypatch: pytest.MonkeyPatch, patch_linsight_conf):
     """A resolution failure is re-raised as TaskExecutionError chained to the cause."""
     monkeypatch.setattr(
         LLMService,
-        "get_workbench_llm",
-        AsyncMock(return_value=SimpleNamespace(linsight_default_model_id="tenant-default", models=[])),
+        "get_workbench_llm_candidates",
+        AsyncMock(
+            return_value=SimpleNamespace(linsight_default_model_id="tenant-default", models=[SimpleNamespace(id="42")])
+        ),
     )
     original = RuntimeError("model offline")
     monkeypatch.setattr(LLMService, "get_bisheng_linsight_llm", AsyncMock(side_effect=original))
 
     task = LinsightWorkflowTask()
     task.session_version_id = "SV-1"
-    session_model = _session(model="frontend-model-xyz")
+    session_model = _session(model="42")
 
     with pytest.raises(TaskExecutionError) as excinfo:
         await task._get_llm(session_model)

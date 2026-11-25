@@ -151,14 +151,14 @@ it.each(["visible", "error", "pending"])("keeps version history readable without
   expect(ports.setSpacePrimaryVersion).not.toHaveBeenCalled();
 });
 
-it("checks delete on the historical physical file independently of space edit", async () => {
+it("checks delete on the historical physical file requiring file edit as well", async () => {
   mocks.get.mockImplementation(async (url: string) => ({ actions:
-    url.includes("knowledge_space/7/") ? ["visible", "edit"] : ["visible"],
+    url.includes("knowledge_file/11/") ? ["visible", "edit"] : ["visible"],
   }));
   const ports = api();
   mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />);
   expect(await screen.findByRole("button", { name: "history.actions.primary" })).toBeVisible();
-  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions"), undefined));
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions"), { signal: expect.any(AbortSignal) }));
   expect(screen.queryByRole("button", { name: "history.actions.delete" })).not.toBeInTheDocument();
 });
 
@@ -178,7 +178,7 @@ it("ignores late history mutation grants from a retired tenant view", async () =
   }
 });
 
-it("opens version management for a parsed single-version file only with space edit and the feature flag", async () => {
+it("opens version management for a parsed single-version file only with file edit and the feature flag", async () => {
   mocks.get.mockImplementation(async (url: string) => url.endsWith("/my-permissions") ? { actions: ["edit", "upload_file"] } : []);
   const row = (
     <table>
@@ -522,4 +522,16 @@ it("opens the client's two-column similar dialog directly rather than nesting it
   expect(await screen.findByText("section_current_file")).toBeVisible();
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   expect(ports.getSpaceFileVersions).not.toHaveBeenCalled();
+});
+
+
+it("hides history writes when only the space is editable", async () => {
+  mocks.get.mockImplementation(async (url: string) => ({ actions:
+    url.includes("knowledge_space/") ? ["visible", "edit", "delete"] : ["visible", "delete"],
+  }));
+  mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={api()} />);
+  await screen.findByText("old.md");
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions"), { signal: expect.any(AbortSignal) }));
+  expect(screen.queryByRole("button", { name: "history.actions.primary" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "history.actions.delete" })).not.toBeInTheDocument();
 });

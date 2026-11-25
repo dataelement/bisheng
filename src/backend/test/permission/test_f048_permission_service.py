@@ -252,8 +252,8 @@ async def test_concrete_action_relation_is_final_and_visible_is_separate() -> No
     fga.allowed = False
     assert not await service.check_action(_actor(), _target(), "edit")
     assert fga.checks[-1][1] == "can_edit"
-    with pytest.raises(InvalidCatalogActionError):
-        await service.check_action(_actor(), _target(), "visible")
+    assert not await service.check_action(_actor(), _target(), "visible")
+    assert fga.checks[-1][1] == "visible"
 
     fga.allowed = True
     assert await service.check_visible(_actor(), _target())
@@ -394,9 +394,7 @@ async def test_complete_visible_enumeration_is_deduplicated_and_consistent() -> 
         "HIGHER_CONSISTENCY",
     )
     candidate_ids = ("allow", "second", "deny")
-    single = tuple(
-        [await service.check_visible(_actor(), _target(resource_id)) for resource_id in candidate_ids]
-    )
+    single = tuple([await service.check_visible(_actor(), _target(resource_id)) for resource_id in candidate_ids])
     batch = await service.batch_check_visible(
         _actor(),
         tuple(_target(resource_id) for resource_id in candidate_ids),

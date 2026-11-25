@@ -31,8 +31,10 @@ def test_first_llm_fills_every_llm_setting_including_later_ones():
         "linsight_llm.chat_default_model_id",
         "linsight_llm.linsight_default_model_id",
         "linsight_llm.chat_title_llm",
+        "linsight_llm.memory_llm",
     }
     assert [m.id for m in workbench.models] == ["1"]
+    assert workbench.memory_llm.id == "1"
     assert workbench.linsight_default_model_id == "1"
     assert workbench.chat_default_model_id == "1"
     assert workbench.embedding_model is None  # another kind
@@ -53,6 +55,7 @@ def test_defaults_point_into_the_configured_model_list():
     fill_empty_slots(ConfigKeyEnum.LINSIGHT_LLM, workbench, LLM)
 
     assert workbench.linsight_default_model_id == "7"
+    assert workbench.memory_llm.id == "7"
     assert [m.id for m in workbench.models] == ["7"]
 
 

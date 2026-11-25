@@ -143,19 +143,16 @@ async def test_caller_rollback_reverts_business_r2_and_job_ack_together(cutover)
         assert job.state == "running" and job.expected_model_config_revision == original.model_config_revision
 
 
-async def test_r2_failure_cannot_acknowledge_or_publish_model(cutover, monkeypatch):
-    context, owner, job_id, _, original = cutover
-    before = business_state(context)
-    monkeypatch.setattr(
-        context.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("actual R2 failed"))
-    )
+async def test_reference_writer_failure_does_not_block_model_cutover_or_acknowledgement(cutover, monkeypatch):
+    context, _, _, _, _ = cutover
+    binding = AsyncMock(side_effect=RuntimeError("actual R2 failed"))
+    monkeypatch.setattr(context.runtime, "aapply_source_bindings", binding)
     async with context.sessions() as session:
-        with pytest.raises(RuntimeError, match="actual R2 failed"):
-            await finalize(cutover, session)
-        await session.rollback()
-    assert business_state(context) == before
-    async with context.sessions() as session:
-        assert (await owner.jobs.aget(session, job_id)).expected_model_config_revision == original.model_config_revision
+        result = await finalize(cutover, session)
+        assert result.state == "partial_failed"
+        await session.commit()
+    assert next(row for row in business_state(context)["knowledge"] if row["id"] == 40)["model_transition"] is None
+    binding.assert_not_awaited()
 
 
 @pytest.mark.parametrize("invalid", ["lease", "expired", "pending", "missing_acceptance"])

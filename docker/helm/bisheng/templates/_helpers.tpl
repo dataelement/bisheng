@@ -67,6 +67,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
             - {key: {{ .Values.minio.auth.secretKeyKey }}, path: minio/secret-key}
       - secret:
           name: {{ default (include "bisheng.component" (list . "platform-keys")) .Values.global.credentials.existingPlatformSecret }}
+      - secret:
+          name: {{ include "bisheng.keyringSecret" . }}
+          items: [{key: keys.json, path: credential-keys/keys.json}]
 {{- if .Values.elasticsearch.auth.enabled }}
       - secret:
           name: {{ required "elasticsearch.auth.existingSecret is required with basic-auth JSON key" .Values.elasticsearch.auth.existingSecret }}
@@ -119,6 +122,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 - name: render-settings
   image: {{ include "bisheng.image" (list . .Values.backend.image) | quote }}
   command: [python, -m, bisheng.core.config.deployment_renderer]
+  env:
+    - {name: BS_SECRET_KEYS_FILE, value: {{ include "bisheng.keyringFile" . }}}
   args:
 {{- if .Values.config.existingConfigMap }}
     - --existing
@@ -139,6 +144,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "bisheng.backendEnv" -}}
 - {name: config, value: /run/generated/config.yaml}
 - {name: TZ, value: {{ .Values.timezone | quote }}}
+- {name: BS_SECRET_KEYS_FILE, value: {{ include "bisheng.keyringFile" . }}}
 {{- with .Values.config.extraEnv }}
 {{ toYaml . }}
 {{- end }}
@@ -162,7 +168,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and $root.Release.IsUpgrade (not $old) -}}
 {{- $runtimeWasInstalled := false -}}
 {{- if $root.Values.runtime.enabled }}{{ $runtimeWasInstalled = not (empty (lookup "v1" "ConfigMap" $root.Values.runtime.execution.namespace $root.Values.runtime.execution.dataKeyConfigMap)) }}{{ end -}}
-{{- if or (hasSuffix "-platform-keys" $name) (and $runtimeWasInstalled (or (hasSuffix "-identities" $name) (hasSuffix "-issuer" $name) (hasSuffix "-data-signing" $name) (hasSuffix "-internal-tls" $name) (hasSuffix "-admission-tls" $name))) }}{{ fail "owned cryptographic Secret is missing on upgrade; restore the original instead of rotating silently" }}{{ end -}}
+{{- if or (hasSuffix "-platform-keys" $name) (hasSuffix "-credential-keys" $name) (and $runtimeWasInstalled (or (hasSuffix "-identities" $name) (hasSuffix "-issuer" $name) (hasSuffix "-data-signing" $name) (hasSuffix "-internal-tls" $name) (hasSuffix "-admission-tls" $name))) }}{{ fail "owned cryptographic Secret is missing on upgrade; restore the original instead of rotating silently" }}{{ end -}}
 {{- end -}}
 
 {{- if $old -}}
@@ -191,4 +197,24 @@ affinity: {{ toYaml . | nindent 2 }}
 {{- with .Values.bootstrap.tolerations }}
 tolerations: {{ toYaml . | nindent 2 }}
 {{- end }}
+{{- end -}}
+
+{{- /*
+Credential keyring (v3.1.0-beta2 middleware credential governance). Every
+backend-image process reads BS_SECRET_KEYS_FILE ({"version":1,"keys":[...]},
+first key encrypts, all keys decrypt); there is no built-in default key.
+*/ -}}
+{{- define "bisheng.keyringSecret" -}}
+{{- default (include "bisheng.component" (list . "credential-keys")) .Values.global.credentials.existingKeyringSecret -}}
+{{- end -}}
+{{- define "bisheng.keyringFile" -}}/run/settings-secrets/credential-keys/keys.json{{- end -}}
+{{- define "bisheng.credentialEnvGuard" -}}
+{{- $reserved := list "config" "BS_SECRET_KEYS_FILE" "bisheng_DATABASE_URL" -}}
+{{- $envs := concat (default (list) .Values.config.extraEnv) -}}
+{{- range $name := list "backend" "worker" "linsight" "beat" -}}
+{{- $envs = concat $envs (default (list) (index $.Values $name).extraEnv) -}}
+{{- end -}}
+{{- range $env := $envs -}}
+{{- if has $env.name $reserved }}{{ fail (printf "extraEnv must not override %s; credentials come from the chart Secrets and keyring" $env.name) }}{{ end -}}
+{{- end -}}
 {{- end -}}

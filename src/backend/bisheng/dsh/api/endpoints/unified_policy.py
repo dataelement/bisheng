@@ -42,19 +42,17 @@ class _PlatformPolicyAdmin:
 
 
 async def get_policy_admin(request: Request):
-    """DSH management when deployed; otherwise platform tenant-admin authorization."""
+    """DSH management when credit billing is enabled; otherwise platform tenant-admin authorization."""
     from bisheng.common.services.config_service import settings
 
-    if not settings.dsh.enabled:
+    if not settings.credit_billing.enabled:
         return _PlatformPolicyAdmin()
     return await get_management(await get_runtime(request, settings.dsh))
 
 
 def _missing_row_visible_to_everyone() -> bool:
-    """Without DSH every online model is offered until an administrator narrows it."""
-    from bisheng.common.services.config_service import settings
-
-    return not settings.dsh.enabled
+    """Every online model is offered until an administrator narrows it."""
+    return True
 
 
 @router.get("/admin/models/{model_id}/visibility")
@@ -137,7 +135,12 @@ async def month_credits(runtime, tenant_id: int, user_id: int, preview: CreditRu
     """
     from types import SimpleNamespace
 
+    from bisheng.common.services.config_service import settings
+    from bisheng.dsh.domain.schemas.unified_policy import UNLIMITED_TOKEN_LIMIT
+
     period = billing_period(datetime.now(UTC), runtime.settings.billing_timezone)
+    if not settings.credit_billing.enabled:
+        return {**period, **credit_balance(limit=UNLIMITED_TOKEN_LIMIT, used=0), "billing_enabled": False}
     with profile_scope(tenant_id):
         if preview is None:
             limit = (await read_policy(user_id)).monthly_token_limit

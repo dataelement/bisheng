@@ -303,15 +303,21 @@ class DepartmentFlowService:
 
     @classmethod
     @asynccontextmanager
-    async def hold_execution_lease(cls, login_user) -> AsyncIterator[tuple[SlotOutcome, SlotLease | None]]:
+    async def hold_execution_lease(
+        cls, login_user, lease_id: str | None = None
+    ) -> AsyncIterator[tuple[SlotOutcome, SlotLease | None]]:
         """Hold an execution lease for the duration of a request.
 
         Only valid where the owner lives exactly as long as the ``with`` body.
         WebSocket per-message handlers return while the connection lives, and
         streaming endpoints return before the stream starts — those manage
         their own lease.
+
+        ``lease_id`` takes over an execution lease that the caller acquired
+        earlier (``ensure_lease``): it is renewed while the body runs and
+        released when the body ends.
         """
-        outcome, lease = await cls.ensure_lease(login_user)
+        outcome, lease = await cls.ensure_lease(login_user, lease_id)
         task: asyncio.Task | None = None
         if outcome is SlotOutcome.HELD and lease is not None:
             task = cls.start_renewal(lease)

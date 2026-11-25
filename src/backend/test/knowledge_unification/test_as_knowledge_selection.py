@@ -93,7 +93,9 @@ async def test_new_selection_uses_its_actual_business_permission_kind(knowledge_
     context.knowledge_decision.assert_awaited_once()
     _, links, references, _ = await bindings.inspect_business(context)
     assert {row.knowledge_id for row in links} == {10, 20}
-    assert {row.target_id for row in references} == {"2", "10", "20"}
+    assert {row.target_id for row in references} == {"1", "10"}
+    await bindings.refresh_root(101, "assistant", "assistant-a", session_factory=context.sessions)
+    assert {row.target_id for row in (await bindings.inspect_business(context))[2]} == {"2", "10", "20"}
 
 
 async def test_new_target_credential_narrowing_error_is_not_laundered(knowledge_selection):
@@ -117,7 +119,9 @@ async def test_old_hidden_slot_can_stay_or_be_removed_without_a_new_gate(knowled
         )
     context.knowledge_decision.assert_not_awaited()
     _, links, references, _ = await bindings.inspect_business(context)
-    assert not links and {row.target_id for row in references} == {"2"}
+    assert not links and {row.target_id for row in references} == {"1", "10"}
+    await bindings.refresh_root(101, "assistant", "assistant-a", session_factory=context.sessions)
+    assert {row.target_id for row in (await bindings.inspect_business(context))[2]} == {"2"}
 
 
 async def test_old_deleted_slot_does_not_block_an_unrelated_partial_repair(knowledge_selection):
@@ -133,7 +137,7 @@ async def test_old_deleted_slot_does_not_block_an_unrelated_partial_repair(knowl
     context.knowledge_decision.assert_not_awaited()
     assistant, links, references, _ = await bindings.inspect_business(context)
     assert assistant.model_name == "2" and [row.knowledge_id for row in links] == [10]
-    assert {row.target_id for row in references} == {"2", "10"}
+    assert {row.target_id for row in references} == {"1", "10"}
     async with context.sessions() as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await context.runtime.arequire_source_valid(session, bindings.source_key())

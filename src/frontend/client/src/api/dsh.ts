@@ -2,7 +2,13 @@ import request from './request';
 import { parseDshLaunchBase } from '~/utils/dshLaunch';
 
 type Envelope<T> = { status_code: number; data: T };
-export type DshBrowserConfig = { enabled: boolean; management_enabled: boolean; download_url: string | null; launch_url: string };
+export type DshBrowserConfig = {
+  enabled: boolean;
+  management_enabled: boolean;
+  credit_billing_enabled?: boolean;
+  download_url: string | null;
+  launch_url: string;
+};
 function unwrap<T>(result: Envelope<T>): T {
   if (result.status_code !== 200) throw new Error('DSH request failed');
   return result.data;
@@ -14,7 +20,8 @@ export async function getDshBrowserConfig(signal?: AbortSignal): Promise<DshBrow
     const url = new URL(config.download_url);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Invalid download URL');
   }
-  return { ...config, launch_url: parseDshLaunchBase(config.launch_url) };
+  const creditBillingEnabled = typeof config.credit_billing_enabled === 'boolean' ? config.credit_billing_enabled : config.enabled;
+  return { ...config, credit_billing_enabled: creditBillingEnabled, launch_url: parseDshLaunchBase(config.launch_url) };
 }
 export type DshUsageMetrics = {
     message_count: number

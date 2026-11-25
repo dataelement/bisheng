@@ -15,6 +15,7 @@ from bisheng.finetune.api import dependencies
 from bisheng.finetune.domain.models.dataset import FinetuneDataset
 from bisheng.finetune.domain.models.preset_train import PresetTrainDao
 from bisheng.finetune.domain.repositories import dataset as dataset_repository
+from bisheng.finetune.domain.repositories.file_download_repository import FileDownloadRepository
 from bisheng.finetune.domain.services import finetune_file as service
 from bisheng.knowledge.domain import upload_file_size
 from bisheng.knowledge.domain.models import knowledge as knowledge_model
@@ -70,6 +71,28 @@ async def web(datasets, monkeypatch):
     web.menu_check = AsyncMock(side_effect=menu)
     monkeypatch.setattr(UserPayload, "assert_effective_web_menu_contains", web.menu_check)
     monkeypatch.setattr(service, "get_minio_storage", AsyncMock(return_value=web.objects))
+    monkeypatch.setattr(FileDownloadRepository, "preset_by_object", AsyncMock(return_value=None))
+    monkeypatch.setattr(FileDownloadRepository, "owned_jobs", AsyncMock(return_value=[]))
+
+    class MemoryRedis:
+        def __init__(self):
+            self.store = {}
+
+        async def aset(self, key, value, expiration=None):
+            self.store[key] = value
+
+        async def aget(self, key):
+            return self.store.get(key)
+
+    redis = MemoryRedis()
+
+    async def redis_client():
+        return redis
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.preview_source_service.get_redis_client",
+        redis_client,
+    )
     monkeypatch.setattr(
         dependencies,
         "check_tenant_admin",
@@ -316,7 +339,11 @@ async def test_unknown_or_foreign_personal_uploads_are_not_signed(web, url):
 
 async def test_personal_model_uploads_stay_downloadable_only_in_their_original_scope(web):
     web.model_menu = True
-    uploaded = result(await web.client.post("/api/v1/finetune/job/file", files={"files": ("training.json", b'[{"instruction": "q", "output": "a"}]')}))[0]
+    uploaded = result(
+        await web.client.post(
+            "/api/v1/finetune/job/file", files={"files": ("training.json", b'[{"instruction": "q", "output": "a"}]')}
+        )
+    )[0]
     assert "/60/849/" in uploaded["url"]
     result(await web.client.get("/api/v1/finetune/job/file/download", params={"file_url": uploaded["url"]}))
     web.user.tenant_id = 70

@@ -113,9 +113,13 @@ function VersionHistorySession({
     ? downloadQuery.data.inspection.valid_items.filter(item => item.type === "file").map(item => item.id)
     : []);
 
+  const canEdit = (version: VersionHistoryEntry) => {
+    const permission = deletes[deleteIds.indexOf(version.knowledge_file_id)];
+    return permission?.isSuccess === true && !permission.isFetching && permission.data.actions.includes("edit");
+  };
   const canDelete = (version: VersionHistoryEntry) => {
     const permission = deletes[deleteIds.indexOf(version.knowledge_file_id)];
-    return permission?.isSuccess === true && !permission.isFetching && permission.data.actions.includes("delete");
+    return canEdit(version) && permission?.data?.actions.includes("delete") === true;
   };
   const handleChanged = (anchorFileId?: number) => {
     if (anchorFileId !== undefined && isValidId(anchorFileId) && anchorFileId !== readFileId.current) {
@@ -137,6 +141,7 @@ function VersionHistorySession({
       onRetry={() => void query.refetch()}
       unavailable={!validScope || scopeMismatch ? <p role="alert">{localize("com_ui_error")}</p> : undefined}
       canManage={canManage}
+      canSetPrimary={canEdit}
       canDelete={canDelete}
       onPreview={onPreview}
       onDownload={onDownload}

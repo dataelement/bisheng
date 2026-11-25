@@ -318,7 +318,7 @@ async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(
     assert failures == []
     assert [doc.page_content for doc in docs] == ["answer chunk"]
     assert "[file content begin]\nanswer chunk\n[file content end]" in formatted[0]
-    assert permission_calls == [([100], "use")]
+    assert permission_calls == [([100], "visible")]
     assert vector_calls == [
         {
             "invoke_user_id": 42,

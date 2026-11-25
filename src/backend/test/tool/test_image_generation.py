@@ -133,6 +133,17 @@ async def test_settings_api_persists_configuration_and_rejects_invalid_changes(u
             yield db
 
     monkeypatch.setattr(gpts_tools, "get_async_db_session", session)
+    # Configuration validation is isolated from the separately tested permission runtime.
+    from bisheng.common.errcode.http_error import UnAuthorizedError
+
+    edit_allowed = [True]
+
+    async def authorize_edit(login_user, *, resource_type, resource_id, action):
+        assert (resource_type, resource_id, action) == ("tool", 4, "edit")
+        if not edit_allowed[0]:
+            raise UnAuthorizedError()
+
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.require_business_action", authorize_edit)
     tenant = [1]
     monkeypatch.setattr("bisheng.tool.domain.services.tool.get_current_tenant_id", lambda: tenant[0])
     async with session() as db:
@@ -158,7 +169,7 @@ async def test_settings_api_persists_configuration_and_rejects_invalid_changes(u
         )
         await db.commit()
 
-    user = UserPayload(user_id=42, user_role=[1], is_global_super=True)
+    user = UserPayload(user_id=42, user_role=[], is_global_super=False)
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[UserPayload.get_login_user] = lambda: user
@@ -193,9 +204,9 @@ async def test_settings_api_persists_configuration_and_rejects_invalid_changes(u
             ):
                 assert await save({**settings, **change}) == 15033
                 assert json.loads((await GptsToolsDao.aget_one_tool_type(4)).extra) == saved
-            user.is_global_super = False
+            edit_allowed[0] = False
             assert await save(settings) != 200
-            user.is_global_super = True
+            edit_allowed[0] = True
             tenant[0] = 2
             assert await save(settings) != 200
             tenant[0] = 1

@@ -194,7 +194,7 @@ it('loads both real Vite configs with separate API, license and object-storage r
       target: 'http://workspace.example:4001',
       ws: true,
     });
-    expect(platform.server!.proxy!['/bisheng']).toMatchObject({
+    expect(platform.server!.proxy!['/object']).toMatchObject({
       target: 'http://objects.example:9000/',
     });
     expect(platform.server!.proxy!['/apps/']).toMatchObject({
@@ -208,7 +208,7 @@ it('loads both real Vite configs with separate API, license and object-storage r
       target: 'http://api.example:7860',
       ws: true,
     });
-    expect(client.server!.proxy!['/workspace/tmp-dir']).toMatchObject({
+    expect(client.server!.proxy!['^(/workspace)?/object/']).toMatchObject({
       target: 'http://objects.example:9000',
     });
   } finally {

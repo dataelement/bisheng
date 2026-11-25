@@ -196,10 +196,7 @@ class OperationsRuntime:
 def _production_config():
     from bisheng.common.services.config_service import settings
 
-    config = settings.dsh
-    if not config.enabled:
-        raise RuntimeError("DSH is disabled")
-    return settings, config
+    return settings, settings.dsh
 
 
 _worker_runtime: OperationsRuntime | None = None

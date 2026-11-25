@@ -4,6 +4,7 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, Integer, delete, text
 from sqlmodel import Field, col, select
 
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session
@@ -34,6 +35,14 @@ class Server(ServerBase, table=True):
 # Package business operations
 class ServerDao(ServerBase):
     @classmethod
+    def _scope_tenant(cls, tenant_id: int | None) -> int:
+        if tenant_id is None:
+            tenant_id = get_current_tenant_id()
+        if isinstance(tenant_id, bool) or not isinstance(tenant_id, int) or tenant_id <= 0:
+            raise NoTenantContextError()
+        return tenant_id
+
+    @classmethod
     async def find_server(cls, server_id: int) -> Server | None:
         async with get_async_db_session() as session:
             statement = select(Server).where(Server.id == server_id)
@@ -56,7 +65,9 @@ class ServerDao(ServerBase):
                 return list((await session.exec(select(Server.tenant_id, Server.sft_endpoint))).all())
 
     @classmethod
-    async def insert(cls, server: Server) -> Server:
+    async def insert(cls, server: Server, *, tenant_id: int | None = None) -> Server:
+        # Ownership is supplied only by the authorized service scope.
+        server.tenant_id = cls._scope_tenant(tenant_id)
         async with get_async_db_session() as session:
             session.add(server)
             await session.commit()
@@ -64,11 +75,14 @@ class ServerDao(ServerBase):
             return server
 
     @classmethod
-    async def delete(cls, server_id: int) -> None:
-        statement = delete(Server).where(Server.tenant_id == get_current_tenant_id(), col(Server.id) == server_id)
+    async def delete(cls, server_id: int, *, tenant_id: int | None = None) -> bool:
+        # Bulk DELETE is not covered by the SELECT-only tenant event.
+        tenant_id = cls._scope_tenant(tenant_id)
+        statement = delete(Server).where(col(Server.id) == server_id, col(Server.tenant_id) == tenant_id)
         async with get_async_db_session() as session:
-            await session.exec(statement)
+            result = await session.exec(statement)
             await session.commit()
+            return result.rowcount > 0
 
 
 class ServerRead(ServerBase):
@@ -80,7 +94,14 @@ class ServerQuery(ServerBase):
     server: str | None = None
 
 
-class ServerCreate(ServerBase):
+class ServerCreate(SQLModelSerializable):
+    """Client-editable connection fields, never tenant or persistence ownership."""
+
+    endpoint: str
+    sft_endpoint: str = ""
+    server: str
+    remark: str | None = None
+
     @field_validator("sft_endpoint")
     @classmethod
     def validate_ft_endpoint(cls, value):

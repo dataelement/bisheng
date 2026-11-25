@@ -1,5 +1,6 @@
 # flake8: noqa
 """Loads PDF with semantic splilter."""
+
 import base64
 import logging
 import os
@@ -16,6 +17,7 @@ from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
 from bisheng.core.external.http_client.http_client_manager import get_http_client
+from bisheng.core.storage.browser_object_path import browser_object_path
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 
 logger = logging.getLogger(__name__)
@@ -84,11 +86,10 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
         pdf_image_file_name = f"{pdf_page_base_dir}/{page_number}.png"
         image.save(pdf_image_file_name)
         for item in items:
-            cropped_image_file = crop_image(
-                pdf_image_file_name, item, cropped_image_base_dir
-            )
-            result[item["element_id"]] = (
-                f"/{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+            cropped_image_file = crop_image(pdf_image_file_name, item, cropped_image_base_dir)
+            result[item["element_id"]] = browser_object_path(
+                minio_client.bucket,
+                f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}",
             )
     put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result
@@ -104,9 +105,7 @@ def pre_handle(partitions, file_name, knowledge_id):
 
 def merge_partitions(file_name, partitions, knowledge_id=None):
     # Pre-processingpdf, Extracting Images
-    pre_handle_results = pre_handle(
-        partitions=partitions, file_name=file_name, knowledge_id=knowledge_id
-    )
+    pre_handle_results = pre_handle(partitions=partitions, file_name=file_name, knowledge_id=knowledge_id)
     text_elem_sep = "\n"
     doc_content = []
     is_first_elem = True
@@ -139,9 +138,7 @@ def merge_partitions(file_name, partitions, knowledge_id=None):
                     doc_content.append(text_elem_sep + text)
 
         last_label = label
-        metadata["bboxes"].extend(
-            list(map(lambda x: list(map(int, x)), extra_data["bboxes"]))
-        )
+        metadata["bboxes"].extend(list(map(lambda x: list(map(int, x)), extra_data["bboxes"])))
         metadata["pages"].extend(extra_data["pages"])
         metadata["types"].extend(extra_data["types"])
 
@@ -161,21 +158,21 @@ class Etl4lmLoader(BasePDFLoader):
     """
 
     def __init__(
-            self,
-            file_name: str,
-            file_path: str,
-            unstructured_api_key: str = None,
-            unstructured_api_url: str = None,
-            force_ocr: bool = False,
-            enable_formular: bool = True,
-            filter_page_header_footer: bool = False,
-            ocr_sdk_url: str = None,
-            timeout: int = 60,
-            knowledge_id: int = None,
-            start: int = 0,
-            n: int = None,
-            verbose: bool = False,
-            kwargs: dict = {},
+        self,
+        file_name: str,
+        file_path: str,
+        unstructured_api_key: str = None,
+        unstructured_api_url: str = None,
+        force_ocr: bool = False,
+        enable_formular: bool = True,
+        filter_page_header_footer: bool = False,
+        ocr_sdk_url: str = None,
+        timeout: int = 60,
+        knowledge_id: int = None,
+        start: int = 0,
+        n: int = None,
+        verbose: bool = False,
+        kwargs: dict = {},
     ) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
@@ -210,9 +207,7 @@ class Etl4lmLoader(BasePDFLoader):
             parameters=parameters,
         )
         try:
-            resp = requests.post(
-                self.unstructured_api_url, headers=self.headers, json=payload, timeout=self.timemout
-            )
+            resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload, timeout=self.timemout)
         except requests.Timeout as e:
             logger.error(f"Request to etl4lm API timed out: {e}")
             raise Exception("etl4lm server timeout")
@@ -222,25 +217,17 @@ class Etl4lmLoader(BasePDFLoader):
                 raise Exception("etl4lm server timeout")
             raise e
         if resp.status_code != 200:
-            raise Exception(
-                f"file partition {os.path.basename(self.file_name)} failed resp={resp.text}"
-            )
+            raise Exception(f"file partition {os.path.basename(self.file_name)} failed resp={resp.text}")
 
         resp = resp.json()
         if 200 != resp.get("status_code"):
-            logger.info(
-                f"file partition {os.path.basename(self.file_name)} error resp={resp}"
-            )
-            raise Exception(
-                f"file partition error {os.path.basename(self.file_name)} error resp={resp}"
-            )
+            logger.info(f"file partition {os.path.basename(self.file_name)} error resp={resp}")
+            raise Exception(f"file partition error {os.path.basename(self.file_name)} error resp={resp}")
         partitions = resp["partitions"]
         if partitions:
             logger.info(f"content_from_partitions")
             self.partitions = partitions
-            content, metadata = merge_partitions(
-                self.file_path, partitions, self.knowledge_id
-            )
+            content, metadata = merge_partitions(self.file_path, partitions, self.knowledge_id)
         elif resp.get("text"):
             logger.info(f"content_from_text")
             content = resp["text"]
@@ -283,12 +270,13 @@ class Etl4lmLoader(BasePDFLoader):
             parameters=parameters,
         )
         try:
-
             http_client = await get_http_client()
 
             resp = await http_client.post(
-                url=self.unstructured_api_url, headers=self.headers, body=payload,
-                timeout=ClientTimeout(total=self.timemout)
+                url=self.unstructured_api_url,
+                headers=self.headers,
+                body=payload,
+                timeout=ClientTimeout(total=self.timemout),
             )
         except Exception as e:
             if str(e).find("Timeout") != -1:
@@ -296,20 +284,14 @@ class Etl4lmLoader(BasePDFLoader):
                 raise Exception("etl4lm server timeout")
             raise e
         if (resp.status_code != 200) or (resp.body and resp.body.get("status_code") != 200):
-            logger.info(
-                f"file partition {os.path.basename(self.file_name)} error resp={resp}"
-            )
-            raise Exception(
-                f"file partition error {os.path.basename(self.file_name)} error resp={resp}"
-            )
+            logger.info(f"file partition {os.path.basename(self.file_name)} error resp={resp}")
+            raise Exception(f"file partition error {os.path.basename(self.file_name)} error resp={resp}")
 
         partitions = resp.body.get("partitions")
         if partitions:
             logger.info(f"content_from_partitions")
             self.partitions = partitions
-            content, metadata = merge_partitions(
-                self.file_path, partitions, self.knowledge_id
-            )
+            content, metadata = merge_partitions(self.file_path, partitions, self.knowledge_id)
         elif resp.body.get("text"):
             logger.info(f"content_from_text")
             content = resp.body["text"]

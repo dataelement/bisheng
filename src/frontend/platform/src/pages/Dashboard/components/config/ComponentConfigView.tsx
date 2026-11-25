@@ -31,7 +31,7 @@ const {
   handleDragLeave, handleDrop, handleDeleteDimension, handleSortChange, openEditDialog, isStackedChart,
   stackDimensions, handleAggregationChange, handleMetricFormatChange, sortPriorityFields, setDraggingId, handleDropSortPriority,
   draggingId, filterGroup, handleEditFilter, handleDeleteFilter, filter, handleTimeFilterChange,
-  setFilter, setLimitType, setLimitValue, handleUpdateChart, handleDatasetChange, handleDragStart,
+  setFilter, setLimitType, setLimitValue, handleUpdateChart, handleDatasetChange, selectedDatasetCode, hasDatasetDraft, handleDragStart,
   setDatasetFields, handleFieldClick, editDialogOpen, setEditDialogOpen, editingDimension, setEditingDimension,
   saveDisplayName, filterDialogOpen, setFilterDialogOpen, handleSaveFilter, datasetFields } = controller;
 if (!editingComponent) {
@@ -154,7 +154,7 @@ return (
                                   setTitle(newTitle);
                                 }
 
-                                if (editingComponent) {
+                                if (editingComponent && !hasDatasetDraft) {
 
                                   const currentLimitType = limitType;
                                   const currentLimitValue = limitValue;
@@ -504,7 +504,7 @@ if (value === '' || /^\d+$/.test(value)) {
                 <div className="flex-1 overflow-auto">
                   <DatasetSelector
                     isMetricCard={editingComponent?.type === 'metric'}
-                    selectedDatasetCode={editingComponent.dataset_code}
+                    selectedDatasetCode={selectedDatasetCode}
                     onDatasetChange={handleDatasetChange}
                     onDragStart={handleDragStart}
                     onFieldsLoaded={setDatasetFields}
@@ -558,7 +558,7 @@ if (value === '' || /^\d+$/.test(value)) {
         value={filterGroup}
         onChange={handleSaveFilter}
         fields={datasetFields}
-        dataset_code={editingComponent?.dataset_code}
+        dataset_code={selectedDatasetCode}
         filtersLogic={('filtersLogic' in editingComponent.data_config ? editingComponent.data_config.filtersLogic : undefined)}
         dimensions={[...categoryDimensions, ...stackDimensions, ...valueDimensions]}
       />

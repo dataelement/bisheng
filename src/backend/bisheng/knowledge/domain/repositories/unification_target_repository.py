@@ -89,12 +89,17 @@ class KnowledgeMigrationTargetFact:
 
 
 class KnowledgeMigrationTargetRepository:
-    @staticmethod
-    async def _rows(session, statement):
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
+    async def _rows(self, session, statement, *, family=None):
         # The only cross-scope window is an exact <=200 PK projection. This
         # cannot make a filtered foreign row look like a globally missing row.
         with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
-            return {row["id"]: row for row in (await session.execute(statement)).mappings()}
+            rows = tuple((await session.execute(statement)).mappings())
+        if self.fact_view is not None and family is not None:
+            rows = self.fact_view.project_rows(family, rows)
+        return {row["id"]: row for row in rows}
 
     async def ainspect(
         self, session, *, source_key: SourceKey, targets: tuple[TargetKey, ...]
@@ -114,8 +119,51 @@ class KnowledgeMigrationTargetRepository:
                     Knowledge.index_generation,
                     Knowledge.update_time,
                 ).where(Knowledge.id.in_(space_ids)),
+                family="knowledge",
             )
-        if file_ids:
+        if file_ids and self.fact_view is not None:
+            # Rebuild the join from the projected file's parent. Projecting an
+            # existing JOIN would retain aliases from its original parent.
+            files = await self._rows(
+                session,
+                select(
+                    KnowledgeFile.id,
+                    KnowledgeFile.tenant_id,
+                    KnowledgeFile.knowledge_id,
+                    KnowledgeFile.file_type,
+                    KnowledgeFile.update_time,
+                ).where(KnowledgeFile.id.in_(file_ids)),
+                family="knowledgefile",
+            )
+            parent_ids = tuple(dict.fromkeys(row["knowledge_id"] for row in files.values()))
+            parents = (
+                await self._rows(
+                    session,
+                    select(
+                        Knowledge.id,
+                        Knowledge.tenant_id,
+                        Knowledge.type,
+                        Knowledge.model_config_revision,
+                        Knowledge.index_generation,
+                        Knowledge.update_time,
+                    ).where(Knowledge.id.in_(parent_ids)),
+                    family="knowledge",
+                )
+                if parent_ids
+                else {}
+            )
+            for ident, row in tuple(files.items()):
+                parent = parents.get(row["knowledge_id"])
+                files[ident] = {
+                    **row,
+                    "space_id": parent["id"] if parent else None,
+                    "space_tenant": parent["tenant_id"] if parent else None,
+                    "space_type": parent["type"] if parent else None,
+                    "model_config_revision": parent["model_config_revision"] if parent else None,
+                    "index_generation": parent["index_generation"] if parent else None,
+                    "space_update_time": parent["update_time"] if parent else None,
+                }
+        elif file_ids:
             files = await self._rows(
                 session,
                 select(

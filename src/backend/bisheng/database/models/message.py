@@ -447,6 +447,26 @@ class ChatMessageDao(MessageBase):
         return message
 
     @classmethod
+    async def update_fields_by_id(cls, message_id: int, **fields) -> None:
+        """Write the given columns of one row with a single UPDATE, without loading the row."""
+        if not fields:
+            return
+        async with get_async_db_session() as session:
+            await session.exec(update(ChatMessage).where(ChatMessage.id == message_id).values(**fields))
+            await session.commit()
+
+    @classmethod
+    async def adelete_by_id_in_chat(cls, message_id: int, chat_id: str) -> None:
+        """Delete one row of one conversation with a single DELETE.
+
+        A bulk DELETE gets no tenant filter, so the row is addressed by its id
+        AND its conversation id (a uuid that belongs to one tenant).
+        """
+        async with get_async_db_session() as session:
+            await session.exec(delete(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.chat_id == chat_id))
+            await session.commit()
+
+    @classmethod
     def update_message_copied(cls, message_id: int, copied: int):
         with get_sync_db_session() as session:
             statement = (

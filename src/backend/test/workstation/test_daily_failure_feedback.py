@@ -10,12 +10,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import ToolMessage
 from loguru import logger
 from redis.exceptions import ConnectionError as RedisConnectionError
-from starlette.responses import StreamingResponse
 
 ROOT = Path(__file__).resolve().parents[2] / "bisheng"
 SECRET = "redis://:private-password@internal-host:6379/0"
@@ -134,34 +132,50 @@ def test_daily_history_sanitizes_old_provider_errors_and_keeps_partial_answer():
     assert "secret" not in json.dumps(public)
     assert public["message"]["msg"] == "partial answer"
     assert public["extra"]["error_code"] == 12045
+    # The placeholder that replaced ``error_msg`` said nothing and is not sent.
+    assert "error_msg" not in public["extra"]
 
 
-@pytest.mark.parametrize("wrapped", [False, True])
-async def test_unified_task_submit_failure_preserves_source_in_sse(monkeypatch, wrapped):
-    import sys
-    from types import ModuleType
-
-    from bisheng.common.errcode.base import BaseErrorCode
-    from bisheng.common.errcode.http_error import ServerError
-    from bisheng.common.errcode.linsight import LinsightStartTaskError
-
-    cause = RedisConnectionError(SECRET)
-    error = LinsightStartTaskError(exception=cause) if wrapped else cause
-    fake = ModuleType("bisheng.workstation.domain.services.task_submit_service")
-    fake.submit_task_turn = AsyncMock(side_effect=error)
-    monkeypatch.setitem(sys.modules, fake.__name__, fake)
-    ns = _namespace()
-    ns.update(
-        workbench_tenant_id=lambda user: 1,
-        SensitiveWordPolicyService=SimpleNamespace(evaluate_workbench_user_text=lambda *a: None),
-        BaseErrorCode=BaseErrorCode,
-        ServerError=ServerError,
-        StreamingResponse=StreamingResponse,
+def test_daily_history_returns_the_redacted_detail_of_a_failed_answer():
+    """A reloaded failure shows what the live one showed (114, 2026-11-18: the
+    detail section of a reloaded failure only said "Request failed.")."""
+    namespace = _namespace()
+    namespace["_message_base_fields"] = lambda row: {"id": row.id}
+    helpers = _load(
+        "workstation/domain/services/chat_helpers.py",
+        {"_format_new_message", "_normalise_agent_message_content"},
+        namespace,
     )
-    chat = _chat({"_task_mode_stream_completion"}, ns)
-    response = await chat._task_mode_stream_completion(None, SimpleNamespace(text="question"), SimpleNamespace())
-    chunks = [chunk async for chunk in response.body_iterator]
-    text = "".join(chunk.decode() if isinstance(chunk, bytes) else chunk for chunk in chunks)
-    assert SECRET not in text
-    payload = json.loads(text.split("data: ", 1)[1])
-    assert payload["data"]["failure_info"]["category"] == "database"
+
+    def _public_extra(extra: dict) -> dict:
+        row = SimpleNamespace(
+            id=1,
+            category="agent_answer",
+            type="end",
+            extra=json.dumps(extra),
+            message=json.dumps({"msg": "", "events": []}),
+        )
+        return helpers._format_new_message(row)["extra"]
+
+    detail = 'ValueError: "ToolExecutor" object has no field "executor"'
+    public = _public_extra(
+        {
+            "error": True,
+            "error_msg": detail,
+            "error_code": 11091,
+            "error_type": "chat_unknown",
+            "detail": detail,
+            "reference_id": "fdec5972c50d4238a5fe4e2599b4e561",
+            "run_id": "fdec5972c50d4238a5fe4e2599b4e561",
+        }
+    )
+    assert public["detail"] == detail
+    assert public["error_type"] == "chat_unknown"
+    assert public["reference_id"] == "fdec5972c50d4238a5fe4e2599b4e561"
+    assert "Request failed." not in json.dumps(public)
+
+    # A row without a detail gets none, and a detail on a clean row is not sent.
+    assert "detail" not in _public_extra({"error": True, "error_msg": "stream interrupted"})
+    assert "detail" not in _public_extra({"detail": "left over"})
+    leaked = _public_extra({"error": True, "detail": "open /opt/bisheng/conf/config.yaml token=abc at 10.0.0.8:3306"})
+    assert leaked["detail"] == "open <path> token=*** at <host>"

@@ -2,6 +2,8 @@
 
 import re
 
+from loguru import logger
+
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.knowledge.application.unification_conversion_plan import ConversionPlanBuilder
@@ -11,7 +13,10 @@ from bisheng.knowledge.application.unification_permission_namespace import (
     namespace_plan_records,
 )
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
-from bisheng.knowledge.application.unification_structural_retention import creator_retention
+from bisheng.knowledge.application.unification_structural_retention import (
+    historical_creator_retention,
+    rootless_file_retention,
+)
 from bisheng.knowledge.domain.repositories.unification_control_repository import (
     CreatorFact,
     UnificationControlRepository,
@@ -277,7 +282,9 @@ class UnificationPreflight:
             after = members.next_after
         return page.items, by_root, page.items[-1].knowledge_id
 
-    async def aiter_tenant(self, session, *, permission_planner: ResourceRetirementPlanner, planned_at):
+    async def aiter_tenant(
+        self, session, *, permission_planner: ResourceRetirementPlanner, planned_at, retain_rootless_files=False
+    ):
         tenant = get_current_tenant_id()
         namespace = PermissionNamespacePlan(permission_planner=permission_planner)
         catalog_plan = permission_planner.catalog_plan
@@ -321,22 +328,40 @@ class UnificationPreflight:
             "department_spaces",
         ):
             async for rows in self._pages(self.resources, "alist_" + method, session):
+                if method == "files" and retain_rootless_files:
+                    rootless = tuple(row for row in rows if row.knowledge_id not in spaces)
+                    if rootless:
+                        parents = tuple(sorted({row.knowledge_id for row in rootless}))
+                        if await self.resources.ainspect_existing_knowledge_ids(session, knowledge_ids=parents):
+                            _blocked("rootless_parent_exists_outside_tenant")
+                        ids = tuple(row.id for row in rootless)
+                        for start in range(0, len(ids), 199):
+                            if await self.permissions.ainspect_rootless_file_authorization(
+                                session, file_ids=ids[start : start + 199]
+                            ):
+                                _blocked("rootless_original_authorization_exists")
+                        for row in rootless:
+                            data = record_from_row(row).data
+                            proof = rootless_file_retention(data)
+                            yield "control", record_from_values("rootless_file", **data)
+                            yield "control", proof
+                        rows = tuple(row for row in rows if row.knowledge_id in spaces)
                 if method == "resources":
                     headers, member_rows, member_after = await self._membership_batch(session, rows, member_after)
-                    existing = tuple(row.id for row in rows if row.type == 3)
-                    file_counts = {}
-                    for offset in range(0, len(existing), 199):
-                        file_counts.update(
-                            await self.resources.acount_resource_files(
-                                session, resource_ids=existing[offset : offset + 199]
-                            )
-                        )
-                    permitted_missing = frozenset(
-                        row.user_id for row in rows if row.type == 3 and file_counts[row.id] == 0
-                    )
-                    wanted = {row.creator_user_id for row in headers if row.creator_user_id is not None}
+                    permitted_missing = frozenset(row.user_id for row in rows if row.user_id is not None)
+                    wanted = {row.user_id for row in rows if row.user_id is not None}
                     async for fact in creator_facts(wanted, permitted_missing=permitted_missing):
                         yield "control", fact
+                    missing_roots = tuple(
+                        row.id for row in rows if row.user_id in seen_creators and not seen_creators[row.user_id].exists
+                    )
+                    file_counts = {}
+                    for offset in range(0, len(missing_roots), 199):
+                        file_counts.update(
+                            await self.resources.acount_resource_files(
+                                session, resource_ids=missing_roots[offset : offset + 199]
+                            )
+                        )
                     membership_plans = []
                     for header in headers:
                         original_members = tuple(member_rows[header.knowledge_id])
@@ -363,15 +388,25 @@ class UnificationPreflight:
                         spaces[row.id] = data
                         creator = seen_creators.get(row.user_id)
                         if creator is not None and creator.exists is False:
+                            logger.warning(
+                                "F118 retains historical resource {} creator {}; no account or member is created",
+                                row.id,
+                                row.user_id,
+                            )
                             yield (
                                 "control",
-                                creator_retention(
+                                historical_creator_retention(
                                     resource=data,
                                     creator=record_from_row(creator).data,
-                                    managed_file_count=file_counts.get(row.id),
+                                    managed_file_count=file_counts[row.id],
                                 ),
                             )
                     elif method == "files":
+                        if row.object_name and "://" in row.object_name:
+                            logger.warning(
+                                "F118 retains historical file {} locator unchanged; no external object is fetched",
+                                row.id,
+                            )
                         if row.file_type not in {0, 1} or row.knowledge_id not in spaces:
                             _blocked("invalid_file_parent")
                         files[row.id] = {**data}
@@ -395,10 +430,12 @@ class UnificationPreflight:
                         creators.add(creator)
                     namespace.observe(section="resources", tenant_id=tenant, record=record)
                     yield "resources", record
-                async for fact in creator_facts(
-                    creators, permitted_missing=permitted_missing if method == "resources" else frozenset()
-                ):
-                    yield "control", fact
+                if method == "resources":
+                    async for fact in creator_facts(creators, permitted_missing=permitted_missing):
+                        yield "control", fact
+                # File uploaders and tag/QA audit authors do not create owners
+                # or grants. Preserve their original rows/digests without
+                # inventing an existence prerequisite for historical metadata.
             if method == "resources":
                 tail = await self.memberships.apage_headers(session, after_id=member_after, limit=1)
                 if tail.items or tail.next_after is not None:

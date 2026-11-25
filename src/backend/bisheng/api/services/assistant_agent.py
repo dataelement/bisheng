@@ -15,6 +15,7 @@ from loguru import logger
 from pydantic import Field, SkipValidation
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.api.services import assistant_memory
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.assistant.application.execution_admission import AssistantExecutionAdmission
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
@@ -231,6 +232,9 @@ class AssistantAgent(AssistantUtils):
 
         # To record the data tracking points
         self.invoke_user_id = invoke_user_id
+        # F132: set True by ChatClient only on logged-in connections; guest-link
+        # and open-API connections never get memory, whatever chat_id they send.
+        self.memory_allowed = False
 
         self.chat_id = chat_id
         self.tools: list[BaseTool] = []
@@ -246,6 +250,24 @@ class AssistantAgent(AssistantUtils):
         # Knowledge Base Retrieval Related Parameters
         self.knowledge_retriever = {"max_content": 15000, "sort_by_source_and_index": False}
         self.citation_registry_collector = CitationRegistryCollector()
+        # F132: author-configured tools (memory tools are added per turn) and the
+        # memory state of the current turn.
+        self.author_tools: list[BaseTool] | None = None
+        self.memory_tools_on = False
+        self.memory_turn = None
+
+    @staticmethod
+    async def authorize_chat_target(user, assistant_id, chat_id, subject, *, original_assistant_id):
+        from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+
+        await AssistantBoundaryService.authorize_chat_target(
+            user, assistant_id, chat_id, subject, original_assistant_id=original_assistant_id
+        )
+
+    async def refresh_knowledge_authorization(self, callbacks: Callbacks = None):
+        """Rebuild tools before each cached-agent round so revocations take effect."""
+        await self.init_tools(callbacks)
+        await self.init_agent()
 
     async def init_assistant(self, callbacks: Callbacks = None):
         await self._require_current_source()
@@ -309,6 +331,7 @@ class AssistantAgent(AssistantUtils):
             app_name=self.assistant.name,
             app_type=ApplicationTypeEnum.ASSISTANT,
             user_id=self.invoke_user_id,
+            admin_selected=True,
         )
 
     async def init_auto_update_llm(self):
@@ -327,6 +350,7 @@ class AssistantAgent(AssistantUtils):
             app_name=self.assistant.name,
             app_type=ApplicationTypeEnum.ASSISTANT,
             user_id=self.invoke_user_id,
+            admin_selected=True,
         )
 
     async def init_tools(self, callbacks: Callbacks = None):
@@ -362,28 +386,32 @@ class AssistantAgent(AssistantUtils):
         kb_ids: list[int] = []
         space_ids: list[int] = []
         if link_knowledge_ids:
+            from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+            from bisheng.core.context.tenant import get_current_tenant_id
+            from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
             from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+            from bisheng.knowledge.domain.services.space_flow_retrieval import abuild_scoped_login_user
 
-            type_by_id = {row.id: row.type for row in KnowledgeDao.get_list_by_ids(link_knowledge_ids)}
+            tenant_id = get_current_tenant_id()
+            type_by_id = {
+                row.id: row.type
+                for row in KnowledgeDao.get_list_by_ids(link_knowledge_ids)
+                if tenant_id is not None and AssistantBoundaryService._visible_resource(row, tenant_id)
+            }
+            link_knowledge_ids = [item for item in link_knowledge_ids if item in type_by_id]
 
-            # 用户知识库权限校验 only ever reached the knowledge-space branch below.
-            # Ordinary knowledge bases went straight to a retriever built off the
-            # bound id, so a user granted the assistant and nothing else still
-            # searched knowledge bases they had no access to. Apply the same rule
-            # the workflow retrieval node applies: the runtime user's `use`
-            # action. Toggle off keeps the previous behaviour untouched.
-            allowed_kb_ids: set[int] | None = None
+            # ON: filter by the runtime user's entitlement. OFF: no permission
+            # check — every tenant-visible binding is usable (product alignment).
+            ordinary_ids = [
+                knowledge_id
+                for knowledge_id in link_knowledge_ids
+                if type_by_id.get(knowledge_id) != KnowledgeTypeEnum.SPACE.value
+            ]
             if self.assistant.knowledge_auth:
-                from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-
-                allowed_kb_ids = await KnowledgeRag.afilter_usable_knowledge_ids(
-                    self.login_user,
-                    [
-                        knowledge_id
-                        for knowledge_id in link_knowledge_ids
-                        if type_by_id.get(knowledge_id) != KnowledgeTypeEnum.SPACE.value
-                    ],
-                )
+                identity_user = await abuild_scoped_login_user(self.invoke_user_id, self.assistant.tenant_id)
+                allowed_kb_ids = await KnowledgeRag.afilter_usable_knowledge_ids(identity_user, ordinary_ids)
+            else:
+                allowed_kb_ids = set(ordinary_ids)
 
             for knowledge_id in link_knowledge_ids:
                 if type_by_id.get(knowledge_id) == KnowledgeTypeEnum.SPACE.value:
@@ -392,7 +420,7 @@ class AssistantAgent(AssistantUtils):
                     # Dropped silently, as the workflow node drops them: the
                     # knowledge base simply is not among the tools, so the model
                     # answers from what it may actually read.
-                    if allowed_kb_ids is not None and knowledge_id not in allowed_kb_ids:
+                    if knowledge_id not in allowed_kb_ids:
                         continue
                     kb_ids.append(knowledge_id)
                     knowledge_tool = await ToolExecutor.init_knowledge_tool(
@@ -406,24 +434,25 @@ class AssistantAgent(AssistantUtils):
                     )
                     tools.append(knowledge_tool)
         if space_ids:
-            # One tool over all selected spaces; identity by the 用户知识库权限校验 toggle
-            # (runtime user ON / assistant creator OFF).
+            # One tool over all selected spaces. ON → runtime user file filter;
+            # OFF → no file permission filter (product alignment).
             from bisheng.knowledge.domain.services.space_flow_retrieval import build_space_knowledge_tool
 
-            identity_user_id = self.invoke_user_id if self.assistant.knowledge_auth else self.assistant.user_id
             tools.append(
                 build_space_knowledge_tool(
                     name="knowledge_space_retriever",
                     description="在知识空间中检索与查询相关的文档内容。",
                     llm=self.llm,
                     space_ids=space_ids,
-                    identity_user_id=identity_user_id,
+                    identity_user_id=self.invoke_user_id if self.assistant.knowledge_auth else None,
                     tenant_id=self.assistant.tenant_id,
                     max_content=self.knowledge_retriever.get("max_content", 15000),
                     access_scope="per_user" if self.assistant.knowledge_auth else "shared",
                 )
             )
         self.tools = [self.wrap_citation_tool(tool) for tool in tools]
+        self.author_tools = list(self.tools)
+        self.memory_tools_on = False
         kb_name_by_id = self._resolve_kb_name_by_id(kb_ids + space_ids)
         for tool in self.tools:
             if isinstance(tool, AssistantCitationToolWrapper) and tool._has_knowledge_rag_tool():
@@ -640,16 +669,49 @@ class AssistantAgent(AssistantUtils):
         # trim message
         inputs = await self.trim_messages(inputs)
 
+        # F132: memory is applied per turn, after trimming, on a copy of the inputs (R6).
+        turn = await self.begin_memory_turn(callback)
+        inputs = assistant_memory.prepare_inputs(inputs, turn)
+
         if self.current_agent_executor == "ReAct":
             result = await self.react_run(inputs, callback)
         else:
             result = await self.agent.ainvoke({"messages": inputs}, config=RunnableConfig(callbacks=callback))
             result = result["messages"]
 
+        # Drop the injected resident message and redact memory tool messages before
+        # the caller slices and persists the result.
+        result = assistant_memory.finalize_result(result)
+        await assistant_memory.finish_turn(turn, callback)
+
         # Record Chat History
         await self.record_chat_history([one.to_json() for one in result])
 
         return result
+
+    async def after_answer_persisted(self, message_id: int | None, interrupted: bool = False) -> None:
+        """Called by the chat client once the turn's answer row is written (normal or stopped),
+        or with ``None`` when the turn failed without an answer (decision 15, R2)."""
+        turn, self.memory_turn = self.memory_turn, None
+        await assistant_memory.end_turn(self.chat_id, turn, message_id)
+
+    async def begin_memory_turn(self, callback: Callbacks = None):
+        """Re-read the memory switch and rebuild the agent when the tool set changes (decision 11)."""
+        if self.author_tools is None:
+            self.author_tools = list(self.tools)
+        turn = await assistant_memory.begin_turn(
+            self.assistant,
+            self.chat_id if self.memory_allowed else None,
+            callback,
+            actor_user_id=self.invoke_user_id,
+        )
+        self.memory_turn = turn
+        if turn.enabled or self.memory_tools_on:
+            # Memory tools carry this turn's context, so an enabled turn always rebuilds.
+            self.tools = assistant_memory.compose_tools(self.author_tools, turn)
+            self.memory_tools_on = turn.enabled
+            await self.init_agent()
+        return turn
 
     async def astream(self, query: str, chat_history: list | None = None, callback: Callbacks = None):
         """
@@ -666,10 +728,12 @@ class AssistantAgent(AssistantUtils):
 
         # trim message
         inputs = await self.trim_messages(inputs)
+        turn = await self.begin_memory_turn(callback)
+        inputs = assistant_memory.prepare_inputs(inputs, turn)
 
         if self.current_agent_executor == "ReAct":
             # ReActMode temporarily does not support streaming, downgrade to non streaming
-            result = await self.react_run(inputs, callback)
+            result = assistant_memory.finalize_result(await self.react_run(inputs, callback))
             # Record Chat History
             await self.record_chat_history([one.to_json() for one in result])
             yield result

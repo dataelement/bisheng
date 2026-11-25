@@ -35,6 +35,19 @@ async def read_model_pricing(model_id: int) -> dict | None:
     return await LLMService.read_model_pricing(model_id)
 
 
+async def read_ledger_policy(user_id: int):
+    """Accounting metadata for a separately authorized administrator call."""
+
+    def read():
+        from bisheng.core.database import get_sync_db_session
+        from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
+
+        with get_sync_db_session() as session:
+            return UnifiedPolicyRepository(session).ledger_policy(user_id)
+
+    return await asyncio.to_thread(read)
+
+
 async def read_credit_setting():
     """F016: current tenant's credit settings; defaults when the tenant has none."""
 
@@ -155,8 +168,15 @@ async def get_model_runtime(runtime) -> ModelRuntime:
     from bisheng.dsh.domain.services.model_display import read_display_names
 
     audit = ModelAuditRuntime(config, redis)
+    async def read_visible_models(user_id: int) -> list[int]:
+        from bisheng.dsh.domain.services.model_catalog import visible_workbench_models
+
+        entries = await visible_workbench_models(user_id)
+        return [int(item["id"]) for item in entries]
+
     model = DshModelService(
         policy_reader=read_policy,
+        visible_models_reader=read_visible_models,
         model_loader=LLMService.get_dsh_model_snapshot,
         llm_builder=build,
         capabilities_for=capabilities,
