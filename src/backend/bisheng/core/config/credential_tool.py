@@ -24,6 +24,44 @@ class _Parser(argparse.ArgumentParser):
         raise CredentialConfigurationError("arguments: invalid request; use --help")
 
 
+def _fresh_generatable(data):
+    """Allow only the shipped single-node endpoints without customer credentials."""
+    # Fingerprint the delivered MySQL template URL (which has a legacy ciphertext),
+    # never interpret arbitrary ciphertext on a local endpoint as an unset password.
+    db = data.get("database_url", "")
+    if isinstance(db, str) and (
+        db == "mysql+pymysql://root@mysql:3306/bisheng?charset=utf8mb4"
+        or hashlib.sha256(db.encode()).hexdigest() == "76de9e92169ca3b0c570ed53a8eb6bdb16022a485d0b84deb77aa6510a751ca2"
+    ):
+        yield "mysql"
+    if data.get("redis_url") == "redis://redis:6379/1" and data.get("celery_redis_url") == "redis://redis:6379/2":
+        yield "redis"
+    storage = data.get("object_storage") or {}
+    minio = storage.get("minio") or {}
+    if storage.get("type") == "minio" and minio.get("endpoint") == "minio:9000" and not minio.get("secret_key"):
+        yield "minio"
+    vectors = data.get("vector_stores") or {}
+    es = vectors.get("elasticsearch") or {}
+    if (
+        es.get("url") == "http://elasticsearch:9200"
+        and set(es) <= {"url", "ssl_verify"}
+        and es.get("ssl_verify", {}) in ({}, "{}")
+    ):
+        yield "elasticsearch"
+    args = (vectors.get("milvus") or {}).get("connection_args")
+    if isinstance(args, str):
+        args = json.loads(args)
+    if (
+        isinstance(args, dict)
+        and set(args) <= {"host", "port", "user", "password", "secure"}
+        and args.get("host") == "milvus"
+        and str(args.get("port")) == "19530"
+        and args.get("user") in (None, "", "root")
+        and not args.get("password")
+    ):
+        yield "milvus"
+
+
 def redis_password(value):
     if isinstance(value, dict):
         return redis_password(value["url"]) if value.get("url") else value.get("password", "")
@@ -143,6 +181,7 @@ def _parser():
     requirements = sub.add_parser("requirements")
     requirements.add_argument("--config", type=Path, required=True)
     requirements.add_argument("--env-file", type=Path)
+    requirements.add_argument("--fresh-generatable", action="store_true", help=argparse.SUPPRESS)
     validate_key = sub.add_parser("validate-keyring")
     validate_key.add_argument("--key-file", type=Path, required=True)
     join = sub.add_parser("join-keyrings")
@@ -216,6 +255,10 @@ def main(argv=None):
             from bisheng.core.config.credential_loader import load_config
 
             data = load_config(args.config, env_file=args.env_file).data
+            if args.fresh_generatable:
+                for component in _fresh_generatable(data):
+                    print(component)
+                return 0
             for component in COMPONENTS[:5]:
                 print(component)
             telemetry = data.get("telemetry_elasticsearch") or {}
