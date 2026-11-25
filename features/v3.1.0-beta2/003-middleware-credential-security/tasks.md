@@ -13,7 +13,7 @@ Milvus 内部 Base64 消息例外、选项 C 和旧 ES 无认证升级的现行�
 
 | 步骤 | 状态 | 备注 |
 | --- | --- | --- |
-| spec.md | ✅ 已评审 | AC-01～AC-76；门禁记录见 reviews.md |
+| spec.md | ✅ 已评审 | AC-01～AC-76 原门禁见 reviews.md；2026-11-25 已确认首次设密增量 AC-77～79 与设计 |
 | design.md | ✅ 已确认 | 现行正文是选项 C；2026-11-14 密封方案审查只作历史记录 |
 | test-cases.md | ✅ 已编写 | QA 参考；执行证据见 verification.md，不以用例数量宣告全覆盖 |
 | tasks.md | ✅ 已拆解 | 拆解门禁见 reviews.md；逐任务 L1 见 task-reviews.md |

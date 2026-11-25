@@ -409,7 +409,6 @@ def _compile_current(bundle, inspect_stream, secret_gid, env_file=None):
         run_id=json.loads(read_private(Path(bundle) / "manifest.json"))["revision"],
     )
     service = result["compose"]["services"]["elasticsearch"]
-    service["user"] = "0:0"  # Materializer sets UID 1001 ownership before vendor privilege drop.
     enabled = json.loads(read_private(Path(bundle) / "manifest.json")).get("es_security_enabled", True)
     service["environment"]["ELASTICSEARCH_ENABLE_SECURITY"] = "true" if enabled else "false"
     if urlparse(settings_for(bundle, env_file).vector_stores.elasticsearch.elasticsearch_url).scheme == "http":
