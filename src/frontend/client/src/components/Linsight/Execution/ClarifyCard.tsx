@@ -13,11 +13,13 @@ import { Outlined } from 'bisheng-icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Textarea } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
-import { useRunStore, type RunAskUserData } from '~/store/runStore';
+import { useRunStore } from '~/store/runStore';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
-import { composeClarifyAnswer, parseClarifyRequest } from './stepUtils';
+import { composeClarifyAnswer, parseClarifyRequest, runQuestionToClarifyData } from './stepUtils';
 import { ClarifyFallbackCard } from './ClarifyFallbackCard';
+
+export { runQuestionToClarifyData };
 
 interface ClarifyCardProps {
     data: ExecStepEventData;
@@ -35,27 +37,6 @@ interface ClarifyCardProps {
 export function ClarifyCard(props: ClarifyCardProps) {
     const hasQuestions = useMemo(() => parseClarifyRequest(props.data).questions.length > 0, [props.data]);
     return hasQuestions ? <ClarifyCardInteractive {...props} /> : <ClarifyFallbackCard {...props} />;
-}
-
-/**
- * F004 (T050): map the pending question of a run (`ask_user` event, runStore)
- * to the step shape the card parses. Pure. The unified runtime has no task id:
- * the answer is the next message of the conversation.
- */
-export function runQuestionToClarifyData(pending: RunAskUserData): ExecStepEventData {
-    return {
-        call_id: pending.call_id,
-        task_id: '',
-        step_type: 'call_user_input',
-        call_reason: pending.reason || '',
-        params: {
-            tool_calls: (pending.questions || []).map((q, index) => ({
-                id: q.id || `q_${index}`,
-                name: 'ask_user',
-                args: { question: q.question, options: q.options || [], multiple: !!q.multiple },
-            })),
-        },
-    };
 }
 
 interface RunClarifyCardProps {

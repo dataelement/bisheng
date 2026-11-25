@@ -11,6 +11,7 @@ import { MessageTime } from "./MessageTime";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
 import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
 import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
+import { AskedQuestionRow } from "~/components/Chat/Messages/AskedQuestionRow";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
@@ -270,6 +271,9 @@ function AgentTimeline({
                             compactImages={compactImages}
                         />
                     );
+                }
+                if (block.kind === "question") {
+                    return <AskedQuestionRow key={`ask-${i}`} event={block.event} />;
                 }
                 return (
                     <DeepThinkingGroup

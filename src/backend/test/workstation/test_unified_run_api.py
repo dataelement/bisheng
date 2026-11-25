@@ -134,12 +134,25 @@ async def world(monkeypatch: pytest.MonkeyPatch):
             raise run_send.ConversationNotFoundError()
         return session, is_new
 
-    async def insert_question(data, login_user, cid, memory_register, storage_partition=None):
+    async def insert_question(data, login_user, cid, memory_register, storage_partition=None, extra=None):
         row = SimpleNamespace(id=100 + len(w.question_rows), chat_id=cid)
         w.question_rows.append(
-            {"id": row.id, "chat_id": cid, "text": data.text, "storage_partition": storage_partition}
+            {"id": row.id, "chat_id": cid, "text": data.text, "storage_partition": storage_partition, "extra": extra}
         )
         return row
+
+    async def recent_rows(chat_id, category_list=None, limit=10, offset=0):
+        # The question rows as the table returns them (oldest first).
+        return [
+            SimpleNamespace(
+                id=q["id"],
+                is_bot=False,
+                extra=json.dumps(q["extra"] or {}, ensure_ascii=False),
+                message=json.dumps({"query": q["text"], "files": []}, ensure_ascii=False),
+            )
+            for q in w.question_rows
+            if q["chat_id"] == chat_id
+        ][-limit:]
 
     async def model_name(data, login_user):
         return "模型一"
@@ -147,6 +160,7 @@ async def world(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(run_send, "_get_session", get_session)
     monkeypatch.setattr(run_send, "_open_conversation", open_conversation)
     monkeypatch.setattr(run_send, "_insert_question_row", insert_question)
+    monkeypatch.setattr(chat_service.ChatMessageDao, "aget_messages_by_chat_id", recent_rows)
     monkeypatch.setattr(run_send, "_model_display_name", model_name)
     monkeypatch.setattr(run_send, "_spawn_title", lambda *a, **k: None)
     monkeypatch.setattr(UserPayload, "assert_effective_web_menu_contains", AsyncMock(return_value=None))
@@ -599,9 +613,7 @@ async def test_open_api_send_to_a_conversation_of_another_subject_is_404(world: 
     assert no_department_limit["released"] == ["lease-1"]
 
 
-async def test_open_api_send_rejected_by_the_department_limit_is_one_error_frame(
-    world: _World, subject, monkeypatch
-):
+async def test_open_api_send_rejected_by_the_department_limit_is_one_error_frame(world: _World, subject, monkeypatch):
     from bisheng.department.domain.services.department_flow_service import DepartmentFlowService, SlotOutcome
 
     async def rejected(login_user, lease_id=None):
@@ -860,3 +872,42 @@ async def test_follower_backs_off_while_a_held_conversation_has_no_stream(world:
             break
 
     assert sleeps[:7] == [0.05, 0.1, 0.2, 0.4, 0.8, 1.0, 1.0]
+
+
+# --------------------------------------------------------------- answered question
+
+
+async def test_answer_row_keeps_the_question_and_its_answer(world: _World, client: httpx.AsyncClient):
+    """The answer of a parked question is stored on the run's answer row, in place.
+
+    The question row of the answer names the run and keeps the question, so the
+    history can show the question and its answer inside the answer row.
+    """
+    question = {"call_id": "c1", "reason": "", "questions": [{"id": "q1", "question": "做哪种网页"}]}
+    world.script = [
+        {"type": "text", "data": {"text": "先问一下。"}},
+        {"type": "tool_call", "data": {"call_id": "c1", "name": "ask_user", "status": "start", "params": {}}},
+        {"type": "ask_user", "data": question},
+    ]
+    first = await client.post(f"{PREFIX}/chat/completions", json=_body(text="做个网页"), headers=V2)
+    run_id = first.json()["data"]["run_id"]
+    await asyncio.gather(*world.tasks)
+    assert (await world.state()).status == "waiting"
+
+    world.script = [
+        {"type": "ask_user_answered", "data": {"call_id": "c1", "answer": "活动宣传页"}},
+        {"type": "text", "data": {"text": "好的。"}},
+        {"type": "run_finished", "data": {}},
+    ]
+    second = await client.post(f"{PREFIX}/chat/completions", json=_body(text="活动宣传页"), headers=V2)
+    assert second.json()["data"]["run_id"] == run_id
+    await asyncio.gather(*world.tasks)
+
+    assert world.question_rows[0]["extra"] is None
+    assert world.question_rows[1]["extra"] == {"run_id": run_id, "ask_user": question}
+    (row,) = world.answer_rows
+    events = json.loads(row.message)["events"]
+    assert events[0] == {"type": "text", "content": "先问一下。"}
+    asked = events[1]
+    assert (asked["type"], asked["tool_name"], asked["tool_call_id"]) == ("tool_call", "ask_user", "c1")
+    assert asked["args"] == question and asked["results"] == "活动宣传页"

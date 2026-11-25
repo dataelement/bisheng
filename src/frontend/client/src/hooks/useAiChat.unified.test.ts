@@ -195,7 +195,7 @@ describe("conversation page", () => {
     expect(selectIsMessageQueued("c9", "m2")(useRunStore.getState())).toBe(false);
   });
 
-  it("answers a pending question without a second answer row and clears the question", async () => {
+  it("answers a pending question in the run's answer row and clears the question", async () => {
     mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
     const { result } = renderChat("c9");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
@@ -207,7 +207,8 @@ describe("conversation page", () => {
     await act(async () => {
       await result.current.sendMessage("the second one");
     });
-    expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "run:r1", "m3"]);
+    // The answer is no row of its own: the answer row shows the question with it.
+    expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "run:r1"]);
     const run = useRunStore.getState().conversations.c9.run;
     expect(run?.pendingQuestion).toBeNull();
     expect(run?.status).toBe("running");
