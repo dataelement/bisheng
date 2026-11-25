@@ -17,36 +17,42 @@ const call = (over: Partial<AgentToolCall> = {}): AgentToolCall => ({
     ...over,
 });
 
-describe('generic tool row: view code and output (AC-25)', () => {
+const row = () => screen.getByText('com_tools_state_tool_done').closest('button') as HTMLButtonElement;
+
+describe('generic tool row: clicking the row shows code and output (AC-25)', () => {
     it('opens the code and the output, then collapses', () => {
         render(<ToolCallDisplay toolCall={call()} />);
         expect(screen.queryByText('print(1 + 1)')).toBeNull();
-        fireEvent.click(screen.getByText('runTool.viewCodeOutput'));
+        expect(row()).not.toBeDisabled();
+        fireEvent.click(row());
         expect(screen.getByText('runTool.code')).toBeInTheDocument();
         expect(screen.getByText('print(1 + 1)')).toBeInTheDocument();
         expect(screen.getByText('runTool.output')).toBeInTheDocument();
         expect(screen.getByText('2')).toBeInTheDocument();
-        fireEvent.click(screen.getByText('runTool.collapse'));
+        fireEvent.click(row());
         expect(screen.queryByText('print(1 + 1)')).toBeNull();
     });
     it('shows all parameters when the call carries no code', () => {
         render(<ToolCallDisplay toolCall={call({ tool_name: 'weather', args: { city: 'Taipei' }, results: { temp: 21 } })} />);
-        fireEvent.click(screen.getByText('runTool.viewCodeOutput'));
+        fireEvent.click(row());
         expect(screen.getByText('runTool.params')).toBeInTheDocument();
         expect(screen.getByText(/"city": "Taipei"/)).toBeInTheDocument();
         expect(screen.getByText(/"temp": 21/)).toBeInTheDocument();
     });
-    it('is absent while the call runs, after it failed, and when it has nothing to show', () => {
-        const { rerender } = render(<ToolCallDisplay toolCall={call({ inflight: true })} />);
-        expect(screen.queryByText('runTool.viewCodeOutput')).toBeNull();
-        rerender(<ToolCallDisplay toolCall={call({ error: 'boom' })} />);
-        expect(screen.queryByText('runTool.viewCodeOutput')).toBeNull();
-        rerender(<ToolCallDisplay toolCall={call({ args: undefined, results: undefined })} />);
-        expect(screen.queryByText('runTool.viewCodeOutput')).toBeNull();
+    it('has no separate link', () => {
+        render(<ToolCallDisplay toolCall={call()} />);
+        expect(screen.getAllByRole('button')).toHaveLength(1);
     });
-    it('is absent on knowledge and web rows', () => {
-        render(<ToolCallDisplay toolCall={call({ tool_name: 'web_search', tool_type: 'web', results: [] })} />);
-        expect(screen.queryByText('runTool.viewCodeOutput')).toBeNull();
+    it('does not expand while the call runs or when it has nothing to show', () => {
+        const { rerender } = render(<ToolCallDisplay toolCall={call({ inflight: true })} />);
+        expect(screen.queryByText('runTool.code')).toBeNull();
+        rerender(<ToolCallDisplay toolCall={call({ args: undefined, results: undefined })} />);
+        expect(row()).toBeDisabled();
+    });
+    it('a failed call shows its error, not code and output', () => {
+        render(<ToolCallDisplay toolCall={call({ error: 'boom' })} />);
+        expect(screen.getByText('boom')).toBeInTheDocument();
+        expect(screen.queryByText('runTool.code')).toBeNull();
     });
 });
 
