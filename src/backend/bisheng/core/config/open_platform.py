@@ -93,6 +93,8 @@ class OpenMcpConf(BaseModel):
     connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     read_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
     max_redirects: int = Field(default=3, ge=0, le=10)
+    # Text model used by bisheng_knowledge_answer when the caller does not pass model_id.
+    answer_default_model_id: int | None = Field(default=None, ge=1)
 
     @field_validator("file_url_allowed_hosts")
     @classmethod

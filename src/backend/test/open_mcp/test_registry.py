@@ -26,6 +26,9 @@ EXPECTED_SOURCES = {
     ("PUT", "/api/v2/knowledge/file/modify_user_metadata"),
     ("DELETE", "/api/v2/knowledge/file/delete_user_metadata"),
     ("POST", "/api/v2/knowledge/file/list_user_metadata"),
+    ("POST", "/api/v2/filelib/answer"),
+    ("POST", "/api/v2/filelib/chunks"),
+    ("POST", "/api/v2/filelib/chunks_string"),
 }
 
 
@@ -45,8 +48,8 @@ def _principal(*, actor_kind="service_account", scopes=frozenset({"knowledge:rea
     )
 
 
-def test_allowlist_is_exactly_twenty_four_and_bidirectional():
-    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 24
+def test_allowlist_is_exactly_twenty_seven_and_bidirectional():
+    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 27
     assert SOURCE_ALLOWLIST == EXPECTED_SOURCES
 
 
@@ -58,10 +61,11 @@ def test_pat_only_discovers_the_read_tools():
         "bisheng_knowledge_file_list",
         "bisheng_knowledge_qa_query",
         "bisheng_knowledge_qa_detail",
+        "bisheng_knowledge_answer",
     }
 
 
 def test_service_account_discovery_obeys_scope():
     tools = list_tools_for(_principal(scopes=frozenset({"knowledge:write"})))
-    assert len(tools) == 19
+    assert len(tools) == 21
     assert all(TOOL_REGISTRY[tool.name].scope == "knowledge:write" for tool in tools)

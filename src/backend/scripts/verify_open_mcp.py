@@ -57,6 +57,9 @@ EXPECTED_TOOL_NAMES = frozenset(
         "bisheng_knowledge_file_metadata_modify",
         "bisheng_knowledge_file_metadata_delete",
         "bisheng_knowledge_file_metadata_list",
+        "bisheng_knowledge_answer",
+        "bisheng_knowledge_chunks_upload",
+        "bisheng_knowledge_chunks_text",
     }
 )
 READ_ONLY_TOOL_NAMES = frozenset(
@@ -66,6 +69,7 @@ READ_ONLY_TOOL_NAMES = frozenset(
         "bisheng_knowledge_file_list",
         "bisheng_knowledge_qa_query",
         "bisheng_knowledge_qa_detail",
+        "bisheng_knowledge_answer",
     }
 )
 EXPECTED_PROFILES = {

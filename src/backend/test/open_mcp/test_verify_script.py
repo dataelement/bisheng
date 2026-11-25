@@ -27,6 +27,7 @@ def test_verifier_allowlist_and_calls_are_read_only():
         "bisheng_knowledge_file_list",
         "bisheng_knowledge_qa_query",
         "bisheng_knowledge_qa_detail",
+        "bisheng_knowledge_answer",
     }
     args = script._parser().parse_args(
         [

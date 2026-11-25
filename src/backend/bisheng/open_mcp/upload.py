@@ -109,6 +109,11 @@ def _safe_file_name(value: str) -> str:
     return normalized
 
 
+def safe_file_name(value: str) -> str:
+    """Reject path-like file names; shared by every MCP tool that names a stored file."""
+    return _safe_file_name(value)
+
+
 def _staged_file_name(file_hash: str, file_name: str) -> str:
     suffix = file_name[-60:]
     while len(suffix.encode("utf-8")) > 180:
@@ -284,5 +289,6 @@ async def prepared_upload(source: KnowledgeFileUploadInput) -> AsyncIterator[tup
 __all__ = [
     "McpUploadError",
     "prepared_upload",
+    "safe_file_name",
     "validate_outbound_url",
 ]

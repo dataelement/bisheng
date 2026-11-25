@@ -561,6 +561,83 @@ class FileMetadataListData(McpContract):
     items: dict[str, Any] = Field(description="键为文件 ID(字符串), 值为该文件的自定义元数据。")
 
 
+class AnswerSpaceFilter(McpContract):
+    knowledge_base_id: int = Field(gt=0)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AnswerFilters(McpContract):
+    knowledge_base_filters: list[AnswerSpaceFilter] = Field(default_factory=list, max_length=20)
+
+
+class KnowledgeAnswerInput(McpContract):
+    query: str = Field(min_length=1, max_length=4096)
+    knowledge_base_ids: list[int] = Field(min_length=1, max_length=20, description="仅支持知识空间。")
+    model_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="作答用的文本模型 ID; 不传则使用服务端配置的默认模型, 调用方通常不需要传。",
+    )
+    filters: AnswerFilters | None = None
+    top_k: int = Field(default=10, ge=1, le=50)
+    max_content: int = Field(default=15000, ge=1, le=60000)
+
+
+class AnswerReference(McpContract):
+    knowledge_id: int = Field(description="参考文件所属知识空间 ID。")
+    document_id: int = Field(description="参考文件 ID。")
+    document_name: str = Field(description="参考文件名称。")
+    document_update_time: str = Field(default="", description="文件最后更新时间; 不可用时为空字符串。")
+
+
+class KnowledgeAnswerData(McpContract):
+    answer: str = Field(description="由服务端模型基于检索结果生成的答案。")
+    has_context: bool = Field(description="是否检索到可用上下文; false 时答案不是依据知识库生成。")
+    model_id: int = Field(description="实际使用的模型 ID。")
+    references: list[AnswerReference] = Field(description="答案依据的参考文件, 粒度为文件, 不含段序号。")
+
+
+class KnowledgeChunksUploadInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+    file_name: str | None = Field(default=None, min_length=1, max_length=255)
+    content_base64: str | None = Field(default=None, max_length=settings.open_mcp.max_base64_characters)
+    file_url: AnyHttpUrl | None = None
+    split_mode: Literal["auto", "custom", "hierarchical"] = "auto"
+    separator: list[str] | None = None
+    separator_rule: list[str] | None = None
+    chunk_size: int | None = Field(default=None, ge=1)
+    chunk_overlap: int | None = Field(default=None, ge=0)
+    hierarchy_level: int = Field(default=3, ge=1)
+    append_title: bool = False
+    max_chunk_size: int = Field(default=1000, ge=1)
+
+    @model_validator(mode="after")
+    def validate_file_source(self):
+        has_inline = self.content_base64 is not None
+        has_url = self.file_url is not None
+        if has_inline == has_url:
+            raise ValueError("exactly one of content_base64 or file_url is required")
+        if has_inline and not self.file_name:
+            raise ValueError("file_name is required with content_base64")
+        return self
+
+
+class ChunkMetadata(McpContract):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    source: str = Field(min_length=1, max_length=255, description="文件名; 第一段的 source 决定入库的文件名。")
+
+
+class ChunkText(McpContract):
+    page_content: str = Field(min_length=1, description="文本段内容。")
+    metadata: ChunkMetadata
+
+
+class KnowledgeChunksTextInput(McpContract):
+    knowledge_id: int = Field(gt=0)
+    documents: list[ChunkText] = Field(min_length=1, max_length=500)
+
+
 MCP_INPUT_MODELS = {
     "bisheng_knowledge_list": KnowledgeListInput,
     "bisheng_knowledge_create": KnowledgeCreateInput,
@@ -578,6 +655,9 @@ MCP_INPUT_MODELS = {
     "bisheng_knowledge_qa_add_relative": QaAddRelativeInput,
     "bisheng_knowledge_qa_update": QaUpdateInput,
     "bisheng_knowledge_qa_delete": QaDeleteInput,
+    "bisheng_knowledge_answer": KnowledgeAnswerInput,
+    "bisheng_knowledge_chunks_upload": KnowledgeChunksUploadInput,
+    "bisheng_knowledge_chunks_text": KnowledgeChunksTextInput,
     "bisheng_knowledge_metadata_fields_add": MetadataFieldsAddInput,
     "bisheng_knowledge_metadata_fields_rename": MetadataFieldsRenameInput,
     "bisheng_knowledge_metadata_fields_delete": MetadataFieldsDeleteInput,
@@ -597,6 +677,7 @@ __all__ = [
     "KnowledgeResource",
     "OperationResult",
     "FileMetadataListData",
+    "KnowledgeAnswerData",
     "MetadataFieldsData",
     "QaItem",
     "QaListData",

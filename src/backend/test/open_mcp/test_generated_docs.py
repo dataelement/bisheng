@@ -9,7 +9,7 @@ PUBLIC_DOC = BACKEND_ROOT / "docs/api/open-mcp.md"
 def test_public_doc_covers_the_exact_registry_allowlist():
     content = PUBLIC_DOC.read_text(encoding="utf-8")
 
-    assert "24 个知识资源、知识文件、问答条目和元数据工具" in content
+    assert "27 个知识资源、知识文件、问答条目、元数据、分段导入和服务端作答工具" in content
     assert "https://<BISHENG_HOST>/api/v2/mcp" in content
     for definition in TOOL_DEFINITIONS:
         assert content.count(f"`{definition.name}`") >= 1
