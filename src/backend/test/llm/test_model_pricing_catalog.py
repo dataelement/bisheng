@@ -11,12 +11,12 @@ from bisheng.llm.domain.pricing.catalog import PriceCatalog, catalog_pricing, lo
 
 def test_bundled_catalog_is_valid_and_prices_convert():
     catalog = load_catalog()
-    assert catalog.version == "2026-11-16"
+    assert catalog.version == "2026-11-25"
     assert len(catalog.entries) >= 80
     for entry in catalog.entries:
         pricing = catalog_pricing(entry)
         assert isinstance(pricing, ModelPricing)
-        assert (pricing.source, pricing.catalog_key, pricing.catalog_version) == ("CATALOG", entry.key, "2026-11-16")
+        assert (pricing.source, pricing.catalog_key, pricing.catalog_version) == ("CATALOG", entry.key, "2026-11-25")
         assert entry.source_url.startswith("https://")
 
 

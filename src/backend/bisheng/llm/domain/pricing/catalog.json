@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-16",
+  "version": "2026-11-25",
   "entries": [
     {
       "key": "deepseek/deepseek-v4-pro",
@@ -18,7 +18,7 @@
       "cache_write": null,
       "output": "27",
       "source_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "deepseek/deepseek-flash",
@@ -37,7 +37,7 @@
       "cache_write": null,
       "output": "8",
       "source_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen4-max",
@@ -56,7 +56,7 @@
       "cache_write": "12.5",
       "output": "30",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.8-max",
@@ -75,7 +75,7 @@
       "cache_write": null,
       "output": "36",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.7-max",
@@ -94,7 +94,7 @@
       "cache_write": "15",
       "output": "36",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.7-plus",
@@ -113,7 +113,7 @@
       "cache_write": "2.5",
       "output": "8",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.6-plus",
@@ -132,7 +132,7 @@
       "cache_write": "2.5",
       "output": "12",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.5-plus",
@@ -151,7 +151,7 @@
       "cache_write": "1",
       "output": "4.8",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.8-flash",
@@ -170,7 +170,7 @@
       "cache_write": null,
       "output": "2.7",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.7-flash",
@@ -189,7 +189,7 @@
       "cache_write": "0.25",
       "output": "0.8",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.6-flash",
@@ -208,7 +208,7 @@
       "cache_write": "1.5",
       "output": "7.2",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3.5-flash",
@@ -227,7 +227,7 @@
       "cache_write": "0.25",
       "output": "2",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen3-coder-flash",
@@ -246,7 +246,7 @@
       "cache_write": "1.25",
       "output": "4",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen-max",
@@ -266,7 +266,7 @@
       "cache_write": "3",
       "output": "9.6",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen-plus",
@@ -286,7 +286,7 @@
       "cache_write": "1",
       "output": "2",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen-flash",
@@ -305,7 +305,7 @@
       "cache_write": "0.1875",
       "output": "1.5",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qwen/qwen-long",
@@ -325,7 +325,7 @@
       "cache_write": "0.625",
       "output": "2",
       "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "volcengine/doubao-seed-2.1-pro",
@@ -347,7 +347,7 @@
       "cache_write": null,
       "output": "30",
       "source_url": "https://www.volcengine.com/docs/82379/1544106",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "volcengine/doubao-seed-evolving",
@@ -366,7 +366,7 @@
       "cache_write": null,
       "output": "30",
       "source_url": "https://www.volcengine.com/docs/82379/1544106",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "volcengine/doubao-seed-2.1-turbo",
@@ -387,7 +387,7 @@
       "cache_write": null,
       "output": "15",
       "source_url": "https://www.volcengine.com/docs/82379/1544106",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "volcengine/doubao-seed-2.1-lite",
@@ -408,7 +408,7 @@
       "cache_write": null,
       "output": "2.7",
       "source_url": "https://www.volcengine.com/docs/82379/1544106",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "volcengine/doubao-seed-2.0-pro",
@@ -428,7 +428,47 @@
       "cache_write": null,
       "output": "16",
       "source_url": "https://www.volcengine.com/docs/82379/1544106",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "volcengine/doubao-seed-2.0-lite",
+      "vendor": "字节豆包",
+      "label": "豆包 Seed 2.0 Lite",
+      "provider_types": [
+        "volcengine",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "doubao-seed-2.0-lite",
+        "doubao-seed-2-0-lite"
+      ],
+      "currency": "CNY",
+      "input": "0.6",
+      "cache_read": "0.12",
+      "cache_write": null,
+      "output": "3.6",
+      "source_url": "https://ark.volcengine.com/region:cn-beijing/docs/model-pricing",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "volcengine/doubao-seed-2.0-mini",
+      "vendor": "字节豆包",
+      "label": "豆包 Seed 2.0 Mini",
+      "provider_types": [
+        "volcengine",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "doubao-seed-2.0-mini",
+        "doubao-seed-2-0-mini"
+      ],
+      "currency": "CNY",
+      "input": "0.2",
+      "cache_read": "0.04",
+      "cache_write": null,
+      "output": "2",
+      "source_url": "https://ark.volcengine.com/region:cn-beijing/docs/model-pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "volcengine/doubao-seed-1.6",
@@ -469,7 +509,46 @@
       "cache_write": null,
       "output": "28",
       "source_url": "https://open.bigmodel.cn/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "zhipu/glm-5.3-flashx",
+      "vendor": "智谱",
+      "label": "GLM-5.3-FlashX",
+      "provider_types": [
+        "zhipu",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "glm-5.3-flashx",
+        "glm-5.3-flashx-legal"
+      ],
+      "currency": "CNY",
+      "input": "2",
+      "cache_read": "0.57",
+      "cache_write": null,
+      "output": "7",
+      "source_url": "https://docs.bigmodel.cn/cn/guide/start/pricing",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "zhipu/glm-5.3-flash",
+      "vendor": "智谱",
+      "label": "GLM-5.3-Flash",
+      "provider_types": [
+        "zhipu",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "glm-5.3-flash"
+      ],
+      "currency": "CNY",
+      "input": "0.8",
+      "cache_read": "0.23",
+      "cache_write": null,
+      "output": "2.8",
+      "source_url": "https://docs.bigmodel.cn/cn/guide/start/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "zhipu/glm-5.2",
@@ -488,7 +567,7 @@
       "cache_write": null,
       "output": "28",
       "source_url": "https://open.bigmodel.cn/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "zhipu/glm-4.7",
@@ -546,7 +625,7 @@
       "cache_write": "13",
       "output": "68",
       "source_url": "https://platform.moonshot.cn/docs/pricing/chat",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "moonshot/kimi-k3.1-pro-highspeed",
@@ -565,7 +644,7 @@
       "cache_write": "26",
       "output": "136",
       "source_url": "https://platform.moonshot.cn/docs/pricing/chat",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "moonshot/kimi-k3",
@@ -584,7 +663,7 @@
       "cache_write": "20",
       "output": "100",
       "source_url": "https://platform.moonshot.cn/docs/pricing/chat",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "minimax/minimax-m3",
@@ -602,8 +681,8 @@
       "cache_read": "0.42",
       "cache_write": null,
       "output": "8.4",
-      "source_url": "https://platform.minimaxi.com",
-      "verified_at": "2026-11-16"
+      "source_url": "https://platform.minimaxi.com/docs/guides/pricing-paygo",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "minimax/minimax-m3.1-flash",
@@ -621,8 +700,8 @@
       "cache_read": "0.1",
       "cache_write": null,
       "output": "4",
-      "source_url": "https://platform.minimaxi.com",
-      "verified_at": "2026-11-16"
+      "source_url": "https://platform.minimaxi.com/docs/guides/pricing-paygo",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qianfan/ernie-5.5-flash-preview",
@@ -641,7 +720,7 @@
       "cache_write": null,
       "output": "8",
       "source_url": "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "qianfan/ernie-5.1",
@@ -660,7 +739,7 @@
       "cache_write": null,
       "output": "18",
       "source_url": "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "tencent/hy4",
@@ -678,8 +757,46 @@
       "cache_read": "0.3",
       "cache_write": null,
       "output": "18",
-      "source_url": "https://cloud.tencent.com/document/product/1823/130051",
-      "verified_at": "2026-11-16"
+      "source_url": "https://cloud.tencent.com/document/product/1823/130055",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "tencent/hy4-preview",
+      "vendor": "腾讯混元",
+      "label": "混元 Hy4 Preview",
+      "provider_types": [
+        "tencent",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "hy4-preview"
+      ],
+      "currency": "CNY",
+      "input": "6",
+      "cache_read": "0.3",
+      "cache_write": null,
+      "output": "18",
+      "source_url": "https://cloud.tencent.com/document/product/1823/130055",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "tencent/hy4-flash",
+      "vendor": "腾讯混元",
+      "label": "混元 Hy4 Flash",
+      "provider_types": [
+        "tencent",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "hy4-flash"
+      ],
+      "currency": "CNY",
+      "input": "0.5",
+      "cache_read": "0.02",
+      "cache_write": null,
+      "output": "2",
+      "source_url": "https://cloud.tencent.com/document/product/1823/130055",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "tencent/hy3",
@@ -697,8 +814,8 @@
       "cache_read": "0.25",
       "cache_write": null,
       "output": "4",
-      "source_url": "https://cloud.tencent.com/document/product/1823/130051",
-      "verified_at": "2026-11-16"
+      "source_url": "https://cloud.tencent.com/document/product/1823/130055",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "tencent/hy3-preview",
@@ -716,8 +833,8 @@
       "cache_read": "0.4",
       "cache_write": null,
       "output": "4",
-      "source_url": "https://cloud.tencent.com/document/product/1823/130051",
-      "verified_at": "2026-11-16"
+      "source_url": "https://cloud.tencent.com/document/product/1823/130055",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "spark/spark-x2.6",
@@ -736,7 +853,7 @@
       "cache_write": null,
       "output": "6",
       "source_url": "https://maas.xfyun.cn/modelSquare",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "spark/spark-x2.5",
@@ -755,7 +872,47 @@
       "cache_write": null,
       "output": "12",
       "source_url": "https://maas.xfyun.cn/modelSquare",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/gpt-6.2-astra",
+      "vendor": "OpenAI",
+      "label": "GPT-6.2 Astra",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-6.2-astra"
+      ],
+      "currency": "USD",
+      "input": "8",
+      "cache_read": "0.4",
+      "cache_write": null,
+      "output": "40",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/gpt-6.2-sol",
+      "vendor": "OpenAI",
+      "label": "GPT-6.2 Sol",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-6.2-sol"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.1",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-6-astra",
@@ -775,7 +932,7 @@
       "cache_write": null,
       "output": "50",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-6.1-sol",
@@ -795,7 +952,7 @@
       "cache_write": null,
       "output": "10",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-6.1-terra",
@@ -815,7 +972,7 @@
       "cache_write": null,
       "output": "5",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-6-sol",
@@ -835,7 +992,7 @@
       "cache_write": null,
       "output": "10",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-6-luna",
@@ -855,7 +1012,7 @@
       "cache_write": null,
       "output": "0.5",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5.6-sol",
@@ -875,7 +1032,7 @@
       "cache_write": null,
       "output": "20",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5.6-terra",
@@ -895,7 +1052,7 @@
       "cache_write": null,
       "output": "12",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5.6-luna",
@@ -915,7 +1072,7 @@
       "cache_write": null,
       "output": "1.2",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5.5",
@@ -935,7 +1092,27 @@
       "cache_write": null,
       "output": "30",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/gpt-5.5-pro",
+      "vendor": "OpenAI",
+      "label": "GPT-5.5 Pro",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.5-pro"
+      ],
+      "currency": "USD",
+      "input": "30",
+      "cache_read": "30",
+      "cache_write": null,
+      "output": "180",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5.4",
@@ -955,7 +1132,7 @@
       "cache_write": null,
       "output": "15",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5.4-mini",
@@ -975,7 +1152,7 @@
       "cache_write": null,
       "output": "4.5",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5.4-nano",
@@ -995,7 +1172,87 @@
       "cache_write": null,
       "output": "1.25",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/gpt-5.4-pro",
+      "vendor": "OpenAI",
+      "label": "GPT-5.4 Pro",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.4-pro"
+      ],
+      "currency": "USD",
+      "input": "30",
+      "cache_read": "30",
+      "cache_write": null,
+      "output": "180",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/gpt-5.2",
+      "vendor": "OpenAI",
+      "label": "GPT-5.2",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.2"
+      ],
+      "currency": "USD",
+      "input": "1.75",
+      "cache_read": "0.175",
+      "cache_write": null,
+      "output": "14",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/gpt-5.2-pro",
+      "vendor": "OpenAI",
+      "label": "GPT-5.2 Pro",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.2-pro"
+      ],
+      "currency": "USD",
+      "input": "21",
+      "cache_read": "21",
+      "cache_write": null,
+      "output": "168",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/gpt-5.1",
+      "vendor": "OpenAI",
+      "label": "GPT-5.1",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.1"
+      ],
+      "currency": "USD",
+      "input": "1.25",
+      "cache_read": "0.125",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5",
@@ -1015,7 +1272,7 @@
       "cache_write": null,
       "output": "10",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5-mini",
@@ -1035,7 +1292,7 @@
       "cache_write": null,
       "output": "2",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-5-nano",
@@ -1055,7 +1312,27 @@
       "cache_write": null,
       "output": "0.4",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/gpt-5-pro",
+      "vendor": "OpenAI",
+      "label": "GPT-5 Pro",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5-pro"
+      ],
+      "currency": "USD",
+      "input": "15",
+      "cache_read": "15",
+      "cache_write": null,
+      "output": "120",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-4.1",
@@ -1075,7 +1352,7 @@
       "cache_write": null,
       "output": "8",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-4.1-mini",
@@ -1095,7 +1372,7 @@
       "cache_write": null,
       "output": "1.6",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-4o",
@@ -1115,7 +1392,7 @@
       "cache_write": null,
       "output": "10",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/gpt-4o-mini",
@@ -1135,7 +1412,7 @@
       "cache_write": null,
       "output": "0.6",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "openai/o3",
@@ -1155,7 +1432,27 @@
       "cache_write": null,
       "output": "8",
       "source_url": "https://developers.openai.com/api/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "openai/o3-pro",
+      "vendor": "OpenAI",
+      "label": "o3 Pro",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "o3-pro"
+      ],
+      "currency": "USD",
+      "input": "20",
+      "cache_read": "20",
+      "cache_write": null,
+      "output": "80",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-fable-5-2",
@@ -1175,7 +1472,7 @@
       "cache_write": "10",
       "output": "40",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-fable-5-1",
@@ -1195,7 +1492,26 @@
       "cache_write": "12.5",
       "output": "50",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "anthropic/claude-fable-5",
+      "vendor": "Anthropic",
+      "label": "Claude Fable 5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-fable-5"
+      ],
+      "currency": "USD",
+      "input": "10",
+      "cache_read": "1",
+      "cache_write": "12.5",
+      "output": "50",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-opus-5-5",
@@ -1215,7 +1531,7 @@
       "cache_write": "5",
       "output": "20",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-opus-5",
@@ -1234,7 +1550,7 @@
       "cache_write": "6.25",
       "output": "25",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-sonnet-5-5",
@@ -1254,7 +1570,7 @@
       "cache_write": "2.5",
       "output": "10",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-sonnet-5",
@@ -1273,7 +1589,7 @@
       "cache_write": "2.5",
       "output": "10",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-haiku-5-5",
@@ -1293,7 +1609,7 @@
       "cache_write": "0.125",
       "output": "0.5",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-opus-4-8",
@@ -1313,7 +1629,7 @@
       "cache_write": "6.25",
       "output": "25",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-opus-4-7",
@@ -1333,7 +1649,7 @@
       "cache_write": "6.25",
       "output": "25",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-opus-4-6",
@@ -1353,7 +1669,7 @@
       "cache_write": "6.25",
       "output": "25",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-opus-4-5",
@@ -1374,7 +1690,28 @@
       "cache_write": "6.25",
       "output": "25",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "anthropic/claude-opus-4-1",
+      "vendor": "Anthropic",
+      "label": "Claude Opus 4.1",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-opus-4-1",
+        "claude-opus-4.1",
+        "claude-opus-4-1-20250805"
+      ],
+      "currency": "USD",
+      "input": "15",
+      "cache_read": "1.5",
+      "cache_write": "18.75",
+      "output": "75",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-sonnet-4-6",
@@ -1394,7 +1731,7 @@
       "cache_write": "3.75",
       "output": "15",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-sonnet-4-5",
@@ -1415,7 +1752,7 @@
       "cache_write": "3.75",
       "output": "15",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "anthropic/claude-haiku-4-5",
@@ -1436,7 +1773,7 @@
       "cache_write": "1.25",
       "output": "5",
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-4-carbon",
@@ -1454,7 +1791,7 @@
       "cache_write": null,
       "output": "10",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-4-argon",
@@ -1472,7 +1809,25 @@
       "cache_write": null,
       "output": "10",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "google/gemini-4-neon",
+      "vendor": "Google",
+      "label": "Gemini 4 Neon",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-4-neon"
+      ],
+      "currency": "USD",
+      "input": "3",
+      "cache_read": "0.15",
+      "cache_write": null,
+      "output": "15",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-4-hydrogen",
@@ -1490,7 +1845,7 @@
       "cache_write": null,
       "output": "7.5",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-3.8-flash",
@@ -1508,7 +1863,7 @@
       "cache_write": null,
       "output": "3.75",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-3.6-flash",
@@ -1526,7 +1881,7 @@
       "cache_write": null,
       "output": "3.75",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-3.5-flash-lite",
@@ -1544,7 +1899,7 @@
       "cache_write": null,
       "output": "2.5",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-3.1-pro-preview",
@@ -1562,7 +1917,7 @@
       "cache_write": null,
       "output": "12",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-3.1-flash-lite",
@@ -1580,7 +1935,43 @@
       "cache_write": null,
       "output": "1.5",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "google/gemini-2.5-pro",
+      "vendor": "Google",
+      "label": "Gemini 2.5 Pro",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-2.5-pro"
+      ],
+      "currency": "USD",
+      "input": "1.25",
+      "cache_read": "0.125",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "google/gemini-2.5-flash",
+      "vendor": "Google",
+      "label": "Gemini 2.5 Flash",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-2.5-flash"
+      ],
+      "currency": "USD",
+      "input": "0.3",
+      "cache_read": "0.03",
+      "cache_write": null,
+      "output": "2.5",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "google/gemini-2.5-flash-lite",
@@ -1598,7 +1989,7 @@
       "cache_write": null,
       "output": "0.4",
       "source_url": "https://aistudio.google.com/docs/pricing",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "xai/grok-4.7",
@@ -1616,7 +2007,7 @@
       "cache_write": null,
       "output": "6",
       "source_url": "https://docs.x.ai/docs/models",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "xai/grok-4.6",
@@ -1634,7 +2025,7 @@
       "cache_write": null,
       "output": "6",
       "source_url": "https://docs.x.ai/docs/models",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "xai/grok-4.5",
@@ -1652,7 +2043,7 @@
       "cache_write": null,
       "output": "6",
       "source_url": "https://docs.x.ai/docs/models",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
     },
     {
       "key": "xai/grok-4.3",
@@ -1670,7 +2061,29 @@
       "cache_write": null,
       "output": "2.5",
       "source_url": "https://docs.x.ai/docs/models",
-      "verified_at": "2026-11-16"
+      "verified_at": "2026-11-25"
+    },
+    {
+      "key": "xai/grok-4.20",
+      "vendor": "xAI",
+      "label": "Grok 4.20",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "grok-4.20",
+        "grok-4.20-0309-reasoning",
+        "grok-4.20-0309-non-reasoning",
+        "grok-4.20-multi-agent",
+        "grok-4.20-multi-agent-0309"
+      ],
+      "currency": "USD",
+      "input": "1.25",
+      "cache_read": "0.2",
+      "cache_write": null,
+      "output": "2.5",
+      "source_url": "https://docs.x.ai/docs/models",
+      "verified_at": "2026-11-25"
     },
     {
       "key": "xai/grok-build-0.1",
