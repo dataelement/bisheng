@@ -85,7 +85,7 @@ def build_app() -> FastAPI:
     router = APIRouter(prefix="/api/v2", dependencies=[Depends(verify_open_api_access)])
 
     @router.get("/probe")
-    @open_api_scope("knowledge:read")
+    @open_api_scope("knowledge:read", pat=True)
     async def probe():
         actor = get_current_permission_actor()
         fga = StubFGA()

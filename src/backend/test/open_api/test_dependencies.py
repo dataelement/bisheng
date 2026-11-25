@@ -18,7 +18,7 @@ def build_app() -> FastAPI:
     router = APIRouter(prefix="/api/v2", dependencies=[Depends(verify_open_api_access)])
 
     @router.get("/registered")
-    @open_api_scope("knowledge:read")
+    @open_api_scope("knowledge:read", pat=True)
     async def registered(request: Request):
         principal = get_current_open_api_principal()
         actor = get_current_permission_actor()
@@ -35,6 +35,11 @@ def build_app() -> FastAPI:
     @router.get("/whoami")
     @open_api_scope(None)
     async def whoami():
+        return {"ok": True}
+
+    @router.get("/service-only")
+    @open_api_scope("knowledge:read")
+    async def service_only():
         return {"ok": True}
 
     @router.get("/unregistered")
@@ -222,3 +227,41 @@ async def test_removed_user_id_is_rejected_in_multipart_before_upload_handler(mo
     assert rejected.json()["status_code"] == 26019
     assert accepted.status_code == 200
     assert accepted.json() == {"filename": "sample.txt"}
+
+
+async def test_personal_token_is_refused_on_endpoints_that_do_not_opt_in(monkeypatch):
+    async def validate(_authorization):
+        return natural_person_principal()
+
+    async def tenant_policy(_tenant_id):
+        return SimpleNamespace(enabled=True, data_scope="all_visible")
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.settings.open_api.pat_enabled", True)
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.TenantSettingService.get_policy", tenant_policy)
+
+    async def not_super(_user_id):
+        return False
+
+    async def not_tenant_admin(_user_id, _tenant_id):
+        return False
+
+    monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", not_super)
+    monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", not_tenant_admin)
+
+    refused = await request(build_app(), "/api/v2/service-only", authorization="Bearer opaque")
+    allowed = await request(build_app(), "/api/v2/registered", authorization="Bearer opaque")
+
+    assert (refused.status_code, refused.json()["status_code"]) == (403, 26050)
+    assert allowed.status_code == 200
+
+
+async def test_service_account_is_not_affected_by_the_personal_token_restriction(monkeypatch):
+    async def validate(_authorization):
+        return service_account_principal()
+
+    monkeypatch.setattr("bisheng.open_api.api.dependencies.validate_bearer", validate)
+
+    response = await request(build_app(), "/api/v2/service-only", authorization="Bearer opaque")
+
+    assert response.status_code == 200

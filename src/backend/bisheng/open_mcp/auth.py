@@ -24,7 +24,8 @@ from bisheng.open_api.domain.services.access_context import (
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
 
 MCP_PATH = "/api/v2/mcp"
-_MCP_MARKER = OpenApiScopeMarker(scope=None, modes=frozenset({"S", "D"}), session=False)
+# Personal keys may reach the MCP endpoint; which tools they see is decided by the tool registry (allow_pat).
+_MCP_MARKER = OpenApiScopeMarker(scope=None, modes=frozenset({"S", "D"}), session=False, pat_allowed=True)
 current_mcp_scope: ContextVar[dict[str, Any] | None] = ContextVar("current_mcp_scope", default=None)
 
 

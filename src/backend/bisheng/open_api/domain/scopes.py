@@ -169,6 +169,8 @@ class OpenApiScopeMarker:
     scope: str | None
     modes: frozenset[IdentityMode]
     session: bool
+    # Personal access tokens may only call endpoints that opt in; service accounts and delegation are unaffected.
+    pat_allowed: bool = False
 
 
 def open_api_scope(
@@ -176,13 +178,14 @@ def open_api_scope(
     *,
     modes: tuple[IdentityMode, ...] = ("S", "D"),
     session: bool = False,
+    pat: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     if scope is not None and scope not in OPEN_API_SCOPE_CODES:
         raise ValueError(f"unknown open API scope {scope!r}")
     mode_set = frozenset(modes)
     if not mode_set or not mode_set <= {"S", "D"}:
         raise ValueError("modes must be a non-empty subset of {'S', 'D'}")
-    marker = OpenApiScopeMarker(scope=scope, modes=mode_set, session=session)
+    marker = OpenApiScopeMarker(scope=scope, modes=mode_set, session=session, pat_allowed=pat)
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
         setattr(func, OPEN_API_SCOPE_ATTR, marker)
