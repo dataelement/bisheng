@@ -3600,6 +3600,8 @@
     "launchAddressHelp": "可以从工作台唤起客户端",
     "platformPublicUrl": "平台公网地址",
     "platformPublicUrlHelp": "桌面端登录、Chat 和 Work 工具使用的公网地址，例如 https://ai.example.com；留空则使用部署配置（BS_DSH_PLATFORM_PUBLIC_URL）。",
+    "businessEnabled": "启用 DSH 业务",
+    "businessEnabledHelp": "关闭后桌面端登录、Chat 与 Work 工具不可用；部署级开关（BS_DSH_ENABLED）仍是总开关。",
     "launchAddress": "客户端唤起地址",
     "title": "客户端",
     "loading": "正在加载…",

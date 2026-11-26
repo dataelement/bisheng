@@ -52,11 +52,11 @@ async def settings_app(tmp_path, monkeypatch):
         await engine.dispose()
 
 
-async def test_always_enabled_settings_preserve_addresses_and_other_configuration(settings_app):
+async def test_settings_preserve_addresses_and_other_configuration(settings_app):
     app, deployment, sessions = settings_app
     async with sessions() as session:
         session.add(Config(key="other_config", value="keep"))
-        session.add(Config(key="dsh_management", value='{"enabled":false,"download_url":null}'))
+        session.add(Config(key="dsh_management", value='{"enabled":true,"download_url":null}'))
         await session.commit()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/api/v1/dsh/config")).json()["enabled"] is True
@@ -65,11 +65,11 @@ async def test_always_enabled_settings_preserve_addresses_and_other_configuratio
         assert browser.headers["cache-control"] == "no-store"
         url = "/api/v1/dsh/admin/settings"
         value = {
-            "enabled": False,
+            "enabled": True,
             "download_url": "http://downloads.test/desktop/latest",
             "launch_url": "dsh-desktop-test://login",
         }
-        expected = {**value, "enabled": True, "platform_public_url": None}
+        expected = {**value, "platform_public_url": None}
         assert (await client.put(url, json=value)).json()["data"] == expected
         assert (await client.get(url)).json()["data"] == expected
         request = Request({"type": "http", "app": app})
@@ -233,3 +233,20 @@ async def test_clearing_the_platform_public_url_falls_back_to_the_deployment_val
     assert (
         await DshSettingsService().platform_public_url(deployment.platform_public_url) == deployment.platform_public_url
     )
+
+
+async def test_business_switch_can_be_turned_off_and_on_from_the_settings_page(settings_app):
+    from bisheng.common.errcode.dsh import DshDshDisabledError
+
+    app, deployment, sessions = settings_app
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        url = "/api/v1/dsh/admin/settings"
+        assert (await client.put(url, json={"enabled": False})).json()["data"]["enabled"] is False
+        assert (await client.get("/api/v1/dsh/browser-config")).json()["data"]["enabled"] is False
+        with pytest.raises(DshDshDisabledError):
+            await dependencies.get_runtime(Request({"type": "http", "app": app}), deployment)
+        assert (await client.put(url, json={"enabled": True})).json()["data"]["enabled"] is True
+    async with sessions() as session:
+        rows = (await session.exec(select(Config))).all()
+        stored = next(row.value for row in rows if row.key == "dsh_management")
+        assert DshManagementSettings.model_validate_json(stored).enabled is True

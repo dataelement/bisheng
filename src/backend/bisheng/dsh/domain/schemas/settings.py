@@ -12,7 +12,11 @@ class DshManagementSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     enabled: bool = Field(
-        default=True, description="Compatibility field; deployed DSH business access is always enabled."
+        default=True,
+        description=(
+            "Business access switch for Desktop login, Chat and Work tools; the deployment "
+            "switch (BS_DSH_ENABLED) still gates the module."
+        ),
     )
     download_url: str | None = Field(
         default="https://www.dshdesktop.com/zh/enterprise/",
