@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ from bisheng.common.errcode.knowledge_space import (
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import Department
 from bisheng.database.models.tag import TagResourceTypeEnum
@@ -53,6 +55,12 @@ from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_reposito
 )
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncParams, FilelibSyncResponseData
 from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import FilelibSyncAuditWriter
+from bisheng.open_endpoints.domain.services.filelib_sync_run_recorder import (
+    FILELIB_FILE_SYNC_JOB_CODE,
+    format_sync_exception_message,
+    record_sync_run_finished,
+    utc_now_naive,
+)
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     PortalDocumentTypeChildConfig,
     PortalDocumentTypeConfig,
@@ -130,16 +138,47 @@ class FilelibSyncService:
         raw_params: str,
         upload_file: UploadFile,
     ) -> FilelibSyncResponseData:
-        params = self.parse_params(raw_params)
-        self._validate_upload(params, upload_file)
-        self._require_dynamic_source_id(params)
-        temporary_file_path = await self._save_temporary_file(params, upload_file)
-        return await self.sync_from_staged_file(
-            params=params,
-            local_file_path=temporary_file_path,
-            endpoint_tag="sync",
-            allow_personal_fallback=True,
-        )
+        start_time = utc_now_naive()
+        started = time.perf_counter()
+        file_name: str | None = None
+        try:
+            params = self.parse_params(raw_params)
+            file_name = params.file_name
+            self._validate_upload(params, upload_file)
+            self._require_dynamic_source_id(params)
+            temporary_file_path = await self._save_temporary_file(params, upload_file)
+            result = await self.sync_from_staged_file(
+                params=params,
+                local_file_path=temporary_file_path,
+                endpoint_tag="sync",
+                allow_personal_fallback=True,
+            )
+            await record_sync_run_finished(
+                tenant_id=int(get_current_tenant_id() or self.login_user.tenant_id),
+                developer_token_id=int(self.token_id),
+                job_code=FILELIB_FILE_SYNC_JOB_CODE,
+                trigger_type="api",
+                status="success",
+                start_time=start_time,
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                file_name=file_name,
+                file_id=int(result.file_id),
+                knowledge_id=int(result.knowledge_id),
+            )
+            return result
+        except Exception as exc:
+            await record_sync_run_finished(
+                tenant_id=int(get_current_tenant_id() or self.login_user.tenant_id),
+                developer_token_id=int(self.token_id),
+                job_code=FILELIB_FILE_SYNC_JOB_CODE,
+                trigger_type="api",
+                status="failed",
+                start_time=start_time,
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                file_name=file_name,
+                error_message=format_sync_exception_message(exc),
+            )
+            raise
 
     async def sync_from_staged_file(
         self,
@@ -1362,15 +1401,13 @@ class FilelibSyncService:
         )
         candidates: dict[int, KnowledgeFile] = {}
 
+        # Include FAILED/TIMEOUT/VIOLATION; get_file_by_condition excludes them
+        # and would leave a failed row beside the next successful sync.
         for path in self._file_level_path_variants(file_level_path):
-            for existing_file in (
-                await asyncio.to_thread(
-                    KnowledgeFileDao.get_file_by_condition,
-                    knowledge_id=knowledge_id,
-                    file_name=file_name,
-                    file_level_path=path,
-                )
-                or []
+            for existing_file in await self.repository.find_files_for_sync_replace(
+                knowledge_id,
+                file_name=file_name,
+                file_level_path=path,
             ):
                 candidates[int(existing_file.id)] = existing_file
 

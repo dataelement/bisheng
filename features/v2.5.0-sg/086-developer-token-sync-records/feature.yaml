@@ -1,0 +1,26 @@
+schema_version: 1
+feature_id: "086-developer-token-sync-records"
+title: 开发者 Token 同步记录与错误详情
+kind: feature_extension
+primary_module: developer_token
+affected_modules:
+  - developer_token
+  - open_endpoints
+  - platform
+target_release: "2.5.0-sg"
+related_features: []
+development_status: design_pending_confirmation
+acceptance_status: not_started
+deliveries: []
+artifacts:
+  requirements: requirements.md
+  design: design.md
+  development_cases: test-cases.md
+  tasks: tasks.md
+  resume: state.md
+  handoff: handoff.md
+terminology:
+  - name: 同步记录
+    status: confirmed
+    meaning: Token「同步记录」弹窗中的同步/入库类执行记录（file/sync、检化验 sync、汽车板介绍同步）；不含 MCP 与非同步开放 API
+acceptance_reference: null

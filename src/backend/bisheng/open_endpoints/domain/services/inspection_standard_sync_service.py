@@ -4,15 +4,14 @@ import hashlib
 import os
 import re
 import tempfile
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from pydantic import ValidationError
 
 from bisheng.common.errcode.filelib_sync import (
-    FilelibSyncError,
     FilelibSyncNotFoundError,
     FilelibSyncPermissionDeniedError,
 )
@@ -25,6 +24,7 @@ from bisheng.common.errcode.inspection_standard_sync import (
     InspectionStandardSyncTokenRuleError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFolderNotFoundError, SpacePermissionDeniedError
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.developer_token.domain.file_sync_folder_path import normalize_file_sync_folder_path
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncParams
@@ -35,8 +35,14 @@ from bisheng.open_endpoints.domain.schemas.inspection_standard_sync import (
     InspectionStandardSyncRequest,
     InspectionStandardSyncResponseData,
 )
-from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
 from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import FilelibSyncAuditWriter
+from bisheng.open_endpoints.domain.services.filelib_sync_run_recorder import (
+    FILELIB_INSPECTION_STANDARD_SYNC_JOB_CODE,
+    format_sync_exception_message,
+    record_sync_run_finished,
+    utc_now_naive,
+)
+from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
 from bisheng.open_endpoints.domain.services.inspection_standard_excel_builder import (
     build_inspection_standard_xlsx_bytes,
 )
@@ -56,6 +62,8 @@ class InspectionStandardSyncService:
         self.filelib_sync_service = filelib_sync_service
 
     async def sync(self, request: InspectionStandardSyncRequest) -> InspectionStandardSyncResponseData:
+        run_start_time = utc_now_naive()
+        run_started = time.perf_counter()
         self._validate_token_rule(self.filelib_sync_service.file_sync_rule)
         start_dt, end_dt = self._parse_time_window(request.start_time, request.end_time)
         year_dir = str(start_dt.year)
@@ -67,6 +75,7 @@ class InspectionStandardSyncService:
 
         staged_paths: list[str] = []
         file_results: list[InspectionStandardSyncFileResult] = []
+        last_file_name: str | None = None
         try:
             for group in groups:
                 target_folder_id, folder_path = await self._resolve_group_target_folder(
@@ -86,6 +95,7 @@ class InspectionStandardSyncService:
                     start_dt=start_dt,
                     end_dt=end_dt,
                 )
+                last_file_name = generated_file_name
                 params = FilelibSyncParams(
                     external_file_id=self._build_external_file_id(
                         create_dept_id=group.create_dept_id,
@@ -140,6 +150,18 @@ class InspectionStandardSyncService:
                 file_count=len(file_results),
                 responsible_person_id=request.responsible_person_id,
             )
+            await record_sync_run_finished(
+                tenant_id=int(get_current_tenant_id() or self.filelib_sync_service.login_user.tenant_id),
+                developer_token_id=int(self.filelib_sync_service.token_id),
+                job_code=FILELIB_INSPECTION_STANDARD_SYNC_JOB_CODE,
+                trigger_type="api",
+                status="success",
+                start_time=run_start_time,
+                duration_ms=int((time.perf_counter() - run_started) * 1000),
+                file_name=last_file_name,
+                knowledge_id=knowledge_id,
+                file_id=int(file_results[-1].file_id) if file_results else None,
+            )
             return response
         except Exception as exc:
             await FilelibSyncAuditWriter.write_inspection_batch_failed(
@@ -155,6 +177,18 @@ class InspectionStandardSyncService:
                 success_count=len(file_results),
                 error=exc,
                 responsible_person_id=request.responsible_person_id,
+            )
+            await record_sync_run_finished(
+                tenant_id=int(get_current_tenant_id() or self.filelib_sync_service.login_user.tenant_id),
+                developer_token_id=int(self.filelib_sync_service.token_id),
+                job_code=FILELIB_INSPECTION_STANDARD_SYNC_JOB_CODE,
+                trigger_type="api",
+                status="failed",
+                start_time=run_start_time,
+                duration_ms=int((time.perf_counter() - run_started) * 1000),
+                file_name=last_file_name,
+                knowledge_id=knowledge_id,
+                error_message=format_sync_exception_message(exc),
             )
             raise
         finally:

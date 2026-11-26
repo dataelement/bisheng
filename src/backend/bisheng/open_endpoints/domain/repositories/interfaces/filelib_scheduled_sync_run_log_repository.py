@@ -54,3 +54,14 @@ class FilelibScheduledSyncRunLogRepository(ABC):
         limit: int,
     ) -> tuple[list[FilelibScheduledSyncRunLog], int]:
         """Return paginated run logs ordered by id desc."""
+
+    @abstractmethod
+    async def list_by_developer_token(
+        self,
+        tenant_id: int,
+        *,
+        developer_token_id: int,
+        page: int,
+        limit: int,
+    ) -> tuple[list[FilelibScheduledSyncRunLog], int]:
+        """Return paginated run logs for one developer token, newest first."""

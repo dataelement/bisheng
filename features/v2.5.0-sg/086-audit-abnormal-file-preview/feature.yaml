@@ -1,0 +1,16 @@
+feature_id: F086-audit-abnormal-file-preview
+project: bisheng
+module: audit
+kind: enhancement
+target_release: null
+baseline: feat/2.5.0-sg
+artifacts:
+  requirements: spec.md
+  design: design.md
+  development_cases: test-cases.md
+  tasks: tasks.md
+  handoff: handoff.md
+requirements_status: confirmed
+design_status: confirmed
+implementation_status: implemented_build_pending
+qa_status: not_executed

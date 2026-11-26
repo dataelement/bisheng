@@ -214,6 +214,36 @@ export async function viewDeveloperTokenSecretApi(
   return await axios.get(`/api/v1/admin/developer-tokens/${tokenId}/secret`)
 }
 
+export type DeveloperTokenSyncRecordStatus = "running" | "success" | "failed" | "skipped"
+
+export interface DeveloperTokenSyncRecord {
+  id: number
+  interface: string
+  job_code: string
+  trigger_type: string
+  status: DeveloperTokenSyncRecordStatus | string
+  file_name: string | null
+  start_time: string
+  end_time: string | null
+  duration_ms: number | null
+  error_message: string | null
+  error_truncated: boolean
+}
+
+export interface DeveloperTokenSyncRecordPage {
+  data: DeveloperTokenSyncRecord[]
+  total: number
+}
+
+export async function listDeveloperTokenSyncRecordsApi(
+  tokenId: number,
+  params: { page?: number; limit?: number } = {},
+): Promise<DeveloperTokenSyncRecordPage> {
+  return await axios.get(`/api/v1/admin/developer-tokens/${tokenId}/sync-records`, {
+    params: { page: 1, limit: 20, ...params },
+  })
+}
+
 export async function getDeveloperTokenGlobalConfigApi(): Promise<DeveloperTokenGlobalConfig> {
   return await axios.get("/api/v1/admin/developer-tokens/config/global")
 }

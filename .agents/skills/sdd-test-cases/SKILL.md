@@ -7,7 +7,7 @@ description: >-
 # Sdd Test Cases
 
 先读 [阶段交接规则](../sdd-workflow/references/stage-contract.md)，按风险使用 [用例方法](references/case-methods.md)。涉及 mock、接口／功能测试或真实环境安排时使用[测试环境与证据策略](references/test-strategy.md)。
-生成、改写或评审正式用例时，使用 [测试用例写作与完成标准](references/case-writing-standard.md)，按其四部分结构输出 HTML。
+生成、改写或评审正式用例时，使用 [测试用例写作与完成标准](references/case-writing-standard.md)，按其四部分结构输出 Markdown。
 
 ## 输入与时机
 
@@ -42,7 +42,7 @@ UI 功能用例可在需求闭环后设计并随交互规则细化；执行继�
 
 ## 专业复核与完成标准
 
-按 [HTML 交付约定](../sdd-workflow/references/html-delivery.md) 交付本岗位的实际 HTML 用例文档，关联需求版本与稳定 REQ／AC；可配套机器可读数据，不以测试脚本、Markdown 或聊天摘要代替。用例定义、评审状态和各次运行结果分别记录，未执行不能填通过。HTML 文档不改变两岗位代码工程和执行阶段。
+按 [Markdown 交付约定](../sdd-workflow/references/markdown-delivery.md) 交付本岗位的实际 Markdown 用例文档，关联需求版本与稳定 REQ／AC；可配套机器可读数据，不以测试脚本或聊天摘要代替。用例定义、评审状态和各次运行结果分别记录，未执行不能填通过。Markdown 文档不改变两岗位代码工程和执行阶段。
 输出覆盖概览矩阵、规定九列的用例清单、异常与边界专项清单、自动化可行性标注。逐条核对验收条件和本岗位必要场景，检查单一意图、独立前提、具体数据与边界值、明确断言及副作用；缺规则或必要契约时记录待补，相关定义仅为草稿，不标记已就绪。
 通过独立需求推导、不同检查视角或独立评审补查遗漏；说明实际采用的复核方式，不把作者自评称为独立审核。
 本岗位用例就绪表示对应定义完整且必要契约已补足，不表示测试已经通过；另一岗位的用例和执行待办独立记录，不自动阻塞本岗位已完成的范围。

@@ -51,6 +51,7 @@ from bisheng.core.context.tenant import (
     set_visible_tenant_ids,
     visible_tenant_ids,
 )
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao, UserTenantDao
@@ -68,6 +69,7 @@ from bisheng.developer_token.domain.schemas import (
     DeveloperTokenPrincipal,
     DeveloperTokenRead,
     DeveloperTokenSecretResponse,
+    DeveloperTokenSyncRecord,
     DeveloperTokenUpdate,
     FileSyncOptionBusinessDomain,
     FileSyncOptionCategory,
@@ -81,6 +83,13 @@ from bisheng.developer_token.domain.schemas import (
 )
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.open_endpoints.domain.repositories.implementations.filelib_scheduled_sync_run_log_repository_impl import (
+    FilelibScheduledSyncRunLogRepositoryImpl,
+)
+from bisheng.open_endpoints.domain.services.filelib_sync_run_recorder import (
+    is_error_message_truncated,
+    job_code_to_interface_label,
+)
 from bisheng.shougang_portal_config.domain.services.portal_config_service import (
     ShougangPortalConfigService,
 )
@@ -135,6 +144,46 @@ class DeveloperTokenService:
         return await cls._to_detail(
             token,
             file_sync_target_display=display_map.get(int(token.id)),
+        )
+
+    @classmethod
+    async def list_sync_records(
+        cls,
+        token_id: int,
+        operator: UserPayload,
+        *,
+        page: int,
+        limit: int,
+    ) -> PageData[DeveloperTokenSyncRecord]:
+        token = await cls._get_existing_token(token_id)
+        await cls._assert_admin_scope(operator, token.tenant_id)
+        tenant_id = int(token.tenant_id)
+        with cls._target_tenant_context(tenant_id):
+            async with get_async_db_session() as session:
+                rows, total = await FilelibScheduledSyncRunLogRepositoryImpl(session).list_by_developer_token(
+                    tenant_id,
+                    developer_token_id=int(token.id),
+                    page=page,
+                    limit=limit,
+                )
+        return PageData(
+            data=[
+                DeveloperTokenSyncRecord(
+                    id=int(row.id),
+                    interface=job_code_to_interface_label(row.job_code),
+                    job_code=row.job_code,
+                    trigger_type=row.trigger_type,
+                    status=row.status,
+                    file_name=row.file_name,
+                    start_time=row.start_time,
+                    end_time=row.end_time,
+                    duration_ms=row.duration_ms,
+                    error_message=row.error_message,
+                    error_truncated=is_error_message_truncated(row.error_message),
+                )
+                for row in rows
+            ],
+            total=total,
         )
 
     @classmethod

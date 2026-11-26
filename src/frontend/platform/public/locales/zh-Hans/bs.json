@@ -369,6 +369,7 @@
         "invalidError": "汽车板介绍同步配置中的“{{field}}”无效或未填写，请检查后重试。",
         "recentRuns": "最近执行（共 {{total}} 条）",
         "noRuns": "暂无执行记录",
+        "runsMovedHint": "执行记录已迁移到对应 Token 行的「同步记录」中查看。",
         "errorFields": {
           "enabled": "启用开关",
           "apiUrl": "接口地址",
@@ -395,6 +396,42 @@
           "startTime": "开始时间",
           "duration": "耗时",
           "error": "错误信息"
+        }
+      },
+      "syncRecords": {
+        "action": "同步记录",
+        "title": "同步记录 — {{name}}",
+        "hint": "展示该 Token 的文件同步、检化验同步与汽车板介绍同步执行记录。",
+        "loading": "正在加载同步记录…",
+        "empty": "暂无同步记录",
+        "loadFailed": "同步记录加载失败，请重试",
+        "viewError": "查看错误",
+        "errorDetailTitle": "错误详情",
+        "truncatedHint": "错误内容已截断（最多约 16KB）。",
+        "copy": "复制",
+        "copied": "已复制到剪贴板",
+        "copyFailed": "复制失败，请手动选择文本",
+        "close": "关闭",
+        "columns": {
+          "id": "ID",
+          "interface": "接口",
+          "trigger": "触发方式",
+          "status": "状态",
+          "fileName": "文件名",
+          "startTime": "开始时间",
+          "duration": "耗时",
+          "error": "错误信息"
+        },
+        "triggerTypes": {
+          "manual": "手动",
+          "scheduled": "定时",
+          "api": "接口"
+        },
+        "statuses": {
+          "running": "执行中",
+          "success": "成功",
+          "failed": "失败",
+          "skipped": "跳过"
         }
       },
       "saveConfig": "保存配置",

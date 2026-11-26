@@ -112,3 +112,38 @@ async def test_run_log_repository_lists_by_start_time_desc_with_pagination(async
     assert total == 2
     assert [row.id for row in page_one] == [newer_id]
     assert [row.id for row in page_two] == [older_id]
+
+
+async def test_run_log_repository_lists_by_developer_token(async_db_session):
+    repo = FilelibScheduledSyncRunLogRepositoryImpl(async_db_session)
+    matched = await repo.insert(
+        FilelibScheduledSyncRunLogCreate(
+            tenant_id=5,
+            job_code="filelib_file_sync",
+            trigger_type="api",
+            status="failed",
+            start_time=_NOW,
+            developer_token_id=42,
+            error_message="boom",
+        )
+    )
+    await repo.insert(
+        FilelibScheduledSyncRunLogCreate(
+            tenant_id=5,
+            job_code=AUTOMOTIVE_SHEET_INTRO_JOB_CODE,
+            trigger_type="manual",
+            status="success",
+            start_time=_NOW,
+            developer_token_id=99,
+        )
+    )
+
+    rows, total = await repo.list_by_developer_token(
+        5,
+        developer_token_id=42,
+        page=1,
+        limit=20,
+    )
+    assert total == 1
+    assert [row.id for row in rows] == [matched]
+    assert rows[0].job_code == "filelib_file_sync"

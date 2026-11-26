@@ -173,3 +173,22 @@ class FilelibSyncRepositoryImpl(
             if str(metadata.get("external_file_id") or "").strip() == normalized_external_file_id:
                 matched.append(record)
         return matched
+
+    async def find_files_for_sync_replace(
+        self,
+        knowledge_id: int,
+        *,
+        file_name: str,
+        file_level_path: str,
+    ) -> list[KnowledgeFile]:
+        # Include FAILED/TIMEOUT/VIOLATION; KnowledgeFileDao.get_file_by_condition excludes them.
+        result = await self.session.exec(
+            select(KnowledgeFile).where(
+                KnowledgeFile.knowledge_id == knowledge_id,
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.file_name == file_name,
+                KnowledgeFile.file_level_path == file_level_path,
+                KnowledgeFile.deleted_at.is_(None),
+            )
+        )
+        return list(result.all())
