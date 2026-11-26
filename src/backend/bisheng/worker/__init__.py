@@ -28,6 +28,7 @@ from bisheng.worker.knowledge.move_worker import migrate_file_vectors
 from bisheng.worker.knowledge.processing_jobs import dispatch_pending_processing_jobs, execute_processing_job
 from bisheng.worker.knowledge.provider_dispatch import dispatch_due_provider_operations
 from bisheng.worker.knowledge.provider_operations import advance_provider_operation
+from bisheng.worker.knowledge.provider_readiness import reconcile_provider_uploads
 from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery, insert_qa_celery, rebuild_qa_knowledge_celery
 from bisheng.worker.knowledge.rebuild_cleanup import cleanup_superseded_collections
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk

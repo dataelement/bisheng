@@ -48,6 +48,41 @@ class Snapshot:
 
 
 class ProcessingReadinessRepository:
+    async def alist_pending(self, db, *, tenant_id, limit):
+        """Uploads that were accepted but still await their processing proof.
+
+        Only the ledger and the local mapping are read here; the provider is
+        never queried from this bounded scan.
+        """
+        tenant = get_current_tenant_id()
+        if type(tenant) is not int or tenant <= 0 or tenant != tenant_id or is_tenant_filter_bypassed():
+            return ()
+        if type(limit) is not int or not 1 <= limit <= 500:
+            return ()
+        query = (
+            select(Op.operation_id, Op.actor_user_id)
+            .join(
+                M,
+                (M.tenant_id == Op.tenant_id)
+                & (M.space_id == Op.space_id)
+                & (M.generation == Op.generation)
+                & (M.operation_epoch == Op.operation_epoch),
+            )
+            .where(
+                Op.tenant_id == tenant,
+                Op.kind == "upload",
+                Op.state == "succeeded",
+                M.tenant_id == tenant,
+                M.resource_type == "file",
+                M.lifecycle_state == "received",
+                M.tombstoned_at.is_(None),
+                M.ready_revision.is_(None),
+            )
+            .order_by(Op.create_time, Op.operation_id)
+            .limit(limit)
+        )
+        return tuple((await db.execute(query)).all())
+
     async def snapshot(self, db, operation_id, *, locked=False):
         tenant = get_current_tenant_id()
         if type(tenant) is not int or tenant <= 0 or is_tenant_filter_bypassed():
@@ -177,12 +212,9 @@ class ProcessingReadinessRepository:
                 File.tenant_id == key.tenant_id,
                 File.knowledge_id == key.space_id,
                 File.file_type == FileType.FILE.value,
-                File.status.in_(
-                    (
-                        KnowledgeFileStatus.WAITING.value,
-                        KnowledgeFileStatus.PROCESSING.value,
-                    )
-                ),
+                # A resend can succeed after a rejected remote attempt, so only
+                # an already-successful row is left untouched.
+                File.status != KnowledgeFileStatus.SUCCESS.value,
             )
             .values(status=KnowledgeFileStatus.SUCCESS.value)
         )
@@ -195,3 +227,31 @@ class ProcessingReadinessRepository:
             generation.content_revision = ready_revision
             generation.revision += 1
         return True
+
+    async def mark_rejected(self, db, snapshot):
+        """The provider itself reported this upload as failed or cancelled.
+
+        The mapping stays ``received`` so a client resend still owns its row;
+        only the visible file state becomes terminal, which also stops this
+        file from being re-probed on every scan.
+        """
+        key = snapshot.target
+        if await self.snapshot(db, key.operation_id, locked=True) != snapshot:
+            return False
+        changed = await db.execute(
+            update(File)
+            .where(
+                File.id == key.file_id,
+                File.tenant_id == key.tenant_id,
+                File.knowledge_id == key.space_id,
+                File.file_type == FileType.FILE.value,
+                File.status.in_(
+                    (
+                        KnowledgeFileStatus.WAITING.value,
+                        KnowledgeFileStatus.PROCESSING.value,
+                    )
+                ),
+            )
+            .values(status=KnowledgeFileStatus.FAILED.value)
+        )
+        return changed.rowcount == 1

@@ -9,6 +9,8 @@ from bisheng.knowledge.domain.repositories.provider_processing_readiness_reposit
     ProcessingTarget,
 )
 
+_REJECTED = frozenset({"failed", "cancelled"})
+
 
 @dataclass(frozen=True, slots=True)
 class ProcessingProof:
@@ -36,13 +38,15 @@ async def reconcile_processed_upload(
     if frozen is None:
         return False
     proof = await read_proof(frozen.target)
-    if (
-        not isinstance(proof, ProcessingProof)
-        or proof.target != frozen.target
-        or proof.state != "succeeded"
-        or type(proof.content_revision) is not int
-        or not 0 < proof.content_revision < 2**31
-    ):
+    if not isinstance(proof, ProcessingProof) or proof.target != frozen.target:
+        return False
+    if proof.state in _REJECTED:
+        if type(proof.content_revision) is not int or proof.content_revision < 0:
+            return False
+        async with sessions() as db, db.begin():
+            await repo.mark_rejected(db, frozen)
+        return False
+    if proof.state != "succeeded" or type(proof.content_revision) is not int or not 0 < proof.content_revision < 2**31:
         return False
     async with sessions() as db, db.begin():
         return await repo.activate(db, frozen, proof.content_revision)

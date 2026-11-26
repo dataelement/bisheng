@@ -37,6 +37,14 @@ beat_schedule.setdefault(
         "options": {"queue": "knowledge_celery"},
     },
 )
+beat_schedule.setdefault(
+    "knowledge-provider-readiness-recovery",
+    {
+        "task": "bisheng.worker.knowledge.provider_readiness.reconcile_provider_uploads",
+        "schedule": 30.0,
+        "options": {"queue": "knowledge_celery"},
+    },
+)
 if settings.dsh.enabled:
     beat_schedule.setdefault(
         "dsh-content-safety-projection",

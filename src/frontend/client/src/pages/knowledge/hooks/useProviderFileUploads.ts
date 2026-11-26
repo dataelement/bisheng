@@ -18,6 +18,7 @@ import {
   type UploadSizeLimits,
 } from '../knowledgeUtils';
 import { showApiError } from '~/api/request';
+import { sha256Hex } from '~/utils/sha256';
 import { NotificationSeverity } from '~/common';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
@@ -64,9 +65,10 @@ export function useProviderFileUploads(spaceId: string, parentId: string | undef
         if (!file) return;
         if (!entry.checksum) {
           try {
-            const bytes = await file.arrayBuffer();
-            const hash = await crypto.subtle.digest('SHA-256', bytes);
-            entry.checksum = Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
+            // Not `crypto.subtle` directly: the client is served over plain HTTP on
+            // LAN addresses, where Web Crypto is undefined and the old call threw
+            // before any byte was sent. See utils/sha256.
+            entry.checksum = await sha256Hex(file);
           } catch {
             // No network write has started; do not offer a receipt lookup.
             entry.row.state = 'not_sent'; return;
@@ -152,7 +154,9 @@ export function useProviderFileUploads(spaceId: string, parentId: string | undef
       return;
     }
     if (!inScope() || !active.current.canUploadProviderFolder) return;
-    const folderByDir = new Map(prepared.folders.map((row) => [row.relative_dir, String(row.folder_id)]));
+    const folderByDir = new Map<string, string>(
+      prepared.folders.map((row): [string, string] => [row.relative_dir, String(row.folder_id)]),
+    );
     const entries = valid.map((file) => {
       const key = uuid();
       const relative = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
