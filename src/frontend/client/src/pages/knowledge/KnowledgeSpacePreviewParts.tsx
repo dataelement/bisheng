@@ -9,11 +9,12 @@ import { useLocalize } from "~/hooks";
 interface PreviewSpaceHeaderProps {
     space: KnowledgeSpace;
     status: "none" | "joined" | "pending" | "rejected";
+    showStats: boolean;
     action: { label: string; variant: "secondary" | "outline" | "default"; disabled: boolean };
     onAction: () => void;
 }
 
-export function PreviewSpaceHeader({ space, status, action, onAction }: PreviewSpaceHeaderProps) {
+export function PreviewSpaceHeader({ space, status, showStats, action, onAction }: PreviewSpaceHeaderProps) {
     const localize = useLocalize();
 
     return (
@@ -41,13 +42,15 @@ export function PreviewSpaceHeader({ space, status, action, onAction }: PreviewS
                 <span className="text-sm text-text-3">{space.creator}</span>
             </div>
 
-            <div className="flex items-center justify-between">
-                <div className="flex items-center text-sm text-text-3">
-                    <span className="mr-3">
-                        {localize("com_knowledge.square_preview_parsed_total", { total: space.fileCount ?? 0 })}
-                    </span>
-                    <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
-                </div>
+            <div className={showStats ? "flex items-center justify-between" : "flex items-center justify-end"}>
+                {showStats && (
+                    <div className="flex items-center text-sm text-text-3">
+                        <span className="mr-3">
+                            {localize("com_knowledge.square_preview_parsed_total", { total: space.fileCount ?? 0 })}
+                        </span>
+                        <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
+                    </div>
+                )}
                 <Button
                     variant={action.variant}
                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"

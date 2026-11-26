@@ -464,7 +464,13 @@ export function KnowledgeSpacePreviewDrawer({
                 )}
                 {space ? (
                     <>
-                        <PreviewSpaceHeader space={space} status={status} action={btn} onAction={handleClickAction} />
+                        <PreviewSpaceHeader
+                            space={space}
+                            status={status}
+                            showStats={canViewFiles}
+                            action={btn}
+                            onAction={handleClickAction}
+                        />
 
                         <div
                             ref={spacePreviewScrollRevealRef}
