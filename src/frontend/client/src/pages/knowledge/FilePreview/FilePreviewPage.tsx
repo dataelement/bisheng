@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Outlined } from "bisheng-icons";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import request from "~/api/request";
 import { getMyResourcePermissions } from "~/api/permission";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { FileAiDock } from "~/pages/Subscription/AiChat/FileAiDock";
@@ -37,6 +38,21 @@ function extractExtFromUrl(url: string, fallback: string): string {
 
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
+
+/**
+ * A provider content handle (`/api/v1/.../content/preview|download`).
+ *
+ * These are the only preview/download URLs that live under `/api/v1`, so they go
+ * through the browser-facing admission layer like any other API call. A super
+ * admin's session is admitted only when the request names its management tenant,
+ * and that header is added by the app's HTTP client — never by a bare
+ * `<a>`/`fetch` from a viewer. Reading them through the client and handing the
+ * viewer a `blob:` URL keeps the admission rule intact while still showing the
+ * content.
+ */
+function isProviderContentUrl(url: string): boolean {
+    return /^\/api\/v1\/knowledge\/space\/\d+\/files\/\d+\/content\/(?:preview|download)(?:\?|$)/.test(url);
+}
 
 function isRichPreviewData(data: KnowledgeFilePreview | null): boolean {
     if (!data) return false;
@@ -105,19 +121,30 @@ export default function FilePreviewPage() {
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }
         let cancelled = false;
+        const objectUrls: string[] = [];
         setLoading(true);
         setConversionFailed(false);
         setPreviewData(null);
         setFileUrl("");
         getFilePreviewApi(spaceId, fileId)
-            .then((data) => {
+            .then(async (data) => {
                 if (cancelled) return;
                 // A controlled text excerpt is never an original-file URL, even for a PDF or DOCX.
                 if (data.media_kind === "text_excerpt") {
                     const expected = `/api/v1/knowledge/space/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileId)}/content/preview?`;
                     const url = data.preview_url;
                     setFileType("txt");
-                    setFileUrl(url.startsWith(expected) ? `${__APP_ENV__.BASE_URL.replace(/\/$/, "")}${url}` : "");
+                    if (!url.startsWith(expected)) {
+                        setFileUrl("");
+                        return;
+                    }
+                    // Read through the app client: a bare fetch by the viewer cannot
+                    // name the management tenant, which a super admin's session requires.
+                    const blob = await request.get<Blob>(url, { responseType: "blob" });
+                    if (cancelled) return;
+                    const objectUrl = URL.createObjectURL(blob);
+                    objectUrls.push(objectUrl);
+                    setFileUrl(objectUrl);
                     return;
                 }
                 const resolvedPreview = {
@@ -158,7 +185,10 @@ export default function FilePreviewPage() {
             })
             .catch((err) => { if (!cancelled) console.error("Failed to load preview URL:", err); })
             .finally(() => { if (!cancelled) setLoading(false); });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            objectUrls.forEach((url) => URL.revokeObjectURL(url));
+        };
     }, [fileId, spaceId, identity]);
 
     const handleDownloadFile = useCallback(async () => {
@@ -168,6 +198,22 @@ export default function FilePreviewPage() {
             if (currentTarget.current !== permissionTarget) return;
             const downloadUrl = downloadData.original_url || downloadData.preview_url;
             if (!downloadUrl) return;
+
+            if (isProviderContentUrl(downloadUrl)) {
+                // Same admission rule as the preview: the tenant must be named by the
+                // app client, so fetch the bytes and save them from a blob URL.
+                const blob = await request.get<Blob>(downloadUrl, { responseType: "blob" });
+                if (currentTarget.current !== permissionTarget) return;
+                const objectUrl = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = objectUrl;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(objectUrl);
+                return;
+            }
 
             const link = document.createElement("a");
             link.href = resolveKnowledgePreviewUrl(downloadUrl);
