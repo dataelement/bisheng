@@ -38,7 +38,7 @@ export interface CommercialLicenseStatus {
  */
 export async function getLicenseStatus(): Promise<LicenseStatus | null> {
     try {
-        return await axios.get(`/api/license/status`, { silent: true })
+        return await axios.get(`/api/license/status`, { silent: true, managementContext: 'independent' })
     } catch {
         return null
     }

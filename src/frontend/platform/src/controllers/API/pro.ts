@@ -68,7 +68,7 @@ export function getSSOurlApi() {
 }
 
 export async function getKeyApi() {
-    return await axios.get('/api/getkey')
+    return await axios.get('/api/getkey', { managementContext: 'independent' })
 }
 
 export async function ldapLoginApi(username:string, password:string) {
