@@ -159,7 +159,7 @@ export default function PreviewResult({
             if (["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)) {
               setFileViewUrl({ load: false, url: currentFile.originalUrl || currentFile.filePath });
             }
-            console.error('解析错误：', data.code, data.message);
+            console.error('Preview parsing failed:', data.code, data.message);
             break;
           case 'canceled':
             // 被新请求取消：关闭 loading
@@ -244,17 +244,23 @@ export default function PreviewResult({
         </div>)
       }
       {/* 其他内容 */}
-      <PreviewParagraph
-        fileId={syncChunksSelectId}
-        fileSuffix={currentFile?.suffix}
-        previewCount={previewCount}
-        className="flex-1 min-h-0"
-        edit={editable && (step === 3 || (step === 2 && !showPreview))}
-        loading={loading}
-        chunks={chunks}
-        onDel={handleUiRequest(handleDelete)}
-        onChange={handleChunkChange}
-      />
+      {previewErrorMessage ? (
+        <p role="alert" className="text-sm leading-6 whitespace-pre-line text-gray-500">
+          {previewErrorMessage}
+        </p>
+      ) : (
+        <PreviewParagraph
+          fileId={syncChunksSelectId}
+          fileSuffix={currentFile?.suffix}
+          previewCount={previewCount}
+          className="flex-1 min-h-0"
+          edit={editable && (step === 3 || (step === 2 && !showPreview))}
+          loading={loading}
+          chunks={chunks}
+          onDel={handleUiRequest(handleDelete)}
+          onChange={handleChunkChange}
+        />
+      )}
     </div>
   </div>
   )
