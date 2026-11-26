@@ -19,7 +19,7 @@ class KunlianConf(BaseModel):
     issuer: str = ""
     client_id: str = ""
     allowed_tenant_id: str = ""
-    auto_onboarding_enabled: bool = Field(default=False, strict=True)
+    auto_onboarding_enabled: bool = Field(default=True, strict=True)
     login_scope_mode: Literal["fixed", "tenant_workspace_map", "directory_active_tenants"] = "fixed"
     tenant_workspace_allowlist: dict[str, list[str]] = Field(default_factory=dict)
     public_origin: str = ""
@@ -190,3 +190,38 @@ class SSOSyncConf(BaseModel):
     )
 
     kunlian: KunlianConf = Field(default_factory=KunlianConf)
+
+
+def apply_kunlian_db_overrides(base_conf: KunlianConf, db_sso_sync: object) -> KunlianConf:
+    """Return a copy of KunlianConf with explicit DB overrides from initdb_config applied.
+
+    Only explicit boolean values under sso_sync.kunlian.auto_onboarding_enabled override
+    the deployment config.yaml setting; null, missing keys, or non-dict payloads inherit base_conf.
+    """
+    config = base_conf.model_copy(deep=True)
+    if not isinstance(db_sso_sync, dict):
+        return config
+    kunlian_override = db_sso_sync.get("kunlian")
+    if not isinstance(kunlian_override, dict):
+        return config
+    auto_onboarding = kunlian_override.get("auto_onboarding_enabled")
+    if type(auto_onboarding) is bool:
+        config.auto_onboarding_enabled = auto_onboarding
+    return config
+
+
+def validate_sso_sync_db_config(db_sso_sync: object) -> None:
+    """Validate optional sso_sync overrides inside initdb_config YAML before saving."""
+    if db_sso_sync is None:
+        return
+    if not isinstance(db_sso_sync, dict):
+        raise ValueError("sso_sync must be a mapping")
+    kunlian = db_sso_sync.get("kunlian")
+    if kunlian is None:
+        return
+    if not isinstance(kunlian, dict):
+        raise ValueError("sso_sync.kunlian must be a mapping")
+    if "auto_onboarding_enabled" in kunlian:
+        auto_onboarding = kunlian["auto_onboarding_enabled"]
+        if auto_onboarding is not None and type(auto_onboarding) is not bool:
+            raise ValueError("sso_sync.kunlian.auto_onboarding_enabled must be a boolean or null")

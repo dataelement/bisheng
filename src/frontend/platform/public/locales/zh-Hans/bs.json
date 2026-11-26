@@ -419,6 +419,16 @@
     "groupNameRequired": "用户组名称不可为空",
     "roleNameExists": "角色名称已存在",
     "parameterConfig": "参数配置",
+    "kunlianAutoOnboarding": {
+      "title": "昆联成员自动建角色与工作流授权",
+      "desc": "开启后，新同步的昆联成员会自动获配该租户下默认工作流的基础角色（昆联工作流基础_<hash>）；关闭后不再自动创建或分配该角色。",
+      "scopeHint": "支持热更新（无需重启），同时同步到下方 YAML 的 sso_sync.kunlian.auto_onboarding_enabled；关闭仅停止新增授权，不会回收历史已分配角色。",
+      "sourceOverride": "系统配置覆盖",
+      "sourceInherit": "沿用部署配置（{{value}}）",
+      "stateOn": "已开启",
+      "stateOff": "已关闭",
+      "resetInherit": "恢复沿用部署文件"
+    },
     "spaceAuthorization": "空间授权",
     "spaceAuthorizationDesc": "选择该角色可以访问的空间",
     "spaceName": "空间名称",

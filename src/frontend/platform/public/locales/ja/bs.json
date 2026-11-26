@@ -417,6 +417,16 @@
     "groupNameRequired": "ユーザーグループ名は必須です",
     "roleNameExists": "ロール名はすでに存在します",
     "parameterConfig": "パラメータ設定",
+    "kunlianAutoOnboarding": {
+      "title": "昆聯メンバー自動ロール作成・ワークフロー権限付与",
+      "desc": "有効にすると、新規同期された昆聯メンバーにテナント単位の基本ワークフローロールが自動付与されます。無効にすると自動作成および自動付与を停止します。",
+      "scopeHint": "再起動なしで即時反映され、下の YAML の sso_sync.kunlian.auto_onboarding_enabled と連動します。無効化しても既存のロール付与は取り消されません。",
+      "sourceOverride": "システム設定で上書き",
+      "sourceInherit": "デプロイ設定を継承（{{value}}）",
+      "stateOn": "有効",
+      "stateOff": "無効",
+      "resetInherit": "デプロイ設定に戻す"
+    },
     "language": "言語",
     "spaceAuthorization": "スペース権限",
     "spaceAuthorizationDesc": "このロールがアクセスできるスペースを選択",

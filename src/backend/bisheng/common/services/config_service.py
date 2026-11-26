@@ -21,6 +21,11 @@ from bisheng.core.config.settings import (
     WorkflowConf,
     decrypt_token,
 )
+from bisheng.core.config.sso_sync import (
+    KunlianConf,
+    apply_kunlian_db_overrides,
+    validate_sso_sync_db_config as validate_sso_sync_db_config,
+)
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 
 config_file = os.getenv("config", "config.yaml")
@@ -575,6 +580,14 @@ class ConfigService(Settings):
         if mcp_conf:
             return McpConf(**mcp_conf)
         return McpConf()
+
+    def get_kunlian_conf(self) -> KunlianConf:
+        """Return effective KunlianConf with explicit DB initdb_config overrides applied."""
+        return apply_kunlian_db_overrides(self.sso_sync.kunlian, self.get_from_db("sso_sync"))
+
+    async def aget_kunlian_conf(self) -> KunlianConf:
+        """Async variant returning effective KunlianConf with explicit DB initdb_config overrides applied."""
+        return apply_kunlian_db_overrides(self.sso_sync.kunlian, await self.aget_from_db("sso_sync"))
 
     def get_sandbox_conf(self):
         """Effective sandbox access: page config over deployment, per field.

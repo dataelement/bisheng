@@ -11,6 +11,7 @@ from cryptography.fernet import Fernet
 from pydantic import SecretStr
 
 from bisheng.common.errcode.sso_sync import KunlianDependencyUnavailableError
+from bisheng.core.config.sso_sync import apply_kunlian_db_overrides
 from bisheng.role.application.external_basic_role import ExternalBasicRoleApplication, RoleExternalBasicRoleRepository
 from bisheng.sso_sync.application.browser import KunlianBrowserApplication
 from bisheng.sso_sync.application.kunlian import (
@@ -84,7 +85,14 @@ class KunlianRuntimeProvider:
         from bisheng.common.services.config_service import settings
         from bisheng.user.domain.services.auth import AuthJwt
 
-        config = settings.sso_sync.kunlian.model_copy(deep=True)
+        base_config = settings.sso_sync.kunlian
+        # Only read initdb_config when Kunlian SSO/directory is enabled so disabled tests keep zero DB reads.
+        db_sso_sync = (
+            await settings.aget_from_db("sso_sync")
+            if (base_config.login_enabled or base_config.directory_enabled)
+            else None
+        )
+        config = apply_kunlian_db_overrides(base_config, db_sso_sync)
         multi_tenant_enabled = settings.multi_tenant.enabled
         references = (
             "client_secret_reference",

@@ -208,3 +208,9 @@ memory:
   default_timezone: Asia/Shanghai
   # 自动整理总开关；关闭后不再投整理任务，不影响显式写入与读取
   auto_consolidation_enabled: true
+
+sso_sync:
+  kunlian:
+    # 昆联成员自动建角色与工作流授权开关（热更新，无需重启）
+    # null 表示沿用部署文件 config.yaml 的 sso_sync.kunlian.auto_onboarding_enabled；设为 true/false 时覆盖
+    auto_onboarding_enabled: null

@@ -36,4 +36,10 @@ export type AppConfig = {
      * `open_platform_enabled`, which only gates the three dev-toolkit scopes.
      */
     open_api_management_enabled?: boolean;
+    /** Kunlian SSO/directory integration enabled at deployment level. */
+    kunlian_sso_configured?: boolean;
+    /** Kunlian auto_onboarding_enabled default from deployment config.yaml. */
+    kunlian_auto_onboarding_default?: boolean;
+    /** Effective Kunlian auto_onboarding_enabled (DB override or config.yaml default). */
+    kunlian_auto_onboarding_enabled?: boolean;
 };

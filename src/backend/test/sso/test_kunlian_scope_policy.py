@@ -22,7 +22,7 @@ def test_malformed_scope_policy_is_rejected_as_a_whole(pairs):
 
 def test_fixed_defaults_remain_usable_and_integrated_map_mode_is_ready():
     conf = config()
-    assert not conf.auto_onboarding_enabled
+    assert conf.auto_onboarding_enabled
     assert conf.login_scope_mode == "fixed"
     assert not conf.readiness_reasons(multi_tenant_enabled=True)
     conf.login_scope_mode = "tenant_workspace_map"

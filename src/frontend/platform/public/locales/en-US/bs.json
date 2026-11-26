@@ -428,6 +428,16 @@
     "groupNamePrompt": "UserGroup name cannot exceed 30 characters",
     "groupNameRequired": "UserGroup name is required",
     "parameterConfig": "Parameter Configuration",
+    "kunlianAutoOnboarding": {
+      "title": "Kunlian Auto-Onboarding Role & Workflow Grant",
+      "desc": "When enabled, newly synced Kunlian members automatically receive a tenant-scoped baseline workflow role; when disabled, baseline roles are no longer auto-created or assigned.",
+      "scopeHint": "Hot-reloads without restarting and stays synced with sso_sync.kunlian.auto_onboarding_enabled in the YAML below. Disabling stops future grants only and keeps existing memberships.",
+      "sourceOverride": "System config override",
+      "sourceInherit": "Inherits deployment config ({{value}})",
+      "stateOn": "Enabled",
+      "stateOff": "Disabled",
+      "resetInherit": "Reset to deployment default"
+    },
     "language": "Language",
     "colorConfig": "Color Configuration",
     "assistantAuthorization": "Assistant",

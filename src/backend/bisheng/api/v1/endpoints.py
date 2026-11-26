@@ -15,6 +15,7 @@ from bisheng.common.errcode.server import (
 )
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.common.services.config_service import validate_sso_sync_db_config
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.utils import generate_uuid, get_request_ip
@@ -104,6 +105,19 @@ def get_env():
     # Four sibling switches on purpose — each gates a different surface.
     env["personal_token_enabled"] = bool(bisheng_settings.open_api.pat_enabled)
     env["open_api_management_enabled"] = bool(bisheng_settings.open_api.management_ui_enabled)
+    kunlian_base_conf = getattr(getattr(bisheng_settings, "sso_sync", None), "kunlian", None)
+    kunlian_sso_configured = bool(
+        kunlian_base_conf and (kunlian_base_conf.directory_enabled or kunlian_base_conf.login_enabled)
+    )
+    kunlian_auto_onboarding_default = bool(kunlian_base_conf.auto_onboarding_enabled) if kunlian_base_conf else False
+    try:
+        kunlian_auto_onboarding_enabled = bool(bisheng_settings.get_kunlian_conf().auto_onboarding_enabled)
+    except Exception as exc:
+        logger.warning("Failed to load kunlian config override, using deployment default: {}", exc)
+        kunlian_auto_onboarding_enabled = kunlian_auto_onboarding_default
+    env["kunlian_sso_configured"] = kunlian_sso_configured
+    env["kunlian_auto_onboarding_default"] = kunlian_auto_onboarding_default
+    env["kunlian_auto_onboarding_enabled"] = kunlian_auto_onboarding_enabled
     try:
         workflow_conf = bisheng_settings.get_workflow_conf()
         workflow_auto_rerun_on_open = workflow_conf.auto_rerun_on_open
@@ -201,6 +215,8 @@ def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_ad
                 False,
             ]:
                 raise ValueError("linsight_invitation_code must be a boolean value")
+        if isinstance(config, dict) and "sso_sync" in config:
+            validate_sso_sync_db_config(config.get("sso_sync"))
 
         db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
         db_config.value = data.get("data")

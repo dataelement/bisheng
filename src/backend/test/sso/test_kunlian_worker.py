@@ -63,6 +63,7 @@ async def test_durable_request_survives_publish_loss_and_next_tick_requeues(work
 
 async def test_bounded_projection_continues_by_key_and_disabled_configuration_is_inert(worker):
     module, _, cfg, services, runtime, sync, recover = worker
+    cfg.auto_onboarding_enabled = False
     services.projection.project_pending.return_value.update(has_more=True)
     await module.run_control_operation("recover", connection_id="fixture")
     services.projection.project_pending.assert_awaited_once_with("fixture", after_key="", limit=25)

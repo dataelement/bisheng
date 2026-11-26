@@ -103,6 +103,9 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           // personal-token management tabs on the system page.
           personalTokenEnabled: !!res.personal_token_enabled,
           openApiManagementEnabled: !!res.open_api_management_enabled,
+          kunlianSsoConfigured: !!res.kunlian_sso_configured,
+          kunlianAutoOnboardingDefault: !!res.kunlian_auto_onboarding_default,
+          kunlianAutoOnboardingEnabled: !!res.kunlian_auto_onboarding_enabled,
           // Off unless an operator turned it on: the builder marks the node as
           // disabled rather than letting the author discover it at run time.
           codeNodeEnabled: !!res.workflow?.code_node_enabled
