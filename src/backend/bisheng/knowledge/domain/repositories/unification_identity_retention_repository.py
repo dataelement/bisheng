@@ -55,6 +55,9 @@ class IdentityRetentionSnapshot:
 
 
 class UnificationIdentityRetentionRepository:
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
     async def acapture(self, session):
         require(
             isinstance(session, AsyncSession)
@@ -68,7 +71,7 @@ class UnificationIdentityRetentionRepository:
         tenant_id = get_current_tenant_id()
         fingerprint, counts = sha256(), Counter()
 
-        async def read(query):
+        async def read(query, *, family=None):
             transaction.assert_current(session)
             require(
                 get_current_tenant_id() == tenant_id and not session.new and not session.dirty and not session.deleted,
@@ -77,6 +80,8 @@ class UnificationIdentityRetentionRepository:
             with session.no_autoflush, bypass_tenant_filter():
                 result = tuple((await session.execute(query)).mappings())
             transaction.assert_current(session)
+            if self.fact_view is not None and family is not None:
+                result = self.fact_view.project_rows(family, result)
             return result
 
         def record(tag, row):
@@ -92,7 +97,8 @@ class UnificationIdentityRetentionRepository:
                 if after is not None:
                     current = current.where(table.c.id > after)
                 rows = await read(current)
-                for row in rows:
+                projected = self.fact_view.project_rows(table.name, rows) if self.fact_view is not None else rows
+                for row in projected:
                     yield row
                 if len(rows) < 200:
                     break
@@ -152,10 +158,12 @@ class UnificationIdentityRetentionRepository:
         for start in range(0, len(ordered), 200):
             ids = ordered[start : start + 200]
             table = PermissionProjectionOperation.__table__
-            pending = select(table.c.id, table.c.tenant_id, table.c.scope_key).where(
+            pending = select(table.c.id, table.c.tenant_id, table.c.scope_key, table.c.status).where(
                 table.c.tenant_id.in_(ids), table.c.scope_type == "resource", table.c.status != "FINALIZED"
             )
             async for row in pages(table, pending):
+                if row.get("status") == "FINALIZED":
+                    continue
                 require((row["tenant_id"], *row["scope_key"].split(":", 1)) not in modes, "unfinished_projection")
             for model in (UserTenant, Department):
                 table = model.__table__
@@ -199,13 +207,18 @@ class UnificationIdentityRetentionRepository:
             for start in range(0, len(ids), 200):
                 batch = ids[start : start + 200]
                 mode, actual = ResourcePermissionMode.__table__, Tenant.__table__
+                conflict = (
+                    select(mode.c.id)
+                    .join(actual, actual.c.id == mode.c.tenant_id)
+                    .where(mode.c.resource_type == kind, mode.c.resource_id.in_(batch))
+                    .limit(1)
+                )
+                if self.fact_view is not None:
+                    # The history contract only purges orphan tool/assistant
+                    # mirrors; it never creates or moves their retained scope.
+                    conflict = self.fact_view.exclude_affected_probe(conflict)
                 require(
-                    not await read(
-                        select(mode.c.id)
-                        .join(actual, actual.c.id == mode.c.tenant_id)
-                        .where(mode.c.resource_type == kind, mode.c.resource_id.in_(batch))
-                        .limit(1)
-                    ),
+                    not await read(conflict),
                     "live_mode_conflict",
                 )
                 if kind == "assistant":
@@ -213,7 +226,8 @@ class UnificationIdentityRetentionRepository:
                     rows = await read(
                         select(table.c.id, table.c.tenant_id, actual.c.id.label("actual_tenant"))
                         .outerjoin(actual, actual.c.id == table.c.tenant_id)
-                        .where(table.c.id.in_(batch))
+                        .where(table.c.id.in_(batch)),
+                        family=table.name,
                     )
                     require({r["id"] for r in rows} == set(batch), "moved_assistant_missing")
                     for row in rows:
@@ -229,7 +243,9 @@ class UnificationIdentityRetentionRepository:
         ids = sorted(operations)
         for start in range(0, len(ids), 200):
             table = PermissionProjectionOperation.__table__
-            rows = await read(select(*table.c).where(table.c.id.in_(ids[start : start + 200])).order_by(table.c.id))
+            rows = await read(
+                select(*table.c).where(table.c.id.in_(ids[start : start + 200])).order_by(table.c.id), family=table.name
+            )
             require({r["id"] for r in rows} == set(ids[start : start + 200]), "operation_missing")
             for row in rows:
                 require(

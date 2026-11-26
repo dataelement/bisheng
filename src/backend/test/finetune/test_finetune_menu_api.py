@@ -252,7 +252,7 @@ async def test_creation_rejects_unowned_references_before_signing_or_remote_call
 async def test_same_tenant_base_model_must_belong_to_selected_service(tasks):
     with tenant_execution_scope(60):
         await server.ServerDao.insert(
-            server.Server(id=61, server="another FT", endpoint="", sft_endpoint="http://another.test")
+            server.Server(id=61, server="another FT", endpoint="", sft_endpoint="http://another.test"), tenant_id=60
         )
     response = await tasks.client.post("/api/v1/finetune/job", json=payload(server=61))
     assert response.json()["status_code"] != 200 and not tasks.signed
@@ -267,7 +267,7 @@ async def test_lookups_and_bulk_mutations_ignore_root_visibility_and_old_server_
         assert await FinetuneService.get_server(1) is None
         assert await finetune.FinetuneDao.find_job_by_model_name("trained-1") is None
         assert await finetune.FinetuneDao.find_job_by_model_id(1) is None
-        await server.ServerDao.delete(1)
+        await server.ServerDao.delete(1, tenant_id=60)
         await model_deploy.ModelDeployDao.delete_model_by_id(1)
         await sft_model.SftModelDao.delete_sft_model("same-name")
         assert not await finetune.FinetuneDao.change_status("job-1", 1, 3)

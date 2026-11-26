@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from fastapi import Request
 from loguru import logger
@@ -20,13 +19,15 @@ from bisheng.permission.domain.services.owner_service import OwnerService, _run_
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.user.domain.services.user import UserService
+from bisheng.user_group.domain.schemas.user_group_schema import GroupUserSummary
 from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
+from bisheng.user_group.domain.services.user_group_service import UserGroupService
 from bisheng.utils import get_request_ip
 
 
 class RoleGroupService:
     @staticmethod
-    def _execute_group_change_ops(operations: List[PermissionRelationChange]) -> None:
+    def _execute_group_change_ops(operations: list[PermissionRelationChange]) -> None:
         if not operations:
             return
         try:
@@ -42,7 +43,7 @@ class RoleGroupService:
         except Exception as exc:
             logger.warning("Failed to cleanup legacy user_group subject tuples group=%s: %s", group_id, exc)
 
-    def enrich_group_reads(self, groups: List[Group]) -> List[GroupRead]:
+    def enrich_group_reads(self, groups: list[Group]) -> list[GroupRead]:
         """Attach admins to Group ORM rows and return GroupRead list."""
         if not groups:
             return []
@@ -62,7 +63,7 @@ class RoleGroupService:
             ]
         return groupReads
 
-    def get_group_list(self, group_ids: List[int]) -> List[GroupRead]:
+    def get_group_list(self, group_ids: list[int]) -> list[GroupRead]:
         """Get the full amountgroupVertical"""
 
         # Inquirygroup
@@ -136,8 +137,11 @@ class RoleGroupService:
 
         purge_user_group_residual_sync(group_info.id)
 
-    def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> Optional[List[Dict]]:
-        """Get the full amountgroupVertical"""
+    def get_group_user_list(
+        self, group_id: int, page_size: int, page_num: int, login_user: UserPayload
+    ) -> list[dict] | None:
+        """Return safe identities only after the domain target visibility check."""
+        _run_async_safe(UserGroupService.aensure_group_visible(group_id, login_user))
 
         # Inquiryuser
         user_group_list = UserGroupDao.get_group_user(group_id, page_size, page_num)
@@ -149,12 +153,14 @@ class RoleGroupService:
         return None
 
     @staticmethod
-    def _dump_user_with_avatar_share_link(user: User | None) -> Dict:
+    def _dump_user_with_avatar_share_link(user: User | None) -> dict:
         if not user:
             return {}
-        user_data = user.model_dump()
-        user_data["avatar"] = UserService.get_avatar_share_link_sync(user_data.get("avatar"))
-        return user_data
+        return GroupUserSummary(
+            user_id=user.user_id,
+            user_name=user.user_name,
+            avatar=UserService.get_avatar_share_link_sync(user.avatar),
+        ).model_dump()
 
     def insert_user_group(self, user_group: UserGroupCreate) -> UserGroupRead:
         """Insert User Group"""
@@ -172,39 +178,39 @@ class RoleGroupService:
         self._execute_group_change_ops(ops)
         return row
 
-    def replace_user_groups(self, request: Request, login_user: UserPayload, user_id: int, group_ids: List[int]):
+    def replace_user_groups(self, request: Request, login_user: UserPayload, user_id: int, group_ids: list[int]):
         """Overwrite the user group the user belongs to"""
         # Determine if the Operated User is a Super Admin
         user_role_list = UserRoleDao.get_user_roles(user_id)
         if any(one.role_id == AdminRole for one in user_role_list):
             raise AdminUserUpdateForbiddenError()
 
-        # Get all previous groupings of users
-        old_group = UserGroupDao.get_user_group(user_id)
-        old_group = [one.group_id for one in old_group]
+        current_ids = {one.group_id for one in UserGroupDao.get_user_group(user_id)}
+        desired_ids = set(group_ids)
+        admin_group = []
+        old_group = sorted(current_ids)
         if not login_user.is_admin():
-            # Get Operator Managed Groups
-            admin_group = UserGroupDao.get_user_admin_group(login_user.user_id)
-            admin_group = [one.group_id for one in admin_group]
-            # Filter the group where the operator is located, only groups with permission management are processed
-            old_group = [one for one in old_group if one in admin_group]
-            # Describe this user Not in a user group administered by this user group administrator
+            admin_group = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            old_group = sorted(current_ids & set(admin_group))
             if not old_group:
                 raise UnAuthorizedError()
-        need_delete_group = old_group.copy()
-        need_add_group = []
-        for one in group_ids:
-            if one not in old_group:
-                # User groups to join
-                need_add_group.append(one)
-            else:
-                # Remaining in the old user group is the user group to be moved out
-                need_delete_group.remove(one)
+        # Existing memberships outside the operator's scope are not additions
+        # and must never be removed by this legacy replacement form.
+        need_delete_group = sorted(set(old_group) - desired_ids)
+        need_add_group = sorted(desired_ids - current_ids)
+        _run_async_safe(
+            UserGroupService.avalidate_legacy_membership_changes(
+                login_user,
+                user_id,
+                need_delete_group + need_add_group,
+                delegated_group_ids=admin_group,
+            )
+        )
         if need_delete_group:
             UserGroupDao.delete_user_groups(user_id, need_delete_group)
         if need_add_group:
             UserGroupDao.add_user_groups(user_id, need_add_group)
-        ops: List[PermissionRelationChange] = []
+        ops: list[PermissionRelationChange] = []
         for group_id in need_delete_group:
             ops.extend(GroupChangeHandler.on_member_removed(group_id, user_id))
         for group_id in need_add_group:
@@ -213,7 +219,7 @@ class RoleGroupService:
 
         # Log Audit Logs
         group_infos = GroupDao.get_group_by_ids(old_group + group_ids)
-        group_dict: Dict[int, str] = {}
+        group_dict: dict[int, str] = {}
         for one in group_infos:
             group_dict[one.id] = one.group_name
         note = "Pre-edit user groups:"
@@ -227,7 +233,7 @@ class RoleGroupService:
         AuditLogService.update_user(login_user, get_request_ip(request), user_id, list(group_dict.keys()), note)
         return None
 
-    def get_user_groups_list(self, user_id: int) -> List[GroupRead]:
+    def get_user_groups_list(self, user_id: int) -> list[GroupRead]:
         """Get a list of user groups"""
         user_groups = UserGroupDao.get_user_group(user_id)
         if not user_groups:
@@ -235,7 +241,7 @@ class RoleGroupService:
         group_ids = [ug.group_id for ug in user_groups]
         return GroupDao.get_group_by_ids(group_ids)
 
-    def set_group_admin(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
+    def set_group_admin(self, request: Request, login_user: UserPayload, user_ids: list[int], group_id: int):
         """Set up user group administrators"""
         # Get the list of administrators of the current user group
         user_group_admins = UserGroupDao.get_groups_admins([group_id])
@@ -255,7 +261,7 @@ class RoleGroupService:
                 res.append(UserGroupDao.insert_user_group_admin(user_id, group_id))
         if need_delete_admin:
             UserGroupDao.delete_group_admins(group_id, need_delete_admin)
-        ops: List[PermissionRelationChange] = []
+        ops: list[PermissionRelationChange] = []
         if need_add_admin:
             ops.extend(GroupChangeHandler.on_admin_set(group_id, need_add_admin))
         if need_delete_admin:
@@ -268,7 +274,7 @@ class RoleGroupService:
         self.update_group_hook(request, login_user, group_info)
         return res
 
-    def set_group_members(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
+    def set_group_members(self, request: Request, login_user: UserPayload, user_ids: list[int], group_id: int):
         """Batch set group members (non-admin), overwriting the existing member list."""
         target_ids = set(user_ids)
         current_ids = {m.user_id for m in UserGroupDao.get_group_user(group_id)}
@@ -278,7 +284,7 @@ class RoleGroupService:
 
         UserGroupDao.batch_add_group_members(group_id, need_add)
         UserGroupDao.batch_delete_group_members(group_id, need_delete)
-        ops: List[PermissionRelationChange] = []
+        ops: list[PermissionRelationChange] = []
         if need_add:
             ops.extend(GroupChangeHandler.on_members_added(group_id, need_add))
         for user_id in need_delete:

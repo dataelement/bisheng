@@ -519,6 +519,16 @@ class BaseExecutor(ABC):
             except Exception:
                 # One unmirrored file degrades ls/continuity for that file only.
                 logger.exception("workspace mirror failed for {}", object_name)
+                continue
+            # F004 T055: the caller may want to know which files reached the workspace
+            # (set as ``executor.on_workspace_file = fn(rel_path, size)``). Called on
+            # the executor's thread; a failing callback must not undo the mirror.
+            callback = getattr(self, "on_workspace_file", None)
+            if callback is not None:
+                try:
+                    callback(rel_key, os.path.getsize(local_path))
+                except Exception:
+                    logger.exception("workspace mirror: file callback failed for {}", object_name)
         if synced:
             logger.debug("workspace mirror: {} file(s) -> {}/{}", synced, bucket, prefix)
         return synced

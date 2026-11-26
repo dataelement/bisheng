@@ -145,15 +145,17 @@ async def test_effective_declaration_uses_original_principal_and_frozen_ids(capa
         await bus.load_effective_declaration("actual-app", principal=capability_bus.identity.model_copy())
 
 
-async def test_whole_source_bad_knowledge_blocks_model_and_retrieval_before_io(capability_bus, monkeypatch):
+async def test_missing_knowledge_only_blocks_retrieval_before_io(capability_bus, monkeypatch):
     from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
 
     retrieval = AsyncMock()
     monkeypatch.setattr(RetrievalFacadeService, "retrieve", retrieval)
     async with AsyncSession(capability_bus.engine) as session, session.begin():
         await session.execute(sa.delete(Knowledge).where(Knowledge.id == 7))
-    with pytest.raises(BaseErrorCode):
+    assert (
         await bus.HostedAppDeclarationAdapter().assert_model_binding(capability_bus.identity, "alpha", resolved())
+        is None
+    )
     with pytest.raises(BaseErrorCode):
         await bus.CapabilityBusService.retrieve(
             app_id="actual-app", principal=capability_bus.identity, access_user_id=4, query="question"
@@ -204,7 +206,7 @@ async def test_actual_retrieval_keeps_access_user_narrowing_and_legacy_kinds(
     assert retrieval.await_count == 1
 
 
-async def test_historical_qa_blocks_actual_model_gateway_and_retrieval_before_provider(capability_bus, monkeypatch):
+async def test_historical_qa_does_not_block_independent_model_capability(capability_bus, monkeypatch):
     from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
 
     async with AsyncSession(capability_bus.engine) as session, session.begin():
@@ -216,13 +218,13 @@ async def test_historical_qa_blocks_actual_model_gateway_and_retrieval_before_pr
     monkeypatch.setattr(gateway.ModelGatewayService, "_instantiate", instantiate)
     monkeypatch.setattr(gateway.ModelGatewayService, "_start_record", Mock(return_value=SimpleNamespace()))
     monkeypatch.setattr(gateway.ModelGatewayService, "_finish_record", Mock())
-    with pytest.raises(ModelFaceModelRevokedError):
+    with pytest.raises(AssertionError, match="QA source reached provider"):
         await gateway.ModelGatewayService.complete(
             capability_bus.identity,
             None,
             ChatCompletionRequest(model="alpha", messages=[{"role": "user", "content": "hi"}]),
         )
-    instantiate.assert_not_awaited()
+    instantiate.assert_awaited_once()
     retrieval = AsyncMock()
     monkeypatch.setattr(RetrievalFacadeService, "retrieve", retrieval)
     with pytest.raises(ResourceReferenceInvalidError):
@@ -312,11 +314,12 @@ async def test_actual_deleted_model_still_in_cached_catalog_never_reaches_provid
         )
     # Exercise the real cache window, not an invented current-name result.
     assert await resolve_model_name(101, "alpha") == cached
-    with pytest.raises(ModelFaceModelRevokedError) as raised:
+    from bisheng.common.errcode.model_face import ModelFaceModelNotFoundError
+
+    with pytest.raises(ModelFaceModelNotFoundError):
         await gateway.ModelGatewayService.complete(
             original, None, ChatCompletionRequest(model="alpha", messages=[{"role": "user", "content": "hi"}])
         )
-    assert raised.value.__cause__ is not None
     native_gateway.provider.assert_not_awaited()
 
 

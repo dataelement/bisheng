@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 
 from loguru import logger
 
+from bisheng.core.storage.browser_object_path import parse_browser_object_reference
+
 LONG_EDGE = 512
 MIN_READABLE_EDGE = 32
 _KNOWLEDGE_IMAGES = "knowledge/images/"
@@ -100,12 +102,16 @@ def _classify(url: str) -> str:
             return "http"
         return "reject"
     prefix = f"/{_public_bucket()}/{_KNOWLEDGE_IMAGES}"
-    if url.startswith(prefix):
+    object_prefix = f"/object{prefix}"
+    if url.startswith(prefix) or url.startswith(object_prefix):
         return "minio_path"
     return "reject"
 
 
 def _split_internal_path(url: str) -> tuple[str, str]:
+    parsed = parse_browser_object_reference(url, _public_bucket(), "")
+    if parsed is not None:
+        return parsed
     stripped = url.split("?", 1)[0].lstrip("/")
     bucket, object_key = stripped.split("/", 1)
     return bucket, object_key

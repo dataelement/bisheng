@@ -61,11 +61,8 @@ from bisheng.app_publish.domain.repositories.reference_source_repository import 
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.schemas.failure import failure_from_error
 from bisheng.app_publish.domain.services import package_service
-from bisheng.app_publish.domain.services.reference_extractor import (
-    APP_REFERENCE_EXTRACTOR_VERSION,
-    extract_app_references,
-)
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
+from bisheng.app_publish.domain.services.saved_bindings import binding_payload
 from bisheng.app_runtime.application.authorization import authorize_loaded_app, resolve_app_actor
 from bisheng.app_runtime.application.runtime_authorization import user_authorization_context
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision
@@ -88,14 +85,10 @@ from bisheng.database.models.app_version import (
 )
 from bisheng.llm.application.model_name_resolution import get_model_name_resolution_port
 from bisheng.permission.application.business_authorization import require_business_action
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.contracts import (
-    SourceKey,
-    SourceType,
-    TargetKey,
     TargetType,
-    reference_set_digest,
 )
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 
 #: The three non-NULL values of ``app_version.terminal_state``. NULL — "no
 #: outcome yet" — is the fourth state and deliberately not a member here: it is
@@ -249,8 +242,6 @@ class VersionService:
                 references = await resolve_app_references(
                     session, declaration, identity=identity, source_tenant_id=root["tenant_id"], model_name_plan=plan
                 )
-                runtime = await get_reference_binding_runtime()
-                key = SourceKey(root["tenant_id"], SourceType.HOSTED_APP_VERSION, root["id"], deployment.version_id)
                 locked_root = None
 
                 async def lock_source_root(sql):
@@ -259,7 +250,6 @@ class VersionService:
                     current_versions = await repository.alist_versions(sql, locked_root, for_update=True)
                     if locked_root != root or current_versions != versions:
                         raise KnowledgeOperationPlanConflictError(reason="app_version_manifest_changed")
-                    await cls._require_version_inventory(sql, locked_root, current_versions, key, runtime.repository)
                     await authorize_loaded_app(
                         identity,
                         SimpleNamespace(**locked_root),
@@ -290,14 +280,7 @@ class VersionService:
                             actor=actor,
                         )
 
-                prepared = await runtime.aprepare_source_bindings(
-                    session,
-                    key,
-                    references,
-                    extractor_version=APP_REFERENCE_EXTRACTOR_VERSION,
-                    lock_source_root=lock_source_root,
-                    new_source=True,
-                )
+                await lock_source_root(session)
                 previous = await repository.amax_version_no(session, locked_root)
                 row = AppVersion(
                     release_notes=deployment.release_notes,
@@ -309,7 +292,7 @@ class VersionService:
                     code_object_key=deployment.code_object_key or "",
                     manifest=manifest,
                     capabilities=manifest.get("capabilities") or {},
-                    injections={},
+                    injections={"resource_bindings": binding_payload(references)},
                     tier_id=deployment.tier_code or manifest.get("tier") or "light",
                     runtime=str(manifest.get("runtime") or ""),
                     # The image the build produced. Without it the version row keeps
@@ -323,48 +306,9 @@ class VersionService:
                 # Repository INSERT values must retain native Python values.
                 values = {name: getattr(row, name) for name in AppVersion.model_fields}
                 saved = await repository.ainsert_version(session, locked_root, values)
-                await runtime.aapply_source_bindings(session, prepared)
-                return AppVersion(**saved)
-
-    @staticmethod
-    async def _require_version_inventory(session, root, versions, key, references):
-        """A new UUID does not repair missing indices of older immutable versions."""
-        guard = await references.aget_root_guard(session, key, for_update=True)
-        if versions and (
-            guard is None
-            or guard.record_kind != "root_guard"
-            or guard.ready
-            or guard.effective
-            or guard.source_revision <= 0
-        ):
-            raise ReferenceCoverageNotReadyError(reason="app_version_root_guard_inconsistent")
-        sets = await references.alist_source_sets_for_root(session, key, for_update=True)
-        raw = await references.alist_source_references_for_root(session, key, for_update=True)
-        by_version = {version["id"]: version for version in versions}
-        if {item.source_version for item in sets} != set(by_version) or any(
-            item.source_version not in by_version for item in raw
-        ):
-            raise ReferenceCoverageNotReadyError(reason="app_version_inventory_incomplete")
-        for indexed in sets:
-            rows = [item for item in raw if item.source_version == indexed.source_version]
-            try:
-                declaration = CapabilityDeclaration.model_validate(by_version[indexed.source_version]["capabilities"])
-                mapping = {item.slot_key: TargetKey(item.target_type, item.target_id) for item in rows}
-                configured = extract_app_references(declaration, resolved_targets=mapping)
-            except (TypeError, ValueError) as error:
-                raise ReferenceCoverageNotReadyError(reason="app_version_configuration_drift") from error
-            if (
-                not indexed.ready
-                or not indexed.effective
-                or indexed.source_revision <= 0
-                or guard is None
-                or indexed.source_revision > guard.source_revision
-                or len(mapping) != len(rows)
-                or indexed.extractor_version != APP_REFERENCE_EXTRACTOR_VERSION
-                or indexed.digest != reference_set_digest(configured)
-                or any(item.source_revision != indexed.source_revision for item in rows)
-            ):
-                raise ReferenceCoverageNotReadyError(reason="app_version_inventory_inconsistent")
+                result = AppVersion(**saved)
+        await notify_reference_sync(root["tenant_id"], "hosted_app_version", root["id"])
+        return result
 
     # -- the single latch -------------------------------------------------
 

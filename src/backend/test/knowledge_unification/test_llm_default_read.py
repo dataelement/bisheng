@@ -77,7 +77,7 @@ async def test_raw_management_preserves_unindexed_original_id_while_execute_refu
         reads.facade.get_default("evaluation_llm") if native_sync else await reads.facade.aget_default("evaluation_llm")
     )
     assert json.loads(raw.payload_json)["model_id"] == 777 and raw.source.tenant_id == 101
-    with pytest.raises(ReferenceCoverageNotReadyError):
+    with pytest.raises(ResourceReferenceInvalidError):
         if native_sync:
             reads.facade.require_default("evaluation_llm")
         else:
@@ -158,11 +158,12 @@ async def test_unconfigured_has_explicit_empty_value_but_own_empty_requires_zero
     assert value.payload_json == "{}" and value.source_key is None
     with Session(reads.engine) as session, session.begin():
         session.add(TenantSystemModelConfig(tenant_id=101, key="evaluation_llm", value="{}"))
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        if native_sync:
-            reads.facade.require_default("evaluation_llm")
-        else:
-            await reads.facade.arequire_default("evaluation_llm")
+    value = (
+        reads.facade.require_default("evaluation_llm")
+        if native_sync
+        else await reads.facade.arequire_default("evaluation_llm")
+    )
+    assert value.payload_json == "{}" and value.source_key.source_id == "evaluation_llm"
 
 
 @pytest.mark.parametrize("native_sync", [False, True])

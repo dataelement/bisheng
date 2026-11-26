@@ -6,7 +6,12 @@ jest.mock('~/hooks', () => ({ useLocalize: () => (key: string, values?: Record<s
         : key === 'com_linsight_error_hide_detail' ? 'Hide details'
         : values?.['0'] ?? key,
 }));
-jest.mock('bisheng-icons', () => ({ Outlined: { Down: () => null } }));
+jest.mock('bisheng-icons', () => ({
+    Outlined: new Proxy({}, { get: () => () => null }),
+    Filled: new Proxy({}, { get: () => () => null }),
+}));
+const mockCopy = jest.fn();
+jest.mock('copy-to-clipboard', () => ({ __esModule: true, default: (...args: unknown[]) => mockCopy(...args) }));
 
 const failure = {
     version: 1,
@@ -48,4 +53,14 @@ it('reveals redacted detail together with provenance using one disclosure', () =
     fireEvent.click(screen.getByRole('button', { name: 'View details' }));
     expect(screen.getByText(/failure-1/)).toBeInTheDocument();
     expect(screen.getByText('Redacted provider error')).toBeInTheDocument();
+});
+
+// 114, 2026-11-18: "故障标识有什么意义吗？" The line now says what the id is
+// for, and the id can be copied.
+it('says what the reference is for and copies it', () => {
+    render(<FailureInfoDetails referenceId="fdec5972c50d4238a5fe4e2599b4e561" />);
+    expect(screen.getByText('api_errors.failure_id_hint')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'com_ui_copy' }));
+    expect(mockCopy).toHaveBeenCalledWith('fdec5972c50d4238a5fe4e2599b4e561', { format: 'text/plain' });
+    expect(screen.getByRole('button', { name: 'com_ui_copied' })).toBeInTheDocument();
 });

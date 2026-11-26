@@ -8,6 +8,7 @@ from typing import Any
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
+from bisheng.chat_session.domain.schemas.user_message import ComposerReference, serialize_user_question
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -937,7 +938,7 @@ async def announce_stranded_session_failure(session_version_id: str) -> None:
         logger.error(f"Failed to announce stranded session failure {session_version_id}: {e}")
 
 
-async def enqueue_session_for_execution(session_model: LinsightSessionVersion) -> None:
+async def enqueue_session_for_execution(session_model: LinsightSessionVersion, run_id: str | None = None) -> None:
     """Hand a task-mode session to the Linsight worker queue.
 
     Single entry point for enqueueing, shared by the unified submit path and the
@@ -957,12 +958,17 @@ async def enqueue_session_for_execution(session_model: LinsightSessionVersion) -
     Enqueueing twice is harmless: the executor re-reads the session and bails via
     ``_is_session_in_progress`` when it is already running, so the client's
     start-execute stays a safe no-op / late retry.
+
+    ``run_id`` (F004): the run id the unified send entry reserved the
+    conversation with. The worker claims the conversation under that id; without
+    it the run id is the session version id and the item is exactly the legacy one.
     """
     from bisheng.linsight.worker import LinsightQueue, encode_queue_item
 
     redis_client = await get_redis_client()
     queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
-    await queue.put(data=encode_queue_item(session_model.id, tenant_id=session_model.tenant_id))
+    extra = {"run_id": run_id} if run_id is not None else {}
+    await queue.put(data=encode_queue_item(session_model.id, tenant_id=session_model.tenant_id, **extra))
 
 
 async def persist_task_turn_message(session_model: LinsightSessionVersion) -> ChatMessage:
@@ -1059,8 +1065,9 @@ async def persist_task_user_turn(
     chat_id: str,
     user_id: int,
     question: str,
-    files: list | None = None,
+    files: list[dict] | None = None,
     session_version_id: str | None = None,
+    composer_references: list[ComposerReference] | None = None,
 ) -> ChatMessage:
     """F035 Track J (TJ-3): persist the task user turn into the unified conversation.
 
@@ -1082,7 +1089,7 @@ async def persist_task_user_turn(
             is_bot=False,
             sender="User",
             category="question",
-            message=json.dumps({"query": question or "", "files": files or []}, ensure_ascii=False),
+            message=serialize_user_question(question, files, composer_references),
             files=json.dumps(files) if files else None,
             extra=json.dumps({"linsight_session_version_id": session_version_id}) if session_version_id else "{}",
             source=0,

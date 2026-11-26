@@ -7,6 +7,18 @@ from bisheng.evaluation.domain.models.evaluation import Evaluation, ExecType
 
 class EvaluationRepository:
     @classmethod
+    def find_download_owner(cls, object_name: str) -> Evaluation | None:
+        from sqlalchemy import or_
+
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(Evaluation).where(
+                    Evaluation.is_delete == 0,
+                    or_(Evaluation.file_path == object_name, Evaluation.result_file_path == object_name),
+                )
+            ).first()
+
+    @classmethod
     def get_my_evaluations(cls, user_id: int, page: int, limit: int) -> tuple[list[Evaluation], int]:
         with get_sync_db_session() as session:
             statement = select(Evaluation).where(

@@ -1,0 +1,28 @@
+{
+  "id": "chat-suggestion-not-experience",
+  "acs": [
+    "AC-50"
+  ],
+  "turns": [
+    {
+      "user": "写周报有什么好的结构可以参考？",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我写周报有没有什么固定的做法？你记得的话直接说，不记得就说不记得",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "不记得",
+      "没有",
+      "暂无",
+      "未找到"
+    ]
+  },
+  "notes": "模型给出的建议、用户没有表态，不应整理为经验",
+  "requires_consolidation": true
+}

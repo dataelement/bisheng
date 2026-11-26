@@ -8,7 +8,6 @@ import { getWorkflowReportTemplate,saveWorkflowReportTemplate } from "@/controll
 import { showApiError } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import Word from "@/pages/Report/components/Word";
-import { getOfficeReachableUrl } from "@/utils/officeUrl";
 import { Outlined } from "bisheng-icons";
 
 import { useEffect,useRef,useState } from "react";
@@ -73,7 +72,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
     </div>
 
     // new
-    if (!docx.path) return <div className="relative size-full">
+    if (!docx.path && docx.source_kind !== 'empty') return <div className="relative size-full">
         <div className="absolute -top-10 z-10 flex gap-4">
             <DialogClose className="">
                 <Button variant="outlined" size="medium" color="default" iconOnly><Outlined.Left size={16} /></Button>
@@ -131,6 +130,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
 
 
 const useReport = (versionKey, flowId, onchange) => {
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(false)
     const [pageLoading, setPageLoading] = useState(true)
 
@@ -153,10 +153,8 @@ const useReport = (versionKey, flowId, onchange) => {
     }, [])
 
 
-    const handleCreate = async () => {
-        // Must be an address the document server itself can fetch — in local dev
-        // override it via VITE_OFFICE_PUBLIC_ORIGIN (see utils/officeUrl).
-        setDocx(doc => ({ ...docx, path: getOfficeReachableUrl('/empty.docx') }))
+    const handleCreate = () => {
+        setDocx(doc => ({ key: doc.key, path: '', source_kind: 'empty' }))
     }
 
     const handleImport = () => {
@@ -168,15 +166,21 @@ const useReport = (versionKey, flowId, onchange) => {
         input.style.display = "none"; // Hidden from view
         input.multiple = false; // Allow only one file selection
 
-        input.onchange = (e: Event) => {
-            setLoading(true);
-
-            // Get the selected file
+        input.onchange = async (e: Event) => {
             const file = (e.target as HTMLInputElement).files?.[0];
-            uploadFileWithProgress(file, (progress) => { }).then(res => {
+            if (!file) return;
+            setLoading(true);
+            try {
+                const res = await uploadFileWithProgress(file, () => {});
+                if (!res?.file_path || !res?.preview_upload_ref) {
+                    throw new Error(String(t('flow:wordEditorLoadFailed')));
+                }
+                setDocx(doc => ({ key: doc.key, path: res.file_path, preview_upload_ref: res.preview_upload_ref }));
+            } catch (error) {
+                showApiError(error);
+            } finally {
                 setLoading(false);
-                setDocx(docx => ({ ...docx, path: res.file_path }))
-            })
+            }
         };
 
         input.click();

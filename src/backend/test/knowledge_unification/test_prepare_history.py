@@ -11,10 +11,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from test.knowledge_unification import test_migration_preflight as native_preflight
-from test.knowledge_unification import test_migration_resource_repository as resources
-from test.knowledge_unification import test_perm_migration_snapshot as permission
-from test.knowledge_unification.test_model_share_projection_deferred import Marker, Transport
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError
@@ -33,6 +29,10 @@ from bisheng.permission.domain.models import (
 from bisheng.permission.domain.repositories.projection_repository import ProjectionRepository
 from bisheng.permission.domain.services.projection_service import ProjectionService
 from scripts import prepare_f118_history as module
+from test.knowledge_unification import test_migration_preflight as native_preflight
+from test.knowledge_unification import test_migration_resource_repository as resources
+from test.knowledge_unification import test_perm_migration_snapshot as permission
+from test.knowledge_unification.test_model_share_projection_deferred import Marker, Transport
 
 resource_native, native = native_preflight.resource_native, native_preflight.native
 
@@ -65,11 +65,10 @@ class FGA(Transport):
 
 @pytest.fixture
 async def history(native, monkeypatch):
-    from scripts.f118_history_business import models
-
     from bisheng.common.models.config import Config
     from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
     from bisheng.llm.domain.models.llm_server import LLMModel
+    from scripts.f118_history_business import models
 
     metadata = sa.MetaData()
     for model in (*models().values(), *(owner[0] for owner in module.business_models().values()), Config, LLMModel):
@@ -85,13 +84,14 @@ async def history(native, monkeypatch):
             if target.name not in metadata.tables:
                 target.to_metadata(metadata)
                 pending.append(target)
-    for model in (KnowledgeUnificationRun, PermissionProjectionTuple):
+    for model in (KnowledgeUnificationRun, PermissionProjectionTuple, ResourcePermissionMode):
         cloned = model.__table__.to_metadata(metadata)
-        if model is PermissionProjectionTuple:
+        if model in (PermissionProjectionTuple, ResourcePermissionMode):
             cloned.c.id.type = sa.Integer()
     PermissionProjectionOperation.__table__.to_metadata(metadata).c.id.type = sa.Integer()
     async with native.engine.begin() as connection:
         await connection.run_sync(lambda conn: PermissionProjectionOperation.__table__.drop(conn))
+        await connection.run_sync(lambda conn: ResourcePermissionMode.__table__.drop(conn))
         await connection.run_sync(metadata.create_all)
 
     @asynccontextmanager

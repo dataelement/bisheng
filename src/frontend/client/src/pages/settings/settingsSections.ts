@@ -9,6 +9,7 @@ export type SettingsPageSection =
   | "notifications"
   | "account"
   | "ai-access"
+  | "memory"
   | "desktop"
   | "general";
 
@@ -30,6 +31,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     items: [
       { key: "account", labelKey: "com_account_info_title", icon: Outlined.PeopleEdit },
       { key: "ai-access", labelKey: "com_ai_access.title", icon: Outlined.Send },
+      { key: "memory", labelKey: "memory.nav_title", icon: Outlined.Bulb },
       { key: "desktop", labelKey: "dsh_title", icon: Outlined.DeviceDesktopExchange },
       { key: "general", labelKey: "com_settings_general", icon: Outlined.Setting },
     ],

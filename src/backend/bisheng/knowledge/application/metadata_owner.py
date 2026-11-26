@@ -5,7 +5,6 @@ from dataclasses import asdict, dataclass, field, replace
 from weakref import WeakKeyDictionary
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
-from bisheng.knowledge.application.model_reference_read import get_knowledge_model_read_runtime
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
 from bisheng.knowledge.domain.repositories.metadata_execution_repository import MetadataExecutionRepository
 from bisheng.knowledge.domain.repositories.metadata_processing_repository import metadata_digest
@@ -74,13 +73,8 @@ class MetadataProcessingOwner:
         )
 
     async def _amodel_configuration(self, session, space_id, *, identity):
-        if self.model_owner is not None:
-            return (await self.model_owner.aread_current(session, space_id, identity=identity)).configuration
-        runtime = await get_knowledge_model_read_runtime()
-        admitted = await runtime.arequire(
-            space_id, login_user=None if isinstance(identity, OpenApiPrincipal) else identity, session=session
-        )
-        return ProcessingConfiguration(admitted.model_config_revision, admitted.index_generation)
+        current = await self.execution.aread_configuration(session, space_id)
+        return ProcessingConfiguration(current.model_config_revision, current.index_generation)
 
     def _check(self, session, prepared):
         issued = self._issued.get(prepared) if isinstance(prepared, PreparedMetadataOperation) else None

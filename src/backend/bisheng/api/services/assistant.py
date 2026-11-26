@@ -13,12 +13,11 @@ from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq, StreamData
 from bisheng.assistant.application.execution_admission import AssistantExecutionAdmission
+from bisheng.assistant.application.reference_validation import authorize_assistant_knowledge_bindings
 from bisheng.assistant.domain.repositories.assistant_repository import AssistantRepository
 from bisheng.assistant.domain.services.reference_extractor import (
-    ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
     extract_assistant_references,
-    extract_legacy_assistant_knowledge_references,
-    legacy_assistant_name_version,
+    unresolved_assistant_model_name,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -32,7 +31,6 @@ from bisheng.common.errcode.assistant import (
 from bisheng.common.errcode.knowledge import (
     KnowledgeEmbeddingUnavailableError,
     KnowledgeUnificationError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
@@ -47,6 +45,7 @@ from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.llm.application.model_selection import require_new_models
 from bisheng.llm.domain.services import LLMService
 from bisheng.permission.application.access import get_f048_resource_adapter
 from bisheng.permission.application.business_authorization import (
@@ -56,8 +55,8 @@ from bisheng.permission.application.business_authorization import (
 )
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
-from bisheng.resource_reference.application.contracts import SourceKey, TargetType, reference_set_digest
+from bisheng.resource_reference.application.contracts import TargetType
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
@@ -100,10 +99,6 @@ class AssistantService(BaseService, AssistantUtils):
     UserCache: InMemoryCache = InMemoryCache()
 
     @staticmethod
-    def _reference_source(assistant: Assistant) -> SourceKey:
-        return SourceKey(assistant.tenant_id, "assistant", str(assistant.id), "current")
-
-    @staticmethod
     def _extract_references(assistant: Assistant, links):
         return AssistantService._configuration_references(
             assistant.model_name, [link.knowledge_id for link in links if link.knowledge_id]
@@ -112,9 +107,11 @@ class AssistantService(BaseService, AssistantUtils):
     @staticmethod
     def _configuration_references(model_name, knowledge_ids):
         try:
+            if unresolved_assistant_model_name(model_name):
+                return extract_assistant_references(model_name="", knowledge_ids=knowledge_ids)
             return extract_assistant_references(model_name=model_name, knowledge_ids=knowledge_ids)
         except (TypeError, ValueError) as exc:
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid") from exc
+            raise ResourceReferenceInvalidError(reason="reference_selection_invalid") from exc
 
     @classmethod
     async def _persist_assistant_changes(
@@ -133,14 +130,8 @@ class AssistantService(BaseService, AssistantUtils):
         before_save=None,
         condition=None,
     ) -> Assistant:
-        """Every assistant config writer participates in the reference fence.
-
-        Candidate reads never mutate ORM rows. The runtime locks all old/new
-        targets before the callback obtains a refreshing lock on the real root.
-        It then guards root/source revisions in the same external transaction.
-        """
+        """Persist actual configuration; reverse hints are notified after commit."""
         repository = AssistantRepository()
-        runtime = await get_reference_binding_runtime()
         changes = changes or {}
         if skip_unchanged_status is not None and (
             skip_unchanged_status != AssistantStatus.ONLINE.value
@@ -151,105 +142,45 @@ class AssistantService(BaseService, AssistantUtils):
             or any(value is not None for value in (tool_ids, flow_ids, knowledge_ids))
         ):
             raise ValueError("only an unchanged ONLINE transition may skip persistence")
+        from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+
+        if knowledge_ids is not None:
+            await authorize_assistant_knowledge_bindings(user_payload, assistant_id, knowledge_ids)
+        if flow_ids is not None:
+            await AssistantBoundaryService.authorize_flow_bindings(user_payload, flow_ids)
         async with get_async_db_session() as session:
-            candidate = await repository.aget(session, assistant_id)
-            if candidate is None or candidate.is_delete:
+            locked = await repository.aget(session, assistant_id, for_update=True)
+            if locked is None or locked.is_delete:
                 raise AssistantNotExistsError()
-
-            async def authorize(row):
-                if action == "edit":
-                    await cls.check_update_permission_async(row, user_payload)
-                else:
-                    await require_business_action(
-                        user_payload, resource_type="assistant", resource_id=row.id, action=action
-                    )
-
-            await authorize(candidate)
-            old_links = await repository.alist_links(session, assistant_id)
-            source = cls._reference_source(candidate)
-            from bisheng.assistant.domain.repositories.reference_source_repository import (
-                AssistantReferenceSourceRepository,
-            )
-
-            original_model_name = candidate.model_name
-            legacy_version = legacy_assistant_name_version(original_model_name)
-            legacy_repo = AssistantReferenceSourceRepository()
-            retained_legacy = legacy_version is not None and await legacy_repo.ahas_legacy_name_retention(
-                session, source, legacy_version
-            )
-            old_references = (
-                extract_legacy_assistant_knowledge_references(
-                    model_name=original_model_name,
-                    knowledge_ids=[link.knowledge_id for link in old_links if link.knowledge_id],
+            if action == "edit":
+                await cls.check_update_permission_async(locked, user_payload)
+            else:
+                await require_business_action(
+                    user_payload, resource_type="assistant", resource_id=locked.id, action=action
                 )
-                if retained_legacy
-                else cls._extract_references(candidate, old_links)
-            )
-            if require_valid and retained_legacy:
-                raise ResourceReferenceInvalidError(reason="assistant_legacy_model_name_unresolved")
-            new_name = changes.get("model_name", original_model_name)
-            retained_new = retained_legacy and new_name == original_model_name and not deleting
+            if condition is not None and not condition(locked):
+                return locked
+            old_links = await repository.alist_links(session, assistant_id)
+            old_references = cls._extract_references(locked, old_links)
             selected_knowledge = (
                 knowledge_ids
                 if knowledge_ids is not None
                 else [link.knowledge_id for link in old_links if link.knowledge_id]
             )
-            if deleting:
-                new_references = ()
-            elif retained_new:
-                new_references = extract_legacy_assistant_knowledge_references(
-                    model_name=new_name, knowledge_ids=selected_knowledge
-                )
-            else:
-                new_references = cls._configuration_references(new_name, selected_knowledge)
-            locked = None
-
-            async def lock_root(active_session):
-                nonlocal locked
-                locked = await repository.aget(active_session, assistant_id, for_update=True)
-                if locked is None or locked.is_delete:
-                    raise AssistantNotExistsError()
-                links = await repository.alist_links(active_session, assistant_id)
-                if retained_legacy and (
-                    locked.model_name != original_model_name
-                    or not await legacy_repo.ahas_legacy_name_retention(active_session, source, legacy_version)
-                ):
-                    raise ResourceReferenceInvalidError(reason="reference_lock_plan_changed")
-                actual_old = (
-                    extract_legacy_assistant_knowledge_references(
-                        model_name=locked.model_name,
-                        knowledge_ids=[link.knowledge_id for link in links if link.knowledge_id],
-                    )
-                    if retained_legacy
-                    else cls._extract_references(locked, links)
-                )
-                if actual_old != old_references:
-                    raise ResourceReferenceInvalidError(reason="reference_lock_plan_changed")
-                await authorize(locked)
-                return locked
-
-            prepared = await runtime.aprepare_source_bindings(
-                session,
-                source,
-                new_references,
-                extractor_version=legacy_version if retained_new else ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
-                lock_source_root=lock_root,
-                effective=not deleting,
-            )
-            if prepared.verified.context.old_references_digest != reference_set_digest(old_references):
-                raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
-            if condition is not None and not condition(locked):
-                return locked
-            # Target Owners verify physical existence/tenant/shared facts. A
-            # newly selected resource also needs the configuring actor's own
-            # visible decision, including any credential narrowing. Existing
-            # unchanged slots remain repairable even if now hidden or deleted.
+            new_name = changes.get("model_name", locked.model_name)
+            if new_name != locked.model_name and unresolved_assistant_model_name(new_name):
+                raise ResourceReferenceInvalidError(reason="assistant_model_id_required")
+            if require_valid and unresolved_assistant_model_name(new_name):
+                raise ResourceReferenceInvalidError(reason="assistant_legacy_model_name_unresolved")
+            new_references = () if deleting else cls._configuration_references(new_name, selected_knowledge)
+            await require_new_models(session, new_references, () if require_valid else old_references)
             added_knowledge_ids = tuple(
                 sorted(
-                    int(reference.target.target_id)
-                    for reference in set(new_references) - set(old_references)
-                    if reference.slot_key == "knowledge_list"
-                    and reference.target.target_type == TargetType.KNOWLEDGE_SPACE
+                    {
+                        int(ref.target.target_id)
+                        for ref in set(new_references) - set(old_references)
+                        if ref.target.target_type == TargetType.KNOWLEDGE_SPACE
+                    }
                 )
             )
             kinds = await repository.alock_knowledge_kinds(session, added_knowledge_ids)
@@ -260,15 +191,16 @@ class AssistantService(BaseService, AssistantUtils):
                     resource_id=knowledge_id,
                     action="visible",
                 )
-            if require_valid:
-                await runtime.arequire_source_valid(session, source, references=old_references)
             if skip_unchanged_status is not None and locked.status == skip_unchanged_status:
                 return locked
             if before_save is not None:
                 await before_save(session, locked)
-            if "name" in changes and changes["name"] != locked.name:
-                if cls.judge_name_repeat(changes["name"], locked.user_id):
-                    raise AssistantNameRepeatError()
+            if (
+                "name" in changes
+                and changes["name"] != locked.name
+                and cls.judge_name_repeat(changes["name"], locked.user_id)
+            ):
+                raise AssistantNameRepeatError()
             for key, value in changes.items():
                 setattr(locked, key, value)
             if deleting:
@@ -278,8 +210,8 @@ class AssistantService(BaseService, AssistantUtils):
                 await repository.areplace_links(
                     session, assistant_id, tool_ids=tool_ids, flow_ids=flow_ids, knowledge_ids=knowledge_ids
                 )
-            await runtime.aapply_source_bindings(session, prepared)
             await session.commit()
+            await notify_reference_sync(locked.tenant_id, "assistant", locked.id)
             return locked
 
     @classmethod
@@ -296,7 +228,6 @@ class AssistantService(BaseService, AssistantUtils):
         """
         Get list of assistants
         """
-        action = "visible" if action == "use" else action
         assistant_ids = []
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
@@ -424,7 +355,6 @@ class AssistantService(BaseService, AssistantUtils):
         from bisheng.common.errcode.flow import AppInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
-        action = "visible" if action == "use" else action
         context = f"assistant|sort=update_time|action={action}"
         try:
             decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
@@ -523,7 +453,8 @@ class AssistantService(BaseService, AssistantUtils):
                 action="visible",
             ):
                 visible_ids.append(row.id)
-        tool_list, flow_list, knowledge_list = cls.get_link_info(
+        tool_list, flow_list, knowledge_list = await cls.get_link_info(
+            login_user,
             [link["tool_id"] for link in links if link.get("tool_id")],
             [link["flow_id"] for link in links if link.get("flow_id")],
             visible_ids,
@@ -585,29 +516,17 @@ class AssistantService(BaseService, AssistantUtils):
 
         # The description is generated afterwards by the config page (description_stream),
         # so a slow or unreachable model neither delays nor fails creation.
-        runtime = await get_reference_binding_runtime()
         repository = AssistantRepository()
         async with get_async_db_session() as session:
-            # The UUID exists before insertion. Flush the new real root in this
-            # transaction; a failed binding write rolls the insertion back.
+            # The UUID exists before insertion; persist only the actual business row.
             await repository.ainsert(session, assistant)
 
-            async def lock_root(active_session):
-                return await repository.aget(active_session, assistant.id, for_update=True)
-
-            prepared = await runtime.aprepare_source_bindings(
-                session,
-                cls._reference_source(assistant),
-                cls._extract_references(assistant, ()),
-                extractor_version=ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
-                lock_source_root=lock_root,
-                new_source=True,
-            )
-            await runtime.aapply_source_bindings(session, prepared)
+            await require_new_models(session, cls._extract_references(assistant, ()))
             # The permission hook consumes the already verified new-root record;
             # its durable projection must succeed before SQL is finalized.
             await cls.create_assistant_hook_async(request, assistant, login_user)
             await session.commit()
+            await notify_reference_sync(assistant.tenant_id, "assistant", assistant.id)
 
         # Audit reads through a separate connection, so the new root must be committed first.
         AuditLogService.create_build_assistant(login_user, get_request_ip(request), assistant.id)
@@ -767,6 +686,9 @@ class AssistantService(BaseService, AssistantUtils):
         # F041: persist the 用户知识库权限校验 toggle (None = untouched, keep current value)
         if req.knowledge_auth is not None:
             changes["knowledge_auth"] = req.knowledge_auth
+        # F132: the memory switch takes effect on the next turn (None = untouched)
+        if req.memory_enabled is not None:
+            changes["memory_enabled"] = req.memory_enabled
         assistant = await cls._persist_assistant_changes(
             req.id,
             login_user,
@@ -779,7 +701,9 @@ class AssistantService(BaseService, AssistantUtils):
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
 
-        tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list, req.knowledge_list)
+        tool_list, flow_list, knowledge_list = await cls.get_link_info(
+            login_user, req.tool_list, req.flow_list, req.knowledge_list
+        )
         if req.knowledge_list is None:
             # None means this write retained its selections. Reading their
             # IDs does not re-run admission or turn an accepted save into a
@@ -925,14 +849,17 @@ class AssistantService(BaseService, AssistantUtils):
         )
 
     @classmethod
-    def get_link_info(
+    async def get_link_info(
         cls,
+        login_user: UserPayload,
         tool_list: list[int],
         flow_list: list[str],
         knowledge_list: list[int] | None = None,
     ):
         tool_list = GptsToolsDao.get_list_by_ids(tool_list) if tool_list else []
-        flow_list = FlowDao.get_flow_by_ids(flow_list) if flow_list else []
+        from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+
+        flow_list = await AssistantBoundaryService.flow_views(login_user, flow_list)
         knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_list) if knowledge_list else []
         return tool_list, flow_list, knowledge_list
 
@@ -1075,5 +1002,14 @@ class AssistantService(BaseService, AssistantUtils):
         flow_info = []
         for one in flow_list:
             if flow_dict.get(one):
-                flow_info.append(flow_dict[one])
+                from bisheng.database.models.flow import FlowRead
+
+                source = flow_dict[one]
+                # Suggestion/SSE consumers need identity and display metadata,
+                # never the executable graph or inline credentials.
+                flow_info.append(
+                    FlowRead.model_validate(
+                        source.model_dump(include={"id", "name", "description", "logo", "status", "flow_type"})
+                    )
+                )
         return flow_info

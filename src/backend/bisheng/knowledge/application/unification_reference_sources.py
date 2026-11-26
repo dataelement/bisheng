@@ -19,7 +19,7 @@ from bisheng.knowledge.application.unification_reference_state import (
 )
 from bisheng.knowledge.application.unification_sources import knowledge_business_revision_digest
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
-from bisheng.knowledge.domain.services.model_reference_extractor import extract_knowledge_model_references
+from bisheng.knowledge.domain.services.model_reference_extractor import knowledge_model_source_configuration
 from bisheng.knowledge.domain.services.unification_fingerprints import digest
 from bisheng.llm.domain.services.default_reference_extractor import extract_model_default_references
 from bisheng.resource_reference.application.contracts import (
@@ -31,13 +31,24 @@ from bisheng.workflow.domain.services.reference_extractor import extract_workflo
 
 
 class ReferenceAfterSources:
-    def __init__(self, repository=None):
+    def __init__(self, repository=None, *, semantic_projections=None, root_expectations=None):
         self.repository = repository or UnificationInventoryRepository()
+        self.semantic_projections = semantic_projections or {}
+        self.root_expectations = root_expectations or {}
 
-    async def aload(self, session, *, header, records, conversion=None):
+    async def aload(self, session, *, header, records, conversion=None, snapshot=None):
         key = header.source_key
-        root, version, children = await self.repository.aload_reference_source(session, source_key=key)
+        root, version, children = (
+            snapshot if snapshot is not None else await self.repository.aload_reference_source(session, source_key=key)
+        )
         kind, links = key.source_type, tuple(asdict(child) for child in children)
+        from bisheng.resource_reference.application.contracts import SourceRootKey
+
+        expected_root = self.root_expectations.get(SourceRootKey(key.tenant_id, key.source_type, key.source_id))
+        if expected_root is not None and kind != SourceType.MODEL_DEFAULT:
+            owner = root.owner_user_id if kind == SourceType.HOSTED_APP_VERSION else root.user_id
+            if owner != expected_root.creator_id:
+                blocked("actual_source_owner_changed")
         if kind == SourceType.WORKFLOW_VERSION:
             if root.is_delete != 0 or version.is_delete not in (None, 0):
                 blocked("source_retired_after_freeze")
@@ -80,7 +91,9 @@ class ReferenceAfterSources:
                 "model": root.model,
                 "model_transition": json.loads(root.model_transition_json) if root.model_transition_json else None,
             }
-            references = extract_knowledge_model_references(**configuration)
+            extractor, references = knowledge_model_source_configuration(**configuration, retain_legacy=True)
+            if extractor != header.extractor_version:
+                blocked("legacy_knowledge_model_changed")
             revision = knowledge_business_revision_digest(root)
         else:
             lifecycle = (root.key,)
@@ -90,6 +103,13 @@ class ReferenceAfterSources:
             revision = digest(asdict(root))
         expected_configuration, expected_revision = header.configuration_digest, header.business_revision_digest
         expected_lifecycle, expected_refs = header.lifecycle, header.reference_digest
+        semantic = self.semantic_projections.get(key)
+        if semantic is not None and conversion is None:
+            from bisheng.knowledge.application.unification_reference_reconciliation import snapshot_semantics
+
+            if snapshot_semantics(key, root, version, children)["semantic_digest"] != semantic["semantic_digest"]:
+                blocked("semantic_source_changed")
+            expected_revision = revision
         original = {(record.slot_key, record.target): record for record in records}
         if conversion is not None:
             if kind == SourceType.KNOWLEDGE:
@@ -138,14 +158,21 @@ class ReferenceAfterSources:
 
     async def averify_retired(self, session, *, header):
         from bisheng.knowledge.application.unification_workflow_retention import (
+            invalid_configuration,
             invalid_root,
             invalid_version,
+            invalid_workflow_configuration,
             invalid_workflow_root,
             invalid_workflow_version,
         )
         from bisheng.resource_reference.application.contracts import SourceKey
 
-        if invalid_root(header):
+        if invalid_configuration(header):
+            parent, version, _ = await self.repository.aload_reference_source(session, source_key=header.source_key)
+            if parent.flow_type != 10 or parent.tenant_id != header.root_key.tenant_id or parent.is_delete != 0:
+                blocked("invalid_workflow_configuration_parent_changed")
+            actual = invalid_workflow_configuration(header.source_key, digest(asdict(parent)), version)
+        elif invalid_root(header):
             parent = await self.repository.aload_invalid_workflow_parent(session, root_key=header.root_key)
             actual = invalid_workflow_root(header.root_key, parent)
         elif invalid_version(header):
@@ -218,10 +245,21 @@ class ReferenceAfterSources:
     async def acensus(self, session, *, plan, tenant, reference_repository):
         from bisheng.knowledge.application.unification_workflow_retention import invalid_root
 
+        # A foreign AssistantLink is invisible to valid-parent source pages;
+        # a membership census must also prove the native tenant-parent gate.
+        await self.repository.avalidate_tenant_orphans(session)
         actual_roots, actual_sources, actual_versions = await self.repository.acensus_reference_sources(session)
         expected_sources = frozenset(
             entry.header.source_key for entry in plan.sources if entry.header.source_key.tenant_id == tenant
         )
+        from bisheng.resource_reference.application.contracts import SourceKey, SourceRootKey
+
+        additions = tuple(
+            SourceKey(**item["key"])
+            for item in (plan.reconciliation.registered_additions if plan.reconciliation else ())
+            if item["key"]["tenant_id"] == tenant
+        )
+        expected_sources |= frozenset(additions)
         expected_roots = {row.header.root_key for row in plan.roots if row.header.root_key.tenant_id == tenant}
         expected_roots.update(
             row.header.root_key
@@ -231,6 +269,7 @@ class ReferenceAfterSources:
             and row.header.lifecycle != PHYSICAL_ROOT_ABSENT
             and not invalid_root(row.header)
         )
+        expected_roots.update(SourceRootKey(key.tenant_id, key.source_type, key.source_id) for key in additions)
         expected_versions = {
             key
             for key in expected_sources
@@ -240,6 +279,9 @@ class ReferenceAfterSources:
             row.header.source_key
             for row in plan.retired
             if row.header.root_key.tenant_id == tenant and row.header.source_key is not None
+        )
+        expected_versions.update(
+            key for key in additions if key.source_type in {SourceType.WORKFLOW_VERSION, SourceType.HOSTED_APP_VERSION}
         )
         if (
             set(actual_roots) != expected_roots

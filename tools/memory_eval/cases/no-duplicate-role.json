@@ -1,0 +1,30 @@
+{
+  "id": "no-duplicate-role",
+  "acs": [
+    "AC-47"
+  ],
+  "turns": [
+    {
+      "user": "记一下我在华东区",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "对，我一直在华东区工作",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我在哪个区？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "华东"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

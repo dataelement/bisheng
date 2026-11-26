@@ -27,6 +27,35 @@ def _secret(path):
         raise ValueError("deployment_secret_unavailable") from None
 
 
+# Settings fields that the strict loader accepts only as ``encrypt(<token>)``
+# (see settings._credential). Values bound from Secret files at these paths are
+# sealed with the BS_SECRET_KEYS_FILE keyring before they reach config.yaml.
+_SEALED_PATHS = {
+    ("object_storage", "minio", "secret_key"),
+    ("vector_stores", "milvus", "connection_args", "password"),
+    ("vector_stores", "milvus", "connection_args", "token"),
+}
+_BASIC_AUTH_PATH = ("vector_stores", "elasticsearch", "ssl_verify", "basic_auth")
+
+
+def _sealed(value, encrypt_token):
+    if not isinstance(value, str):
+        raise ValueError("deployment_secret_binding_invalid")
+    if not value:
+        return value
+    return f"encrypt({encrypt_token(value).decode()})"
+
+
+def _seal_binding(keys, value, encrypt_token):
+    if keys in _SEALED_PATHS:
+        return _sealed(value, encrypt_token)
+    if keys == _BASIC_AUTH_PATH:
+        if not isinstance(value, list) or len(value) != 2:
+            raise ValueError("deployment_secret_binding_invalid")
+        return [value[0], _sealed(value[1], encrypt_token)]
+    return value
+
+
 def render_settings(document):
     from bisheng.core.config.settings import encrypt_token
 
@@ -75,7 +104,7 @@ def render_settings(document):
             value = json.loads(value)
         elif binding.get("encoding", "text") != "text":
             raise ValueError("deployment_secret_encoding_invalid")
-        cursor[keys[-1]] = value
+        cursor[keys[-1]] = _seal_binding(tuple(keys), value, encrypt_token)
     return result
 
 

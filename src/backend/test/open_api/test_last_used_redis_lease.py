@@ -1,8 +1,9 @@
 """A rejected NX acquisition must not renew last-used telemetry's throttle."""
 
-import pickle
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+from bisheng.core.cache.serialization import decode_redis_value
 
 
 async def exercise_real_adapter():
@@ -13,7 +14,7 @@ async def exercise_real_adapter():
     lease = [None]
 
     async def atomic_set(key, value, *, nx, ex):
-        writes.append((key, pickle.loads(value), nx, ex))
+        writes.append((key, decode_redis_value(key, value), nx, ex))
         if lease[0] is not None and clock[0] < lease[0]:
             return False
         lease[0] = clock[0] + ex

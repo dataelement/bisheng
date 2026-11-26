@@ -290,7 +290,7 @@ class RetrievalEngine:
         tag_names: list[str],
         max_content: int,
     ) -> list[tuple[int, Document]]:
-        """Document knowledge base (type=0): library-level ``use`` gate first.
+        """Document knowledge base (type=0): library-level visibility gate first.
 
         No folder / version-primary logic — those are knowledge-space-only
         concepts. The current permission model has no per-file visibility for
@@ -299,7 +299,7 @@ class RetrievalEngine:
         """
         from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
-        # Library-level use permission (raises UnAuthorizedError on denial →
+        # Library-level visibility permission (raises UnAuthorizedError on denial →
         # surfaced by the caller's BaseErrorCode handler).
         await KnowledgeService.permission_service.ensure_knowledge_use_async(
             login_user=self.login_user,

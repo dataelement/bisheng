@@ -49,7 +49,7 @@ async def test_ac02_launch_checks_current_person_and_use(service, principal):
     before = get_current_tenant_id()
     result = await service.launch(principal, "a" * 32)
     module.require_action.assert_awaited_once()
-    assert module.require_action.await_args.kwargs["action"] == "use"
+    assert module.require_action.await_args.kwargs["action"] == "visible"
     assert result["entry_path"] == "/apps/shared-tasks/"
     assert get_current_tenant_id() == before
     service.sessions.issue.assert_awaited_once_with(principal, app_id="a" * 32, slug="shared-tasks")

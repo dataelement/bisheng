@@ -183,7 +183,7 @@ def test_native_shared_facts_never_promote_revocation_or_backend_failure(native_
     with Session(ctx.engine) as session:
         if kind == "revoked":
             fact = inspect(ctx, session)[0]
-            assert fact.state == "valid" and not fact.is_valid
+            assert fact.state == "invalid_scope" and not fact.is_valid
         else:
             with pytest.raises(RuntimeError if kind == "error" else ResourceReferenceInvalidError):
                 inspect(ctx, session)
@@ -211,7 +211,7 @@ def test_native_tombstones_are_read_from_original_owner_without_new_receipts(nat
             session.execute(delete(LLMModel).where(LLMModel.tenant_id == 101, LLMModel.id == 11))
     with Session(ctx.engine) as session:
         fact = inspect(ctx, session)[0]
-        assert fact.state == ("invalid_deleted" if stage == "deleted" else "deleting") and not fact.is_valid
+        assert fact.state == ("invalid_missing" if stage == "deleted" else "deleting") and not fact.is_valid
 
 
 def test_native_legacy_reads_actual_frozen_ledger_and_preserves_unknown_target_tenant(native_target):
@@ -231,7 +231,7 @@ def test_native_legacy_reads_actual_frozen_ledger_and_preserves_unknown_target_t
         )
     with Session(ctx.engine) as session:
         fact = inspect(ctx, session)[0]
-        assert fact.state == "invalid_legacy" and fact.target_tenant_id is None and not fact.is_valid
+        assert fact.state == "invalid_missing" and fact.target_tenant_id is None and not fact.is_valid
 
 
 def test_native_candidate_target_server_change_requires_whole_transaction_retry(native_target):

@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF003
 import asyncio
 import mimetypes
 import os
@@ -15,6 +16,7 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
+from bisheng.chat_session.domain.schemas.user_message import ComposerReference
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -275,11 +277,13 @@ class LinsightWorkbenchImpl:
         display_files: list[dict] | None = None,
         defer_ingest: bool = True,
         *,
+        display_references: list[ComposerReference] | None = None,
         session_subject: SessionSubject | None = None,
         api_meta: dict | None = None,
         telemetry_source: str = "platform",
         session_name: str = "New Chat",
         project_intent: dict | None = None,
+        persist_user_turn: bool = True,
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -292,6 +296,7 @@ class LinsightWorkbenchImpl:
                 ChatMessage so the uploaded attachments render after a refresh,
                 mirroring the daily-chat question envelope. ``None`` for the
                 legacy /linsight entry (it renders attachments its own way).
+            display_references: Resource references as displayed in the composer.
             defer_ingest: Park the raw file refs in ``pending_files`` and let the
                 worker ingest them (``ingest_pending_files``) instead of parsing
                 them here. Ingestion runs the full ETL — 12 PDFs measured at 19
@@ -308,6 +313,8 @@ class LinsightWorkbenchImpl:
             telemetry_source: ``source`` on the NEW_MESSAGE_SESSION event
                 ("api" for Open API submissions).
             session_name: Initial conversation name.
+            persist_user_turn: False for an F004 relay run, whose question rows
+                were written when the messages joined the inbox.
 
         Returns:
             tuple: (Message Session Model, Inspiration Conversation Version Model)
@@ -416,6 +423,8 @@ class LinsightWorkbenchImpl:
             # F035 Track J: land the user question in the unified conversation
             # stream so the round reads as one Q→A pair regardless of task mode.
             # (The bot answer turn is written at completion in task_exec.)
+            if not persist_user_turn:
+                return message_session, linsight_session_version
             await linsight_execute_utils.persist_task_user_turn(
                 chat_id=chat_id,
                 user_id=login_user.user_id,
@@ -437,6 +446,7 @@ class LinsightWorkbenchImpl:
                     **({"storage_partition": session_subject.storage_partition} if session_subject is not None else {}),
                 ),
                 session_version_id=svid,
+                composer_references=display_references,
             )
 
             return message_session, linsight_session_version
@@ -671,7 +681,7 @@ class LinsightWorkbenchImpl:
         # onto A. Only pair by position when the lengths still prove alignment;
         # otherwise re-read key by key so each file gets its own value (or None).
         if len(temp_values) == len(linsight_files):
-            temp_by_id = {f.file_id: t for f, t in zip(linsight_files, temp_values)}
+            temp_by_id = {f.file_id: t for f, t in zip(linsight_files, temp_values, strict=False)}
         else:
             temp_by_id = {
                 f.file_id: await redis_client.aget(f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{f.file_id}")
@@ -2214,9 +2224,6 @@ class LinsightWorkbenchImpl:
             """
             Build task tree
             """
-            # Create task mapping
-            task_map = {task.id: task for task in all_tasks}
-
             # By Parent TaskIDGroup subtasks
             children_map = {}
             for task in all_tasks:
@@ -2585,7 +2592,11 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def init_linsight_config_tools(
-        cls, session_version: LinsightSessionVersion, llm: BishengLLM, need_upload: bool = False, file_dir: str = None
+        cls,
+        session_version: LinsightSessionVersion,
+        llm: BishengLLM,
+        need_upload: bool = False,
+        file_dir: str | None = None,
     ) -> list[BaseTool]:
         """
         Tools for initializing Invis configurations
@@ -2599,49 +2610,10 @@ class LinsightWorkbenchImpl:
         Returns:
             Tools List
         """
-        tools = []
+        # Shared with the unified runtime (F004 T022).
+        from bisheng.linsight.domain.services.tool_assembly import assemble_planned_tools
 
-        tool_ids = list(dict.fromkeys(cls._extract_tool_ids(session_version.tools or [])))
-
-        # Task infrastructure is resolved on each execution/resume, independently
-        # of the optional tools selected in the composer. Initialization failures
-        # propagate before the model starts so capability loss is actionable.
-        if need_upload and file_dir:
-            tools.extend(
-                await cls._init_bisheng_code_tool(
-                    tool_ids, file_dir, user_id=session_version.user_id, session_version_id=session_version.id
-                )
-            )
-
-        # Retired builtin row. Saved task selections may still name it.
-        # Passing the row to load_tools raises "Got unknown tool image_view"
-        # and aborts the task before skills or any other tool run.
-        from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
-
-        image_view_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key=IMAGE_VIEW_TOOL_KEY)
-        if image_view_tool and image_view_tool.id in tool_ids:
-            tool_ids.remove(image_view_tool.id)
-            logger.info("skip image_view tool id={}: config row is not a callable tool", image_view_tool.id)
-
-        # Unified-resource direction (2026-06-16): task mode reuses the daily
-        # tool selection directly. Every selected tool id (a real GptsTools id
-        # the user already has access to) binds. The code interpreter is already
-        # consumed above when selected, so it is never built twice.
-        valid_tool_ids = tool_ids
-
-        # Initialization Tools
-        if valid_tool_ids:
-            tools.extend(
-                await ToolExecutor.init_by_tool_ids(
-                    valid_tool_ids,
-                    app_id=ApplicationTypeEnum.LINSIGHT.value,
-                    app_name=ApplicationTypeEnum.LINSIGHT.value,
-                    app_type=ApplicationTypeEnum.LINSIGHT,
-                    user_id=session_version.user_id,
-                )
-            )
-
-        return tools
+        return await assemble_planned_tools(session_version, need_upload=need_upload, file_dir=file_dir)
 
     @classmethod
     def _extract_tool_ids(cls, tools: list[dict]) -> list[int]:
@@ -2673,7 +2645,11 @@ class LinsightWorkbenchImpl:
         minio_client = await get_minio_storage()
 
         object_name = file_info.file_url
-        object_name = object_name.replace(f"/{minio_client.bucket}/", "")
+        bucket = minio_client.bucket
+        for prefix in (f"/object/{bucket}/", f"/{bucket}/"):
+            if prefix in object_name:
+                object_name = object_name.replace(prefix, "", 1)
+                break
         try:
             bytes_io = BytesIO()
 

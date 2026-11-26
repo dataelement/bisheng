@@ -6,6 +6,7 @@ import { notification } from '@bisheng/ui';
 
 import axios from "axios";
 import i18next from "i18next";
+import { workflowReferenceErrorMessage } from './workflowReferenceErrors';
 import { managementRequestScope,requiresManagementScope,guardManagementResponse,readManagementScope,pauseManagementScopeForRequest,acceptManagementScope } from './managementScope';
 
 window.addEventListener('storage', event => {
@@ -134,6 +135,8 @@ function decodeEnvelopeMessage(value: unknown) {
     if (rateLimitMessage) return rateLimitMessage;
     const processingConflictMessage = knowledgeProcessingConflictMessage(envelope);
     if (processingConflictMessage) return processingConflictMessage;
+    const workflowReferenceMessage = workflowReferenceErrorMessage(envelope);
+    if (workflowReferenceMessage) return workflowReferenceMessage;
     const statusMessage = typeof envelope?.status_message === 'string' ? envelope.status_message : '';
     const codeKey = `api_errors:${statusCode}`;
     const i18Msg = i18next.exists(codeKey) ? i18next.t(codeKey) : '';

@@ -97,10 +97,7 @@ async def _fake_action_map(user, data, actions, actions_by_type=None):
     # F056 asks the square for per-resource-type actions (``actions_by_type``);
     # these rows are all plain workflows, so the default set is what applies.
     del actions_by_type
-    return {
-        str(item["id"]): (frozenset(actions) if str(item["id"]) in _VISIBLE_IDS else frozenset())
-        for item in data
-    }
+    return {str(item["id"]): (frozenset(actions) if str(item["id"]) in _VISIBLE_IDS else frozenset()) for item in data}
 
 
 @pytest.mark.asyncio
@@ -232,7 +229,7 @@ async def test_online_cursor_strips_ranking_columns_without_eager_edit_or_share(
         {"id": "1", "flow_type": 10, "logo": "", "user_id": 1, "_used_rank": 0, "_sort_time": datetime(2026, 1, 1)},
         {"id": "2", "flow_type": 10, "logo": "", "user_id": 1, "_used_rank": 1, "_sort_time": datetime(2026, 1, 1)},
     ]
-    action_map = {"1": frozenset({"use"}), "2": frozenset({"use"})}
+    action_map = {"1": frozenset({"visible"}), "2": frozenset({"visible"})}
 
     async def _fake_scan(**kwargs):
         return page_items, True, action_map
@@ -248,7 +245,7 @@ async def test_online_cursor_strips_ranking_columns_without_eager_edit_or_share(
         patch.object(WorkFlowService, "get_logo_share_link", side_effect=lambda logo: logo),
     ):
         env = await WorkFlowService.get_online_flows_cursor(
-            user, None, 2, None, None, cursor=None, page_size=2, action="use"
+            user, None, 2, None, None, cursor=None, page_size=2, action="visible"
         )
 
     assert env.has_more is True

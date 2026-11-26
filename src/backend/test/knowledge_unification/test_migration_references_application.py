@@ -125,7 +125,7 @@ async def test_new_tenant_sql_facts_and_empty_certificate_commit_together(publis
     from bisheng.workstation.domain.services import WorkStationService
 
     value = published_input
-    before = await app(value).arun_references(**value.input, operator_id=7)
+    await app(value).arun_references(**value.input, operator_id=7)
     for model in (Department, UserTenant):
         async with value.database.engine.begin() as conn:
             await conn.run_sync(lambda connection, model=model: model.__table__.create(connection, checkfirst=True))
@@ -164,13 +164,7 @@ async def test_new_tenant_sql_facts_and_empty_certificate_commit_together(publis
         from bisheng.core.context.tenant import tenant_execution_scope
 
         with tenant_execution_scope(result["id"]):
-            row = (
-                (await session.execute(sa.select(Run.__table__).where(Run.tenant_id == result["id"]))).mappings().one()
-            )
-        assert row["origin"] == "empty_tenant" and row["phase"] == "completed"
-        assert row["coverage_epoch"] == before.coverage_epoch + 1
-        ready = await production_coverage_factory(session).arequire_global_ready()
-        assert ready.verified_tenant_ids == tuple(sorted((*before.tenant_ids, result["id"])))
+            assert not (await session.execute(sa.select(Run.__table__).where(Run.tenant_id == result["id"]))).all()
 
 
 async def seed_six_and_old_invalid(database):
@@ -418,14 +412,13 @@ async def test_retired_root_and_version_cleanup_is_exact_and_resume_stable(publi
 
 @pytest.mark.parametrize("occupied", [False, True])
 async def test_real_mounted_tenant_creation_never_fakes_empty_source_proof(published_input, monkeypatch, occupied):
-    from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
     from bisheng.database.models.department import Department, UserDepartment
     from bisheng.database.models.tenant import Tenant
     from bisheng.knowledge.domain.models.knowledge import Knowledge
     from bisheng.tenant.application import tenant_creation
 
     value = published_input
-    before = await app(value).arun_references(**value.input, operator_id=7)
+    await app(value).arun_references(**value.input, operator_id=7)
     async with value.database.engine.begin() as connection:
         await connection.run_sync(lambda conn: Department.__table__.create(conn, checkfirst=True))
         await connection.run_sync(lambda conn: UserDepartment.__table__.create(conn, checkfirst=True))
@@ -464,14 +457,7 @@ async def test_real_mounted_tenant_creation_never_fakes_empty_source_proof(publi
                 (await session.execute(sa.select(Department.__table__).where(Department.id == 700))).mappings().one()
             )
         assert department["is_tenant_root"] == 1 and department["mounted_tenant_id"] == next_id
-        repository = production_coverage_factory(session)
-        if occupied:
-            assert not cert
-            with pytest.raises(ReferenceCoverageNotReadyError):
-                await repository.arequire_global_ready()
-        else:
-            assert cert[0]["coverage_epoch"] == before.coverage_epoch + 1
-            assert (await repository.arequire_global_ready()).verified_tenant_ids == (*before.tenant_ids, next_id)
+        assert not cert
 
 
 @pytest.mark.parametrize("boundary", ["references", "certificate"])

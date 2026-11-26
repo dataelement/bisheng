@@ -25,7 +25,7 @@ class StubCatalog:
         return True
 
     async def effective_actions(self, resource_type):
-        return ("use",)
+        return ("visible",)
 
 
 class StubFence:
@@ -131,18 +131,18 @@ async def test_check_action_denies_before_super_admin_shortcut_and_fga(resolver)
     fga = StubFGA()
 
     with pytest.raises(PersonalTokenDataScopeError):
-        await service(fga).check_action(narrowed_super_admin(), target("8"), "use")
+        await service(fga).check_action(narrowed_super_admin(), target("8"), "visible")
 
     assert fga.calls == []  # never reached OpenFGA — denial precedes everything
 
 
-async def test_check_action_owned_resource_still_passes_shortcut(resolver):
+async def test_check_action_owned_resource_still_requires_visibility(resolver):
     fga = StubFGA()
 
-    allowed = await service(fga).check_action(narrowed_super_admin(), target("7"), "use")
+    allowed = await service(fga).check_action(narrowed_super_admin(), target("7"), "visible")
 
     assert allowed is True
-    assert fga.calls == []  # super-admin shortcut, reached only because owned
+    assert fga.calls[-1][1]["relation"] == "visible"
 
 
 async def test_check_visible_denies_before_fga(resolver):
@@ -159,7 +159,7 @@ async def test_batch_checks_narrow_silently_instead_of_raising(resolver):
     svc = service(fga)
     targets = (target("7"), target("8"), target("9"))
 
-    actions = await svc.batch_check_actions(narrowed_super_admin(), targets, "use")
+    actions = await svc.batch_check_actions(narrowed_super_admin(), targets, "visible")
     visible = await svc.batch_check_visible(narrowed_super_admin(), targets)
 
     assert actions == (True, False, False)
@@ -183,7 +183,7 @@ async def test_unregistered_resolver_fails_closed(no_resolver):
     svc = service(fga)
 
     with pytest.raises(PersonalTokenDataScopeError):
-        await svc.check_action(narrowed_super_admin(), target("7"), "use")
+        await svc.check_action(narrowed_super_admin(), target("7"), "visible")
     result = await svc.list_visible_objects(
         narrowed_super_admin(),
         resource_type="knowledge_library",
@@ -195,7 +195,7 @@ async def test_unregistered_resolver_fails_closed(no_resolver):
 async def test_ungoverned_resource_type_is_untouched(resolver):
     fga = StubFGA()
 
-    allowed = await service(fga).check_action(narrowed_super_admin(), target("3", rtype="workflow"), "use")
+    allowed = await service(fga).check_action(narrowed_super_admin(), target("3", rtype="workflow"), "visible")
 
     assert allowed is True  # super-admin shortcut as before — narrowing is knowledge-domain only
 
@@ -206,7 +206,7 @@ async def test_default_scope_changes_nothing(no_resolver):
     fga = StubFGA()
     actor = PermissionActor(subject_type="user", subject_id=5, tenant_id=1)
 
-    allowed = await service(fga).check_action(actor, target("8"), "use")
+    allowed = await service(fga).check_action(actor, target("8"), "visible")
 
     assert allowed is True  # decided by the stubbed OpenFGA, not by the narrowing
     assert [name for name, _ in fga.calls] == ["check"]
@@ -245,6 +245,9 @@ def _wire_business_layer(monkeypatch, runtime):
 
     monkeypatch.setattr(ba, "get_f048_resource_registry", get_registry)
     monkeypatch.setattr(ba, "get_f048_runtime", get_runtime)
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(ba, "_require_creation_ready", AsyncMock())
     return ba, registry
 
 
@@ -261,20 +264,18 @@ async def test_business_action_shortcut_yields_to_narrowed_scope(resolver, monke
     token = set_current_permission_actor(narrowed_super_admin())
     try:
         with pytest.raises(PersonalTokenDataScopeError):
-            await ba.check_business_action(
-                login, resource_type="knowledge_library", resource_id="8", action="use"
-            )
+            await ba.check_business_action(login, resource_type="knowledge_library", resource_id="8", action="visible")
         allowed = await ba.check_business_action(
-            login, resource_type="knowledge_library", resource_id="7", action="use"
+            login, resource_type="knowledge_library", resource_id="7", action="visible"
         )
         assert allowed is True  # owned: reaches the runtime, then the shortcut
         batch = await ba.batch_check_business_actions(
             login,
             resource_type="knowledge_library",
             resource_ids=["7", "8"],
-            actions=["use"],
+            actions=["visible"],
         )
-        assert batch == {"7": frozenset({"use"}), "8": frozenset()}
+        assert batch == {"7": frozenset({"visible"}), "8": frozenset()}
         assert registry.calls > 0  # the foregone-conclusion path was NOT taken
     finally:
         reset_current_permission_actor(token)
@@ -294,16 +295,16 @@ async def test_business_action_shortcut_intact_for_wide_scope(monkeypatch, no_re
     token = set_current_permission_actor(wide_super)
     try:
         allowed = await ba.check_business_action(
-            login, resource_type="knowledge_library", resource_id="8", action="use"
+            login, resource_type="knowledge_library", resource_id="8", action="visible"
         )
         batch = await ba.batch_check_business_actions(
             login,
             resource_type="knowledge_library",
             resource_ids=["8"],
-            actions=["use"],
+            actions=["visible"],
         )
     finally:
         reset_current_permission_actor(token)
     assert allowed is True
-    assert batch == {"8": frozenset({"use"})}
+    assert batch == {"8": frozenset({"visible"})}
     assert registry.calls == 0  # untouched default-scope behaviour (AC-P23)

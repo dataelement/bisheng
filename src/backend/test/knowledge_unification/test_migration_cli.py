@@ -39,7 +39,7 @@ def entry():
     return importlib.import_module("scripts.unify_knowledge_spaces")
 
 
-def arguments(value, *extra, legacy=False):
+def arguments(value, *extra, legacy=False, materials_dir=None):
     return (
         entry()
         .parser()
@@ -49,6 +49,7 @@ def arguments(value, *extra, legacy=False):
                 value.input["run_id"],
                 "--environment",
                 value.input["environment"],
+                *(["--materials-dir", str(materials_dir)] if materials_dir is not None else []),
                 *(
                     [
                         "--backup-ref",
@@ -66,14 +67,36 @@ def arguments(value, *extra, legacy=False):
 
 
 def runtime(value):
+    class Lease:
+        async def ensure(self):
+            return None
+
+    @asynccontextmanager
+    async def executor_lock():
+        yield Lease()
+
     @asynccontextmanager
     async def open_runtime(*args, **kwargs):
-        yield SimpleNamespace(store=value.artifacts.store, sessions=value.sessions, inventory=None)
+        yield SimpleNamespace(
+            store=value.artifacts.store,
+            sessions=value.sessions,
+            inventory=None,
+            engine=value.database.engine,
+            executor_lock=executor_lock,
+        )
 
     return open_runtime
 
 
-async def test_default_preview_is_read_only_and_reports_actual_frozen_scope(published_input):
+async def seed_cli_operator(database):
+    # Reuse the native new-Run test's SQLite identity adaptation and actual
+    # active actor seed before the frozen fixture baseline is captured.
+    from test.knowledge_unification.test_upgrade_new_run import seed_actor
+
+    await seed_actor(database)
+
+
+async def test_default_preview_is_read_only_and_reports_actual_frozen_scope(published_input, tmp_path):
     value, writes = published_input, []
 
     def observe(connection, cursor, statement, parameters, context, many):
@@ -82,27 +105,77 @@ async def test_default_preview_is_read_only_and_reports_actual_frozen_scope(publ
 
     sa.event.listen(value.database.engine.sync_engine, "before_cursor_execute", observe)
     try:
-        result = await entry().arun(arguments(value), runtime_factory=runtime(value))
+        result = await entry().arun(arguments(value, materials_dir=tmp_path), runtime_factory=runtime(value))
     finally:
         sa.event.remove(value.database.engine.sync_engine, "before_cursor_execute", observe)
-    assert result["mode"] == "preview" and result["tenant_ids"] == list(value.frozen.tenant_ids)
+    assert result["mode"] == "dry-run" and result["tenant_ids"] == list(value.frozen.tenant_ids)
     assert result["ready"] is False and not writes and value.store.writes == 0
-    assert result["validation_scope"] == "frozen_run" and result["preflight_complete"] is False
+    assert result["validation_scope"] == "frozen_resume" and result["preflight_complete"] and result["can_apply"]
     value.sessions.assert_closed()
 
 
-async def test_apply_and_same_run_resume_reach_real_certificate(published_input):
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_apply_and_same_run_resume_reach_real_certificate(published_input, tmp_path):
     value = published_input
-    args = arguments(value, "--apply", "--operator-id", "7")
+    await entry().arun(arguments(value, materials_dir=tmp_path), runtime_factory=runtime(value))
+    args = arguments(value, "--apply", "--operator-id", "7", materials_dir=tmp_path)
     result = await entry().arun(args, runtime_factory=runtime(value))
     assert result["ready"] is True and result["coverage_epoch"] > 0
     assert result["invalid_manifest_ref"] == value.frozen.plan_ref
     args.resume = True
-    assert await entry().arun(args, runtime_factory=runtime(value)) == result
+    resumed = await entry().arun(args, runtime_factory=runtime(value))
+    stable = (
+        "run_id",
+        "writer_contract_version",
+        "baseline_hash",
+        "plan_hash",
+        "tenant_ids",
+        "coverage_epoch",
+        "source_proofs",
+        "stages",
+        "complete",
+        "ready",
+    )
+    assert {key: resumed[key] for key in stable} == {key: result[key] for key in stable}
+    assert resumed["counts_scope"] == "history_actions_in_this_command" and resumed["auto_repair"] == 0
+    assert resumed["retained_warning"] == 0 and resumed["report_path"]
     async with value.sessions() as session, session.begin():
         assert (
             await session.execute(sa.select(Run.phase).where(Run.run_id == value.frozen.run_id))
         ).scalar_one() == "completed"
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_explicit_permission_stage_does_not_certify_references(published_input, tmp_path):
+    from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+    from bisheng.knowledge.application.unification_coverage import production_coverage_factory
+
+    value = published_input
+    args = arguments(value, "--apply", "--operator-id", "7", "--permissions-only", materials_dir=tmp_path)
+    result = await entry().arun(args, runtime_factory=runtime(value))
+    assert result["mode"] == "apply_permissions" and result["permissions_complete"] is True
+    assert result["ready"] is False and result["reference_backfill_executed"] is False
+    async with value.sessions() as session, session.begin():
+        row = (await session.execute(sa.select(Run).where(Run.run_id == value.frozen.run_id))).scalar_one()
+        assert row.phase == "converting" and row.coverage_epoch is None and row.source_coverage == {}
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await production_coverage_factory(session).arequire_global_ready()
+    args.resume = True
+    assert await entry().arun(args, runtime_factory=runtime(value)) == result
+    args.permissions_only = False
+    await entry().arun(arguments(value, materials_dir=tmp_path), runtime_factory=runtime(value))
+    assert (await entry().arun(args, runtime_factory=runtime(value)))["ready"] is True
+
+
+async def test_permission_stage_requires_explicit_apply(published_input, tmp_path):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await entry().arun(
+            arguments(published_input, "--permissions-only", materials_dir=tmp_path),
+            runtime_factory=runtime(published_input),
+        )
+    assert caught.value.kwargs["reason"] == "migration_cli_permissions_only_requires_apply"
 
 
 def test_cli_requires_explicit_apply_and_valid_operator():
@@ -138,9 +211,8 @@ def test_cli_requires_explicit_apply_and_valid_operator():
         )
 
 
-async def test_apply_without_run_calls_actual_native_m2_before_original_chain(published_input):
-    from test.knowledge_unification import test_migration_inventory_application as m2
-
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_apply_without_run_calls_actual_native_m2_before_original_chain(published_input, tmp_path):
     value = published_input
     # Start from the actual pre-conversion SQL state, with no frozen Run.
     # Immutable fixture objects remain harmless content-addressed evidence.
@@ -148,37 +220,23 @@ async def test_apply_without_run_calls_actual_native_m2_before_original_chain(pu
         await session.execute(sa.delete(Run.__table__))
     value.store.enforce_closed = False  # M2's original read TX intentionally spans its read-only evidence IO.
 
-    @asynccontextmanager
-    async def native_runtime(args):
-        @asynccontextmanager
-        async def inventory(session):
-            yield m2.application(
-                importlib.import_module("bisheng.knowledge.application.unification_inventory"), value.artifacts
-            )
-
-        yield SimpleNamespace(store=value.artifacts.store, sessions=value.sessions, inventory=inventory)
-
-    result = await entry().arun(arguments(value, "--apply", "--operator-id", "7"), runtime_factory=native_runtime)
+    native_runtime = current_inventory_runtime(value)
+    preview = await entry().arun(arguments(value, materials_dir=tmp_path), runtime_factory=native_runtime)
+    assert preview["can_apply"]
+    result = await entry().arun(
+        arguments(value, "--apply", "--operator-id", "7", materials_dir=tmp_path), runtime_factory=native_runtime
+    )
     assert result["ready"] is True and result["complete"] is True
 
 
 def current_inventory_runtime(value):
-    from test.knowledge_unification import test_migration_inventory_application as m2
+    from test.knowledge_unification.test_upgrade_new_run import runtime as native_history_runtime
 
-    @asynccontextmanager
-    async def native_runtime(args):
-        @asynccontextmanager
-        async def inventory(session):
-            yield m2.application(
-                importlib.import_module("bisheng.knowledge.application.unification_inventory"), value.artifacts
-            )
-
-        yield SimpleNamespace(store=value.artifacts.store, sessions=value.sessions, inventory=inventory)
-
-    return native_runtime
+    return native_history_runtime(value)
 
 
-async def test_new_run_preview_performs_complete_inventory_without_persisting(published_input):
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_new_run_preview_performs_complete_inventory_without_persisting(published_input, tmp_path):
     value, writes = published_input, []
     async with value.sessions() as session, session.begin():
         await session.execute(sa.delete(Run.__table__))
@@ -191,13 +249,20 @@ async def test_new_run_preview_performs_complete_inventory_without_persisting(pu
 
     sa.event.listen(value.database.engine.sync_engine, "before_cursor_execute", observe)
     try:
-        result = await entry().arun(arguments(value), runtime_factory=current_inventory_runtime(value))
+        result = await entry().arun(
+            arguments(value, materials_dir=tmp_path), runtime_factory=current_inventory_runtime(value)
+        )
     finally:
         sa.event.remove(value.database.engine.sync_engine, "before_cursor_execute", observe)
-    assert result["validation_scope"] == "current_inventory" and result["preflight_complete"] is True
+    assert result["validation_scope"] == "repaired_inventory" and result["preflight_complete"] and result["can_apply"]
     assert result["tenant_ids"] == [1, 101, 202]
     assert result["frozen"] is False and result["ready"] is False
-    assert result["baseline_ref"] is None and result["plan_ref"] is None
+    from bisheng.knowledge.application.unification_upgrade_materials import UpgradeMaterials
+
+    flow = UpgradeMaterials(tmp_path, run_id=value.input["run_id"]).read_object(
+        result["flow_ref"], kind="upgrade_flow"
+    )["records"][0]
+    assert flow["baseline_ref"] and flow["plan_ref"]
     assert not writes and value.artifacts.objects == objects_before
     assert value.store.tuples == tuples_before and value.store.writes == 0
     assert value.store.requests  # The real pinned permission reader participated in the complete inventory.
@@ -206,43 +271,48 @@ async def test_new_run_preview_performs_complete_inventory_without_persisting(pu
     value.sessions.assert_closed()
 
 
-async def test_new_run_preview_reports_actual_data_blocker_instead_of_only_listing_tenants(published_input):
-    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_new_run_preview_reports_actual_data_blocker_instead_of_only_listing_tenants(published_input, tmp_path):
     from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
     value = published_input
     async with value.sessions() as session, session.begin():
         await session.execute(sa.delete(Run.__table__))
         await session.execute(
-            sa.update(KnowledgeFile.__table__).where(KnowledgeFile.id == 1).values(knowledge_id=999999)
+            # An unknown parent folder is automatically removed; a cyclic
+            # ancestry is ambiguous and must remain a concrete dry-run block.
+            sa.update(KnowledgeFile.__table__)
+            .where(KnowledgeFile.id == 1)
+            .values(knowledge_id=999999, file_type=0, file_level_path="1")
         )
     value.store.enforce_closed = False
     objects_before = dict(value.artifacts.objects)
-    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
-        await entry().arun(arguments(value), runtime_factory=current_inventory_runtime(value))
-    assert caught.value.kwargs["reason"] == "unification_resource_file_parent_invalid"
+    result = await entry().arun(
+        arguments(value, materials_dir=tmp_path), runtime_factory=current_inventory_runtime(value)
+    )
+    assert not result["can_apply"] and not result["preflight_complete"]
+    assert any(item["reason"].endswith("ambiguous_parent_path") for item in result["diagnostics"]), result
     assert value.artifacts.objects == objects_before and value.store.writes == 0
     async with value.sessions() as session, session.begin():
         assert (await session.execute(sa.select(sa.func.count()).select_from(Run.__table__))).scalar_one() == 0
     value.sessions.assert_closed()
 
 
-async def test_new_run_preview_requires_full_inventory_port(published_input):
-    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
-
+async def test_new_run_preview_requires_full_inventory_port(published_input, tmp_path):
     value = published_input
     async with value.sessions() as session, session.begin():
         await session.execute(sa.delete(Run.__table__))
-    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
-        await entry().arun(arguments(value), runtime_factory=runtime(value))
-    assert caught.value.kwargs["reason"] == "migration_cli_native_inventory_ports_required"
+    result = await entry().arun(arguments(value, materials_dir=tmp_path), runtime_factory=runtime(value))
+    assert not result["can_apply"] and not result["preflight_complete"]
+    assert any(item["reason"].endswith("read_pinned_history_client_required") for item in result["diagnostics"]), result
 
 
-async def test_new_run_preview_rejects_freeze_committed_between_its_two_transactions(published_input, monkeypatch):
-    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_new_run_preview_rejects_freeze_committed_between_its_two_transactions(
+    published_input, monkeypatch, tmp_path
+):
     from bisheng.core.context.tenant import bypass_tenant_filter
-    from bisheng.knowledge.domain.repositories.unification_run_repository import KnowledgeUnificationRunRepository
-    from test.knowledge_unification import test_migration_inventory_application as m2
+    from bisheng.knowledge.application.unification_inventory import UnificationInventoryApplication
 
     value = published_input
     # Save a real committed frozen Run, then make the CLI's first transaction
@@ -253,49 +323,38 @@ async def test_new_run_preview_rejects_freeze_committed_between_its_two_transact
             original_rows = [dict(row) for row in (await session.execute(sa.select(Run.__table__))).mappings()]
         await session.execute(sa.delete(Run.__table__))
     value.store.enforce_closed = False
-    observations = []
-    original_get = KnowledgeUnificationRunRepository.aget_global_freeze
+    original_preview = UnificationInventoryApplication.arun
 
-    async def observe_freeze(self, session, **kwargs):
-        result = await original_get(self, session, **kwargs)
-        observations.append(result is not None)
-        return result
+    async def competing_freeze(self, session, **kwargs):
+        async with value.sessions() as competing, competing.begin():
+            await competing.execute(sa.insert(Run.__table__), original_rows)
+        return await original_preview(self, session, **kwargs)
 
-    monkeypatch.setattr(KnowledgeUnificationRunRepository, "aget_global_freeze", observe_freeze)
-
-    @asynccontextmanager
-    async def racing_runtime(args):
-        @asynccontextmanager
-        async def inventory(session):
-            async with value.sessions() as competing, competing.begin():
-                await competing.execute(sa.insert(Run.__table__), original_rows)
-            yield m2.application(
-                importlib.import_module("bisheng.knowledge.application.unification_inventory"), value.artifacts
-            )
-
-        yield SimpleNamespace(store=value.artifacts.store, sessions=value.sessions, inventory=inventory)
+    monkeypatch.setattr(UnificationInventoryApplication, "arun", competing_freeze)
 
     objects_before = dict(value.artifacts.objects)
-    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
-        await entry().arun(arguments(value), runtime_factory=racing_runtime)
-    assert caught.value.kwargs["reason"] == "migration_inventory_preview_requires_new_run"
-    assert observations == [False, True]
+    result = await entry().arun(
+        arguments(value, materials_dir=tmp_path), runtime_factory=current_inventory_runtime(value)
+    )
+    assert not result["can_apply"]
+    assert any(item["reason"] == "migration_inventory_preview_requires_new_run" for item in result["diagnostics"])
     assert value.artifacts.objects == objects_before and value.store.writes == 0
     value.sessions.assert_closed()
 
 
-async def test_resume_preview_still_requires_original_frozen_run(published_input):
+async def test_resume_preview_still_requires_original_frozen_run(published_input, tmp_path):
     from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
     value = published_input
     async with value.sessions() as session, session.begin():
         await session.execute(sa.delete(Run.__table__))
     with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
-        await entry().arun(arguments(value, "--resume"), runtime_factory=runtime(value))
+        await entry().arun(arguments(value, "--resume", materials_dir=tmp_path), runtime_factory=runtime(value))
     assert caught.value.kwargs["reason"] == "migration_cli_resume_requires_frozen_run"
 
 
-async def test_new_run_preview_scans_current_tenants_without_old_backup_materials(published_input):
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_new_run_preview_scans_current_tenants_without_old_backup_materials(published_input, tmp_path):
     from bisheng.database.models.tenant import Tenant
 
     value = published_input
@@ -306,7 +365,9 @@ async def test_new_run_preview_scans_current_tenants_without_old_backup_material
         )
     value.store.enforce_closed = False
     objects_before = dict(value.artifacts.objects)
-    result = await entry().arun(arguments(value), runtime_factory=current_inventory_runtime(value))
+    result = await entry().arun(
+        arguments(value, materials_dir=tmp_path), runtime_factory=current_inventory_runtime(value)
+    )
     assert result["preflight_complete"] is True and result["tenant_ids"] == [1, 101, 202, 303]
     assert value.artifacts.objects == objects_before and value.store.writes == 0
 
@@ -337,47 +398,56 @@ def test_cli_needs_no_dba_evidence_inputs():
     assert not args.apply and not args.resume
 
 
-async def test_legacy_run_recovers_original_fields_without_reading_dba_proofs(published_input):
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_legacy_run_recovers_original_fields_without_reading_dba_proofs(published_input, tmp_path):
     value = published_input
     for name in ("backup_ref", "schema_ref"):
         del value.artifacts.objects[value.input[name]["object_key"]]
     objects_before = dict(value.artifacts.objects)
-    result = await entry().arun(arguments(value, "--resume"), runtime_factory=runtime(value))
-    assert result["frozen"] and result["validation_scope"] == "frozen_run"
+    result = await entry().arun(arguments(value, "--resume", materials_dir=tmp_path), runtime_factory=runtime(value))
+    assert result["frozen"] and result["validation_scope"] == "frozen_resume" and result["can_apply"]
     assert value.artifacts.objects == objects_before and value.store.writes == 0
     result = await entry().arun(
-        arguments(value, "--apply", "--resume", "--operator-id", "7"), runtime_factory=runtime(value)
+        arguments(value, "--apply", "--resume", "--operator-id", "7", materials_dir=tmp_path),
+        runtime_factory=runtime(value),
     )
     assert result["ready"] and result["complete"]
 
 
 @pytest.mark.parametrize("changed", ["backup_ref", "schema_ref", "environment"])
-async def test_legacy_run_still_rejects_changed_explicit_identity(published_input, changed):
+async def test_legacy_run_still_rejects_changed_explicit_identity(published_input, changed, tmp_path):
     from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-    args = arguments(published_input, legacy=True)
+    args = arguments(published_input, legacy=True, materials_dir=tmp_path)
     if changed == "environment":
         args.environment = "another-environment"
     else:
         setattr(args, changed, getattr(args, changed) | {"sha256": "f" * 64})
     with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
         await entry().arun(args, runtime_factory=runtime(published_input))
-    assert caught.value.kwargs["reason"] == "migration_inventory_frozen_input_changed"
+    assert caught.value.kwargs["reason"] == (
+        "migration_upgrade_environment_assertion_changed"
+        if changed == "environment"
+        else "migration_upgrade_material_assertion_changed"
+    )
     assert published_input.store.writes == 0
 
 
-async def test_new_run_refuses_legacy_descriptor_flags(published_input):
+async def test_new_run_refuses_legacy_descriptor_flags(published_input, tmp_path):
     from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
     value = published_input
     async with value.sessions() as session, session.begin():
         await session.execute(sa.delete(Run.__table__))
     with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
-        await entry().arun(arguments(value, legacy=True), runtime_factory=current_inventory_runtime(value))
+        await entry().arun(
+            arguments(value, legacy=True, materials_dir=tmp_path), runtime_factory=current_inventory_runtime(value)
+        )
     assert caught.value.kwargs["reason"] == "migration_cli_legacy_descriptors_require_frozen_run"
 
 
-async def test_new_run_interrupted_after_freeze_resumes_without_dba_inputs(published_input, monkeypatch):
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
+async def test_new_run_interrupted_after_freeze_resumes_without_dba_inputs(published_input, monkeypatch, tmp_path):
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.knowledge.application.unification_conversion import UnificationSQLConversionApplication
 
@@ -387,6 +457,10 @@ async def test_new_run_interrupted_after_freeze_resumes_without_dba_inputs(publi
     for name in ("backup_ref", "schema_ref"):
         del value.artifacts.objects[value.input[name]["object_key"]]
     value.store.enforce_closed = False
+    preview = await entry().arun(
+        arguments(value, materials_dir=tmp_path), runtime_factory=current_inventory_runtime(value)
+    )
+    assert preview["can_apply"]
 
     async def interrupted(*args, **kwargs):
         raise RuntimeError("interrupted after durable M2 freeze")
@@ -395,7 +469,7 @@ async def test_new_run_interrupted_after_freeze_resumes_without_dba_inputs(publi
         patch.setattr(UnificationSQLConversionApplication, "arun_references", interrupted)
         with pytest.raises(RuntimeError, match="durable M2 freeze"):
             await entry().arun(
-                arguments(value, "--apply", "--operator-id", "7"),
+                arguments(value, "--apply", "--operator-id", "7", materials_dir=tmp_path),
                 runtime_factory=current_inventory_runtime(value),
             )
     async with value.sessions() as session, session.begin():
@@ -405,7 +479,8 @@ async def test_new_run_interrupted_after_freeze_resumes_without_dba_inputs(publi
             ).all()
     assert len(original) == 3
     result = await entry().arun(
-        arguments(value, "--apply", "--resume", "--operator-id", "7"), runtime_factory=runtime(value)
+        arguments(value, "--apply", "--resume", "--operator-id", "7", materials_dir=tmp_path),
+        runtime_factory=current_inventory_runtime(value),
     )
     assert result["complete"] and result["ready"]
     async with value.sessions() as session, session.begin():

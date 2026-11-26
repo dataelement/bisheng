@@ -2,5 +2,5 @@ apiVersion: v2
 name: bisheng-app-runtime
 description: Open source namespace-scoped BiSheng application runtime
 version: 0.2.0
-appVersion: 3.1.0-beta1
+appVersion: 3.1.0-beta2
 type: application

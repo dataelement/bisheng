@@ -552,7 +552,7 @@ async def test_full_m2_keeps_original_default_sources_and_freezes_safe_after_com
     )
     complete.queries.clear()
     async with AsyncSession(complete.engine) as session, session.begin():
-        await application(module, transport).arun(session, **transport.inputs)
+        frozen = await application(module, transport).arun(session, **transport.inputs)
     pages = [json.loads(content) for content in transport.objects.values()]
     command = next(row for page in pages for row in page["records"] if row.get("record_type") == "default_conversion")
     assert command["selected_linsight_id"] == "11" and command["selected_chat_id"] == "11"
@@ -562,12 +562,13 @@ async def test_full_m2_keeps_original_default_sources_and_freezes_safe_after_com
         for row in page["records"]
     )
     assert all(b"never export" not in content for content in transport.objects.values())
-    # Each tenant: one original NameCatalog projection, one preflight own row
-    # projection and one original source projection; none is repeated per slot.
+    # The shared native projections now need two bounded default reads per
+    # tenant across preflight/source capture; none is repeated per source slot.
     defaults = [sql for sql, _ in complete.queries if "FROM tenant_system_model_config" in sql]
     registered_tenant = [sql for sql in defaults if "reference_registered_tenant" in sql]
     assert len(registered_tenant) == 1  # one global C3 integrity read, independent of source slots
-    assert len(defaults) - len(registered_tenant) == 9
+    assert frozen.tenant_ids == (1, 101, 202)
+    assert len(defaults) - len(registered_tenant) == 2 * len(frozen.tenant_ids)
     async with complete.engine.connect() as connection:
         assert (
             await connection.execute(

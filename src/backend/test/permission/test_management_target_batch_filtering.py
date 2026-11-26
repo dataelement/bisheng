@@ -75,10 +75,10 @@ async def test_super_admin_batch_never_grants_a_foreign_tenant_id(monkeypatch):
             object(),
             resource_type="knowledge_library",
             resource_ids=[19, 77],
-            actions=("visible", "use"),
+            actions=("visible", "edit"),
         )
 
-    assert result["19"] == frozenset({"visible", "use"})
+    assert result["19"] == frozenset({"visible", "edit"})
     assert not result.get("77")
 
 

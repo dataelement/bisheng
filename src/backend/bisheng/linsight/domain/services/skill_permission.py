@@ -3,6 +3,7 @@
 from hashlib import sha256
 
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.linsight.domain.models.linsight_skill import SKILL_SOURCE_BUILTIN
 from bisheng.linsight.domain.repositories.skill_permission import SkillPermissionRepository
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 
@@ -46,17 +47,28 @@ async def ensure_builtin_skill_permission(skill):
     )
 
     runtime = (await get_f048_process_runtime()).components.facade
-    await reconcile_system_owned_resources(
-        runtime,
-        (
-            SystemOwnedResourceSpec(
-                tenant_id=skill.tenant_id,
-                resource_type="linsight_skill",
-                resource_id=str(skill.id),
-                action_codes=("visible",),
-                context_version=f"skill:{skill.id}",
+    # A shared idempotency key does not exclude another live executor. Hold the
+    # business row until projection/finalize finishes; a waiter then inspects
+    # fresh permission state instead of reconciling an active STAGING journal.
+    async with SkillPermissionRepository().lock(skill.id, tenant_id=skill.tenant_id) as current:
+        if (
+            current is None
+            or current.tenant_id != skill.tenant_id
+            or current.source != SKILL_SOURCE_BUILTIN
+            or current.owner_user_id != 0
+        ):
+            raise PermissionInvalidResourceError()
+        await reconcile_system_owned_resources(
+            runtime,
+            (
+                SystemOwnedResourceSpec(
+                    tenant_id=current.tenant_id,
+                    resource_type="linsight_skill",
+                    resource_id=str(current.id),
+                    action_codes=("visible",),
+                    context_version=f"skill:{current.id}",
+                ),
             ),
-        ),
-        apply=True,
-        operator_id=1,
-    )
+            apply=True,
+            operator_id=1,
+        )

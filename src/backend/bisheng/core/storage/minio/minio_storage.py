@@ -25,12 +25,14 @@ from urllib3 import BaseHTTPResponse, PoolManager
 from urllib3.util import Timeout
 from urllib3.util.retry import Retry
 
+from bisheng.common.errcode.storage import BrowserObjectBucketError
 from bisheng.common.services.config_service import settings as _bisheng_settings
 from bisheng.common.services.failure_context import FailureContextAdapter, failure_boundary
 from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.config.settings import MinioConf
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.storage.base import BaseStorage
+from bisheng.core.storage.browser_object_path import browser_bucket_allowed, rewrite_browser_object_text
 
 # F017 AC-06: prefix pattern installed by multi_tenant layout —
 #   Root       → no prefix (e.g. ``knowledge/<file>``)
@@ -452,7 +454,6 @@ class MinioStorage(BaseStorage, ABC):
         content_type: str = "application/octet-stream",
         **kwargs,
     ) -> None:
-
         if bucket_name is None:
             bucket_name = self.bucket
 
@@ -526,7 +527,6 @@ class MinioStorage(BaseStorage, ABC):
 
     @_metered("get")
     def get_object_sync(self, bucket_name: str | None = None, object_name: str = None) -> bytes | None:
-
         if bucket_name is None:
             bucket_name = self.bucket
 
@@ -604,11 +604,9 @@ class MinioStorage(BaseStorage, ABC):
                 raise StorageSharingFallbackError() from e2
 
     async def object_exists(self, bucket_name: str | None = None, object_name: str = None) -> bool:
-
         return await asyncio.to_thread(self.object_exists_sync, bucket_name=bucket_name, object_name=object_name)
 
     def object_exists_sync(self, bucket_name: str | None = None, object_name: str = None) -> bool:
-
         if not bucket_name:
             bucket_name = self.bucket
 
@@ -639,7 +637,6 @@ class MinioStorage(BaseStorage, ABC):
     async def copy_object(
         self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
     ) -> None:
-
         return await asyncio.to_thread(
             self.copy_object_sync,
             source_bucket=source_bucket,
@@ -652,7 +649,6 @@ class MinioStorage(BaseStorage, ABC):
     def copy_object_sync(
         self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
     ) -> None:
-
         if source_bucket is None:
             source_bucket = self.tmp_bucket
 
@@ -704,6 +700,9 @@ class MinioStorage(BaseStorage, ABC):
         if object_name[0] == "/":
             object_name = object_name[1:]
 
+        if clear_host and not browser_bucket_allowed(bucket, self.bucket, self.tmp_bucket):
+            raise BrowserObjectBucketError()
+
         share_link = self.share_minio_client.presigned_get_object(
             bucket, object_name, expires=timedelta(days=expire_days)
         )
@@ -725,9 +724,10 @@ class MinioStorage(BaseStorage, ABC):
         TODO The logical solution is to deploy ahttpsright of privacyminioUse with front-end
         to be erasedurlhitting the nail on the headminio share<g id="Bold">Address:</g> Let the front end throughnginxProxy to access resources
         """
-        share_host = self.get_minio_share_host()
 
-        return file_url.replace(share_host, "")
+        share_host = self.get_minio_share_host()
+        stripped = file_url.replace(share_host, "")
+        return rewrite_browser_object_text(stripped, self.bucket or "", self.tmp_bucket or "")
 
     async def close(self) -> None:
         """Close Minio Client link"""

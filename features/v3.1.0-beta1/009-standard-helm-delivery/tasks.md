@@ -147,3 +147,9 @@
 - 初始化去总完成标记/claim，旧接纳和额外代理地址冻结移除，沙箱热关闭延期：已同步design.md及用户确认记录。
 
 - T002–T030：源码实施与定向复核见 task-review.md / code-review.md / verification.md。T030只完成本轮源码部分，未将模板或本地API回归算作真实集群E2E。
+
+### 2026-11-23 同名镜像重复发布
+
+用户明确要求移除工场同名镜像覆盖限制。以最新`feat/3.1.0-beta1`的`95e5b6445c`为基线，移除`build_runtime_images.sh`和`sync_runtime_images_cr.sh`中的标签存在性阻断及`RUNTIME_REPLACE_RELEASE`，工作流不再依赖`github.event.forced`。前后端CI原本直接构建/推送同名标签，无此限制。原生架构/源码、全部隔离冒烟、Image ID同步、双仓库/双架构目录及正式Release推广保持；运营说明和设计已同步。
+
+同名构建/CR发布先在旧脚本复现2项失败；改动后两个发行模块51项通过，其中2项本地HTTP/SQLite测试因沙箱禁止loopback监听，单独在允许本机监听的环境补跑通过。两个Shell语法、工作流YAML依赖、Python Ruff/格式及架构守卫通过。七维增量审查与现场边界见[变更记录](../../../docs/reviews/runtime-image-republish-20261123.md)；本机回归使用Docker替身，不冒充原生Linux镜像构建结果。

@@ -32,8 +32,12 @@
 
 ### 3.3 配置与密钥
 
-- 选定：延续联网搜索 `type` + `config` 的单服务商选择，新增 `custom` 配置；密钥在服务端加密保存，读接口只返回是否已配置，更新时区分保留、替换与清除。固定参数中不得包含密钥；认证单独配置。切换服务商保留其他配置。系统随机密钥自动存于共享数据库，复用既有配置加密封装，不要求管理员新增搜索环境变量。
-- 备选：沿用现有 `extra` 中明文回传的习惯，会违反本功能密钥不回显的要求。强制部署专用环境变量会阻断界面配置；进程内生成密钥无法跨副本验证。若项目提供统一 KMS，重新评估数据库存储封装，保留 key ID 与旧密文的升级兼容。
+- 选定：延续联网搜索 `type` + `config` 的单服务商选择，新增 `custom` 配置；密钥在服务端加密保存，读接口只返回是否已配置，更新时区分保留、替换与清除。固定参数中不得包含密钥；认证单独配置。切换服务商保留其他配置。复用平台既有配置加密封装，不要求管理员新增搜索环境变量。
+- 备选：沿用现有 `extra` 中明文回传的习惯，会违反本功能密钥不回显的要求。强制部署专用环境变量会阻断界面配置；进程内生成密钥无法跨副本验证。若项目提供统一 KMS，重新评估加密封装，保留 key ID 与旧密文的升级兼容。
+
+### 3.4 beta2 移除操作证明（2026-11-24，用户明确要求）
+
+选定：删除操作 proof 的签发、加解密和比对，管理员直接保存规范化接口声明与请求模板。原始需求未要求必须使用 proof；它与现有 Root 配置复制路径不兼容，且原始 Schema 不持久化，错误配置难以从页面恢复。保留服务端结构、参数类型、声明内认证要求、映射、权限和出站校验。现有配置及旧客户端可提交旧 proof，服务端忽略该字段，返回和选中 custom 保存时移除；不再要求重新导入 Schema。若未来需要服务端审批接口或不可修改的接口目录，应设计明确的服务端持久化声明合同，再评估来源约束。API Key 加密及租户/类别范围仍保留，移除 proof 不授予子租户读取 Root 凭据的能力。
 
 ## 4. 系统现状与拟议数据流
 
@@ -51,25 +55,25 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 
 | 项目 | 拟议契约与职责 |
 |---|---|
-| 配置 | `type: custom`，`config.custom` 保存所选 operation 的受限规范化描述、搜索词参数、固定参数、认证设置和结果映射，不保存完整 Schema；持久化前限制整个分类 extra 的 UTF-8 大小以适配 MySQL TEXT（上限 60 KiB），超限明确报错。密钥在专用表中以自动生成并共享持久化的专用 Fernet 密钥加密持久化，extra 和前端只见状态。原有 provider 数据结构不迁移。 |
+| 配置 | `type: custom`，`config.custom` 保存所选 operation 的受限规范化描述、搜索词参数、固定参数、认证设置和结果映射，不保存完整 Schema；持久化前限制整个分类 extra 的 UTF-8 大小以适配 MySQL TEXT（上限 60 KiB），超限明确报错。密钥在专用表中通过平台加密封装加密持久化，extra 和前端只见状态。原有 provider 数据结构不迁移。 |
 | 运行输入 | `web_search` 的 `query: string`，保持现有调用方不变。 |
 | 运行输出 | JSON 数组，每项包含 `id`、`title`、`snippet`、`url`、`source`、`siteIcon`、`datePublished`；URL 无效的结果不作为网页引用，映射错误不能伪装为空数组。 |
-| 管理 API | 采用 §4.4 的专用 settings、schema 和 test 契约；原两入口提案及现状见 §4.1、§4.4。仅全局超管可管理，校验目标联网搜索预置工具及其归属，不复用仅验证登录的通用入口。 |
+| 管理 API | 采用 §4.4 的专用 settings、schema 和 test 契约；原两入口提案及现状见 §4.1、§4.4。系统超管及当前租户管理员可管理当前租户配置，校验目标联网搜索预置工具及其归属，不复用仅验证登录的通用入口。 |
 | 服务端适配器 | 负责受限 Schema 验证、请求构造、超时/大小限制、响应转换；不改变引用注册规则。 |
 | 管理端 | 沿用现有 OpenAPI 编辑的导入、认证与测试交互及现有组件；下拉增加自定义，展示选择、固定参数、映射和测试结果。遵循三语言及设计系统规范。 |
 
 ### 4.4 专用管理 API 和 DTO（提案，路径相对 /api/v1/tool）
 
-以下均需已登录且服务端重新检查 global super；不可仅依赖前端隐藏或通用 /schema、/test 的登录检查。服务端从可信租户上下文加载目标分类及子工具，校验 preset、未删除、真实子项 tool_key=web_search、分类归属和当前操作者权限；错误 ID、不匹配、越权 fail closed，不通过 ID 或异常泄露其他租户资源。设置类路径遵守现有 route 命名约束。请求和响应均有尺寸上限，未知字段拒绝；不接受客户端声明的 tenant_id、权限、密文或 key_id 作为可信依据。
+以下均需已登录且通过 permission application 的 `is_current_tenant_administrator`，与既有预置工具配置管理一致；不可仅依赖前端隐藏或通用 /schema、/test 的登录检查。服务端从可信租户上下文加载目标分类及子工具，校验 preset、未删除、真实子项 tool_key=web_search、分类归属和当前操作者权限；错误 ID、不匹配、越权 fail closed，不通过 ID 或异常泄露其他租户资源。设置类路径遵守现有 route 命名约束。请求和响应均有尺寸上限，未知字段拒绝；不接受客户端声明的 tenant_id、权限、密文或 key_id 作为可信依据。
 
-- `GET /{tool_type_id}/web-search/settings`：返回 `{revision, enabled, type, prompt, providers, custom_secret_configured}`；providers 是该用户可管理设置的白名单化配置 DTO，custom 内是规范化 operation、query 参数、固定参数、auth 位置/名称及 mapping，不含 API Key 明文、API Key 存储密文或 Schema 中的示例 secret；另含操作声明 proof（见下方实现对照）。旧服务商字段维持原兼容语义，自定义密钥仅返回存在标志。revision 是服务端生成的 opaque 版本，非时间戳。
+- `GET /{tool_type_id}/web-search/settings`：返回 `{revision, enabled, type, prompt, providers, custom_secret_configured}`；providers 是该用户可管理设置的白名单化配置 DTO，custom 内是规范化 operation、query 参数、固定参数、auth 位置/名称及 mapping，不含 API Key 明文、API Key 存储密文或 Schema 中的示例 secret；不再返回操作声明 proof。旧服务商字段维持原兼容语义，自定义密钥仅返回存在标志。revision 是服务端生成的 opaque 版本，非时间戳。
 - `PUT /{tool_type_id}/web-search/settings`：请求 `{revision, enabled, type, prompt, providers, custom_secret: {action: keep|replace|clear, value?: string}}`；仅 replace 必须提交非空 value，keep/clear 禁止提交 value；密钥存在标志不参与写入。服务端全量静态校验后原子保存，返回新 revision 和脱敏 DTO；不进行在线测试。原 provider 配置使用现有兼容字段合并规则，不能凭前端固定枚举删未知 provider；任何失败不得部分写入。无认证配置可以 clear；需要 key 而无有效密钥的配置不得保存。冲突返回稳定的冲突码/HTTP 409，提示重新加载，禁止静默覆盖。
 - `POST /{tool_type_id}/web-search/schema`：互斥的 `{content}` 或 `{url}`；使用 §4.7 安全网络策略导入、受限解析 OpenAPI 3.0，返回操作/参数候选及受限规范化描述，不读取或写入保存密钥；拒绝外部 $ref、认证内嵌、超限和不支持操作。URL 不得含 userinfo、fragment 或秘密查询参数。
 - `POST /{tool_type_id}/web-search/test`：`{draft, query, secret: {action: keep|replace, value?: string}}`；keep 仅可由有权管理同一目标者使用已存 key，replace 使用一次性提交的值、不写库。服务端验证草稿并按 §4.7 访问，返回 `{status, preview, results}` 或脱敏错误。preview 保留原始响应交互并进行已知凭据脱敏，剩余风险见 §4.8；不因测试成功隐式保存或启用。
 
 原两入口提案（范围待评审和用户确认）：`ToolSet.tsx` 的父级提交和历史 `bench/Subscribe.tsx` 对话框的 isApi 提交统一改用专用 settings 的读写与 revision；目前仅前者有活跃打开入口，后者没有打开触发器。成功才关闭，冲突/失败保留草稿并允许用户显式重载。现有 `WebSearchFrom.tsx` 白名单重建配置会丢新 provider，需取消这一丢弃行为；`ToolSet.tsx` 的配置 console.log 必须移除，状态管理不得留存明文 secret。旧 `/tool/config`、旧列表/详情及其他写入口不能绕过白名单、脱敏、版本和验证：对 web_search 必须委派同一服务及 CAS 或拒绝旧写；必须验证升级前客户端兼容性，不能保留一条无版本覆盖通路。
 
-**实现对照（未完成独立评审）**：`web_search.py` 为每个 schema operation 生成 `proof`，实际 custom DTO 为 `{operation, mapping, proof}`；proof 为 `{key_id, ciphertext}` 的操作声明认证密封值，不是 API Key 的密文。`web_search.py` 使用独立域标签并绑定 tenant/category，测试、custom 保存和执行初始化校验 operation 的 server/method/path、参数、类型与 security。导入直接使用平台 encrypt_token/decrypt_token，凭据更新须保留已保存 proof 的可解密性；相关兼容性与轮换仍待测试。settings DTO 可返回操作 proof，但不得返回 API Key 明文或其存储密文。API 成功响应经 `resp_200(data=...)` 包装；schema 的 content/url 互斥且当前实现拒绝所有 URL 查询串，test 的 data 为 `{status, preview, results}`。上述为源代码观察，不代表安全、兼容性或端到端验证通过。
+**beta2 当前实现**：custom DTO 为 `{operation, mapping}`，schema 导入直接返回接口候选，不签发 proof。`_custom` 接受旧 `{operation, mapping, proof}` 并剔除 proof，继续校验操作结构、请求模板、认证声明和映射；GET、测试、custom 保存和 ToolExecutor 初始化共用该校验。API 成功响应经 `resp_200(data=...)` 包装；schema 的 content/url 互斥，test 的 data 为 `{status, preview, results}`。只有搜索凭据使用平台 encrypt_token/decrypt_token；配置或旧 proof 的复制不构成读取其他租户凭据的授权。
 
 **设置实现边界**：`web_search.py` 使用非 custom provider 字段白名单；历史未知 provider 和字段在读取视图隐藏但保存时保留，新增或修改未知项被拒绝。旧 custom 凭据无法解密时，选择 custom 失败；选择其他 provider 仅在 prompt 和非 custom 配置不变等条件下允许，默认值也可能使配置变化而触发 409。详情及恢复条件见 [运维指南](./operations.md#保存时的凭据检查)。
 
@@ -87,11 +91,11 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 
 凭据专用表仅保存密文、固定 `platform` key_id、版本和审计元数据；加密根密钥由现有平台 `encrypt_token/decrypt_token` 封装提供，不在搜索域生成或存储。
 
-搜索 API Key 和 operation proof 直接调用现有 `encrypt_token / decrypt_token`；密文信封保留 domain、version、tenant_id、category_id 约束，凭据记录的 key_id 固定为 `platform`。不生成或持久化搜索专用 keyring，不新增 config 表行；API、Celery、Linsight 使用同一平台加密封装。旧部署先用旧 keyring 解密并迁移已有凭据/proof，再删环境变量，步骤见 operations.md。密文含版本和 key_id，解密后验证信封域及 owner/category 绑定；未知版本/key、缺钥、错钥和校验失败均 fail closed，不回退其他 provider 或用空密钥。执行于 `ToolExecutor._init_preset_tool` 中在受权、选定实际有效 extra 之后、调用 `load_tools` 之前注入深拷贝内存参数，不写回 ORM、缓存、队列或日志；独立的 `bisheng_langchain` 包不得反向导入 `bisheng`。长运行实例可能持有旧密钥，只承诺下次初始化生效，失效强制终止需另议。
+搜索 API Key 直接调用现有 `encrypt_token / decrypt_token`；密文信封保留 domain、version、tenant_id、category_id 约束，凭据记录的 key_id 固定为 `platform`。不生成或持久化搜索专用 keyring，不新增 config 表行；API、Celery、Linsight 使用同一平台加密封装。旧部署先用旧 keyring 解密并迁移已有凭据，再删环境变量，步骤见 operations.md。密文含版本和 key_id，解密后验证信封域及 owner/category 绑定；未知版本/key、缺钥、错钥和校验失败均 fail closed，不回退其他 provider 或用空密钥。执行于 `ToolExecutor._init_preset_tool` 中在受权、选定实际有效 extra 之后、调用 `load_tools` 之前注入深拷贝内存参数，不写回 ORM、缓存、队列或日志；独立的 `bisheng_langchain` 包不得反向导入 `bisheng`。长运行实例可能持有旧密钥，只承诺下次初始化生效，失效强制终止需另议。
 
 凭据轮换沿用平台加密封装；更新凭据时以新密文替换旧密文，旧 keyring 不再参与新写入。备份数据库密文时遵守平台既有密钥恢复流程。
 
-**轮换现状**：上述 CAS 批量重加密任务尚未实现；`web_search.py` 和 `web_search.py` 的 `keep` 不重加密，受控流程可逐分类显式替换凭据。替换不会更新既有 operation proof，旧 proof 和保留期内备份仍可能需要旧 key；不要提前移除，演练及恢复仍待验证。具体流程见 [运维指南](./operations.md#轮换备份和恢复)。
+**轮换现状**：CAS 批量重加密任务尚未实现；keep 不重加密，受控流程可逐分类显式替换凭据。beta2 不再读取操作 proof，旧 proof 无需迁移；搜索凭据和备份仍遵守平台密钥恢复流程，演练及恢复仍待验证。
 
 ### 4.7 内外网出站约束（待确认提案）
 
@@ -123,13 +127,14 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 | `validate_destination` 只验证 URL 形式，并不证明目标地址公网安全。 | 导入、测试和正式调用都要应用一致的目标地址策略、重定向与 DNS 校验；需保留企业内网部署的可配置能力，不能简单假设该函数已防 SSRF。 |
 | `ToolSet.tsx` 是活跃入口，`bench/Subscribe.tsx` 的历史对话框目前无打开触发器。 | 不得将历史代码视为已实现的第二入口；原两入口提案和验证范围待评审及用户确认，见 §4.1。 |
 | 上游错误、原始响应或 Schema 中可能包含密钥。 | 对测试响应、错误和日志进行密钥脱敏；不记录认证头或完整带密钥 URL；固定参数不用于存储秘密。 |
+| 联网搜索有独立的四个管理端点，通用 `/tool/config` 放开租户管理员并不覆盖它们。 | 四个端点统一复用 `is_current_tenant_administrator`，目标由 `_target` 校验当前租户/preset/删除态/子工具标识，回归同时覆盖读、写、导入和测试，避免只能打开其他预置配置但搜索设置 403。 |
 | 现有调用方读取规范化的网页结果。 | 原样返回上游数据会破坏引用；测试及运行必须通过同一转换函数。 |
 
 ## 6. 对外契约与依赖
 
 - 提供：不改变 `web_search(query)` 及其结果数组契约；管理侧新增或扩展解析、测试和脱敏配置能力。
 - 依赖：上游服务遵守所选 OpenAPI 操作、返回可映射 JSON；配置存储需在 API、Celery 和 Linsight 进程均可读取；使用外部提供且各进程一致的专用加密密钥，缺失或解密失败时明确报错。后端 ToolExecutor 在调用独立 bisheng_langchain 包前解析密钥并注入内存，禁止反向 import 或持久化明文；不能依赖本地文件保存共享状态。
-- 权限和租户：当前预置工具配置保存仅允许全局超管；新增导入、测试和写入也仅允许全局超管，并校验目标确为联网搜索预置工具。执行保留 ToolExecutor 的 tool/use 授权，沿用现有子工具配置优先于分类配置的选择规则；不新增未经验证的跨租户配置读取。读写作用域须以实际预置工具数据模型及业务授权测试确认，批量写入不能依赖 SELECT 租户过滤。
+- 权限和租户：预置工具配置的读取、保存、导入和测试均允许系统超管或当前租户管理员，并校验目标确为当前租户的联网搜索预置工具；普通用户即便有工具 owner/manager/edit 授权也不获得配置管理能力。执行保留 ToolExecutor 的 tool/use 授权，沿用现有子工具配置优先于分类配置的选择规则；不新增未经验证的跨租户配置读取。读写作用域须以实际预置工具数据模型及业务授权测试确认，批量写入不能依赖 SELECT 租户过滤。
 - 网络：用户确认支持公网和企业内网；仅全局超管配置的明确服务地址可被访问，禁止自动重定向及代理环境变量，禁止访问环回、链路本地和云元数据地址。连接前校验全部解析地址，固定连接 IP 并保留原 Host/TLS SNI、校验对端地址；域名解析变化后重新校验。Schema 导入、测试和运行共用同一策略；测试覆盖 IPv4/IPv6、重绑定、混合 DNS 和敏感地址。出站采用有限超时和响应体大小，错误不回传 URL 查询串、上游正文或凭据。
 
 ## 7. 验证与可观测
@@ -149,3 +154,16 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 ### 2026-11-15 P1 修复
 
 无需专用密钥环境变量；直接使用平台 `encrypt_token/decrypt_token`，不创建独立搜索 keyring 或数据库配置项。旧环境升级必须先迁移密文，再从 env_file 移除旧变量并重建容器；仅重启不能改变容器环境。
+
+### 2026-11-24 beta2 移除操作 proof
+
+用户要求去掉证明校验，按 §3.4 删除签发和各执行入口校验，兼容旧数据与旧请求。保留权限、独立 API Key 加密及现有请求验证。Root Schema 原文未持久化、前端输入框不回显的问题另行处理，本次不扩展 UI。
+
+
+### 2026-11-24 租户管理员搜索配置鉴权修复
+
+用户已要求租户管理员编辑本租户预置工具配置；116 的 `/api/v1/tool/1410/web-search/settings` 仍由专用 `_require_search_admin` 硬编码全局超管，遗漏通用配置入口的修复。四条专用路由统一复用 permission application 的管理身份协议：沿已认证身份解析 PermissionActor，并保留 data_scope 收窄、当前租户及管理身份约束；全局超管身份仍由登录依赖服务端验证，不信任请求中声明的角色。旧的“仅 global super”设计已被本轮用户确认的租户管理员规则替代。
+
+选择复用同一管理身份入口，而不是把工具 edit/owner 授权当作配置权限，避免擅自实现仍待确认的普通管理者配置能力。服务端 `_target` 保留分类及子项的当前租户/preset/删除态/web_search 校验，凭据按 tenant/category 加密、revision CAS、脱敏和出站策略均沿原合同；没有新接口字段、表、SQL 或网络能力。只有用户另行确认普通资源授权可委托配置时，才重评这个身份边界。
+
+本租户管理员和超管分别通过实际 ASGI 路由完成导入、读写、预览，外租户管理员、普通用户、收窄身份继续被拒绝；本租户管理员对 Root 分类的四个请求均在目标校验中拒绝，未写数据或访问上游。详见 [本轮验证与审查](../../../docs/reviews/web-search-tenant-admin-403-20261124.md)。116 仅核对源码，未部署或保存现场配置。

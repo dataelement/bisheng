@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from bisheng.api.v1.schemas import OrgKbConfig, WorkstationConfig
 from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
 from bisheng.llm.domain.services.llm import LLMService
@@ -22,13 +24,27 @@ async def test_daily_config_can_skip_models_that_the_endpoint_replaces(monkeypat
     picker.assert_not_awaited()
 
 
+@pytest.fixture(autouse=True)
+def _org_kbs_are_document_libraries(monkeypatch):
+    """These tests predate knowledge spaces in orgKbs; type every id as a library."""
+
+    async def resource_types(self, ids):
+        return dict.fromkeys(ids, "knowledge_library")
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.repositories.knowledge_compatibility_repository."
+        "KnowledgeCompatibilityRepository.aresource_types",
+        resource_types,
+    )
+
+
 async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
     login_user = _login_user()
     daily_config = WorkstationConfig(
         tools=[{"id": 362, "name": "curated", "default_checked": True, "children": [{"id": 2125}]}],
         orgKbs=[
-            OrgKbConfig(id=12, name="hidden", default_checked=True, sort_order=0),
-            OrgKbConfig(id=13, name="visible", default_checked=True, sort_order=1),
+            OrgKbConfig(id=12, name="hidden", sort_order=0),
+            OrgKbConfig(id=13, name="visible", show_in_composer=False, sort_order=1),
         ],
     )
 
@@ -84,10 +100,12 @@ async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
 
     response = await config_endpoint.get_config(request=None, login_user=login_user)
 
-    picker.assert_awaited_once_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
+    # F004: the protocol switch is gone; the client always speaks the run protocol.
+    assert "unified_runtime_enabled" not in response.data
+    picker.assert_awaited_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
     assert response.data["tools"][0]["default_checked"] is True
     assert [item["id"] for item in response.data["orgKbs"]] == [13]
-    assert response.data["orgKbs"][0]["default_checked"] is True
+    assert response.data["orgKbs"][0]["show_in_composer"] is False
 
 
 async def test_org_kb_visibility_filter_short_circuits_empty_input(monkeypatch):
@@ -116,8 +134,8 @@ async def test_public_config_survives_a_deleted_org_kb_for_super_admin(monkeypat
     login_user = SimpleNamespace(user_id=1, user_name="admin", tenant_id=60)
     daily_config = WorkstationConfig(
         orgKbs=[
-            OrgKbConfig(id=19, name="alive", default_checked=True, sort_order=0),
-            OrgKbConfig(id=20, name="deleted", default_checked=True, sort_order=1),
+            OrgKbConfig(id=19, name="alive", sort_order=0),
+            OrgKbConfig(id=20, name="deleted", sort_order=1),
         ],
     )
 

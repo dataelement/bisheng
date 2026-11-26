@@ -57,7 +57,7 @@ export async function getDepartmentPathTreeApi(
 
 export async function createDepartmentApi(
   data: DepartmentCreateForm
-): Promise<any> {
+): Promise<Pick<DepartmentDetail, "id">> {
   return await axios.post(`/api/v1/departments/`, data)
 }
 

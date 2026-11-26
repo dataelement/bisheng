@@ -292,7 +292,9 @@ async def test_nudge_emitted_for_uncited_output_md_and_logged(fake_redis, nudge_
     tail = _human_tail(seen, len(messages))
     assert len(tail) == 1
     assert tail[0].startswith("【系统提醒，不是用户的新消息】output/x.md 已写入成功，但正文没有来源编号。")
-    assert "edit_file" in tail[0] and "[Sn]" in tail[0] and "按用户最初的任务正常收尾" in tail[0]
+    # F004 §5 #18: a literal [Sn] is echoed to the user; the nudge gives a real example.
+    assert "edit_file" in tail[0] and "[S3]" in tail[0] and "[Sn]" not in tail[0]
+    assert "按用户最初的任务正常收尾" in tail[0]
     # state untouched
     assert seen.state["messages"] == messages
     # dedupe recorded on the session handle table with the table's TTL

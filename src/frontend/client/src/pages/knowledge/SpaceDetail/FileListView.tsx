@@ -52,7 +52,7 @@ interface FileListViewProps {
     versionManagementEnabled?: boolean;
     onOpenVersionManagement?: (file: KnowledgeFile) => void;
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
-    canManageVersions?: boolean;
+    editEntryIds?: Set<string>;
     /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
     highlightedTagIds?: number[];
     /** Keyword hit by the active search; matching substring in the file name is highlighted. */
@@ -91,7 +91,7 @@ export function FileListView({
     versionManagementEnabled = false,
     onOpenVersionManagement,
     onOpenVersionHistory,
-    canManageVersions = false,
+    editEntryIds,
     highlightedTagIds,
     highlightKeyword,
     onScroll,
@@ -183,7 +183,7 @@ export function FileListView({
                         versionManagementEnabled={versionManagementEnabled}
                         onOpenVersionManagement={onOpenVersionManagement}
                         onOpenVersionHistory={onOpenVersionHistory}
-                        canManageVersions={canManageVersions}
+                        canManageVersions={Boolean(editEntryIds?.has(file.id))}
                         canRename={Boolean(renameEntryIds?.has(file.id))}
                         canDelete={Boolean(deleteEntryIds?.has(file.id))}
                         canDownload={Boolean(downloadEntryIds?.has(file.id))}

@@ -223,6 +223,19 @@ def _sse_resp(
     return f"event: message\ndata: {json.dumps(resp, ensure_ascii=False, default=custom_json_serializer)}\n\n"
 
 
+# F132: category of the long-term memory signal. The payload carries the turn id
+# and two flags only, never item text; the client fetches the notice and the
+# attribution from /api/v1/memory/turn.
+MEMORY_SSE_CATEGORY = "memory"
+_MEMORY_SIGNAL_KEYS = ("turn_id", "has_write", "has_attribution")
+
+
+def _memory_sse(signal: dict, chat_id: str, message_id=None) -> str:
+    """Build the `memory` SSE event: {turn_id, has_write, has_attribution}."""
+    payload = {key: signal[key] for key in _MEMORY_SIGNAL_KEYS}
+    return _sse_resp(MEMORY_SSE_CATEGORY, "over", payload, chat_id, message_id=message_id)
+
+
 def _is_new_format(msg: ChatMessage) -> bool:
     """Return True when `msg.message` is already the new JSON object format.
 
@@ -355,7 +368,17 @@ def _format_new_message(msg: ChatMessage) -> dict:
             extra = {}
     except (json.JSONDecodeError, TypeError):
         extra = {}
+    stored_detail = extra.get("detail")
     extra = FailureContextAdapter.public_payload(extra)
+    # ``public_payload`` replaces ``error_msg`` with a fixed placeholder and drops
+    # ``detail``. The placeholder says nothing, so it is not sent: the client then
+    # uses its own localized line. ``detail`` was redacted when the row was saved;
+    # it is redacted again and returned, like the replay of a deep-research
+    # failure (``task_failure_payload``), so a reloaded failure shows what the
+    # live one showed.
+    extra.pop("error_msg", None)
+    if extra.get("error") and isinstance(stored_detail, str) and stored_detail.strip():
+        extra["detail"] = FailureContextAdapter.public_text(stored_detail)
     if isinstance(message_content, dict):
         for event in message_content.get("events") or []:
             if not isinstance(event, dict) or event.get("type") != "tool_call":

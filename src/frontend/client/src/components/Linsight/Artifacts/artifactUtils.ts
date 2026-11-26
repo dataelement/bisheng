@@ -25,7 +25,7 @@ export interface ArtifactFile {
      * A conversation attachment kept permanently: open it through a freshly
      * issued link, since `directUrl` is the upload-time link and expires.
      */
-    attachment?: { conversationId: string; fileId: string };
+    attachment?: { conversationId: string; fileId: string; run?: boolean };
     file_id: string;
     file_name: string;
     file_url: string;
@@ -58,6 +58,12 @@ export interface ArtifactFile {
      * with its own id. Absent → the caller's versionId (single-turn surfaces).
      */
     versionId?: string;
+    /**
+     * F004: the id the run's live `file` events gave this file. An answer row
+     * stores its own copy under another `file_id` and keeps the event id here,
+     * so the workspace can tell that a replayed live file is this one.
+     */
+    workspaceFileId?: string;
 }
 
 /** The version to resolve `file` against: its own turn, else the caller's. */

@@ -1,4 +1,4 @@
-"""T045: real assistant CRUD and references form one SQL transaction."""
+"""Assistant business writes commit independently of auxiliary reference hints."""
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -19,18 +19,19 @@ from bisheng.assistant.domain.services.reference_extractor import (
     extract_assistant_references,
 )
 from bisheng.common.errcode.knowledge import (
-    KnowledgeProcessingConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao, AssistantStatus
+from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.resource_reference.application.contracts import (
     DeletionEvidence,
     SourceKey,
     TargetLockReceipt,
     TransactionIdentity,
 )
+from bisheng.resource_reference.application.source_sync import refresh_root
 from bisheng.resource_reference.application.target_state import resolve_target_state
 from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
@@ -103,6 +104,9 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
             lambda conn: SQLModel.metadata.create_all(
                 conn,
                 tables=[
+                    Tenant.__table__,
+                    LLMServer.__table__,
+                    LLMModel.__table__,
                     Assistant.__table__,
                     AssistantLink.__table__,
                     Knowledge.__table__,
@@ -122,6 +126,11 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
             ],
         )
     async with AsyncSession(engine) as session, session.begin():
+        session.add(Tenant(id=101, tenant_code="leaf", tenant_name="Leaf"))
+        session.add(LLMServer(id=7, tenant_id=101, name="test", type="openai"))
+        session.add_all(
+            [LLMModel(id=i, tenant_id=101, server_id=7, model_name=f"m-{i}", model_type="llm") for i in (1, 2)]
+        )
         session.add_all(
             [
                 Knowledge(id=target_id, tenant_id=101, user_id=9, name=f"space-{target_id}", type=3)
@@ -154,12 +163,22 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
     monkeypatch.setattr(AssistantService, "get_logo_share_link", MagicMock())
     monkeypatch.setattr(AssistantService, "update_assistant_hook", MagicMock(return_value=True))
     monkeypatch.setattr(AssistantService, "delete_assistant_hook", MagicMock(return_value=True))
-    monkeypatch.setattr(AssistantService, "get_link_info", MagicMock(return_value=([], [], [])))
+    monkeypatch.setattr(AssistantService, "get_link_info", AsyncMock(return_value=([], [], [])))
     monkeypatch.setattr(
         assistant_module.LLMService,
         "get_assistant_llm",
         AsyncMock(return_value=SimpleNamespace(llm_list=[SimpleNamespace(default=True, model_id=1)])),
     )
+    monkeypatch.setattr(
+        assistant_module.LLMService,
+        "aget_assistant_llm_with_meta",
+        AsyncMock(return_value=(SimpleNamespace(llm_list=[SimpleNamespace(default=True, model_id=1)]), {}, None)),
+    )
+    monkeypatch.setattr(assistant_module, "notify_reference_sync", AsyncMock())
+    from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+
+    monkeypatch.setattr(AssistantBoundaryService, "authorize_knowledge_bindings", AsyncMock())
+    monkeypatch.setattr(AssistantBoundaryService, "authorize_flow_bindings", AsyncMock())
     permission_adapter = SimpleNamespace(
         load_permission_record=AsyncMock(return_value=object()), project_delete=AsyncMock(), cleanup_deleted=AsyncMock()
     )
@@ -234,31 +253,36 @@ async def stage(context, kind, target_id, value):
         await session.execute(
             update(targets).where(targets.c.kind == kind, targets.c.id == target_id).values(stage=value)
         )
+        if value == "deleted":
+            model = LLMModel if kind == "model" else Knowledge
+            await session.execute(delete(model).where(model.id == target_id))
         await session.commit()
 
 
-async def test_create_binds_the_default_model_in_the_same_transaction(assistant_business):
+async def test_create_commits_default_model_before_reference_refresh(assistant_business):
     context = assistant_business
     await AssistantService.create_assistant(
         context.request, context.user, Assistant(id="assistant-a", name="new", user_id=7)
     )
     assistant, _, references, source = await inspect_business(context)
-    assert assistant.model_name == "1"
+    assert assistant.model_name == "1" and references == [] and source is None
+    assistant_module.notify_reference_sync.assert_awaited_once_with(101, "assistant", "assistant-a")
+    await refresh_root(101, "assistant", "assistant-a", session_factory=context.sessions)
+    _, _, references, source = await inspect_business(context)
     assert {(ref.slot_key, ref.target_id) for ref in references} == {("model_name", "1")}
     assert source.effective
 
 
-async def test_binding_failure_rolls_back_new_assistant(assistant_business, monkeypatch):
+async def test_legacy_binding_failure_does_not_block_new_assistant(assistant_business, monkeypatch):
     context = assistant_business
-    monkeypatch.setattr(
-        context.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("binding failed"))
+    binding = AsyncMock(side_effect=RuntimeError("binding failed"))
+    monkeypatch.setattr(context.runtime, "aapply_source_bindings", binding)
+    await AssistantService.create_assistant(
+        context.request, context.user, Assistant(id="assistant-a", name="new", user_id=7)
     )
-    with pytest.raises(RuntimeError, match="binding failed"):
-        await AssistantService.create_assistant(
-            context.request, context.user, Assistant(id="assistant-a", name="new", user_id=7)
-        )
-    assistant, links, references, source = await inspect_business(context)
-    assert assistant is None and links == () and references == [] and source is None
+    assistant, _, references, source = await inspect_business(context)
+    assert assistant.model_name == "1" and references == [] and source is None
+    binding.assert_not_awaited()
 
 
 async def test_creation_projection_failure_does_not_commit_business_or_references(assistant_business, monkeypatch):
@@ -274,36 +298,33 @@ async def test_creation_projection_failure_does_not_commit_business_or_reference
     assert assistant is None and links == () and references == [] and source is None
 
 
-async def test_update_failure_rolls_back_model_and_knowledge_selection(assistant_business, monkeypatch):
+async def test_update_commits_selection_without_synchronous_reference_writes(assistant_business, monkeypatch):
     context = assistant_business
     await seed(context)
-    monkeypatch.setattr(
-        context.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("binding failed"))
+    binding = AsyncMock(side_effect=RuntimeError("binding failed"))
+    monkeypatch.setattr(context.runtime, "aapply_source_bindings", binding)
+    await AssistantService.update_assistant(
+        context.request,
+        context.user,
+        AssistantUpdateReq(id="assistant-a", name="changed", model_name="2", knowledge_list=[20], temperature=1),
     )
-    with pytest.raises(RuntimeError, match="binding failed"):
-        await AssistantService.update_assistant(
-            context.request,
-            context.user,
-            AssistantUpdateReq(id="assistant-a", name="changed", model_name="2", knowledge_list=[20], temperature=1),
-        )
     assistant, links, references, _ = await inspect_business(context)
-    assert (assistant.name, assistant.model_name) == ("original", "1")
-    assert [link.knowledge_id for link in links] == [10]
-    assert {(ref.slot_key, ref.target_id) for ref in references} == {("model_name", "1"), ("knowledge_list", "10")}
+    assert (assistant.name, assistant.model_name) == ("changed", "2")
+    assert [link.knowledge_id for link in links] == [20]
+    assert {ref.target_id for ref in references} == {"1", "10"}
+    binding.assert_not_awaited()
+    await refresh_root(101, "assistant", "assistant-a", session_factory=context.sessions)
+    assert {ref.target_id for ref in (await inspect_business(context))[2]} == {"2", "20"}
 
 
-async def test_configuration_drift_requires_explicit_reconciliation(assistant_business):
+async def test_stale_reference_configuration_does_not_block_prompt_edit(assistant_business):
     context = assistant_business
     await seed(context)
-    async with context.sessions() as session:
-        await session.execute(
-            update(Assistant).where(Assistant.tenant_id == 101, Assistant.id == "assistant-a").values(model_name="2")
-        )
-        await session.commit()
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await AssistantService.update_prompt("assistant-a", "changed", context.user)
+    async with context.sessions() as session, session.begin():
+        await session.execute(update(Assistant).where(Assistant.id == "assistant-a").values(model_name="2"))
+    await AssistantService.update_prompt("assistant-a", "changed", context.user)
     assistant, _, references, _ = await inspect_business(context)
-    assert assistant.model_name == "2" and assistant.prompt == ""
+    assert assistant.model_name == "2" and assistant.prompt == "changed"
     assert {ref.target_id for ref in references} == {"1", "10"}
 
 
@@ -318,7 +339,7 @@ async def test_partial_invalid_repair_saves_but_still_cannot_execute(assistant_b
     assistant, links, references, source = await inspect_business(context)
     assert assistant.model_name == "2" and source.effective
     assert [link.knowledge_id for link in links] == [10]
-    assert {ref.target_id for ref in references} == {"2", "10"}
+    assert {ref.target_id for ref in references} == {"1", "10"}
     async with context.sessions() as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await context.runtime.arequire_source_valid(session, source_key())
@@ -345,36 +366,39 @@ async def test_soft_delete_releases_source_only_after_business_save(assistant_bu
     await AssistantService.delete_assistant(context.request, context.user, "assistant-a")
     assistant, links, references, source = await inspect_business(context)
     assert assistant.is_delete == 1 and len(links) == 1
-    assert not source.effective and references == []
+    assert source.effective and len(references) == 2
+    await refresh_root(101, "assistant", "assistant-a", session_factory=context.sessions)
+    assert (await inspect_business(context))[2:] == ([], None)
 
 
-async def test_deleting_target_fences_source_delete_and_projection(assistant_business):
+async def test_reference_deletion_marker_does_not_fence_assistant_delete(assistant_business):
     context = assistant_business
     await seed(context)
     await stage(context, "model", 1, "deleting")
-    with pytest.raises(KnowledgeProcessingConflictError):
-        await AssistantService.delete_assistant(context.request, context.user, "assistant-a")
+    await AssistantService.delete_assistant(context.request, context.user, "assistant-a")
     assistant, _, references, source = await inspect_business(context)
-    assert assistant.is_delete == 0 and source.effective and len(references) == 2
-    context.permission_adapter.project_delete.assert_not_awaited()
+    assert assistant.is_delete == 1 and source.effective and len(references) == 2
+    context.permission_adapter.project_delete.assert_awaited_once()
 
 
 @pytest.mark.parametrize("setter", ["prompt", "flow", "tool"])
-async def test_deleting_target_also_fences_nonreference_setters(assistant_business, setter):
+async def test_reference_deletion_marker_does_not_block_other_edits(assistant_business, setter):
     context = assistant_business
     await seed(context)
     await stage(context, "model", 1, "deleting")
-    with pytest.raises(KnowledgeProcessingConflictError):
-        if setter == "prompt":
-            await AssistantService.update_prompt("assistant-a", "changed", context.user)
-        elif setter == "flow":
-            await AssistantService.update_flow_list("assistant-a", ["flow-new"], context.user)
-        else:
-            await AssistantService.update_tool_list("assistant-a", [5], context.user)
-    assistant, links, _, _ = await inspect_business(context)
-    assert assistant.prompt == "" and [(link.knowledge_id, link.tool_id, link.flow_id) for link in links] == [
-        (10, 0, "")
-    ]
+    if setter == "prompt":
+        await AssistantService.update_prompt("assistant-a", "changed", context.user)
+    elif setter == "flow":
+        await AssistantService.update_flow_list("assistant-a", ["flow-new"], context.user)
+    else:
+        await AssistantService.update_tool_list("assistant-a", [5], context.user)
+    assistant, links, references, _ = await inspect_business(context)
+    assert {ref.target_id for ref in references} == {"1", "10"}
+    assert assistant.prompt == ("changed" if setter == "prompt" else "")
+    if setter == "flow":
+        assert "flow-new" in {link.flow_id for link in links}
+    elif setter == "tool":
+        assert 5 in {link.tool_id for link in links}
 
 
 async def test_offline_retains_bindings_and_invalid_publish_keeps_original_error(assistant_business, monkeypatch):
@@ -409,9 +433,9 @@ async def mark_online(context):
     "case,error",
     [
         ("deleted_model", ResourceReferenceInvalidError),
-        ("missing_index", ReferenceCoverageNotReadyError),
-        ("configuration_drift", ReferenceCoverageNotReadyError),
-        ("deleting_model", KnowledgeProcessingConflictError),
+        ("missing_index", None),
+        ("configuration_drift", None),
+        ("deleting_model", None),
     ],
 )
 async def test_repeated_online_still_checks_current_source_and_targets(assistant_business, monkeypatch, case, error):
@@ -440,8 +464,15 @@ async def test_repeated_online_still_checks_current_source_and_targets(assistant
     monkeypatch.setattr(
         assistant_module, "AssistantAgent", MagicMock(return_value=SimpleNamespace(init_assistant=initialize))
     )
-    with pytest.raises(error):
-        await AssistantService.update_status(context.request, context.user, "assistant-a", AssistantStatus.ONLINE.value)
+    if error:
+        with pytest.raises(error):
+            await AssistantService.update_status(
+                context.request, context.user, "assistant-a", AssistantStatus.ONLINE.value
+            )
+    else:
+        assert await AssistantService.update_status(
+            context.request, context.user, "assistant-a", AssistantStatus.ONLINE.value
+        )
     initialize.assert_not_awaited()
     assistant, _, references, source = await inspect_business(context)
     assert assistant.status == AssistantStatus.ONLINE.value
@@ -492,4 +523,4 @@ async def test_offline_does_not_require_deleted_targets_to_be_executable(
     initialize.assert_not_awaited()
     assistant, _, references, source = await inspect_business(context)
     assert assistant.status == AssistantStatus.OFFLINE.value and source.effective and len(references) == 2
-    assert source.source_revision == (1 if already_offline else 2)
+    assert source.source_revision == 1

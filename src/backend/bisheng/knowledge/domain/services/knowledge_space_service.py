@@ -168,6 +168,7 @@ from bisheng.permission.application.initial_grant import (
 )
 from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, get_request_ip
@@ -1431,7 +1432,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return result
 
     async def _create_space_with_model(self, knowledge_space: Knowledge) -> Knowledge:
-        """Persist the actual SPACE, creator and outgoing references together."""
+        """Persist the actual space and creator before notifying reverse hints."""
         knowledge_space.index_name = generate_knowledge_index_name()
         knowledge_space.collection_name = knowledge_space.index_name
         knowledge_space.user_id = self.login_user.user_id
@@ -1448,6 +1449,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 session, knowledge_space, login_user=self.login_user, project_created=project_created
             )
             await session.commit()
+            await notify_reference_sync(get_current_tenant_id(), "knowledge", str(knowledge_space.id))
         await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, knowledge_space)
         return knowledge_space
 
@@ -4053,6 +4055,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         _application=None,
         _deferred: _UploadDispatchBatch | None = None,
         _upload_entries: dict[str, PreparedUpload] | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         if (_legacy_inputs is None) != (_legacy_request is None):
             raise ValueError("Legacy inputs and request must be paired")
@@ -4072,6 +4075,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             _legacy_inputs, _legacy_request = deepcopy((_legacy_inputs, _legacy_request))
         if _deferred is not None and callback_url is not None:
             raise ValueError("Deferred uploads cannot dispatch callbacks")
+        if trusted_sources is not None:
+            # Server-resolved sources replace client paths; they never mix with
+            # verified upload receipts, which already own their server path.
+            if _upload_entries is not None:
+                raise ValueError("Trusted sources and verified upload receipts are exclusive")
+            if len(trusted_sources) != len(file_path):
+                raise ValueError("Upload sources do not match file paths")
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         if parent_id:
@@ -4106,6 +4116,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 application=_application,
                 deferred=_deferred,
                 **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
+                **({"trusted_sources": trusted_sources} if trusted_sources is not None else {}),
             )
 
     @contextmanager
@@ -4148,6 +4159,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         application=None,
         deferred: _UploadDispatchBatch | None = None,
         _upload_entries: dict[str, PreparedUpload] | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         knowledge_id = db_knowledge.id
         file_level_path = ""
@@ -4212,6 +4224,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         application = application if application is not None else self.upload_application_factory()
 
+        if trusted_sources is not None and len(trusted_sources) != len(file_path):
+            raise ValueError("Upload sources do not match file paths")
         try:
             for index, one in enumerate(file_path):
                 selected_upload = _upload_entries.get(one) if _upload_entries is not None else None
@@ -4234,6 +4248,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     file_kwargs={"file_source": file_source.value},
                     processing_rule_request=file_split_rule,
                     ordinary_overrides_only=legacy_inputs is None and not legacy_overrides,
+                    trusted_source=trusted_sources[index] if trusted_sources is not None else None,
                 )
                 if self._upload_execution_guard is not None:
                     await self._upload_execution_guard()
@@ -4352,6 +4367,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         processing_overrides: ProcessingOverrides | None = None,
         _upload_entries: dict[str, PreparedUpload] | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         """F034 §5.5 folder upload: rebuild the client-side directory tree, then
         register every file through the regular add_file pipeline.
@@ -4387,6 +4403,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 parent_id,
                 processing_overrides=processing_overrides,
                 **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
+                **({"trusted_sources": trusted_sources} if trusted_sources is not None else {}),
             )
 
     async def _upload_folder_items_in_execution_scope(
@@ -4397,6 +4414,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         processing_overrides: ProcessingOverrides | None = None,
         _upload_entries: dict[str, PreparedUpload] | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         knowledge_id = db_knowledge.id
         base_path = ""
@@ -4409,14 +4427,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Parse relative paths into (dir chain, file path); collect every
         # directory that needs creating. "." / ".." / empty segments are
         # dropped so a crafted path cannot escape the drop point.
-        parsed: list[tuple[tuple[str, ...], str]] = []
+        if trusted_sources is not None and len(trusted_sources) != len(items):
+            raise ValueError("Upload sources do not match folder items")
+        parsed: list[tuple[tuple[str, ...], str, object]] = []
         dir_set: set[tuple[str, ...]] = set()
-        for item in items:
+        for index, item in enumerate(items):
             parts = [p for p in item.relative_path.replace("\\", "/").split("/") if p and p not in (".", "..")]
             if not parts:
                 raise SpaceFolderNotFoundError()
             dir_parts = tuple(parts[:-1])
-            parsed.append((dir_parts, item.file_path))
+            parsed.append((dir_parts, item.file_path, trusted_sources[index] if trusted_sources is not None else None))
             for depth in range(1, len(dir_parts) + 1):
                 dir_set.add(dir_parts[:depth])
 
@@ -4476,20 +4496,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             # Each group retains the ordinary permission/quota/dedup pipeline.
             # One receipt owner covers the entire request; no group dispatches.
-            groups: dict[tuple[str, ...], list[str]] = {}
-            for dir_parts, file_path in parsed:
-                groups.setdefault(dir_parts, []).append(file_path)
-            for dir_parts, file_paths in groups.items():
+            groups: dict[tuple[str, ...], list[tuple[str, object]]] = {}
+            for dir_parts, file_path, source in parsed:
+                groups.setdefault(dir_parts, []).append((file_path, source))
+            for dir_parts, entries in groups.items():
                 results.extend(
                     await self.add_file(
                         knowledge_id,
-                        file_paths,
+                        [path for path, _ in entries],
                         parent_id=node_info[dir_parts][0],
                         audit=False,
                         processing_overrides=processing_overrides,
                         _application=application,
                         _deferred=batch,
                         **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
+                        **(
+                            {"trusted_sources": [source for _, source in entries]}
+                            if trusted_sources is not None
+                            else {}
+                        ),
                     )
                 )
         except BaseException:

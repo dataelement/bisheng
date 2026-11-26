@@ -23,7 +23,7 @@ def runtime(pages):
     )
     models = (
         SimpleNamespace(snapshot=GrantModelSnapshot("owner", True, ("edit",))),
-        SimpleNamespace(snapshot=GrantModelSnapshot("custom", True, ("use",))),
+        SimpleNamespace(snapshot=GrantModelSnapshot("custom", True, ("visible",))),
     )
     instance._runtime_catalog = AsyncMock(
         return_value=SimpleNamespace(release_id=1, version=1, checksum="same", models=models)
@@ -37,7 +37,7 @@ def runtime(pages):
 async def test_actions_not_model_names_and_all_pages():
     row = SimpleNamespace(source_id=7)
     service, target = runtime([((row,), True), ((), False)])
-    result = await service.read_effective_action_sources(target=target, action="use")
+    result = await service.read_effective_action_sources(target=target, action="visible")
     assert result == (row,)
     assert service._state.load_source_page.call_args.kwargs["models"][0].model_key == "custom"
     assert service._state.load_source_page.call_args.kwargs["after_id"] == 7
@@ -47,8 +47,8 @@ async def test_inactive_model_still_contributes_existing_action_sources():
     row = SimpleNamespace(source_id=7)
     service, target = runtime([((row,), False)])
     catalog = await service._runtime_catalog()
-    catalog.models[1].snapshot = GrantModelSnapshot("custom", False, ("use",))
-    assert await service.read_effective_action_sources(target=target, action="use") == (row,)
+    catalog.models[1].snapshot = GrantModelSnapshot("custom", False, ("visible",))
+    assert await service.read_effective_action_sources(target=target, action="visible") == (row,)
     assert service._state.load_source_page.call_args.kwargs["models"][0].active is False
 
 
@@ -58,7 +58,7 @@ async def test_projection_change_refuses_partial_roster():
     service, target = runtime([((), False)])
     service._state.source_read_stamp.side_effect = [(1,), (2,)]
     with pytest.raises(PermissionPublishNotReadyError):
-        await service.read_effective_action_sources(target=target, action="use")
+        await service.read_effective_action_sources(target=target, action="visible")
 
 
 async def test_nonadvancing_page_refuses_empty_owner_only():
@@ -66,7 +66,7 @@ async def test_nonadvancing_page_refuses_empty_owner_only():
 
     service, target = runtime([((), True)])
     with pytest.raises(PermissionEnumerationIncompleteError):
-        await service.read_effective_action_sources(target=target, action="use")
+        await service.read_effective_action_sources(target=target, action="visible")
 
 
 async def test_catalog_change_refuses_old_action_meanings():
@@ -77,7 +77,7 @@ async def test_catalog_change_refuses_old_action_meanings():
     latest = SimpleNamespace(**{**vars(catalog), "checksum": "new"})
     service._runtime_catalog.side_effect = [catalog, latest]
     with pytest.raises(PermissionPublishNotReadyError):
-        await service.read_effective_action_sources(target=target, action="use")
+        await service.read_effective_action_sources(target=target, action="visible")
 
 
 async def test_inherited_source_stamp_checks_every_ancestor(monkeypatch):

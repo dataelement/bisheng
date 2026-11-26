@@ -242,7 +242,10 @@ async def _effective_from_source(session, result):
     for request in _ordered_requests(declaration):
         if request.target_type != TargetType.KNOWLEDGE_SPACE:
             continue
-        target = frozen[request.slot_key]
+        target = frozen.get(request.slot_key)
+        if target is None:
+            knowledge.append(DeclaredKnowledge(label=labels[request.slot_key], reason=REASON_UNRESOLVABLE))
+            continue
         fact = facts[target]
         item = knowledge_facts.get(target.target_id)
         knowledge.append(
@@ -351,7 +354,20 @@ async def inspect_saved_capabilities(app_id, version_id, identity, *, session=No
         observations, unavailable = {}, True
     rows = []
     for request in requests:
-        target = references[request.slot_key]
+        target = references.get(request.slot_key)
+        if target is None:
+            label = labels[request.slot_key]
+            rows.append(
+                CapabilityStatus(
+                    CAPABILITY_KIND_MODEL if request.target_type == TargetType.MODEL else CAPABILITY_KIND_KNOWLEDGE,
+                    label,
+                    label,
+                    True,
+                    REASON_UNRESOLVABLE,
+                    {"target_id": None, "target_type": request.target_type.value, "state": REASON_UNRESOLVABLE},
+                )
+            )
+            continue
         fact = states[target]
         model = request.target_type == TargetType.MODEL
         reason = REASON_OK if fact.is_valid else fact.state.value
@@ -661,7 +677,11 @@ class CapabilityBusService:
         from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
 
         declaration = await cls._require_declaration(app_id, principal=principal)
-        whitelist = declaration.knowledge_whitelist
+        if knowledge_ids:
+            cls._assert_targets_declared(declaration, knowledge_ids)
+            whitelist = [one.knowledge_id for one in declaration.knowledge if one.resolved]
+        else:
+            whitelist = declaration.knowledge_whitelist
 
         started = time.monotonic()
         try:
@@ -797,8 +817,12 @@ class CapabilityBusService:
 
         if not knowledge_ids:
             return
-        allowed = set(declaration.knowledge_whitelist)
-        declared_but_broken = {one.label for one in declaration.knowledge if not one.resolved}
+        allowed = {one.knowledge_id for one in declaration.knowledge if one.resolved}
+        declared_but_broken = {
+            str(one.knowledge_id) if one.knowledge_id is not None else one.label
+            for one in declaration.knowledge
+            if not one.resolved
+        }
         for raw in knowledge_ids:
             target = int(raw)
             if target in allowed:

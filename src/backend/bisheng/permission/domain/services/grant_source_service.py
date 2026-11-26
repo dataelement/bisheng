@@ -30,6 +30,10 @@ SOURCE_TYPES = frozenset(
 )
 
 
+def is_missing_user_subject(subject_type: str, subject_id: str) -> bool:
+    return subject_type == "user" and subject_id.strip().casefold() in {"", "none", "null", "undefined"}
+
+
 @dataclass(frozen=True, slots=True)
 class GrantModelSnapshot:
     model_key: str
@@ -215,6 +219,8 @@ class GrantSourceService:
         normalized_source_type = source_type.strip().upper()
         if not normalized_subject_id:
             raise ValueError("subject_id must not be empty")
+        if is_missing_user_subject(normalized_subject_type, normalized_subject_id):
+            raise ValueError("user subject_id must identify a real user")
         if normalized_source_type not in SOURCE_TYPES:
             raise ValueError(f"unsupported source_type: {source_type}")
 

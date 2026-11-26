@@ -323,7 +323,8 @@ class SpaceUploadApplication:
             )
             await self._check_identity(entry.tenant_id)
             entry.stage = "temporary_cleanup"
-            KnowledgeService.remove_unused_file(prepared.file_info.file_path)
+            if prepared.cleanup_source:
+                KnowledgeService.remove_unused_file(prepared.file_info.file_path)
             await self._check_identity(entry.tenant_id)
             entry.stage = "projection"
             adapter = await get_f048_resource_adapter("knowledge_file")

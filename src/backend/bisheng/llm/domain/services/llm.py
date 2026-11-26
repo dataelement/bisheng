@@ -66,6 +66,7 @@ from bisheng.llm.domain.schemas import (
 from bisheng.llm.domain.services.context_window import ContextWindowService
 from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
 from bisheng.resource_reference.application.contracts import canonical_target_id
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -823,7 +824,13 @@ class LLMService:
         task.add_done_callback(_background_probes.discard)
 
     @classmethod
-    async def test_model_status(cls, model: LLMModel | LLMModelInfo, login_user: UserPayload):
+    async def test_model_status(
+        cls,
+        model: LLMModel | LLMModelInfo,
+        login_user: UserPayload,
+        *,
+        write_scope: tuple[int, int] | None = None,
+    ):
         """Probe a model with one real call and record the verdict.
 
         Writes on BOTH outcomes: a model that was marked abnormal and has since
@@ -836,18 +843,19 @@ class LLMService:
             "app_type": ApplicationTypeEnum.MODEL_TEST,
             "user_id": login_user.user_id,
         }
+        write_filters = {} if write_scope is None else {"tenant_id": write_scope[0], "server_id": write_scope[1]}
         try:
             async with asyncio.timeout(MODEL_TEST_TIMEOUT):
                 await cls._invoke_model_probe(model, common_params)
         except TimeoutError:
-            LLMDao.update_model_status(model.id, 1, f"Timeout after {MODEL_TEST_TIMEOUT}s")
+            LLMDao.update_model_status(model.id, 1, f"Timeout after {MODEL_TEST_TIMEOUT}s", **write_filters)
             logger.warning("test model status timeout: {} {}", model.id, model.model_name)
         except Exception as e:
-            LLMDao.update_model_status(model.id, 1, str(e))
+            LLMDao.update_model_status(model.id, 1, str(e), **write_filters)
             logger.exception(f"test model status: {model.id} {model.model_name}")
         else:
             # Clear any stale failure reason along with the status.
-            LLMDao.update_model_status(model.id, 0, "")
+            LLMDao.update_model_status(model.id, 0, "", **write_filters)
 
     @classmethod
     async def _invoke_model_probe(cls, model: LLMModel | LLMModelInfo, common_params: dict):
@@ -1067,6 +1075,28 @@ class LLMService:
         await cls.probe_models_in_background(to_probe, login_user)
 
     @classmethod
+    async def _require_model_writable(cls, model_id: int, login_user: UserPayload) -> LLMModel:
+        """Shared/visible Root rows are not management write authority."""
+        from bisheng.permission.application import is_tenant_admin
+
+        model = await LLMDao.aget_model_by_id(model_id)
+        if model is None or model.id != model_id or not model.server_id or model.tenant_id is None:
+            raise LLMModelNotAccessibleError.http_exception()
+        server = await LLMDao.aget_server_by_id(model.server_id, cache=False)
+        if server is None or server.id != model.server_id or server.tenant_id != model.tenant_id:
+            raise LLMModelNotAccessibleError.http_exception()
+        scope = get_current_tenant_id()
+        if scope is None or model.tenant_id != scope:
+            raise LLMModelSharedReadonlyError.http_exception()
+        is_super = await _check_is_global_super(login_user.user_id)
+        if model.tenant_id == ROOT_TENANT_ID:
+            if not is_super:
+                raise LLMModelSharedReadonlyError.http_exception()
+        elif not is_super and not await is_tenant_admin(login_user.user_id, scope):
+            raise LLMModelSharedReadonlyError.http_exception()
+        return model
+
+    @classmethod
     async def verify_model_status(cls, model_id: int, login_user: UserPayload) -> LLMModelInfo:
         """Re-probe one model on demand and return its refreshed state.
 
@@ -1074,17 +1104,7 @@ class LLMService:
         saved, so it can be weeks stale; this lets an admin confirm a model is
         actually reachable right now without leaving the model list.
         """
-        tenant_id = get_current_tenant_id()
-        if type(tenant_id) is not int or tenant_id <= 0:
-            raise LLMSystemConfigForbiddenError()
-        servers = {server.id: server for server in await cls.acollect_visible_servers(tenant_id, strict=True)}
-        with bypass_tenant_filter():
-            exist_model = await LLMDao.aget_model_by_id(model_id)
-        server = servers.get(exist_model.server_id) if exist_model else None
-        if not server or exist_model.tenant_id != server.tenant_id:
-            raise NotFoundError.http_exception()
-        if server.tenant_id != tenant_id:
-            raise LLMModelSharedReadonlyError()
+        exist_model = await cls._require_model_writable(model_id, login_user)
         # The probe resolves the model through a 60s in-process cache that no
         # write invalidates, so a model renamed moments ago would be called under
         # its old name and reported back as "does not exist". Evict first — an
@@ -1093,18 +1113,21 @@ class LLMService:
         await ContextWindowService.invalidate([model_id])
         # Probing ignores the online flag on purpose: a model taken offline
         # still needs checking before you decide to bring it back.
-        await cls.test_model_status(exist_model, login_user)
+        await cls.test_model_status(exist_model, login_user, write_scope=(exist_model.tenant_id, exist_model.server_id))
         refreshed = await LLMDao.aget_model_by_id(model_id)
         return LLMModelInfo(**refreshed.model_dump())
 
     @classmethod
-    async def update_model_online(cls, model_id: int, online: bool) -> LLMModelInfo:
-        """Update whether the model is online"""
-        exist_model = await LLMDao.aget_model_by_id(model_id)
-        if not exist_model:
-            raise NotFoundError.http_exception()
+    async def update_model_online(cls, model_id: int, online: bool, login_user: UserPayload) -> LLMModelInfo:
+        """Update an owned model only after validating its real provider and scope."""
+        exist_model = await cls._require_model_writable(model_id, login_user)
+        await LLMDao.aupdate_model_online(
+            exist_model.id,
+            online,
+            tenant_id=exist_model.tenant_id,
+            server_id=exist_model.server_id,
+        )
         exist_model.online = online
-        await LLMDao.aupdate_model_online(exist_model.id, online)
         return LLMModelInfo(**exist_model.model_dump())
 
     @classmethod
@@ -1259,6 +1282,7 @@ class LLMService:
         async with get_async_db_session() as active:
             result = await save(active)
             await active.commit()
+        await notify_reference_sync(current_model_default_tenant(tenant_id), "model_default", key)
         return result.config
 
     @classmethod
@@ -1512,7 +1536,7 @@ class LLMService:
         if not assistant_llm.llm_list:
             return []
         tenant_id = get_current_tenant_id()
-        if type(tenant_id) is not int or tenant_id <= 0:
+        if not isinstance(tenant_id, int) or isinstance(tenant_id, bool) or tenant_id <= 0:
             raise LLMSystemConfigForbiddenError()
         servers = {server.id: server for server in await cls.acollect_visible_servers(tenant_id, strict=True)}
         with bypass_tenant_filter():

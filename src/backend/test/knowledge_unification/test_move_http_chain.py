@@ -2,6 +2,7 @@
 
 import importlib
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -343,27 +344,24 @@ async def test_current_upload_denial_hides_candidate_and_invisible_details_are_t
             await access.aget(10, app.built.job_id, identity=app.current)
 
 
-async def test_factory_uses_actual_registered_reference_runtime_without_permission_fallback(application, monkeypatch):
+async def test_factory_keeps_real_projection_without_loading_reference_runtime(application, monkeypatch):
     from bisheng.permission.application import process_runtime
     from bisheng.resource_reference.application import access as references
 
     app = application
     module = importlib.import_module("bisheng.knowledge.application.move_processing_access")
-    original = references._runtime
-    references.configure_reference_binding_runtime(app.owner.reference_runtime)
 
     async def components():
         return app.built.bridge.components
 
+    getter = AsyncMock(side_effect=AssertionError("move must not load reference runtime"))
+    monkeypatch.setattr(references, "get_reference_binding_runtime", getter)
     monkeypatch.setattr(module, "get_async_db_session", app.owner.sessions)
     monkeypatch.setattr(process_runtime, "get_f048_process_runtime", components)
-    try:
-        actual = await module.get_move_owner()
-        assert actual.reference_runtime is app.owner.reference_runtime
-        assert await actual.projection._composition() is app.built.bridge.components
-        assert actual.cutover.projection_verifier is actual.projection
-    finally:
-        references.configure_reference_binding_runtime(original)
+    actual = await module.get_move_owner()
+    assert await actual.projection._composition() is app.built.bridge.components
+    assert actual.cutover.projection_verifier is actual.projection
+    getter.assert_not_awaited()
 
 
 async def test_candidate_sql_is_scalar_and_explicit_tenant_under_foreign_or_bypass_context(application):

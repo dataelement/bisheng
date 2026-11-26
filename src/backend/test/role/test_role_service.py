@@ -515,7 +515,6 @@ class TestListRoles:
                 page=1,
                 limit=0,
                 login_user=mock_tenant_admin,
-                include_global_for_binding=True,
             )
 
         assert result["total"] == 2
@@ -525,7 +524,6 @@ class TestListRoles:
             page=1,
             limit=0,
             department_ids=None,
-            tenant_custom_roles_only=False,
         )
 
     @pytest.mark.asyncio

@@ -12,11 +12,20 @@ import { ACCENT, FAINT, INK, MUTED } from './execTokens';
 import type { ExecTask } from './TaskStepRow';
 import { isTaskDone, isTaskRunning } from './stepUtils';
 
+/**
+ * F004: row status of a plan item the agent removed from its plan. Only the
+ * unified runtime produces it (PinnedTaskPanel maps `runStore` plan items);
+ * legacy linsight tasks never carry this status.
+ */
+export const PLAN_ROW_CANCELLED = 'cancelled';
+
 export function TaskPanel({
     tasks,
     completed,
     terminated = false,
     running = false,
+    stopped = false,
+    awaitingAnswer = false,
 }: {
     tasks: ExecTask[];
     completed: boolean;
@@ -24,6 +33,10 @@ export function TaskPanel({
     terminated?: boolean;
     /** the session is still executing (status Running) — gates `wrappingUp` */
     running?: boolean;
+    /** F004: the run was stopped by the user — the header reads "已停止". Pass it together with `terminated`. */
+    stopped?: boolean;
+    /** F004: the run waits for the user's answer to a question — nothing is executing, the header says so. */
+    awaitingAnswer?: boolean;
 }) {
     const localize = useLocalize();
     // Default collapsed: the panel opens collapsed on every conversation switch
@@ -42,8 +55,10 @@ export function TaskPanel({
     const visible = completed && !terminated ? tasks.filter((t) => t.status !== 'terminated') : tasks;
     if (!visible.length) return null;
 
-    const doneCount = visible.filter((t) => isTaskDone(t.status)).length;
-    const everyTaskDone = doneCount === visible.length;
+    // F004 (AC-08): a cancelled row stays in the list but counts in neither number.
+    const countable = visible.filter((t) => t.status !== PLAN_ROW_CANCELLED);
+    const doneCount = countable.filter((t) => isTaskDone(t.status)).length;
+    const everyTaskDone = countable.length > 0 && doneCount === countable.length;
     // Wrap-up window: the model has ticked off its last todo, but the session is
     // still Running while the backend synthesizes the deliverable (final result
     // file / final answer). Every row reads `success` there, so the
@@ -60,7 +75,9 @@ export function TaskPanel({
     // below already shows every task, so the header omits the inline name.
     // A terminated run is no longer "running", so it shows neither the spinner
     // nor the shimmering task name.
-    const runningTask = terminated ? undefined : visible.find((t) => isTaskRunning(t.status));
+    // A run that waits for the user's answer is not executing either.
+    const paused = terminated || awaitingAnswer;
+    const runningTask = paused ? undefined : visible.find((t) => isTaskRunning(t.status));
     const runningName = runningTask?.name || runningTask?.task_data?.name || '';
     const showRunningInline = !open && !allDone && !!runningName;
 
@@ -80,7 +97,7 @@ export function TaskPanel({
                       activity cue of its own and the header must supply it
                     - in progress + expanded → the task (list) glyph
                     - in progress + collapsed → Accent spinner (live activity cue) */}
-                {terminated ? (
+                {paused ? (
                     <Outlined.ListSuccess size={16} className="shrink-0" style={{ color: INK }} />
                 ) : allDone ? (
                     <Outlined.DoubleCheck size={16} className="shrink-0" style={{ color: INK }} />
@@ -90,8 +107,12 @@ export function TaskPanel({
                     <Outlined.Loading size={16} className="shrink-0 animate-spin" style={{ color: ACCENT }} />
                 )}
                 <span className="shrink-0 text-[16px] font-medium" style={{ color: INK }}>
-                    {terminated
+                    {stopped
+                        ? localize('runPlan.stopped')
+                        : terminated
                         ? localize('com_linsight_task_terminated')
+                        : awaitingAnswer
+                        ? localize('runPlan.awaitingAnswer')
                         : allDone
                             ? localize('com_linsight_task_panel_done')
                             : wrappingUp
@@ -108,7 +129,7 @@ export function TaskPanel({
                     className={cn('shrink-0 text-[14px] tabular-nums', showRunningInline ? 'ml-2' : 'ml-1')}
                     style={{ color: MUTED }}
                 >
-                    {doneCount}/{visible.length}
+                    {doneCount}/{countable.length}
                 </span>
                 <span
                     className={cn('shrink-0', showRunningInline ? 'ml-2' : 'ml-auto')}
@@ -137,33 +158,69 @@ export function TaskPanel({
                         {visible.map((task) => {
                             const done = isTaskDone(task.status);
                             const running = isTaskRunning(task.status);
+                            const cancelled = task.status === PLAN_ROW_CANCELLED;
+                            const name = task.name || task.task_data?.name;
+                            // F004 (AC-10): wording before the latest rewrite, shown struck
+                            // through next to the new wording. No author mark.
+                            const previousName: string =
+                                task.previousName && task.previousName !== name ? task.previousName : '';
                             return (
-                                <li key={task.id} className="flex items-center gap-2.5 py-2 text-[14px]">
+                                <li
+                                    key={task.id}
+                                    className={cn(
+                                        'flex gap-2.5 py-2 text-[14px]',
+                                        previousName ? 'items-start' : 'items-center',
+                                    )}
+                                >
                                     {/* §2.7 status glyphs: done → Muted CheckCircle;
                                         running → Accent spinner; not-started → Faint
                                         placeholder ring (the old invisible-icon grey
                                         is fully retired). */}
-                                    <span className="flex size-4 shrink-0 items-center justify-center">
+                                    <span
+                                        className={cn(
+                                            'flex size-4 shrink-0 items-center justify-center',
+                                            previousName && 'mt-[3px]',
+                                        )}
+                                    >
                                         {done ? (
                                             <Outlined.CheckCircle size={16} style={{ color: MUTED }} />
-                                        ) : running ? (
+                                        ) : running && !awaitingAnswer ? (
                                             <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
                                         ) : (
                                             <Outlined.Round size={16} style={{ color: FAINT }} />
                                         )}
                                     </span>
                                     <span
-                                        className={cn('min-w-0 flex-1 truncate', running && 'font-medium')}
-                                        style={{ color: done ? MUTED : INK }}
+                                        className={cn(
+                                            'min-w-0 flex-1',
+                                            // A rewritten row wraps so the new wording is never cut off.
+                                            previousName ? 'break-words' : 'truncate',
+                                            running && 'font-medium',
+                                        )}
+                                        style={{ color: done || cancelled ? MUTED : INK }}
                                     >
-                                        {task.name || task.task_data?.name}
+                                        {previousName && (
+                                            <del className="mr-1.5 font-normal" style={{ color: FAINT }}>
+                                                {previousName}
+                                            </del>
+                                        )}
+                                        {name}
                                     </span>
+                                    {cancelled && (
+                                        <span className="shrink-0 text-caption text-text-3">
+                                            {localize('runPlan.cancelled')}
+                                        </span>
+                                    )}
                                 </li>
                             );
                         })}
                     </ul>
                 </div>
             </div>
+            {/* F004: shown collapsed and expanded, so a stop never reads as lost work. */}
+            {stopped && (
+                <p className="px-4 pb-3 text-caption text-text-3">{localize('runPlan.stoppedNote')}</p>
+            )}
         </div>
     );
 }

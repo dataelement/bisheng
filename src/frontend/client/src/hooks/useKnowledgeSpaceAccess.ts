@@ -35,8 +35,7 @@ export function useKnowledgeSpaceAccess<T extends SelectedOrgKb>(selection: T[],
   const failed = active && query.isError;
   const message = unavailable.length
     ? localize('knowledgeAccess.revoked', { names: unavailable.map((item) => item.name).join(', ') })
-    : failed ? localize('knowledgeAccess.failed')
-      : checking ? localize('knowledgeAccess.checking') : '';
+    : failed ? localize('knowledgeAccess.failed') : '';
   return { available, message, blocked: active && (checking || failed || unavailable.length > 0),
-    checking, failed, retry: query.refetch };
+    checking, verifying: active && query.isFetching, failed, retry: query.refetch };
 }

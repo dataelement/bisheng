@@ -1,0 +1,25 @@
+{
+  "id": "experience-report-format",
+  "acs": [
+    "AC-50"
+  ],
+  "turns": [
+    {
+      "user": "（深度研究）调研三家国产大模型的私有化部署成本，报告按'结论-对比表-风险'三段写，我一直要这个格式",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "（深度研究）调研国内向量数据库的选型",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "风险"
+    ]
+  },
+  "notes": "深度研究任务；整理后下一次任务应带入经验",
+  "requires_consolidation": true
+}

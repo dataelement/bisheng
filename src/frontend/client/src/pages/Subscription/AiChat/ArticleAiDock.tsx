@@ -71,8 +71,8 @@ export function ArticleAiDock({
  * loses its box and gains a divider line. Collapsing (down-chevron) hides the panel
  * again without losing the conversation.
  *
- * Self-contained (channel chat only) so the shared AiAssistantPanel — still used by
- * the knowledge-space file preview — stays untouched.
+ * Self-contained (channel chat only), separate from AiAssistantPanel, the side
+ * panel of the article pages.
  */
 function ArticleAiInPlaceDock({
   articleDocId,

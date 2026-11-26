@@ -111,7 +111,7 @@ export function getReportFormApi(flow_id): Promise<any> {
 /**
  * Get JWT token for OnlyOffice editorConfig
  */
-export function getOfficeTokenApi(editorConfig: any): Promise<{ token: string }> {
+export function getOfficeTokenApi(editorConfig: unknown): Promise<{ token: string; config: { documentType: string; document: Record<string, unknown>; editorConfig: Record<string, unknown> } }> {
     return axios.post(`/api/v1/report/office_token`, editorConfig)
 }
 
@@ -190,7 +190,7 @@ export async function getAppsApi(
         managed,
         status,
         app_state,
-        action = 'use',
+        action = 'visible',
     }: {
         cursor?: string | null;
         pageSize?: number;
@@ -201,7 +201,7 @@ export async function getAppsApi(
         status?: number;
         /** F054 hosted-application state; ignored by the other two types. */
         app_state?: string;
-        action?: 'visible' | 'use';
+        action?: 'visible';
     },
 ): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`

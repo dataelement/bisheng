@@ -234,6 +234,7 @@ class UploadFileResponse(BaseModel):
     flowId: str | None = None
     file_path: str
     relative_path: str | None = None  # minioRelative path, i.e.object_name
+    preview_upload_ref: str | None = None
     file_name: str | None = None
     repeat: bool = False  # Duplicate in Knowledge Base
     repeat_file_name: str | None = None  # Returns the file name of a duplicate file if it is a duplicate
@@ -300,6 +301,9 @@ class AssistantUpdateReq(BaseModel):
         description="F041: 用户知识库权限校验 — ON filters knowledge-space retrieval by the runtime "
         "user's view_file, OFF by the config author's; None = do not update",
     )
+    memory_enabled: bool | None = Field(
+        default=None, description="F132: long-term memory switch of this assistant; None = do not update"
+    )
 
     @field_validator("model_name", mode="before")
     @classmethod
@@ -329,7 +333,7 @@ class AssistantReferenceView(BaseModel):
     slot_key: str
     target_type: Literal["model", "knowledge_space", "knowledge_file"]
     target_id: str
-    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy", "invalid_scope"]
+    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy", "invalid_scope", "invalid_missing"]
     is_valid: bool
 
 
@@ -459,17 +463,29 @@ class ToolConfig(BaseModel):
     is_preset: int | None = Field(default=None, description="0=custom, 1=builtin, 2=mcp")
     description: str | None = Field(default=None)
     default_checked: bool = Field(default=False, description="Initial checked state for new sessions")
+    # F005: hidden from every end-user picker and added to every workbench send
+    # (for users with visibility permission). Mutually exclusive with ``default_checked``.
+    auto_enabled: bool = Field(default=False, description="Auto-enabled: hidden from users, always on")
     children: list[dict] = Field(default_factory=list, description="Selected leaf tools: [{id, name, tool_key, desc}]")
+
+    @model_validator(mode="after")
+    def _auto_enabled_excludes_default_checked(self) -> "ToolConfig":
+        if self.auto_enabled and self.default_checked:
+            self.default_checked = False
+        return self
 
 
 # v2.5 Agent Mode: Configured Organizational Knowledge Base Items
 class OrgKbConfig(BaseModel):
-    """Organization knowledge-base item surfaced in the PlusMenu."""
+    """Configured organization knowledge base. Every one starts selected in a new session (F005)."""
 
     id: int = Field(description="Knowledge.id")
     name: str = Field(description="Knowledge-base display name")
     type: int | None = Field(default=None, description="Knowledge type: 0=doc, 1=qa")
-    default_checked: bool = Field(default=False, description="Initial checked state for new sessions")
+    show_in_composer: bool = Field(
+        default=True,
+        description="Show a tag for it in the composer; hidden ones are still selected and sent",
+    )
     sort_order: int = Field(default=0, description="Display order (ascending)")
 
 
@@ -722,6 +738,9 @@ class UpdatePreviewFileChunk(BaseModel):
 
 class KnowledgeFileOne(BaseModel):
     file_path: str = Field(..., description="FilePath")
+    preview_upload_ref: str | None = None
+    preview_file_id: int | None = Field(default=None, gt=0)
+    preview_source: Literal["original", "converted"] = "original"
     excel_rule: ExcelRule | None = Field(default=None, description="Excel rules")
 
 

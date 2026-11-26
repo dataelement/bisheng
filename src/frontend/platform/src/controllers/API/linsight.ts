@@ -10,6 +10,8 @@ export interface SkillBrief {
   enabled: boolean;
   // Preselected in the end-user picker of every new conversation
   default_checked: boolean;
+  /** F005: hidden from users and loaded in every chat while the skill is enabled. */
+  auto_enabled?: boolean;
   source: 'manual' | 'sop_migrated';
   create_time?: string;
   update_time?: string;
@@ -106,6 +108,10 @@ export const skillApi = {
 
   setSkillDefaultChecked: (name: string, defaultChecked: boolean) => {
     return axios.patch(`${SKILL_BASE}/${encodeURIComponent(name)}/default-checked`, { default_checked: defaultChecked });
+  },
+
+  setSkillAutoEnabled: (name: string, autoEnabled: boolean) => {
+    return axios.patch(`${SKILL_BASE}/${encodeURIComponent(name)}/auto-enabled`, { auto_enabled: autoEnabled });
   },
 
   deleteSkill: (name: string) => {

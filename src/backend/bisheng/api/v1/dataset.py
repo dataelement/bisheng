@@ -1,4 +1,3 @@
-from typing import List
 
 from fastapi import APIRouter, Depends, Request
 
@@ -16,7 +15,7 @@ router = APIRouter(prefix='/dataset', tags=['FineTune'])
 def list_dataset(*,
                  keyword: str = None,
                  page: int = 1,
-                 limit: int = 10) -> UnifiedResponseModel[List[DatasetRead]]:
+                 limit: int = 10) -> UnifiedResponseModel[list[DatasetRead]]:
     """
     Get dataset list
     """
@@ -46,7 +45,7 @@ def delete_dataset(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """
-    Create Dataset
+    Delete only a dataset the caller owns; admins may delete any.
     """
-    DatasetService.delete_dataset(dataset_id)
+    DatasetService.delete_dataset(dataset_id, login_user)
     return resp_200()

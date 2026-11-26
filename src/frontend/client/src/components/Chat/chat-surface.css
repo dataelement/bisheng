@@ -1,6 +1,8 @@
 @import './chat-controls.css';
 
 .dsh-chat-surface {
+  --dsh-composer-font-size:14px;
+  --dsh-composer-line-height:24px;
   display: flex;
   height: 100%;
   min-height: 0;
@@ -91,7 +93,7 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-chat-content { max-width:calc(clamp(680px,64cqw,920px) + 32px); padding-inline:16px; }
 .dsh-chat-composer-seat { max-width:calc(clamp(680px,64cqw,920px) + 64px); padding:8px 16px 20px; }
 .dsh-chat-surface .dsh-chat-composer { border:0; border-radius:28px; corner-shape:superellipse(1.5); padding:8px 0 0; background:rgb(var(--dsh-composer-bg)); box-shadow:0 0 0 .5px rgb(var(--border-base)),0 2px 8px rgb(0 0 0 / 4%); gap:12px; }
-.dsh-chat-surface .dsh-chat-composer .dsh-composer-editor { box-sizing:border-box; border:0; min-height:36px; margin:0; padding:4px 8px 0 14px; font-family:inherit; font-size:14px; line-height:24px; color:rgb(var(--text-1)); }
+.dsh-chat-surface .dsh-chat-composer .dsh-composer-editor { box-sizing:border-box; border:0; min-height:36px; margin:0; padding:4px 8px 0 14px; font-family:inherit; font-size:var(--dsh-composer-font-size); line-height:var(--dsh-composer-line-height); color:rgb(var(--text-1)); }
 .dsh-chat-surface .dsh-chat-composer .dsh-composer-editor[data-empty=true]::before { color:rgb(var(--text-3)); }
 .dsh-chat-surface .dsh-chat-composer:focus-within { outline:1px solid rgb(var(--border-deep)); }
 .dsh-chat-surface .dsh-composer-toolbar { height:auto; min-height:42px; flex-wrap:wrap; gap:12px; container-type:inline-size; padding:2px 8px 6px; }
@@ -99,7 +101,6 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
   min-height:114px;
   box-shadow:0 0 0 .5px var(--dsh-hero-stroke),0 4px 16px rgb(0 0 0 / 3%),0 0 24px rgb(0 0 0 / 3%);
 }
-.dsh-chat-hero .dsh-chat-composer .dsh-composer-editor { font-size:14px; }
 .dsh-chat-hero .dsh-chat-composer .dsh-composer-editor[data-empty=true]::before { color:var(--dsh-hero-placeholder); }
 :root:not(.theme-green) .dsh-chat-hero .dsh-composer-submit {
   --dsh-composer-submit-fill: #4176e6;
@@ -191,11 +192,11 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-chat-surface .dsh-user-message .dsh-message-actions button svg { width:15px; height:15px; }
 .dsh-chat-surface .dsh-message-actions button:hover { color:rgb(var(--text-1)); background:rgb(var(--fill-2)); }
 @media (max-width:767px) {
+  .dsh-chat-surface { --dsh-composer-font-size:16px; }
   .dsh-chat-column { margin-inline-end:0; }
   .dsh-chat-column:has(.dsh-chat-landing) { margin-inline-end:var(--dsh-chat-scroll-clearance); }
   .dsh-chat-content { max-width:100%; padding-inline:16px; }
   .dsh-chat-composer-seat { max-width:100%; padding:8px 12px max(12px,env(safe-area-inset-bottom)); }
-  .dsh-chat-surface .dsh-chat-composer .dsh-composer-editor { font-size:16px; }
   .dsh-chat-surface .dsh-composer-toolbar,
   .dsh-chat-surface .dsh-composer-toolbar .input-bottom-left { gap:8px; }
 }
@@ -207,6 +208,5 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 /* The space picker is portaled outside the Chat root and owns its theme surface. */
 body[data-dsh-chat-theme] .dsh-knowledge-dialog { background:rgb(var(--bg-page)); color:rgb(var(--text-1)); border-color:rgb(var(--border-base)); }
 body[data-dsh-chat-theme] .dsh-knowledge-dialog input { background:transparent; color:rgb(var(--text-1)); border-color:rgb(var(--border-deep, var(--border-base))); }
-body[data-dsh-chat-theme] .dsh-knowledge-dialog .dsh-knowledge-cancel { color:rgb(var(--text-1)); background:rgb(var(--fill-2)); border-color:rgb(var(--border-base)); }
 
 .dsh-history-row:is(:hover,:focus-within) .dsh-history-label { text-overflow:clip; }

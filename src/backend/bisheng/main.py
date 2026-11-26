@@ -164,9 +164,7 @@ async def lifespan(app: FastAPI):
         # by a face a local coding agent calls in a loop.
         model_call_record_writer.start()
         try:
-            from bisheng.knowledge.application.unification_coverage import bootstrap_created_root
-
-            await init_default_data(reference_bootstrap=bootstrap_created_root)
+            await init_default_data()
             # F035 task-mode compatibility data remains unrelated to F048 resource
             # authorization and is safe to maintain independently.
             try:

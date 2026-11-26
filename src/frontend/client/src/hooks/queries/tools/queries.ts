@@ -78,7 +78,7 @@ export const useGetOrgToolList = (
     name?: string;
     sort_by?: string;
     preferred_ids?: string;
-    action?: 'visible' | 'use';
+    action?: 'visible';
   },
   options?: { enabled?: boolean },
 ) => {
@@ -92,7 +92,7 @@ export const useGetOrgToolList = (
       query.name,
       query.sort_by,
       query.preferred_ids || '',
-      query.action || 'use',
+      query.action || 'visible',
     ],
     queryFn: () => getKnowledgeInfo(query),
     select(data) {
@@ -113,7 +113,7 @@ export const useGetOrgToolPages = (query: Omit<OrgKnowledgeQuery, 'cursor'>) => 
       query.name,
       query.sort_by,
       query.preferred_ids || '',
-      query.action || 'use',
+      query.action || 'visible',
     ],
     queryFn: async ({ pageParam }) => {
       const response = await getKnowledgeInfo({

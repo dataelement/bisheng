@@ -14,14 +14,12 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMember,
     UserRoleEnum,
 )
-from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_bypassed, strict_tenant_filter
+from bisheng.core.context.tenant import is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, QAKnowledge
 from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob, deletion_now
 from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
-from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
-from bisheng.resource_reference.application.contracts import ReferenceState, TargetType
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 
 
@@ -167,57 +165,6 @@ class KnowledgeModelReferenceRepository:
         ):
             raise ResourceReferenceInvalidError(reason="knowledge_cleanup_manifest_target_changed")
         return deepcopy(knowledge)
-
-    def _embedding_queries(self, session, verifier, source_key, context):
-        self._tenant_id()
-        # Only original, current-transaction Owner receipts authorize this exact
-        # cross-tenant column projection. Targets were locked before the root;
-        # this must not acquire a new parent/server lock afterwards.
-        targets = verifier.validate_binding_receipts(session, source_key, context.receipts, context.locked_targets)
-        return tuple(
-            (
-                target.key,
-                select(LLMModel.model_type)
-                .join(LLMServer, LLMServer.id == LLMModel.server_id)
-                .where(
-                    LLMModel.id == int(target.key.target_id),
-                    LLMModel.server_id == int(target.model_server_id),
-                    LLMModel.tenant_id == target.target_tenant_id,
-                    LLMServer.id == int(target.model_server_id),
-                    LLMServer.tenant_id == target.target_tenant_id,
-                ),
-            )
-            for target in targets
-            if target.key.target_type == TargetType.MODEL
-            and target.state == ReferenceState.VALID
-            and target.new_binding_allowed
-        )
-
-    def model_kinds(self, session, verifier, source_key, context):
-        queries = self._embedding_queries(session, verifier, source_key, context)
-        with session.no_autoflush, bypass_tenant_filter():
-            return {key: session.exec(query).one_or_none() for key, query in queries}
-
-    async def amodel_kinds(self, session, verifier, source_key, context):
-        queries = self._embedding_queries(session, verifier, source_key, context)
-        with session.no_autoflush, bypass_tenant_filter():
-            return {key: (await session.exec(query)).one_or_none() for key, query in queries}
-
-    def _selected_status_query(self, session, verifier, source_key, context, model_id):
-        queries = self._embedding_queries(session, verifier, source_key, context)
-        return next(
-            query.with_only_columns(LLMModel.status) for key, query in queries if key.target_id == str(model_id)
-        )
-
-    def model_status(self, session, verifier, source_key, context, model_id):
-        query = self._selected_status_query(session, verifier, source_key, context, model_id)
-        with session.no_autoflush, bypass_tenant_filter():
-            return session.exec(query).one_or_none()
-
-    async def amodel_status(self, session, verifier, source_key, context, model_id):
-        query = self._selected_status_query(session, verifier, source_key, context, model_id)
-        with session.no_autoflush, bypass_tenant_filter():
-            return (await session.exec(query)).one_or_none()
 
     @staticmethod
     def _tenant_id():

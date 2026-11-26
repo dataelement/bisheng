@@ -1,6 +1,5 @@
 """T097: actual public command boundary delegates the existing processing kernels."""
 
-import pytest
 from sqlmodel import select
 
 from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
@@ -45,7 +44,8 @@ async def test_nonempty_command_returns_real_accepted_job_with_original_items_an
         job = await session.get(KnowledgeProcessingJob, result.job_id)
         root = await session.get(Knowledge, 40)
         assert job.total_count == 2 and job.pending_dispatch
-        assert root.model == "11" and root.model_transition["pending_model_id"] == "12"
+        assert root.model == "12" and root.model_transition["current_model_id"] == "12"
+        assert root.model_transition["pending_model_id"] == "12"
 
 
 async def test_empty_manual_rebuild_is_not_manufactured_into_a_successful_job(empty):

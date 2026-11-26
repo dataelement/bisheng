@@ -20,15 +20,14 @@ need mocking.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 import bisheng.api.services.workflow as wf_mod
-from bisheng.api.services.workflow import WorkFlowService, _APP_VISIBLE_MAX_RESULTS
+from bisheng.api.services.workflow import _APP_VISIBLE_MAX_RESULTS, WorkFlowService
 from bisheng.database.models.flow import FlowType
 from bisheng.permission.domain.schemas import (
     VisibilityEnumerationStatus,
@@ -70,9 +69,7 @@ def _actor(*, super_admin: bool = False, tenant_admin: bool = False) -> SimpleNa
         user_id=_User.user_id,
         current_tenant_id=_User.tenant_id,
         super_admin=super_admin,
-        tenant_admin_tenant_ids=(
-            frozenset({_User.tenant_id}) if tenant_admin else frozenset()
-        ),
+        tenant_admin_tenant_ids=(frozenset({_User.tenant_id}) if tenant_admin else frozenset()),
     )
 
 
@@ -103,18 +100,28 @@ async def test_regular_user_collects_visible_ids_and_passes_to_scan(
     # Workflow + assistant visible ids (no flow_type filter → both queried).
     workflow_visible = _visible("workflow", "10", "11")
     assistant_visible = _visible("assistant", "aa1")
-    runtime = SimpleNamespace(
-        list_visible_objects=AsyncMock(side_effect=[workflow_visible, assistant_visible])
-    )
+    runtime = SimpleNamespace(list_visible_objects=AsyncMock(side_effect=[workflow_visible, assistant_visible]))
     monkeypatch.setattr(wf_mod, "get_f048_runtime", AsyncMock(return_value=runtime))
 
     scan_call: dict = {}
 
-    async def _fake_scan(*, user, name, status, flow_ids, flow_type, cursor, page_size, managed,
-                         search_description, required_action, admin_bypass=False,
-                         # F054 forwards the hosted-application state filter through
-                         # the same call; irrelevant here, but it must be accepted.
-                         **_f054_kwargs):
+    async def _fake_scan(
+        *,
+        user,
+        name,
+        status,
+        flow_ids,
+        flow_type,
+        cursor,
+        page_size,
+        managed,
+        search_description,
+        required_action,
+        admin_bypass=False,
+        # F054 forwards the hosted-application state filter through
+        # the same call; irrelevant here, but it must be accepted.
+        **_f054_kwargs,
+    ):
         scan_call["flow_ids"] = flow_ids
         scan_call["admin_bypass"] = admin_bypass
         rows = [_app("10"), _app("11"), _app("aa1", flow_type=FlowType.ASSISTANT.value)]
@@ -123,16 +130,19 @@ async def test_regular_user_collects_visible_ids_and_passes_to_scan(
     monkeypatch.setattr(WorkFlowService, "_scan_visible_flows_cursor", staticmethod(_fake_scan))
 
     result = await WorkFlowService.get_all_flows_envelope(
-        _User(), name=None, status=None, tag_id=None, flow_type=None,
-        page_size=10, managed=False, action="use",
+        _User(),
+        name=None,
+        status=None,
+        tag_id=None,
+        flow_type=None,
+        page_size=10,
+        managed=False,
+        action="visible",
     )
 
     # Both resource types were queried.
     assert runtime.list_visible_objects.await_count == 2
-    queried_types = {
-        call.kwargs["resource_type"]
-        for call in runtime.list_visible_objects.await_args_list
-    }
+    queried_types = {call.kwargs["resource_type"] for call in runtime.list_visible_objects.await_args_list}
     assert queried_types == {"workflow", "assistant"}
 
     # The union of visible ids was forwarded as flow_ids.
@@ -149,11 +159,7 @@ async def test_regular_user_empty_visible_set_short_circuits(
     _stub_common(monkeypatch)
     monkeypatch.setattr(wf_mod, "resolve_permission_actor", AsyncMock(return_value=_actor()))
 
-    runtime = SimpleNamespace(
-        list_visible_objects=AsyncMock(
-            side_effect=[_visible("workflow"), _visible("assistant")]
-        )
-    )
+    runtime = SimpleNamespace(list_visible_objects=AsyncMock(side_effect=[_visible("workflow"), _visible("assistant")]))
     monkeypatch.setattr(wf_mod, "get_f048_runtime", AsyncMock(return_value=runtime))
 
     scan_called = []
@@ -165,8 +171,14 @@ async def test_regular_user_empty_visible_set_short_circuits(
     monkeypatch.setattr(WorkFlowService, "_scan_visible_flows_cursor", staticmethod(_fake_scan))
 
     result = await WorkFlowService.get_all_flows_envelope(
-        _User(), name=None, status=None, tag_id=None, flow_type=None,
-        page_size=10, managed=False, action="use",
+        _User(),
+        name=None,
+        status=None,
+        tag_id=None,
+        flow_type=None,
+        page_size=10,
+        managed=False,
+        action="visible",
     )
 
     assert scan_called == [], "DB scan must not run when visible set is empty"
@@ -191,9 +203,14 @@ async def test_regular_user_flow_type_filter_queries_single_resource_type(
     monkeypatch.setattr(WorkFlowService, "_scan_visible_flows_cursor", staticmethod(_fake_scan))
 
     await WorkFlowService.get_all_flows_envelope(
-        _User(), name=None, status=None, tag_id=None,
+        _User(),
+        name=None,
+        status=None,
+        tag_id=None,
         flow_type=FlowType.WORKFLOW.value,
-        page_size=10, managed=False, action="use",
+        page_size=10,
+        managed=False,
+        action="visible",
     )
 
     # Only the workflow resource type is queried when flow_type=WORKFLOW.
@@ -239,8 +256,14 @@ async def test_admin_bypass_skips_f048_runtime_and_marks_all_writeable(
     monkeypatch.setattr(WorkFlowService, "_scan_visible_flows_cursor", staticmethod(_fake_scan))
 
     result = await WorkFlowService.get_all_flows_envelope(
-        _User(), name=None, status=None, tag_id=None, flow_type=None,
-        page_size=10, managed=False, action="use",
+        _User(),
+        name=None,
+        status=None,
+        tag_id=None,
+        flow_type=None,
+        page_size=10,
+        managed=False,
+        action="visible",
     )
 
     # The F048 runtime is never touched for admins.
@@ -289,7 +312,7 @@ async def test_scan_loop_admin_bypass_skips_batch_check(
         page_size=10,
         managed=False,
         search_description=False,
-        required_action="use",
+        required_action="visible",
         admin_bypass=True,
     )
 
@@ -317,8 +340,8 @@ async def test_scan_loop_regular_user_runs_batch_check(
 
     async def _fake_action_map(user, batch, actions):
         action_map_calls.append(actions)
-        # Both rows have "use"; only "50" has "edit".
-        return {"50": frozenset({"use", "edit"}), "51": frozenset({"use"})}
+        # Both rows have "visible"; only "50" has "edit".
+        return {"50": frozenset({"visible", "edit"}), "51": frozenset({"visible"})}
 
     monkeypatch.setattr(WorkFlowService, "_application_action_map", staticmethod(_fake_action_map))
 
@@ -332,12 +355,12 @@ async def test_scan_loop_regular_user_runs_batch_check(
         page_size=10,
         managed=False,
         search_description=False,
-        required_action="use",
+        required_action="visible",
         admin_bypass=False,
     )
 
     assert action_map_calls, "BatchCheck must run for non-admin users"
-    assert len(visible) == 2  # both have "use"
+    assert len(visible) == 2  # both have "visible"
     assert writeable_ids == {"50"}  # only "50" has "edit"
 
 

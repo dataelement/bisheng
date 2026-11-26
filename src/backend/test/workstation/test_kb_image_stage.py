@@ -57,6 +57,13 @@ def _stage(**overrides) -> KbImageStage:
     return KbImageStage("bisheng", **kwargs)
 
 
+def test_browser_prefix_registers_the_same_relative_path():
+    stage = _stage()
+    image = stage.register("/object/bisheng/knowledge/images/1/27/img_1.png")
+    assert image is not None
+    assert image.rel_path == REL
+
+
 def test_annotate_keeps_markdown_and_appends_relative_path():
     stage = _stage()
     out = stage.annotate(f"see ![chart]({URL}) done")

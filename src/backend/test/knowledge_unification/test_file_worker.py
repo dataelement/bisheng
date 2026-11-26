@@ -14,8 +14,8 @@ import pytest
 from sqlmodel import Session
 
 from bisheng.common.errcode.knowledge import (
+    KnowledgeNoEmbeddingError,
     KnowledgeOperationPlanConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.knowledge.application import model_reference_read
@@ -213,7 +213,7 @@ async def test_missing_model_never_uses_prepared_or_snapshot_model(files):
     async with files.context.sessions() as session:
         (await session.get(Knowledge, 40)).model = None
         await session.commit()
-    with pytest.raises((ResourceReferenceInvalidError, ReferenceCoverageNotReadyError)):
+    with pytest.raises((ResourceReferenceInvalidError, KnowledgeNoEmbeddingError)):
         write(files, prepared)
     files.provider.assert_not_called()
 

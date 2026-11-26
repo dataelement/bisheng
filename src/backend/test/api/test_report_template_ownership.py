@@ -264,15 +264,27 @@ async def test_a_viewer_leaves_no_ticket_and_cannot_clobber_an_editors(monkeypat
 
 @pytest.fixture
 def callback_env(monkeypatch, storage):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        workflow,
+        "bisheng_settings",
+        SimpleNamespace(get_from_db=lambda key: "test-only-workflow-office-key-at-least32bytes"),
+    )
     monkeypatch.setattr(workflow, "get_minio_storage", AsyncMock(return_value=storage))
     monkeypatch.setattr(workflow, "afetch_office_document", AsyncMock(return_value=b"docx"))
     return storage
 
 
 async def _callback(key: str) -> dict:
+    from types import SimpleNamespace
+
+    import jwt
+
+    data = {"status": 6, "url": "http://office/cache/x.docx", "key": key}
     return await workflow.upload_report_file(
-        MagicMock(),
-        {"status": 6, "url": "http://office/cache/x.docx", "key": key},
+        SimpleNamespace(headers={}),
+        {**data, "token": jwt.encode(data, "test-only-workflow-office-key-at-least32bytes", algorithm="HS256")},
     )
 
 

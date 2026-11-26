@@ -7,13 +7,6 @@ from unittest.mock import AsyncMock
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
-from test.knowledge_unification.permission_publication_native import complete as complete
-from test.knowledge_unification.permission_publication_native import native as native
-from test.knowledge_unification.permission_publication_native import published_input as published_factory
-from test.knowledge_unification.permission_publication_native import raw_resource_native as raw_resource_native
-from test.knowledge_unification.permission_publication_native import resource_native as resource_native
-from test.knowledge_unification.permission_publication_native import transport as transport
-from test.knowledge_unification.test_permission_publication_application import app
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -28,6 +21,13 @@ from bisheng.resource_reference.application.write_runtime import ReferenceBindin
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
+from test.knowledge_unification.permission_publication_native import complete as complete
+from test.knowledge_unification.permission_publication_native import native as native
+from test.knowledge_unification.permission_publication_native import published_input as published_factory
+from test.knowledge_unification.permission_publication_native import raw_resource_native as raw_resource_native
+from test.knowledge_unification.permission_publication_native import resource_native as resource_native
+from test.knowledge_unification.permission_publication_native import transport as transport
+from test.knowledge_unification.test_permission_publication_application import app
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +51,7 @@ async def real_r2_create_delete(database):
     token = set_current_permission_actor(PermissionActor(tenant_id=101, user_id=7))
     try:
         with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(model_app, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+            mp.setattr(model_app, "get_reference_binding_runtime", AsyncMock(return_value=runtime), raising=False)
             mp.setattr(model_app, "require_business_action", AsyncMock())
             async with AsyncSession(database.engine) as session, session.begin():
                 row = Knowledge(id=50, tenant_id=101, user_id=7, name="created then deleted", type=0, model="88")
@@ -74,9 +74,7 @@ async def real_r2_create_delete(database):
                     .mappings()
                     .all()
                 )
-                assert len(rows) == 2
-                head = next(row for row in rows if row["record_kind"] == "source")
-                assert head["ready"] and not head["effective"] and head["source_revision"] == 2
+                assert not rows
                 assert not (
                     await session.execute(
                         sa.select(BusinessResourceReference.id).where(BusinessResourceReference.source_id == "50")
@@ -85,6 +83,39 @@ async def real_r2_create_delete(database):
                 print(
                     "ACTUAL_R2_AFTER_DELETE",
                     [(row["record_kind"], row["source_revision"], row["effective"], row["ready"]) for row in rows],
+                )
+            # These migration-only cases model the terminal rows written by
+            # pre-F006 releases. Current business deletion above writes none.
+            from bisheng.resource_reference.application.contracts import reference_set_digest
+
+            async with AsyncSession(database.engine) as session, session.begin():
+                session.add_all(
+                    [
+                        BusinessReferenceSet(
+                            tenant_id=101,
+                            source_type="knowledge",
+                            source_id="50",
+                            source_version="__root__",
+                            record_kind="root_guard",
+                            source_revision=2,
+                            extractor_version="root-guard-v1",
+                            digest=reference_set_digest(()),
+                            ready=False,
+                            effective=False,
+                        ),
+                        BusinessReferenceSet(
+                            tenant_id=101,
+                            source_type="knowledge",
+                            source_id="50",
+                            source_version="current",
+                            record_kind="source",
+                            source_revision=2,
+                            extractor_version="knowledge-model-v1",
+                            digest=reference_set_digest(()),
+                            ready=True,
+                            effective=False,
+                        ),
+                    ]
                 )
     finally:
         reset_current_permission_actor(token)
@@ -210,8 +241,6 @@ async def real_channel_create_delete(database):
     from contextlib import asynccontextmanager
     from unittest.mock import MagicMock
 
-    from test.knowledge_unification.test_ch_bindings import config
-
     from bisheng.channel.domain.models import channel_knowledge_sync as sync_module
     from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
     from bisheng.channel.domain.schemas.channel_manager_schema import CreateChannelRequest
@@ -222,6 +251,7 @@ async def real_channel_create_delete(database):
         SpaceChannelMemberRepositoryImpl,
     )
     from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
+    from test.knowledge_unification.test_ch_bindings import config
 
     @asynccontextmanager
     async def sessions():
@@ -241,7 +271,7 @@ async def real_channel_create_delete(database):
     with pytest.MonkeyPatch.context() as mp:
         for module in (channel_module, sync_module, member_module):
             mp.setattr(module, "get_async_db_session", sessions)
-        mp.setattr(channel_module, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+        mp.setattr(channel_module, "get_reference_binding_runtime", AsyncMock(return_value=runtime), raising=False)
         mp.setattr(channel_module, "get_f048_resource_adapter", AsyncMock(return_value=adapter))
         mp.setattr(channel_module, "require_business_action", AsyncMock())
         mp.setattr(
@@ -252,6 +282,8 @@ async def real_channel_create_delete(database):
         # This test owns source lifecycle/M2/M4. Keep the current public quota
         # boundary isolated too; the former get_effective_quota hook is no
         # longer the creation admission and leaked into the live DB factory.
+        mp.setattr(ChannelService, "_assert_channel_creation_quota", AsyncMock())
+        mp.setattr(channel_module, "notify_reference_sync", AsyncMock())
         mp.setattr(channel_module.QuotaService, "check_quota", AsyncMock())
         mp.setattr(channel_module.QuotaService, "check_info_source_subscribe_limit", AsyncMock())
         async with sessions() as legacy:
@@ -307,9 +339,8 @@ async def test_fresh_and_existing_freeze_both_check_actual_prepared_tasks(comple
 async def test_existing_frozen_entry_cannot_borrow_an_old_task_free_snapshot(complete, transport, monkeypatch):
     value = await freeze(complete, transport, monkeypatch)
     await insert_prepared(complete)
-    from test.knowledge_unification import test_migration_inventory_application as m2
-
     from bisheng.knowledge.application import unification_inventory
+    from test.knowledge_unification import test_migration_inventory_application as m2
 
     current = m2.application(unification_inventory, transport)
     async with value.sessions() as session, session.begin():

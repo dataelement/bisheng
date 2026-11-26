@@ -2,7 +2,6 @@
 
 from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.database.models.tenant import Tenant
-from bisheng.knowledge.application.unification_coverage import bootstrap_created_root, production_coverage_factory
 from bisheng.tenant.domain.repositories.installation_repository import InstallationRepository
 
 
@@ -30,8 +29,6 @@ async def initialize_installation(*, engine, metadata, sessions, apply):
                 raise RuntimeError("Pending first installation already has a tenant; explicit recovery required")
             tenant = Tenant(id=1, tenant_code="default", tenant_name="Default Tenant", status="active")
             session.add(tenant)
-            if not await bootstrap_created_root(session, tenant):
-                raise RuntimeError("First installation is not empty; explicit inventory required")
-            await production_coverage_factory(session).arequire_global_ready()
+            await session.flush()
             marker.state = "completed"
     return {"mode": "initialized", "initialized": True}

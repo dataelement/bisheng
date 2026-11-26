@@ -217,7 +217,7 @@ async def test_regular_user_empty_visible_set_short_circuits_before_dao(
             login_user=_User(),
             knowledge_type=KnowledgeTypeEnum.NORMAL,
             page_size=10,
-            action="use",
+            action="visible",
         )
 
     runtime.list_visible_objects.assert_awaited_once()
@@ -269,7 +269,7 @@ async def test_admin_bypass_skips_permission_runtime_and_returns_visible_only(
             login_user=_User(),
             knowledge_type=KnowledgeTypeEnum.NORMAL,
             page_size=10,
-            action="use",
+            action="visible",
         )
 
     # Admin path — no F048 enumeration, no BatchCheck.

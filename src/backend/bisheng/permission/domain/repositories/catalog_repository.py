@@ -48,6 +48,9 @@ class _RepositorySessionMixin:
             token = self._active_session.set(session)
             try:
                 async with session.begin():
+                    from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                    await acheck_transaction(session)
                     yield self
             finally:
                 self._active_session.reset(token)
@@ -56,12 +59,19 @@ class _RepositorySessionMixin:
     async def _session(self, *, write: bool = False) -> AsyncIterator[AsyncSession]:
         current = self._active_session.get()
         if current is not None:
+            if write:
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(current)
             yield current
             return
 
         async with self._session_factory() as session:
             if write:
                 async with session.begin():
+                    from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                    await acheck_transaction(session)
                     yield session
             else:
                 yield session

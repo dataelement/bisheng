@@ -383,10 +383,6 @@ function UploadWizard({
                 busy ||
                 !strategy ||
                 !strategy.rules.fileList.length ||
-                strategy.rules.fileList.some((file) => {
-                  const record = book[file.id] ?? book[file.filePath];
-                  return record?.value.status !== "completed";
-                }) ||
                 files.some((file) => {
                   const record = book[file.id] ?? book[file.file_path];
                   return record != null && record.value.status !== "completed";

@@ -26,12 +26,23 @@ jest.mock('~/hooks/useVisibleKnowledgeSpaces', () => ({
 }));
 jest.mock('@bisheng/ui', () => ({
   Modal: ({ children, footer, onOpenChange }) => <div role="dialog" onKeyDown={(event) => { if (event.key === 'Escape') onOpenChange(false); }}>{children}{footer}</div>,
-  SearchInput: (props) => <input {...props} />,
+  SearchInput: ({ clearLabel, ...props }) => { void clearLabel; return <input {...props} />; },
   Button: ({ color, variant, loading, ...props }) => { void color; void variant; void loading; return <button {...props} />; },
   Checkbox: ({ onCheckedChange, ...props }) => <input type="checkbox" {...props} onChange={onCheckedChange} />,
 }));
 const original = [{ id: 'org', name: 'Enterprise', type: 'org' as const }, { id: '1', name: 'Policy', type: 'space' as const }];
 beforeEach(() => { mockRevoked = false; mockError = false; mockHasMore = false; mockRetry.mockClear(); mockLoadMore.mockClear(); });
+
+test('an empty initial selection enables confirmation only after selecting a space', () => {
+  const onConfirm = jest.fn();
+  render(<KnowledgeSpaceDialog value={[original[0]]} onConfirm={onConfirm} onClose={jest.fn()} />);
+  expect(screen.getByRole('button', { name: 'dshChat.confirmKnowledge' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Product' }));
+  expect(screen.getByRole('button', { name: 'dshChat.confirmKnowledge' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Product' }));
+  expect(screen.getByRole('button', { name: 'dshChat.confirmKnowledge' })).toBeDisabled();
+  expect(onConfirm).not.toHaveBeenCalled();
+});
 
 test('selection is a draft across search and commits once, preserving organization knowledge', () => {
   const onConfirm = jest.fn(); const onClose = jest.fn();

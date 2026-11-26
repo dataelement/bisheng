@@ -1,0 +1,23 @@
+{
+  "id": "date-conversion-answer",
+  "acs": [
+    "AC-31"
+  ],
+  "turns": [
+    {
+      "user": "明天下午三点我要给客户演示工作流编排，帮我记下来",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "我和客户的演示是哪天？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "regex": "\\d{4}-\\d{2}-\\d{2}|\\d+月\\d+日"
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

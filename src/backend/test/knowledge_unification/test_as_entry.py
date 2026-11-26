@@ -25,8 +25,16 @@ def configured_models(monkeypatch):
         for model_id in (1, 2)
     ]
     monkeypatch.setattr(
-        agent_module.LLMService, "get_assistant_llm", AsyncMock(return_value=SimpleNamespace(llm_list=models))
+        agent_module.LLMService,
+        "aget_assistant_llm_with_meta",
+        AsyncMock(return_value=(SimpleNamespace(llm_list=models), {}, None)),
     )
+
+    async def admitted(**kwargs):
+        selected = [row for row in models if f"llm_list.{row.model_id}.model_id" in kwargs["slots"]]
+        return SimpleNamespace(llm_list=selected)
+
+    monkeypatch.setattr(agent_module.LLMService, "get_assistant_llm", admitted)
     invoke = AsyncMock(return_value=object())
     monkeypatch.setattr(agent_module.LLMService, "get_bisheng_llm", invoke)
     return invoke

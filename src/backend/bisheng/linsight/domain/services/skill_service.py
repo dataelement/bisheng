@@ -164,7 +164,8 @@ class SkillService:
     async def get_selectable(self, user_id=None) -> list[SkillSelectable]:
         from bisheng.linsight.domain.services.user_skills import UserSkillsService
 
-        skills = [row for row, _ in await UserSkillsService(user_id).records()]
+        # F005: an auto-enabled skill is always mounted, so it is not offered in the picker.
+        skills = [row for row, _ in await UserSkillsService(user_id).records() if not row.auto_enabled]
         return [
             SkillSelectable(
                 name=s.name,
@@ -370,6 +371,11 @@ class SkillService:
 
     async def set_default_checked(self, name: str, default_checked: bool) -> None:
         if not await LinsightSkillDao.set_default_checked(name, default_checked):
+            raise SkillNotFoundError()
+
+    async def set_auto_enabled(self, name: str, auto_enabled: bool) -> None:
+        """F005. Stored even while the skill is disabled; it only takes effect while enabled."""
+        if not await LinsightSkillDao.set_auto_enabled(name, auto_enabled):
             raise SkillNotFoundError()
 
     async def delete(self, tenant_id: int, name: str) -> None:

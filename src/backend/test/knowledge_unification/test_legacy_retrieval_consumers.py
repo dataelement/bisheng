@@ -123,7 +123,7 @@ async def test_actual_migrated_root_in_legacy_org_bucket_uses_space_runtime_and_
     assert selection.model_dump_json() == before
     assert called == [10]
     assert [call.kwargs["knowledge_ids"] for call in vector_port.await_args_list] == [[20], [30]]
-    assert permission.await_args.args[1:] == ([20, 30], "use")
+    assert permission.await_args.args[1:] == ([20, 30], "visible")
     assert migrated.await_args.kwargs["space_ids"] == [10]
     assert migrated.await_args.kwargs["identity_user"] is roots.user
     assert migrated.await_args.kwargs["max_content"] == 1234

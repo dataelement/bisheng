@@ -429,7 +429,7 @@
     "treeDepartmentSelectEmpty": "暂无部门数据，请先在组织与成员中维护架构。",
     "menuPermissionSection": "菜单权限",
     "menuPermissionHint": "关闭「管理后台」后，工作台中「管理后台」入口将隐藏，其下各业务菜单也不可用；关闭「工作台」则用户无法从入口进入工作台。",
-    "workbenchTaskModeHint": "「首页」子能力。关闭后，工作台首页不展示技能与深度研究选择，左上角「新建任务」入口也将隐藏。",
+    "workbenchTaskModeHint": "「首页」子能力。关闭后，工作台首页不展示深度研究选择，左上角「新建任务」入口也将隐藏。",
     "menuApprovalMode": "显示未授权菜单（支持申请）",
     "menuApprovalModeHint": "开启后，未授权的菜单入口依然可见，用户可发起权限申请；关闭则自动隐藏所有无权限的菜单。",
     "menuApprovalModeWorkbenchHint": "开启后，工作台中未授权的菜单入口依然可见，用户可发起权限申请；关闭则自动隐藏所有无权限的工作台菜单。",
@@ -698,7 +698,7 @@
     "sourceDocumentsLabel": "来源文档",
     "downloadPDFTooltip": "下载双层PDF",
     "downloadOriginalTooltip": "下载原文件",
-    "noMatchedFilesMessage": "无匹配的源文件",
+    "noMatchedFilesMessage": "暂无权限查看原文，或未匹配到源文件",
     "fileStorageFailure": " 文件地址失效!",
     "roundOver": "本轮结束",
     "chatDialogTip": "设置提示模板中定义的输入变量。与代理和链互动",
@@ -1132,7 +1132,6 @@
     "webSearch": {
       "reimportDeclarations": "请重新导入 OpenAPI 描述以查看和编辑完整参数声明。以下显示已保存的参数值。",
       "includeParameter": "包含参数",
-      "proofRequired": "请导入 OpenAPI 描述并选择接口后再保存或测试。",
       "requiredFields": "请填写接口、搜索词参数、必填映射和认证信息。",
       "custom": "自定义",
       "reload": "重新加载已保存配置",
@@ -1291,7 +1290,10 @@
     "documentKnowledgeBase": "文档知识库",
     "knowledgeSpace": "知识空间",
     "userAuthVerification": "用户知识库权限校验",
-    "userAuthVerificationTips": "开启后，检索结果按当前使用者本人的知识空间文件查看权限过滤，每人只能检索到自己有权查看的文件；关闭时，按配置者的可见范围检索，所有使用者共享配置者能看到的文件（配置者无权查看的文件同样不会被检索）。文档知识库不受细粒度文件权限影响。",
+    "userAuthVerificationTips": "开启后，检索结果按当前使用者本人的知识库/知识空间权限过滤，每人只能检索到自己有权使用的内容；关闭后不做权限校验，绑定的知识库与知识空间均可被所有使用者检索。",
+    "memory": "记忆",
+    "assistantMemory": "助手记忆",
+    "assistantMemoryDesc": "开启后，用户在这个助手里的对话要点会整理进自己的记忆；助手回答时会参考当前用户的记忆，记忆内容可能出现在回答里。每个用户的记忆只属于自己，其他用户看不到。",
     "searchBaseName": "搜索知识库名称",
     "debugPreview": "调试预览",
     "addTool": "添加工具",
@@ -1411,7 +1413,18 @@
     "inputPlaceholder": "请输入你的任务目标，然后交给$t(bisheng)$t(linsight)",
     "availableTools": "可用工具",
     "addTool": "添加工具",
-    "defaultChecked": "是否默认勾选",
+    "showInComposer": "展示在输入框",
+    "showInComposerHint": "配置的知识库会自动带入用户的新会话。不勾选「展示在输入框」的知识库仍会被使用，只是输入框里不显示它。",
+    "toolUsage": {
+      "title": "使用方式",
+      "optional": "用户自选",
+      "optionalDesc": "出现在工具菜单，默认不勾选",
+      "default": "默认勾选",
+      "defaultDesc": "新会话预先勾选，用户可取消",
+      "auto": "自动启用",
+      "autoDesc": "不在用户端展示，每次对话自动生效",
+      "ariaLabel": "{{name}}的使用方式"
+    },
     "remove": "移除",
     "builtinTools": "内置",
     "apiTools": "API",
@@ -1521,6 +1534,7 @@
     "value": "值",
     "result": "测试结果",
     "outResultPlaceholder": "点击按钮，输出测试结果",
+    "enterKeyForChangedConfiguration": "测试修改后的接口配置前，请重新输入 API Key。",
     "addVersion": "添加版本",
     "selectVersion": "选择版本",
     "component": "组件",
@@ -2774,6 +2788,7 @@
       "displayName": "展示名称",
       "description": "描述",
       "status": "状态",
+      "autoEnabled": "自动启用",
       "defaultChecked": "默认勾选",
       "updateTime": "修改时间",
       "actions": "操作"
@@ -2789,6 +2804,10 @@
     "defaultCheckedTip": "开启后，用户每次新建对话时，这个技能已经勾选好，用户可以自己取消。技能停用期间不生效。",
     "defaultCheckedOnToast": "已设为默认勾选，新建对话时生效",
     "defaultCheckedOffToast": "已取消默认勾选",
+    "autoEnabledTip": "开启后不在用户端展示，每次对话自动加载",
+    "autoEnabledNeedsEnable": "启用技能后才能设置",
+    "autoEnabledOnToast": "已设为自动启用，用户端不再展示",
+    "autoEnabledOffToast": "已取消自动启用，用户端重新展示",
     "deleted": "已删除",
     "saved": "保存成功",
     "count": "共 {{count}} 条",
@@ -4424,7 +4443,7 @@
       "everyoneVisibleHelp": "企业内所有成员均可使用此模型。",
       "selectedVisible": "部分成员可见",
       "selectedVisibleHelp": "仅下方授权的用户、部门和角色可使用此模型。",
-      "selectedVisibleEmpty": "请至少添加一个用户、部门或角色；否则这个模型对所有人都不可用。",
+      "selectedVisibleEmpty": "未添加任何用户、部门或角色时，当前租户内所有人都不能使用此模型。",
       "saved": "已保存",
       "visibilityHelp": "设置可使用此模型的成员范围。",
       "everyone": "所有成员",
@@ -4609,7 +4628,7 @@
     "collapse": "收起",
     "expand": "展开",
     "close": "关闭",
-    "maskedFile": "是真的马赛克.msk",
+    "maskedFile": "无权限查看原文",
     "notFoundTitle": "页面不存在",
     "notFoundDescription": "您访问的页面不存在或已被移除。",
     "recommendedAppLimit": "平台最多支持配置{{max}}个推荐应用"
@@ -4657,6 +4676,8 @@
     "partialRepair": "可保存部分修复；所有引用有效后才能运行或发布。",
     "invalid_deleted": "已删除",
     "invalid_legacy": "历史引用已失效",
+    "invalid_missing": "引用的资源不存在",
+    "invalid_scope": "当前租户不可用",
     "deleting": "正在删除"
   },
   "accountIdentity": {
@@ -4794,5 +4815,8 @@
       "copySecret": "复制密钥",
       "done": "我已保存"
     }
+  },
+  "memory": {
+    "operation": "记忆操作"
   }
 }

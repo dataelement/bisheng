@@ -1,0 +1,25 @@
+{
+  "id": "preference-is-ok",
+  "acs": [
+    "AC-19"
+  ],
+  "turns": [
+    {
+      "user": "记住我偏好你用表格对比方案",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "给我对比一下 Milvus 和 Elasticsearch",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "|"
+    ]
+  },
+  "notes": "偏好可以记",
+  "requires_consolidation": false
+}

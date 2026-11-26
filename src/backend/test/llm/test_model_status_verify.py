@@ -133,8 +133,9 @@ class TestVerifyDefeatsTheInfoCache:
         LLM_CACHE[server_key] = "row carrying the pre-rename server config"
 
         with (
+            patch("bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id", AsyncMock(return_value=model)),
             patch(
-                "bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id",
+                "bisheng.llm.domain.services.llm.LLMService._require_model_writable",
                 AsyncMock(return_value=model),
             ),
             patch.object(LLMService, "test_model_status", AsyncMock()),
@@ -159,8 +160,9 @@ class TestVerifyDefeatsTheInfoCache:
             seen["cached_at_probe_time"] = LLM_CACHE.get(model_key)
 
         with (
+            patch("bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id", AsyncMock(return_value=model)),
             patch(
-                "bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id",
+                "bisheng.llm.domain.services.llm.LLMService._require_model_writable",
                 AsyncMock(return_value=model),
             ),
             patch.object(LLMService, "test_model_status", record_cache_state),

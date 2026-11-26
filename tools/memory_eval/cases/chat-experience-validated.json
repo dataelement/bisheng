@@ -1,0 +1,31 @@
+{
+  "id": "chat-experience-validated",
+  "acs": [
+    "AC-50",
+    "AC-108"
+  ],
+  "turns": [
+    {
+      "user": "帮我汇总这个月各区域的销售额",
+      "new_session": false,
+      "expect_write": null
+    },
+    {
+      "user": "你先剔除退款单再按区域汇总，这样结果和财务对上了，这个做法很好",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "帮我汇总上个月各区域的销售额，先说说你打算怎么做",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "退款"
+    ]
+  },
+  "notes": "普通对话里用户认可的做法整理为经验；新会话做同类任务时模型应先检索并用上",
+  "requires_consolidation": true
+}
