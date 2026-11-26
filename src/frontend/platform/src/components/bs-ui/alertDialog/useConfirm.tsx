@@ -124,7 +124,7 @@ function ConfirmWrapper() {
                     {isDestructive
                         ? <Outlined.Delete aria-hidden className="size-5 shrink-0 text-danger" />
                         : <Outlined.Attention aria-hidden className="size-5 shrink-0 text-blue-500" />}
-                    <AlertDialogTitle className={`text-left text-base font-medium leading-6 ${isDestructive ? "text-danger" : "text-text-1"}`}>
+                    <AlertDialogTitle className={`min-w-0 break-words text-left text-base font-medium leading-6 ${isDestructive ? "text-danger" : "text-text-1"}`}>
                         {title}
                     </AlertDialogTitle>
                 </AlertDialogHeader>
