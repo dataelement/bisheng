@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from ipaddress import ip_address, ip_network
 from typing import TYPE_CHECKING, Protocol
@@ -195,11 +196,20 @@ class KunlianApiBindings:
 class KunlianManagementApplication:
     """控制面只接受服务端认证主体。每次重读当前资格。不信请求或缓存超管标记。"""
 
-    def __init__(self, service, *, user_owner, tenant_owner, multi_tenant_enabled: bool):
+    def __init__(
+        self,
+        service,
+        *,
+        user_owner,
+        tenant_owner,
+        multi_tenant_enabled: bool,
+        sync_dispatcher: Callable[[str], object] | None = None,
+    ):
         self.service = service
         self.user_owner = user_owner
         self.tenant_owner = tenant_owner
         self.multi_tenant_enabled = multi_tenant_enabled
+        self.sync_dispatcher = sync_dispatcher
 
     async def _dispatch(self, user, operation):
         from loguru import logger
@@ -264,7 +274,19 @@ class KunlianManagementApplication:
         async def run(actor):
             return await self.service.management_request_sync(actor=actor)
 
-        return await self._dispatch(user, run)
+        result = await self._dispatch(user, run)
+        if self.sync_dispatcher is None:
+            return result
+        from loguru import logger
+
+        dispatched = False
+        try:
+            await asyncio.to_thread(self.sync_dispatcher, result["connection_id"])
+            dispatched = True
+        except Exception:
+            # 持久同步需求与审计记录已落库, 即使瞬时入队失败, Beat 仍会在下一周期兜底拉起.
+            logger.warning("Kunlian manual sync immediate dispatch deferred: connection={}", result["connection_id"])
+        return {**result, "dispatched": dispatched}
 
 
 @dataclass(frozen=True)

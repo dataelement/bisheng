@@ -107,5 +107,51 @@
     "pageOf": "Page {{page}} / {{maxPage}}",
     "prev": "Previous",
     "next": "Next"
+  },
+  "kunlianSync": {
+    "title": "Kunlian User & Directory Sync",
+    "subtitle": "Shows Kunlian directory fetch and member projection status. Click Sync Now to dispatch a worker job updating tenants, users, and baseline workflow roles.",
+    "connectionLabel": "Connection {{id}}",
+    "actions": {
+      "refresh": "Refresh Status",
+      "syncNow": "Sync Now",
+      "syncing": "Syncing..."
+    },
+    "directoryStatusLabel": "Directory",
+    "projectionStatusLabel": "Projection",
+    "directoryStatus": {
+      "PUBLISHED": "Published",
+      "FETCHING": "Fetching",
+      "FAILED": "Failed",
+      "UNINITIALIZED": "Uninitialized"
+    },
+    "projectionStatus": {
+      "SUCCEEDED": "Succeeded",
+      "PENDING": "Pending",
+      "FAILED": "Failed",
+      "UNMAPPED": "Unmapped Tenants"
+    },
+    "metrics": {
+      "members": "Members",
+      "unmapped": "Unmapped",
+      "pending": "Pending",
+      "failed": "Failed",
+      "lastPublished": "Last Published",
+      "lastRun": "Last Run",
+      "versions": "Requested / Completed"
+    },
+    "alerts": {
+      "syncFailedTitle": "Kunlian sync failed",
+      "syncFailed": "The latest Kunlian directory sync or projection reported a failure (reason: {{reason}}).",
+      "notReadyTitle": "Kunlian directory not ready",
+      "notReady": "Directory readiness check failed ({{reasons}}). Click Sync Now to refresh."
+    },
+    "feedback": {
+      "triggered": "Kunlian sync dispatched. Refreshing status automatically.",
+      "queuedFallback": "Sync request recorded (v{{version}}). Scheduled worker beat will pick it up.",
+      "completed": "Kunlian directory and member sync completed ({{count}} members).",
+      "finishedWithWarning": "Sync finished with failures or unmapped entries. Check status details above.",
+      "pollTimeout": "Sync is still running in the background. Click Refresh Status shortly to check progress."
+    }
   }
 }

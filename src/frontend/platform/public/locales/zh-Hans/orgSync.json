@@ -107,5 +107,51 @@
     "pageOf": "第 {{page}} / {{maxPage}} 页",
     "prev": "上一页",
     "next": "下一页"
+  },
+  "kunlianSync": {
+    "title": "昆联用户与组织同步",
+    "subtitle": "展示昆联目录拉取与成员投影状态；点击「立即同步」会下发 Worker 同步租户、用户及默认工作流基础角色。",
+    "connectionLabel": "连接 {{id}}",
+    "actions": {
+      "refresh": "刷新状态",
+      "syncNow": "立即同步",
+      "syncing": "同步中..."
+    },
+    "directoryStatusLabel": "目录拉取",
+    "projectionStatusLabel": "成员投影",
+    "directoryStatus": {
+      "PUBLISHED": "已发布",
+      "FETCHING": "拉取中",
+      "FAILED": "失败",
+      "UNINITIALIZED": "未初始化"
+    },
+    "projectionStatus": {
+      "SUCCEEDED": "已完成",
+      "PENDING": "处理中",
+      "FAILED": "失败",
+      "UNMAPPED": "待映射租户"
+    },
+    "metrics": {
+      "members": "成员数",
+      "unmapped": "待映射数",
+      "pending": "待投影",
+      "failed": "失败数",
+      "lastPublished": "最近成功发布",
+      "lastRun": "最近同步发起",
+      "versions": "请求/完成版本"
+    },
+    "alerts": {
+      "syncFailedTitle": "昆联同步存在失败",
+      "syncFailed": "最近一次昆联同步或成员投影存在失败，请检查原因码：{{reason}}",
+      "notReadyTitle": "昆联目录尚未就绪",
+      "notReady": "当前目录就绪检查未通过（{{reasons}}），可点击「立即同步」重新拉取。"
+    },
+    "feedback": {
+      "triggered": "已提交昆联同步任务，正在后台执行并自动刷新状态。",
+      "queuedFallback": "已登记同步需求（v{{version}}），将由后台调度周期自动拉起执行。",
+      "completed": "昆联目录与成员同步已完成，当前目录成员共 {{count}} 人。",
+      "finishedWithWarning": "同步任务已结束，但存在失败或待映射项，请查看上方状态详情。",
+      "pollTimeout": "后台仍在执行同步，可稍后点击「刷新状态」查看最新结果。"
+    }
   }
 }

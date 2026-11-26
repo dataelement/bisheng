@@ -107,5 +107,51 @@
     "pageOf": "{{page}} / {{maxPage}} ページ",
     "prev": "前へ",
     "next": "次へ"
+  },
+  "kunlianSync": {
+    "title": "昆聯ユーザー・組織同期",
+    "subtitle": "昆聯ディレクトリの取得状況とメンバー投影ステータスを表示します。「今すぐ同期」をクリックするとテナント・ユーザー・基本ワークフローロールの同期を実行します。",
+    "connectionLabel": "接続 {{id}}",
+    "actions": {
+      "refresh": "ステータス更新",
+      "syncNow": "今すぐ同期",
+      "syncing": "同期中..."
+    },
+    "directoryStatusLabel": "ディレクトリ取得",
+    "projectionStatusLabel": "メンバー投影",
+    "directoryStatus": {
+      "PUBLISHED": "公開済み",
+      "FETCHING": "取得中",
+      "FAILED": "失敗",
+      "UNINITIALIZED": "未初期化"
+    },
+    "projectionStatus": {
+      "SUCCEEDED": "完了",
+      "PENDING": "処理中",
+      "FAILED": "失敗",
+      "UNMAPPED": "テナント未マッピング"
+    },
+    "metrics": {
+      "members": "メンバー数",
+      "unmapped": "未マッピング",
+      "pending": "投影待ち",
+      "failed": "失敗数",
+      "lastPublished": "最終成功公開",
+      "lastRun": "最終同期開始",
+      "versions": "要求/完了バージョン"
+    },
+    "alerts": {
+      "syncFailedTitle": "昆聯同期に失敗しました",
+      "syncFailed": "直近の昆聯同期またはメンバー投影で失敗が発生しました（理由: {{reason}}）。",
+      "notReadyTitle": "昆聯ディレクトリは準備未完了です",
+      "notReady": "ディレクトリの準備状態チェックが未完了です（{{reasons}}）。「今すぐ同期」を実行してください。"
+    },
+    "feedback": {
+      "triggered": "昆聯同期タスクを投入しました。ステータスを自動更新しています。",
+      "queuedFallback": "同期要求を登録しました（v{{version}}）。次回スケジュールで自動実行されます。",
+      "completed": "昆聯ディレクトリ・メンバー同期が完了しました（メンバー数: {{count}} 名）。",
+      "finishedWithWarning": "同期は終了しましたが、失敗または未マッピング項目があります。上の詳細を確認してください。",
+      "pollTimeout": "バックグラウンドで同期を継続中です。しばらくしてから「ステータス更新」を押してください。"
+    }
   }
 }

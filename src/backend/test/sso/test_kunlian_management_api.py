@@ -263,3 +263,33 @@ async def test_list_tenants_merges_directory_and_bindings_and_enforces_super_adm
         session.add(user)
         await session.commit()
     assert (await client.get(BASE + "/tenants")).status_code == 403
+
+
+async def test_manual_sync_dispatches_worker_and_degrades_gracefully(management_api):
+    client, _, _, _, controls, cfg, _, _, _, _ = management_api
+    bindings_endpoint_module = __import__("bisheng.sso_sync.api.endpoints.kunlian", fromlist=["get_api_bindings"])
+    current_bindings = client._transport.app.dependency_overrides[bindings_endpoint_module.get_api_bindings]()
+
+    dispatched_calls = []
+
+    def ok_dispatcher(connection_id: str):
+        dispatched_calls.append(connection_id)
+
+    current_bindings.management.sync_dispatcher = ok_dispatcher
+    resp_ok = await client.post(BASE + "/sync")
+    assert resp_ok.status_code == 202
+    assert resp_ok.json()["data"]["status"] == "REQUESTED"
+    assert resp_ok.json()["data"]["dispatched"] is True
+    assert dispatched_calls == [cfg.connection_id]
+
+    def broken_dispatcher(_connection_id: str):
+        raise RuntimeError("broker temporarily down")
+
+    current_bindings.management.sync_dispatcher = broken_dispatcher
+    resp_fallback = await client.post(BASE + "/sync")
+    assert resp_fallback.status_code == 202
+    assert resp_fallback.json()["data"]["status"] == "REQUESTED"
+    assert resp_fallback.json()["data"]["dispatched"] is False
+    async with controls() as session:
+        state = await session.get(KunlianConnectionState, cfg.connection_id)
+        assert state.sync_requested_version > state.sync_completed_version

@@ -5,11 +5,13 @@ import type {
   KunlianApiKeyItem,
   KunlianApiKeyUpdatePayload,
   KunlianIntegrationStatus,
+  KunlianSyncTriggerResult,
   KunlianTenantsResponse,
 } from "@/types/api/kunlianApiKey";
 
 const KUNLIAN_API_KEYS_BASE = "/api/v1/identity-integrations/kunlian/api-keys";
 const KUNLIAN_STATUS_PATH = "/api/v1/identity-integrations/kunlian/status";
+const KUNLIAN_SYNC_PATH = "/api/v1/identity-integrations/kunlian/sync";
 const KUNLIAN_TENANTS_PATH = "/api/v1/identity-integrations/kunlian/tenants";
 const MAX_KEY_PAGE_SIZE = 100;
 const MAX_FETCH_PAGES = 20;
@@ -83,6 +85,14 @@ export async function getKunlianIntegrationStatusSilentApi(): Promise<KunlianInt
   } catch {
     return null;
   }
+}
+
+export async function getKunlianIntegrationStatusApi(): Promise<KunlianIntegrationStatus> {
+  return await axios.get(KUNLIAN_STATUS_PATH);
+}
+
+export async function triggerKunlianSyncApi(): Promise<KunlianSyncTriggerResult> {
+  return await axios.post(KUNLIAN_SYNC_PATH);
 }
 
 /**

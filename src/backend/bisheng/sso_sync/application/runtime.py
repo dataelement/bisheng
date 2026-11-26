@@ -62,6 +62,18 @@ def resolve_environment_secret(reference: str) -> SecretStr:
     return SecretStr(value)
 
 
+def dispatch_kunlian_directory_sync(connection_id: str) -> None:
+    """Enqueue immediate Kunlian directory sync task on the shared Celery queue."""
+    from bisheng.worker.main import bisheng_celery
+
+    bisheng_celery.send_task(
+        "bisheng.worker.sso_sync.tasks.sync_directory",
+        args=[connection_id],
+        headers={"tenant_id": 1},
+        queue="celery",
+    )
+
+
 @dataclass(frozen=True)
 class KunlianWorkerServices:
     config: object
@@ -71,8 +83,9 @@ class KunlianWorkerServices:
 
 
 class KunlianRuntimeProvider:
-    def __init__(self, *, secret_resolver=resolve_environment_secret):
+    def __init__(self, *, secret_resolver=resolve_environment_secret, sync_dispatcher=dispatch_kunlian_directory_sync):
         self.secret_resolver = secret_resolver
+        self.sync_dispatcher = sync_dispatcher
         self._lock = asyncio.Lock()
         self._key = None
         self._idp = None
@@ -286,6 +299,7 @@ class KunlianRuntimeProvider:
                     user_owner=user_owner,
                     tenant_owner=tenant_owner,
                     multi_tenant_enabled=multi_tenant_enabled,
+                    sync_dispatcher=self.sync_dispatcher,
                 ),
             )
             self._key = key

@@ -48,10 +48,27 @@ export interface KunlianIntegrationStatus {
   connection_id?: string | null;
   directory_status?: string;
   projection_status?: string;
+  active_batch_id?: string | null;
+  running_batch_id?: string | null;
   member_count?: number | null;
   unmapped_count?: number | null;
+  projection_pending?: number | null;
+  projection_failed?: number | null;
+  last_published_at?: string | null;
+  last_run_at?: string | null;
+  last_reason_code?: string | null;
+  sync_requested_version?: number;
+  sync_completed_version?: number;
   enabled?: boolean;
   ready?: boolean;
+  reasons?: string[];
+}
+
+export interface KunlianSyncTriggerResult {
+  connection_id: string;
+  requested_version: number;
+  status: string;
+  dispatched?: boolean;
 }
 
 export interface KunlianDirectoryTenantItem {

@@ -10,14 +10,17 @@ TableHead,
 TableHeader,
 TableRow,
 } from "@/components/bs-ui/table";
+import { locationContext } from "@/contexts/locationContext";
+import { userContext } from "@/contexts/userContext";
 import { listGatewayOrgSyncLogsApi } from "@/controllers/API/orgSync";
 import { showApiError } from "@/controllers/request";
 import { OrgSyncLog } from "@/types/api/orgSync";
 import { formatIsoDateTime } from "@/util/utils";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
-import { useCallback,useEffect,useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GatewayLogDetailDialog } from "./GatewayLogDetailDialog";
+import { KunlianSyncCard } from "./KunlianSyncCard";
 
 const PAGE_SIZE = 20
 
@@ -41,6 +44,9 @@ function hasErrorDetails(log: OrgSyncLog): boolean {
 export default function OrgSync() {
   const { t } = useTranslation("orgSync")
   const paginationLocale = usePaginationLocale()
+  const { appConfig } = useContext(locationContext)
+  const { user } = useContext(userContext)
+  const showKunlianSyncCard = Boolean(appConfig?.kunlianSsoConfigured && user?.is_global_super)
 
   // Page-local server data — fetched here per C7 (stores must not call HTTP).
   const [gatewayLogs, setGatewayLogs] = useState<OrgSyncLog[]>([])
@@ -65,6 +71,7 @@ export default function OrgSync() {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+      {showKunlianSyncCard && <KunlianSyncCard />}
       <div>
         <Table>
           <TableHeader>
