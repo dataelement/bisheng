@@ -405,7 +405,6 @@
     "roleSelect": "Select Roles",
     "userGroupsSel": "Select UserGroups",
     "roleList": "Role List",
-    "confirmText": "Are you sure you want to delete",
     "roleName": "Role Name",
     "roleNameInputPlaceholder": "Enter role name (must be unique within the same scope)",
     "roleType": "Type",
@@ -439,7 +438,13 @@
     "adminBackendMenus": "Admin console menus",
     "quotaMoreExpand": "More resource quotas (spaces, workflows, …)",
     "quotaMoreCollapse": "Hide extra quotas",
-    "roleDeleteRevokeWarning": "This role is assigned to {{count}} user(s). Deleting it revokes menu and quota policy granted through the role (accounts remain).",
+    "roleDeleteTitle": "Delete role \"{{name}}\"?",
+    "deleteConfirmation": {
+      "cancel": "Not now",
+      "confirm": "Confirm deletion"
+    },
+    "roleDeleteDescription": "Users lose this role, and their menu permissions and quotas are recalculated. References to it in default assignments, approvals, model visibility, and credit rules stop taking effect.",
+    "roleDeleteSharedScope": "Affects all tenants using this role.",
     "systemPresetGlobal": "System preset",
     "roleTenantScoped": "Custom within tenant",
     "quotaLabel": {
@@ -631,7 +636,10 @@
     "passwordRequirements": "Initial password must be at least 8 characters, including uppercase letters, lowercase letters, numbers, and symbols",
     "roleRequired": "At least one role must be selected",
     "userCreationSuccess": "User created successfully! Username and initial password have been copied to clipboard",
-    "relationModelNameExists": "This relation model name already exists"
+    "relationModelNameExists": "This relation model name already exists",
+    "userRolesDescription": "Choose which menus each role can access.",
+    "workbenchMenuEntryHint": "If unchecked, users cannot open the workspace from the admin console.",
+    "adminMenuEntryHint": "If unchecked, the admin console entry is hidden in the workspace and its menus are unavailable."
   },
   "skills": {
     "createNew": "Create New Skill",

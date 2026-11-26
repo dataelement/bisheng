@@ -1,9 +1,7 @@
 import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
-import { Pagination, Button, Input, SearchInput, Select } from '@bisheng/ui';
-import { Switch } from "@bisheng/ui";
+import { Button, Checkbox, Input, Pagination, SearchInput, Select, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-
-
+import { createPortal } from "react-dom";
 
 import { TreeDepartmentSelect } from "@/components/bs-comp/department";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -24,10 +22,134 @@ import {
 import { parseRoleQuota } from "./roleQuotaConfig";
 import { RoleQuotaFields } from "./RoleQuotaFields";
 import type { useRolesController } from "./Roles";
+
+type RoleMenuOption = {
+  id: string;
+  labelKey: string;
+  hintKey?: string;
+  children?: readonly RoleMenuOption[];
+};
+
+const WORKBENCH_MENU_OPTIONS: readonly RoleMenuOption[] = [
+  {
+    id: "home",
+    labelKey: "menu.workbenchHome",
+    children: [{ id: TASK_MODE_MENU_ID, labelKey: "menu.linsightTaskMode", hintKey: "system.workbenchTaskModeHint" }],
+  },
+  { id: "apps", labelKey: "menu.workbenchApps" },
+  { id: "subscription", labelKey: "menu.workbench1" },
+  { id: "knowledge_space", labelKey: "menu.workbench2" },
+];
+
+const ADMIN_MENU_OPTIONS: readonly RoleMenuOption[] = [
+  { id: "board", labelKey: "menu.board" },
+  { id: "build", labelKey: "menu.skills", children: [{ id: "create_app", labelKey: "menu.createApp" }] },
+  {
+    id: "knowledge",
+    labelKey: "menu.workbench2",
+    children: [{ id: "create_knowledge", labelKey: "menu.createKnowledge" }],
+  },
+  { id: "dataset", labelKey: "menu.dataset" },
+  { id: "model", labelKey: "menu.models" },
+  { id: "evaluation", labelKey: "menu.evaluation" },
+  { id: "mark_task", labelKey: "menu.annotation" },
+  { id: "log", labelKey: "menu.log" },
+];
+
+interface RoleMenuSectionProps {
+  titleKey: string;
+  entryKey: string;
+  entryHintKey: string;
+  approvalHintKey: string;
+  approvalEnabled: boolean;
+  onApprovalChange: (value: boolean) => void;
+  parentId: string;
+  childIds: readonly string[];
+  options: readonly RoleMenuOption[];
+  controlsDisabled: boolean;
+  hideInactiveChildren?: boolean;
+  controller: Pick<ReturnType<typeof useRolesController>, "t" | "isMenuEnabled" | "toggleMenuGroup" | "toggleMenuItem">;
+}
+
+function MenuHint({ text }: { text: string }) {
+  return (
+    <Tooltip content={text}>
+      <Button type="button" variant="text" color="default" size="small" iconOnly aria-label={text}>
+        <Outlined.Question aria-hidden="true" size={14} className="text-text-3" />
+      </Button>
+    </Tooltip>
+  );
+}
+
+function RoleMenuSection({
+  titleKey, entryKey, entryHintKey, approvalHintKey, approvalEnabled, onApprovalChange,
+  parentId, childIds, options, controlsDisabled, hideInactiveChildren, controller,
+}: RoleMenuSectionProps) {
+  const { t, isMenuEnabled, toggleMenuGroup, toggleMenuItem } = controller;
+  const isAreaEnabled = isMenuEnabled(parentId);
+
+  const renderMenuOption = (option: RoleMenuOption, disabled: boolean) => (
+    <div className="flex min-w-0 items-center gap-1">
+      <Checkbox
+        label={t(option.labelKey).replace(/\u2002+/g, "")}
+        checked={isMenuEnabled(option.id)}
+        disabled={disabled}
+        onCheckedChange={(checked) => toggleMenuItem(parentId, childIds, option.id, checked === true)}
+      />
+      {option.hintKey && <MenuHint text={t(option.hintKey)} />}
+    </div>
+  );
+
+  return (
+    <fieldset className="min-w-0 overflow-hidden rounded-xl border border-border-base" aria-label={t(titleKey)}>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border-base px-4 py-2">
+        <h4 className="text-body font-medium text-text-1">{t(titleKey)}</h4>
+        <div className="flex items-center gap-1">
+          <Checkbox
+            label={t("system.menuApprovalMode")}
+            checked={approvalEnabled}
+            disabled={controlsDisabled}
+            onCheckedChange={(checked) => onApprovalChange(checked === true)}
+          />
+          <MenuHint text={t(approvalHintKey)} />
+        </div>
+      </div>
+
+      <div className="space-y-3 px-4 pt-4">
+        <Checkbox
+          label={<span className="font-medium">{t(entryKey)}</span>}
+          description={t(entryHintKey)}
+          checked={isAreaEnabled}
+          disabled={controlsDisabled}
+          onCheckedChange={(checked) => toggleMenuGroup(parentId, childIds, checked === true)}
+        />
+        <ul className="-mx-4 rounded-none">
+          {options.map((option) => {
+            const optionEnabled = isMenuEnabled(option.id);
+            return (
+              <li key={option.id} className="grid min-h-11 items-start gap-x-6 gap-y-1 bg-bg-page px-4 py-2 odd:bg-fill-1/60 sm:grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)]">
+                {renderMenuOption(option, controlsDisabled || !isAreaEnabled)}
+                {option.children && (!hideInactiveChildren || optionEnabled) && (
+                  <ul className="ml-3 space-y-1 border-l border-border-base pl-3 sm:ml-0">
+                    {option.children.map((child) => (
+                      <li key={child.id}>{renderMenuOption(child, controlsDisabled || !isAreaEnabled || !optionEnabled)}</li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </fieldset>
+  );
+}
+
 interface RolesViewProps {
   controller: ReturnType<typeof useRolesController>;
+  headerTarget?: HTMLDivElement | null;
 }
-export function RolesView({ controller }: RolesViewProps) {
+export function RolesView({ controller, headerTarget }: RolesViewProps) {
   const {
     requestCloseEditDialog,
     t,
@@ -66,33 +188,40 @@ export function RolesView({ controller }: RolesViewProps) {
     loadRoleMenus,
     workbenchApprovalMode,
     setWorkbenchApprovalMode,
-    toggleMenuGroup,
-    isMenuEnabled,
-    renderWorkbenchChild,
-    WORKBENCH_MENU_OPTIONS,
-    toggleMenuItem,
     adminApprovalMode,
     setAdminApprovalMode,
-    ADMIN_MENU_OPTIONS,
     isSaving,
     submitRole,
   } = controller;
   const paginationLocale = usePaginationLocale();
   const selectLabels = useSelectLabels();
+  const userRolesTitle = t("catalog.menuRoles", { ns: "permission" });
+  const menuControlsDisabled = isMenuLoading || menuLoadFailed;
+  const header = (
+    <>
+      <div className="flex min-w-0 items-center justify-end gap-3">
+        <SearchInput
+          className="w-full min-w-0 sm:w-60"
+          aria-label={t("system.roleSearchPlaceholder")}
+          placeholder={t("system.roleSearchPlaceholder")}
+          onChange={(e) => setKeyword(e.target.value)}
+        />
+        <Button className="shrink-0" onClick={openCreate}>{t("system.roleCreateTitle")}</Button>
+      </div>
+      <p className="text-body text-text-2">{t("system.userRolesDescription")}</p>
+    </>
+  );
   return (
-    <div className="relative h-full">
-      <div className="h-full overflow-y-auto pb-10 pt-2">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="w-[220px]">
-            <SearchInput placeholder={t("system.roleSearchPlaceholder")} onChange={(e) => setKeyword(e.target.value)} />
-          </div>
-          <Button className="flex justify-around" onClick={openCreate}>
-            <Outlined.Plus className="size-4 shrink-0" />
-            <span className="mx-4 text-[#fff]">{t("create")}</span>
-          </Button>
-        </div>
-        <Table noScroll className="mb-6 !w-auto min-w-full" style={{ tableLayout: "fixed", width: rc.totalWidth }}>
-          <TableHeader>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        {headerTarget ? createPortal(header, headerTarget) : headerTarget === undefined ? header : null}
+        <Table
+          aria-label={userRolesTitle}
+          className="!w-auto min-w-full border-collapse border-spacing-0 text-body text-text-1"
+          containerClassName="min-h-0 flex-1 rounded-lg"
+          style={{ tableLayout: "fixed", width: rc.totalWidth }}
+        >
+          <TableHeader className="sticky top-0 z-10 bg-fill-1 [&_th]:h-11 [&_th]:px-3 [&_th]:py-2 [&_th]:text-text-2">
             <TableRow>
               <TableHead {...rc.getThProps(0)}>
                 {t("system.roleName")}
@@ -173,17 +302,17 @@ export function RolesView({ controller }: RolesViewProps) {
           </TableHeader>
           <TableBody>
             {roles.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={10} className="text-center text-gray-400">
+              <TableRow hoverable={false}>
+                <TableCell colSpan={10} className="h-14 !rounded-none !bg-bg-page text-center text-text-3">
                   {t("build.empty")}
                 </TableCell>
               </TableRow>
             ) : (
               roles.map((el) => (
-                <TableRow key={el.id}>
-                  <TableCell {...rc.getTdProps(0)} className="font-medium">
+                <TableRow key={el.id} hoverable={false} className="bg-bg-page even:bg-fill-1/60 [&_td]:h-14 [&_td]:!rounded-none [&_td]:!bg-transparent [&_td]:px-3">
+                  <TableCell {...rc.getTdProps(0)} className="break-words font-medium">
                     {el.role_name}
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-caption text-text-3">
                       {t(el.role_type === "global" ? "system.roleTypeShared" : "system.roleTypeTenant")}
                       {el.tenant_id != null && ` · ${t("system.roleOwner", { id: el.tenant_id })}`}
                     </div>
@@ -204,21 +333,21 @@ export function RolesView({ controller }: RolesViewProps) {
                   <TableCell
                     {...rc.getTdProps(6)}
                     className={cname(
-                      "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-muted-foreground",
+                      "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-text-3",
                     )}
                     title={creatorLabel(el)}
                   >
                     {creatorLabel(el)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(7)} className="whitespace-nowrap tabular-nums">
+                  <TableCell {...rc.getTdProps(7)} className="whitespace-nowrap text-caption tabular-nums">
                     {fmtTime(el.create_time)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(8)} className="whitespace-nowrap tabular-nums">
+                  <TableCell {...rc.getTdProps(8)} className="whitespace-nowrap text-caption tabular-nums">
                     {fmtTime(el.update_time)}
                   </TableCell>
                   <TableCell {...rc.getTdProps(9)} className="text-right">
                     {el.is_readonly ? (
-                      <span className="text-sm text-muted-foreground">&mdash;</span>
+                      <span className="text-text-3">&mdash;</span>
                     ) : (
                       <div className="flex justify-end gap-2">
                         <Button size="small" variant="link" onClick={() => openEdit(el)}>
@@ -258,14 +387,17 @@ export function RolesView({ controller }: RolesViewProps) {
           }
         }}
       >
-        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col sm:max-w-2xl">
+        <DialogContent
+          aria-describedby={undefined}
+          className="flex max-h-[85dvh] w-[calc(100%-2rem)] max-w-3xl flex-col border-border-base bg-bg-page text-text-1 dark:bg-bg-page"
+        >
           <DialogHeader>
-            <DialogTitle>{activeRole ? t("system.roleEditTitle") : t("system.roleCreateTitle")}</DialogTitle>
+            <DialogTitle className="text-h4 text-text-1">{activeRole ? t("system.roleEditTitle") : t("system.roleCreateTitle")}</DialogTitle>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <div>
-              <Label>{t("system.roleName")}</Label>
-              <Input value={roleName} onChange={(e) => setRoleName(e.target.value)} maxLength={128} placeholder={t("system.roleNameInputPlaceholder")} className={"mt-1"} showCount />
+              <Label htmlFor="role-name">{t("system.roleName")}</Label>
+              <Input id="role-name" value={roleName} onChange={(e) => setRoleName(e.target.value)} maxLength={128} placeholder={t("system.roleNameInputPlaceholder")} className={"mt-1"} showCount />
             </div>
 
             <div>
@@ -285,12 +417,12 @@ export function RolesView({ controller }: RolesViewProps) {
               ) : (
                 <p className="mt-1 text-sm">{t(activeRole?.role_type === "global" ? "system.roleTypeShared" : "system.roleTypeTenant")}</p>
               )}
-              <p className="mt-1 text-xs text-muted-foreground">{t("system.roleTypeHint")}</p>
+              <p className="mt-1 text-caption text-text-3">{t("system.roleTypeHint")}</p>
             </div>
 
             <div>
               <Label>{t("system.roleScope")}</Label>
-              <p className="mt-1 text-xs text-muted-foreground">{t("system.roleScopeHint")}</p>
+              <p className="mt-1 text-caption text-text-3">{t("system.roleScopeHint")}</p>
               <TreeDepartmentSelect
                 modal={false}
                 className="mt-1"
@@ -305,158 +437,59 @@ export function RolesView({ controller }: RolesViewProps) {
 
             <RoleQuotaFields value={quota} onChange={setQuota} />
 
-            <div className="rounded-md border p-3">
-              <Label>{t("system.menuPermissionSection")}</Label>
-              <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
-              {isMenuLoading && <LoadingState size="panel" label={t("system.roleMenuLoading")} className="mt-2 text-xs text-muted-foreground" />}
+            <section className="space-y-4" aria-label={t("system.menuPermissionSection")}>
+              <h3 className="text-h4 text-text-1">{t("system.menuPermissionSection")}</h3>
+              {isMenuLoading && (
+                <LoadingState size="panel" label={t("system.roleMenuLoading")} className="text-caption text-text-3" />
+              )}
               {menuLoadFailed && activeRole && (
-                <div className="mt-2 flex items-center gap-3 text-xs text-destructive">
+                <div className="flex items-center gap-3 text-caption text-danger">
                   <span>{t("system.roleMenuLoadFailed")}</span>
-                  <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => void loadRoleMenus(activeRole, parseRoleQuota(activeRole.quota_config))}>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="small"
+                    onClick={() => void loadRoleMenus(activeRole, parseRoleQuota(activeRole.quota_config))}
+                  >
                     {t("retry")}
                   </Button>
                 </div>
               )}
-              <div className="mt-3 space-y-4">
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="text-xs font-medium text-muted-foreground">
-                      {t("system.workbenchMenuAuthorization")}
-                    </div>
-                  </div>
-                  <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
-                    <Switch
-                      checked={workbenchApprovalMode}
-                      onCheckedChange={(v) => setWorkbenchApprovalMode(Boolean(v))}
-                      disabled={isMenuLoading || (Boolean(activeRole) && menuLoadFailed)}
-                    />
-                    <div>
-                      <div className="text-sm font-medium">{t("system.menuApprovalMode")}</div>
-                      <div className="text-xs text-muted-foreground">{t("system.menuApprovalModeWorkbenchHint")}</div>
-                    </div>
-                  </label>
-                  <label
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
-                    onClick={() =>
-                      toggleMenuGroup(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, !isMenuEnabled(WORKBENCH_PARENT_ID))
-                    }
-                  >
-                    <Switch
-                      checked={isMenuEnabled(WORKBENCH_PARENT_ID)}
-                      onCheckedChange={(checked) =>
-                        toggleMenuGroup(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, checked)
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <span>{t("menu.workspace")}</span>
-                  </label>
-
-                  <div className="mt-3 flex flex-col gap-2">
-                    {renderWorkbenchChild(WORKBENCH_MENU_OPTIONS.find((m) => m.id === "home")!)}
-
-
-                    <div className="ml-6 border-l border-border pl-3">
-                      <label
-                        className={`inline-flex w-fit items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
-                          !isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")
-                            ? "cursor-not-allowed opacity-50"
-                            : "cursor-pointer"
-                        }`}
-                        onClick={() =>
-                          isMenuEnabled(WORKBENCH_PARENT_ID) &&
-                          isMenuEnabled("home") &&
-                          toggleMenuItem(
-                            WORKBENCH_PARENT_ID,
-                            WORKBENCH_CHILD_MENUS,
-                            TASK_MODE_MENU_ID,
-                            !isMenuEnabled(TASK_MODE_MENU_ID),
-                          )
-                        }
-                      >
-                        <Switch
-                          checked={isMenuEnabled(TASK_MODE_MENU_ID)}
-                          disabled={!isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")}
-                          onCheckedChange={(checked) =>
-                            toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, TASK_MODE_MENU_ID, checked)
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <span>{t("menu.linsightTaskMode")}</span>
-                      </label>
-                      <p className="mt-1 pl-2 text-xs text-muted-foreground">{t("system.workbenchTaskModeHint")}</p>
-                    </div>
-
-
-                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                      {WORKBENCH_MENU_OPTIONS.filter((m) => m.id !== "home").map(renderWorkbenchChild)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="text-xs font-medium text-muted-foreground">
-                      {t("system.adminMenuAuthorization")}
-                    </div>
-                  </div>
-                  <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
-                    <Switch
-                      checked={adminApprovalMode}
-                      onCheckedChange={(v) => setAdminApprovalMode(Boolean(v))}
-                      disabled={isMenuLoading || (Boolean(activeRole) && menuLoadFailed)}
-                    />
-                    <div>
-                      <div className="text-sm font-medium">{t("system.menuApprovalMode")}</div>
-                      <div className="text-xs text-muted-foreground">{t("system.menuApprovalModeAdminHint")}</div>
-                    </div>
-                  </label>
-                  <label
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
-                    onClick={() => toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, !isMenuEnabled(ADMIN_PARENT_ID))}
-                  >
-                    <Switch
-                      checked={isMenuEnabled(ADMIN_PARENT_ID)}
-                      onCheckedChange={(checked) => toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, checked)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <span>{t("system.adminSpace")}</span>
-                  </label>
-                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
-                    {ADMIN_MENU_OPTIONS.filter(
-                      (m) => !("parentMenuId" in m) || !m.parentMenuId || isMenuEnabled(m.parentMenuId),
-                    ).map((m) => (
-                      <label
-                        key={m.id}
-                        className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
-                          !isMenuEnabled(ADMIN_PARENT_ID) ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-                        }`}
-                        onClick={() =>
-                          isMenuEnabled(ADMIN_PARENT_ID) &&
-                          toggleMenuItem(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, m.id, !isMenuEnabled(m.id))
-                        }
-                      >
-                        <Switch
-                          checked={isMenuEnabled(m.id)}
-                          disabled={!isMenuEnabled(ADMIN_PARENT_ID)}
-                          onCheckedChange={(checked) =>
-                            toggleMenuItem(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, m.id, checked)
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <span>{m.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+              <RoleMenuSection
+                titleKey="system.workbenchMenuAuthorization"
+                entryKey="menu.workspace"
+                entryHintKey="system.workbenchMenuEntryHint"
+                approvalHintKey="system.menuApprovalModeWorkbenchHint"
+                approvalEnabled={workbenchApprovalMode}
+                onApprovalChange={setWorkbenchApprovalMode}
+                parentId={WORKBENCH_PARENT_ID}
+                childIds={WORKBENCH_CHILD_MENUS}
+                options={WORKBENCH_MENU_OPTIONS}
+                controlsDisabled={menuControlsDisabled}
+                controller={controller}
+              />
+              <RoleMenuSection
+                titleKey="system.adminMenuAuthorization"
+                entryKey="system.adminSpace"
+                entryHintKey="system.adminMenuEntryHint"
+                approvalHintKey="system.menuApprovalModeAdminHint"
+                approvalEnabled={adminApprovalMode}
+                onApprovalChange={setAdminApprovalMode}
+                parentId={ADMIN_PARENT_ID}
+                childIds={ADMIN_CHILD_MENUS}
+                options={ADMIN_MENU_OPTIONS}
+                controlsDisabled={menuControlsDisabled}
+                hideInactiveChildren
+                controller={controller}
+              />
+            </section>
           </div>
-          <DialogFooter className="mt-4 shrink-0 border-t pt-2">
+          <DialogFooter className="shrink-0 pt-3">
             <Button variant="outlined" onClick={requestCloseEditDialog} disabled={isSaving} color="default">
               {t("cancel")}
             </Button>
-            <Button onClick={submitRole} disabled={isSaving || isMenuLoading || menuLoadFailed}>
-              {isSaving ? `${t("save")}...` : t("save")}
+            <Button onClick={submitRole} loading={isSaving} disabled={isSaving || menuControlsDisabled}>
+              {t("save")}
             </Button>
           </DialogFooter>
         </DialogContent>

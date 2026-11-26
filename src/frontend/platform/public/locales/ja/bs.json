@@ -406,7 +406,6 @@
     "userGroupsSel": "ユーザーグループ選択",
     "roleList": "ロール一覧",
     "userGroupList": "ユーザーグループ一覧",
-    "confirmText": "削除しますか",
     "roleName": "ロール名",
     "roleNameInputPlaceholder": "ロール名を入力（同一スコープ内で重複不可）",
     "roleType": "ロール種別",
@@ -440,7 +439,13 @@
     "adminBackendMenus": "管理コンソールのメニュー",
     "quotaMoreExpand": "その他のリソース上限（スペース数・WF など）",
     "quotaMoreCollapse": "追加の上限を閉じる",
-    "roleDeleteRevokeWarning": "このロールは {{count}} 名のユーザーに割り当てられています。削除すると当該ロール経由のメニュー・クォータ設定は失われます（ユーザーアカウントは残ります）。",
+    "roleDeleteTitle": "ロール「{{name}}」を削除しますか？",
+    "deleteConfirmation": {
+      "cancel": "今はしない",
+      "confirm": "削除を確認"
+    },
+    "roleDeleteDescription": "ユーザーからこのロールが解除され、メニュー権限とリソース上限が再計算されます。部門のデフォルトロール、承認、モデルの公開範囲、クレジットルールでの参照は無効になります。",
+    "roleDeleteSharedScope": "このロールを使う全テナントに影響します。",
     "systemPresetGlobal": "システム既定",
     "roleTenantScoped": "テナント内カスタム",
     "quotaLabel": {
@@ -626,7 +631,10 @@
     "usernameMaxLength": "1～32文字で入力してください",
     "passwordRequirements": "初期パスワードは 8 文字以上で、大文字・小文字・数字・記号の組み合わせが必要です",
     "roleRequired": "少なくとも1つのロールを選択してください",
-    "userCreationSuccess": "ユーザー作成に成功しました！ユーザー名と初期パスワードをクリップボードにコピーしました"
+    "userCreationSuccess": "ユーザー作成に成功しました！ユーザー名と初期パスワードをクリップボードにコピーしました",
+    "userRolesDescription": "ロールごとに利用できるメニューを設定します。",
+    "workbenchMenuEntryHint": "選択を解除すると、管理画面からワークスペースを開けなくなります。",
+    "adminMenuEntryHint": "選択を解除すると、ワークスペースに管理画面への入口が表示されず、管理メニューを利用できなくなります。"
   },
   "skills": {
     "createNew": "新規スキル",
