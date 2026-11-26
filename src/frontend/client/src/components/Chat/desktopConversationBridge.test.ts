@@ -8,16 +8,22 @@ import {
 } from './desktopConversationBridge';
 
 let mockChannel = 'desktop';
+let mockHostHeader = false;
 jest.mock('~/utils/clientEnvironment', () => {
   const actual = jest.requireActual('~/utils/clientEnvironment');
   // React snapshots must stay stable between reads, so reuse one object per channel.
   const snapshots = new Map();
   const getClientEnvironment = () => {
     const base = actual.getClientEnvironment();
-    const cached = snapshots.get(mockChannel);
+    const stamp = `${mockChannel}:${mockHostHeader}`;
+    const cached = snapshots.get(stamp);
     if (cached?.base === base) return cached.value;
-    const value = { ...base, channel: mockChannel };
-    snapshots.set(mockChannel, { base, value });
+    const value = {
+      ...base,
+      channel: mockChannel,
+      capabilities: { ...base.capabilities, hasHostChatHeader: mockHostHeader },
+    };
+    snapshots.set(stamp, { base, value });
     return value;
   };
   return { ...actual, getClientEnvironment };
@@ -26,6 +32,7 @@ jest.mock('~/utils/clientEnvironment', () => {
 beforeEach(() => {
   resetDesktopConversationBridge();
   mockChannel = 'desktop';
+  mockHostHeader = false;
 });
 afterEach(() => {
   delete window.dshChatPresentation;
@@ -50,8 +57,18 @@ describe('useDesktopConversationActivity', () => {
     expect(reportRunning).toHaveBeenCalledTimes(4);
   });
 
+  it('reports to a mobile host that owns the chat header', () => {
+    mockChannel = 'web';
+    mockHostHeader = true;
+    const reportRunning = jest.fn();
+    window.dshChatPresentation = { reportLanding: jest.fn(), reportRunning };
+    renderHook(() => useDesktopConversationActivity('owner-a', ['chat-a']));
+    expect(reportRunning).toHaveBeenLastCalledWith(['chat-a']);
+  });
+
   it('stays silent outside the desktop and tolerates hosts without activity support', () => {
     mockChannel = 'web';
+    mockHostHeader = false;
     const reportRunning = jest.fn();
     window.dshChatPresentation = { reportLanding: jest.fn(), reportRunning };
     renderHook(() => useDesktopConversationActivity('owner-a', ['chat-a']));
