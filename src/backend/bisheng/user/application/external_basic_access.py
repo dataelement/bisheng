@@ -25,11 +25,11 @@ class ExternalBasicAccessApplication:
         self.repository = repository
         self.service = UserExternalBasicAccessService(repository)
 
-    async def reserve_external_basic_access(self, command):
-        return await self.repository.reserve(command)
+    async def reserve_external_basic_access(self, command, *, force: bool = False):
+        return await self.repository.reserve(command, force=force)
 
-    async def ensure_external_basic_access(self, command, *, operation):
-        return await self.service.ensure(command, operation=operation)
+    async def ensure_external_basic_access(self, command, *, operation, force: bool = False):
+        return await self.service.ensure(command, operation=operation, force=force)
 
     async def read_external_basic_access(self, connection_id, identity_key, tenant_id):
         return await self.repository.read(connection_id, identity_key, tenant_id)

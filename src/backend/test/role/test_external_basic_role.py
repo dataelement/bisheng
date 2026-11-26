@@ -92,3 +92,37 @@ async def test_template_name_collision_never_claims_the_human_role(onboarding_st
         async with onboarding_store.sessions() as session:
             assert not (await session.exec(select(RoleAccess))).all()
             assert (await session.exec(select(RoleExternalBasicRole))).one().role_id is None
+
+
+async def test_force_recovers_suspended_drifted_deleted_and_existing_same_name_role(onboarding_store):
+    from hashlib import sha256
+
+    _, app = await setup_role(onboarding_store)
+    with tenant_execution_scope(7):
+        # 1. Pre-existing same-name role is adopted and reset to BASIC_MENUS when force=True.
+        async with onboarding_store.sessions() as session:
+            existing = Role(id=91, role_name="昆联工作流基础_" + sha256(b"fixture").hexdigest()[:12], tenant_id=7)
+            session.add(existing)
+            session.add(RoleAccess(role_id=91, third_id="create_app", type=99, tenant_id=7))
+            await session.commit()
+        op1 = await app.reserve_external_basic_role("fixture", 7, force=True)
+        adopted = await app.ensure_external_basic_role(op1, force=True)
+        assert adopted.role_id == 91 and adopted.state == "APPLIED"
+        async with onboarding_store.sessions() as session:
+            menus = (await session.exec(select(RoleAccess).where(RoleAccess.role_id == 91))).all()
+            assert {m.third_id for m in menus} == {"admin", "build", "create_workflow"}
+
+        # 2. If explicitly paused/suspended, force=True restores it cleanly.
+        await app.set_external_basic_role("fixture", 7, expected_revision=1, enabled=False)
+        op2 = await app.reserve_external_basic_role("fixture", 7, force=True)
+        restored = await app.ensure_external_basic_role(op2, force=True)
+        assert restored.role_id == 91 and restored.state == "APPLIED"
+
+        # 3. If the role row is deleted from DB, force=True recreates a fresh role and applies BASIC_MENUS.
+        async with onboarding_store.sessions() as session:
+            row = (await session.exec(select(Role).where(Role.id == 91))).one()
+            await session.delete(row)
+            await session.commit()
+        op3 = await app.reserve_external_basic_role("fixture", 7, force=True)
+        recreated = await app.ensure_external_basic_role(op3, force=True)
+        assert recreated.role_id not in (1, 2, 91) and recreated.state == "APPLIED"

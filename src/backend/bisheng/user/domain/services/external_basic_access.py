@@ -5,5 +5,5 @@ class UserExternalBasicAccessService:
     def __init__(self, repository):
         self.repository = repository
 
-    async def ensure(self, command, *, operation):
-        return await self.repository.apply(command, operation)
+    async def ensure(self, command, *, operation, force: bool = False):
+        return await self.repository.apply(command, operation, force=force)

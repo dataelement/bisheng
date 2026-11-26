@@ -180,3 +180,51 @@ async def test_owner_chain_provisions_real_child_user_template_and_single_relati
             assert [(r.user_id, r.role_id, r.tenant_id) for r in actual] == [
                 (uid, template.role_id, tenant.local_tenant_id)
             ]
+
+
+async def test_force_recovers_blocked_user_deleted_relation_and_stale_role_preserving_manual_roles(onboarding_store):
+    app, command, roles = await setup_access(onboarding_store)
+    op = await app.reserve_external_basic_access(command)
+    await app.ensure_external_basic_access(command, operation=op)
+
+    # Simulate manual removal + durable BLOCKED state.
+    with tenant_execution_scope(7):
+        async with onboarding_store.sessions() as session:
+            await session.exec(
+                delete(UserRole).where(
+                    UserRole.user_id == command.user_id, UserRole.role_id == command.template.role_id
+                )
+            )
+            await session.commit()
+    with pytest.raises(KunlianIdentityUnavailableError):
+        await app.reserve_external_basic_access(command)
+
+    # force=True clears BLOCKED and re-grants basic role while preserving manual role 90.
+    op_force1 = await app.reserve_external_basic_access(command, force=True)
+    receipt1 = await app.ensure_external_basic_access(command, operation=op_force1, force=True)
+    assert receipt1.effective and receipt1.state == "APPLIED" and not receipt1.local_blocked
+    with tenant_execution_scope(7):
+        async with onboarding_store.sessions() as session:
+            rows = (await session.exec(select(UserRole).where(UserRole.user_id == command.user_id))).all()
+            assert {r.role_id for r in rows} == {90, command.template.role_id}
+
+    # Simulate template role deleted and recreated with a new role_id.
+    with tenant_execution_scope(7):
+        async with onboarding_store.sessions() as session:
+            old_role = (await session.exec(select(Role).where(Role.id == command.template.role_id))).one()
+            await session.exec(delete(UserRole).where(UserRole.role_id == command.template.role_id))
+            await session.delete(old_role)
+            session.add(Role(id=92, role_name="占位角色", tenant_id=7))
+            await session.commit()
+        new_template = await roles.ensure_external_basic_role(
+            await roles.reserve_external_basic_role("fixture", 7, force=True), force=True
+        )
+    assert new_template.role_id != command.template.role_id
+    updated_command = replace(command, template=new_template)
+    op_force2 = await app.reserve_external_basic_access(updated_command, force=True)
+    receipt2 = await app.ensure_external_basic_access(updated_command, operation=op_force2, force=True)
+    assert receipt2.effective and receipt2.role_id == new_template.role_id
+    with tenant_execution_scope(7):
+        async with onboarding_store.sessions() as session:
+            rows = (await session.exec(select(UserRole).where(UserRole.user_id == command.user_id))).all()
+            assert {r.role_id for r in rows} == {90, new_template.role_id}

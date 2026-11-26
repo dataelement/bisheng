@@ -5,5 +5,5 @@ class RoleExternalBasicRoleService:
     def __init__(self, repository):
         self.repository = repository
 
-    async def ensure(self, operation):
-        return await self.repository.apply(operation)
+    async def ensure(self, operation, *, force: bool = False):
+        return await self.repository.apply(operation, force=force)

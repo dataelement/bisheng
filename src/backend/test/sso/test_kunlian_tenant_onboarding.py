@@ -147,3 +147,45 @@ async def test_one_blocked_tenant_does_not_block_other_ready_tenant(onboarding):
     assert (
         await s.service.current_qualification(next(b for b in bindings if b.external_tenant_id == "external-b"))
     ).user_id
+
+
+async def test_onboarding_force_repairs_suspended_template_and_blocked_user_while_keeping_manual_role(onboarding):
+    from sqlalchemy import delete
+
+    from bisheng.database.models.role import Role
+    from bisheng.database.models.role_access import RoleAccess
+
+    s = onboarding
+    await directory.publish(s.repo)
+    await run_round(s.service)
+
+    async with s.sessions() as session:
+        binding = (await session.exec(select(KunlianIdentityBinding))).one()
+        mapping = (await session.exec(select(KunlianTenantBinding))).one()
+    target = mapping.local_tenant_id
+    initial = await s.service.current_qualification(binding)
+    basic_role_id = initial.role_ids[0]
+
+    # Tamper with managed role menus, delete user basic role relation, and add an extra manual role 95.
+    with tenant_execution_scope(target):
+        async with s.sessions() as session:
+            session.add(Role(id=95, role_name="手工保留角色", tenant_id=target, role_type="tenant"))
+            session.add(UserRole(user_id=binding.local_user_id, role_id=95, tenant_id=target))
+            session.add(RoleAccess(role_id=basic_role_id, third_id="create_app", type=99, tenant_id=target))
+            await session.exec(
+                delete(UserRole).where(
+                    UserRole.user_id == binding.local_user_id, UserRole.role_id == basic_role_id
+                )
+            )
+            await session.commit()
+
+    # Re-running onboarding sync force-repairs the basic role template and re-grants it while keeping role 95.
+    await directory.publish(s.repo)
+    await run_round(s.service)
+
+    after = await s.service.current_qualification(binding)
+    assert set(after.role_ids) == {95, basic_role_id}
+    with tenant_execution_scope(target):
+        async with s.sessions() as session:
+            menus = (await session.exec(select(RoleAccess).where(RoleAccess.role_id == basic_role_id))).all()
+            assert {m.third_id for m in menus} == {"admin", "build", "create_workflow"}

@@ -115,7 +115,7 @@ class RoleExternalBasicRoleRepository:
             and {(r.type, r.third_id) for r in values} == {(99, key) for key in BASIC_MENUS}
         )
 
-    async def reserve(self, connection_id, tenant_id):
+    async def reserve(self, connection_id, tenant_id, *, force: bool = False):
         if not isinstance(connection_id, str) or not connection_id.strip() or len(connection_id) > 64:
             raise KunlianBindingConflictError()
         result = None
@@ -127,7 +127,16 @@ class RoleExternalBasicRoleRepository:
             if row is None:
                 row = RoleExternalBasicRole(connection_id=connection_id, tenant_id=tenant_id, menu_digest=MENU_DIGEST)
             if row.state == "APPLIED" and not await self.intact(session, row):
-                self.suspend(row)
+                if force:
+                    row.local_blocked = False
+                    row.state = "PENDING"
+                    row.operation_id = None
+                else:
+                    self.suspend(row)
+            elif force and (row.local_blocked or row.state == "SUSPENDED"):
+                row.local_blocked = False
+                row.state = "PENDING"
+                row.operation_id = None
             if not row.local_blocked and row.state != "SUSPENDED":
                 if row.operation_id is None:
                     row.operation_id = str(uuid4())
@@ -144,10 +153,10 @@ class RoleExternalBasicRoleRepository:
         return result
 
     @staticmethod
-    def check_operation(row, operation):
+    def check_operation(row, operation, *, force: bool = False):
         if row is None:
             raise KunlianBindingConflictError()
-        if row.local_blocked:
+        if row.local_blocked and not force:
             raise KunlianIdentityUnavailableError()
         if (row.operation_id, row.fence, row.template_revision, row.payload_digest) != (
             operation.operation_id,
@@ -157,25 +166,45 @@ class RoleExternalBasicRoleRepository:
         ):
             raise KunlianBindingConflictError()
 
-    async def apply(self, operation):
+    async def apply(self, operation, *, force: bool = False):
         refused = False
         result = None
         async with self.session(operation.tenant_id) as session:
             row = await self.state(session, operation.connection_id)
-            self.check_operation(row, operation)
-            if row.state == "APPLIED":
-                if not await self.intact(session, row):
-                    self.suspend(row)
-                    row.update_time = datetime.now(UTC).replace(tzinfo=None)
-                    session.add(row)
-                    refused = True
-            else:
+            self.check_operation(row, operation, force=force)
+            expected_name = "昆联工作流基础_" + sha256(row.connection_id.encode()).hexdigest()[:12]
+            if row.state == "APPLIED" and not await self.intact(session, row) and not force:
+                self.suspend(row)
+                row.update_time = datetime.now(UTC).replace(tzinfo=None)
+                session.add(row)
+                refused = True
+            elif row.state != "APPLIED" or (force and not await self.intact(session, row)):
                 role = None
                 if row.role_id is not None:
                     role = (await session.exec(select(Role).where(Role.id == row.role_id).with_for_update())).first()
+                    if role is not None and (
+                        role.id in (1, 2) or role.role_type != "tenant" or role.tenant_id != row.tenant_id
+                    ):
+                        if force:
+                            role = None
+                        else:
+                            raise KunlianBindingConflictError()
+                if role is None and force:
+                    role = (
+                        await session.exec(
+                            select(Role)
+                            .where(
+                                Role.role_name == expected_name,
+                                Role.tenant_id == row.tenant_id,
+                                Role.role_type == "tenant",
+                                Role.id.notin_((1, 2)),
+                            )
+                            .with_for_update()
+                        )
+                    ).first()
                 if role is None:
                     role = Role(
-                        role_name="昆联工作流基础_" + sha256(row.connection_id.encode()).hexdigest()[:12],
+                        role_name=expected_name,
                         tenant_id=row.tenant_id,
                         role_type="tenant",
                         create_user=None,
@@ -184,10 +213,15 @@ class RoleExternalBasicRoleRepository:
                     await session.flush()
                     if role.id in (1, 2):
                         raise KunlianBindingConflictError()
-                if role.role_type != "tenant" or role.tenant_id != row.tenant_id or role.department_id is not None:
-                    raise KunlianBindingConflictError()
+                if role.department_id is not None:
+                    if force:
+                        role.department_id = None
+                        session.add(role)
+                    else:
+                        raise KunlianBindingConflictError()
                 row.role_id = role.id
                 await self.replace_menus(session, role.id, row.tenant_id, BASIC_MENUS)
+                row.local_blocked = False
                 row.state = "APPLIED"
                 row.applied_operation_id, row.applied_fence = row.operation_id, row.fence
                 row.applied_template_revision = row.template_revision

@@ -120,7 +120,10 @@ class KunlianOnboardingService:
             await self.projection.ensure_current_membership(facts)
             await assert_current()
             template = await self.roles.ensure_external_basic_role(
-                await self.roles.reserve_external_basic_role(facts.connection_id, facts.mapping.local_tenant_id)
+                await self.roles.reserve_external_basic_role(
+                    facts.connection_id, facts.mapping.local_tenant_id, force=True
+                ),
+                force=True,
             )
             command = BasicAccessCommand(
                 facts.connection_id,
@@ -130,10 +133,10 @@ class KunlianOnboardingService:
                 projection,
                 template,
             )
-            operation = await self.access.reserve_external_basic_access(command)
+            operation = await self.access.reserve_external_basic_access(command, force=True)
             await assert_current()
             await self._tenant_ready(binding)
-            await self.access.ensure_external_basic_access(command, operation=operation)
+            await self.access.ensure_external_basic_access(command, operation=operation, force=True)
             await assert_current()
             await self._tenant_ready(binding)
 

@@ -196,10 +196,10 @@ class UserExternalBasicAccessRepository:
         row.update_time = datetime.now(UTC).replace(tzinfo=None)
 
     @staticmethod
-    def check(row, operation):
+    def check(row, operation, *, force: bool = False):
         if row is None:
             raise KunlianBindingConflictError()
-        if row.local_blocked:
+        if row.local_blocked and not force:
             raise KunlianIdentityUnavailableError()
         if (row.operation_id, row.fence, row.payload_digest) != (
             operation.operation_id,
@@ -230,7 +230,7 @@ class UserExternalBasicAccessRepository:
         ):
             raise KunlianBindingConflictError()
 
-    async def reserve(self, command):
+    async def reserve(self, command, *, force: bool = False):
         self.validate(command)
         result = None
         async with self.session(command.tenant_id) as session:
@@ -252,17 +252,31 @@ class UserExternalBasicAccessRepository:
                     )
                 if row.user_id != command.user_id:
                     raise KunlianBindingConflictError()
-                relation = await self.relation(session, command.user_id, row.role_id) if row.role_id else None
-                if (
-                    row.state == "APPLIED"
-                    and relation is None
-                    and row.role_id == template.role_id
-                    and row.template_revision == template.template_revision
-                ):
-                    self.block(row)
+                relation = await self.relation(session, command.user_id, template.role_id)
+                if force:
+                    if (
+                        row.local_blocked
+                        or row.state in {"BLOCKED", "PENDING"}
+                        or row.role_id != template.role_id
+                        or relation is None
+                    ):
+                        row.local_blocked = False
+                        row.state = "PENDING"
+                        row.operation_id = None
+                else:
+                    owned_relation = (
+                        await self.relation(session, command.user_id, row.role_id) if row.role_id else None
+                    )
+                    if (
+                        row.state == "APPLIED"
+                        and owned_relation is None
+                        and row.role_id == template.role_id
+                        and row.template_revision == template.template_revision
+                    ):
+                        self.block(row)
                 if not row.local_blocked:
-                    # 不能把没有来源回执的现有相同关系当作本次自动关系。
-                    if row.role_id is None and await self.relation(session, command.user_id, template.role_id):
+                    # 不能把没有来源回执的现有相同关系当作本次自动关系.
+                    if not force and row.role_id is None and relation is not None:
                         raise KunlianBindingConflictError()
                     if row.payload_digest != command.payload_digest or row.operation_id is None:
                         row.fence += 1
@@ -288,7 +302,7 @@ class UserExternalBasicAccessRepository:
             raise KunlianIdentityUnavailableError()
         return result
 
-    async def apply(self, command, operation):
+    async def apply(self, command, operation, *, force: bool = False):
         self.validate(command)
         if (operation.connection_id, operation.identity_key, operation.tenant_id, operation.payload_digest) != (
             command.connection_id,
@@ -307,11 +321,11 @@ class UserExternalBasicAccessRepository:
                     session, command.identity_key, command.user_id, command.tenant_id, receipt=command.projection
                 )
                 row = await self.state(session, command.connection_id, command.identity_key)
-                self.check(row, operation)
+                self.check(row, operation, force=force)
                 if row.user_id != command.user_id or row.role_id != template.role_id:
                     raise KunlianBindingConflictError()
                 relation = await self.relation(session, row.user_id, row.role_id)
-                if row.state == "APPLIED" and relation is None:
+                if not force and row.state == "APPLIED" and relation is None:
                     self.block(row)
                     row.update_time = datetime.now(UTC).replace(tzinfo=None)
                     session.add(row)
@@ -319,6 +333,7 @@ class UserExternalBasicAccessRepository:
                 else:
                     if relation is None:
                         session.add(UserRole(user_id=row.user_id, role_id=row.role_id, tenant_id=row.tenant_id))
+                    row.local_blocked = False
                     row.state = "APPLIED"
                     row.applied_operation_id, row.applied_fence = row.operation_id, row.fence
                     row.update_time = datetime.now(UTC).replace(tzinfo=None)

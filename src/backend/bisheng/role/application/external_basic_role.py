@@ -23,11 +23,11 @@ class ExternalBasicRoleApplication:
         self.repository = repository
         self.service = RoleExternalBasicRoleService(repository)
 
-    async def reserve_external_basic_role(self, connection_id, tenant_id):
-        return await self.repository.reserve(connection_id, tenant_id)
+    async def reserve_external_basic_role(self, connection_id, tenant_id, *, force: bool = False):
+        return await self.repository.reserve(connection_id, tenant_id, force=force)
 
-    async def ensure_external_basic_role(self, operation):
-        return await self.service.ensure(operation)
+    async def ensure_external_basic_role(self, operation, *, force: bool = False):
+        return await self.service.ensure(operation, force=force)
 
     async def read_external_basic_role(self, connection_id, tenant_id):
         async with self.repository.session(tenant_id) as session:
