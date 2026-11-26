@@ -76,6 +76,7 @@ before choosing retrieval keywords.
 | 26040 | the administrator turned the capability off | the key is intact and resumes working when re-enabled — tell the user to contact their administrator, do not re-issue |
 | 26043 | the key's holder was deactivated or removed | tell the user to contact their administrator; re-issuing an identical key will not help |
 | **26044** | **the administrator restricted retrieval to the user's own knowledge bases** | do **not** retry and do not re-issue; the listing endpoints already reflect the restricted set — work within it, and tell the user to contact their administrator if they need wider access |
+| 26050 | the personal token is not allowed to call this endpoint | personal tokens are limited to the knowledge list, file list, retrieval, create, update and upload endpoints; do not retry and do not re-issue — the listing endpoints already show what is available, and the user should use a connector or service-account key for anything else |
 | 404 | resource not found *or* not visible to the holder | treat as non-existent; never probe for existence |
 
 Data-scope note: an administrator may narrow every personal token to the
