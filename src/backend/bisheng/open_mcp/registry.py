@@ -57,7 +57,7 @@ TOOL_DEFINITIONS = (
     McpToolDefinition(
         "bisheng_knowledge_list",
         "查询知识资源列表",
-        "按类型分页查询当前身份可见的知识库、问答库或知识空间。",
+        "分页查询当前身份可见的知识资源；省略 type 时同时返回文档库和知识空间两类。",
         "GET",
         "/api/v2/filelib/",
         "knowledge:read",

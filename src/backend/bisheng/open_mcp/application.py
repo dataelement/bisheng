@@ -8,6 +8,8 @@ to run in the existing domain/application services.
 
 from __future__ import annotations
 
+import base64
+import json
 from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks
@@ -17,7 +19,10 @@ from starlette.requests import Request
 from bisheng.api.v1.schemas import ExcelRule, KnowledgeFileOne, KnowledgeFileProcess
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
-from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
+from bisheng.common.errcode.open_api import (
+    OpenApiAuthDependencyUnavailableError,
+    OpenApiListCursorInvalidError,
+)
 from bisheng.common.errcode.permission import PermissionServiceUnavailableError
 from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
 from bisheng.core.database import get_async_db_session
@@ -80,8 +85,85 @@ def _space_service(request: Request, login_user, version_repo, doc_repo) -> Know
     return service
 
 
+_MERGED_CURSOR_PREFIX = "mcp_all:"
+_MERGED_CURSOR_VERSION = 1
+
+
+def _encode_merged_cursor(cursor_doc: str | None, cursor_space: str | None) -> str:
+    """把两类的子游标打包成一个游标，供省略 type 的合并列表翻页。"""
+    payload = json.dumps(
+        {"v": _MERGED_CURSOR_VERSION, "d": cursor_doc, "s": cursor_space},
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return _MERGED_CURSOR_PREFIX + base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _decode_merged_cursor(cursor: str | None) -> tuple[str | None, str | None]:
+    """拆出合并游标里的两类子游标；不是合并游标就报错，避免被当成页码用。"""
+    if not cursor:
+        return None, None
+    if not cursor.startswith(_MERGED_CURSOR_PREFIX):
+        raise OpenApiListCursorInvalidError().http_exception()
+    raw = cursor[len(_MERGED_CURSOR_PREFIX):]
+    padding = "=" * (-len(raw) % 4)
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(raw + padding).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise OpenApiListCursorInvalidError().http_exception()
+    if not isinstance(payload, dict) or payload.get("v") != _MERGED_CURSOR_VERSION:
+        raise OpenApiListCursorInvalidError().http_exception()
+    return payload.get("d"), payload.get("s")
+
+
+async def _list_all_types(*, request: Request, command, login_user, version_repo, doc_repo):
+    """省略 type 时的合并列表：文档库（type=0）和知识空间（type=3）各取一页。
+
+    每类各取 page_size 条，所以一页最多 2 * page_size 条；翻页游标同时带两类的子游标，
+    两类都取完才 has_more=false。
+    """
+    cursor_doc, cursor_space = _decode_merged_cursor(command.cursor)
+    doc_page = await KnowledgeService.get_knowledge(
+        request,
+        login_user,
+        KnowledgeTypeEnum.NORMAL.value,
+        name=command.name,
+        sort_by=command.sort_by,
+        page_size=command.page_size,
+        cursor=cursor_doc,
+    )
+    space_page = await _space_service(request, login_user, version_repo, doc_repo).alist_mine_and_joined_cursor(
+        name=command.name,
+        page_size=command.page_size,
+        cursor=cursor_space,
+    )
+    doc_data = doc_page.get("data") or []
+    space_data = space_page.get("data") or []
+    has_more = bool(doc_page.get("has_more")) or bool(space_page.get("has_more"))
+    next_cursor = None
+    if has_more:
+        next_cursor = _encode_merged_cursor(doc_page.get("next_cursor"), space_page.get("next_cursor"))
+    return {
+        "data": list(doc_data) + list(space_data),
+        "page_size": command.page_size,
+        "has_more": has_more,
+        "next_cursor": next_cursor,
+    }
+
+
 async def list_knowledge(*, request: Request, command, version_repo, doc_repo):
     login_user = await get_open_api_operator_async()
+    if command.resource_type is None:
+        return await _list_all_types(
+            request=request,
+            command=command,
+            login_user=login_user,
+            version_repo=version_repo,
+            doc_repo=doc_repo,
+        )
+    if command.cursor and command.cursor.startswith(_MERGED_CURSOR_PREFIX):
+        # 合并游标只属于省略 type 的模式，传给单类列表要明确报错
+        raise OpenApiListCursorInvalidError().http_exception()
     if command.resource_type in _KB_TYPES:
         return await KnowledgeService.get_knowledge(
             request,

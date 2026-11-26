@@ -192,6 +192,14 @@ class PersonalTokenHolderInvalidError(OpenApiAuthError):
     http_status = 401
 
 
+class OpenApiListCursorInvalidError(OpenApiAuthError):
+    """The cursor was produced by a different listing mode (merged or single type)."""
+
+    Code = 26051
+    Msg = "Cursor does not belong to this listing mode"
+    http_status = 400
+
+
 class PersonalTokenEndpointNotAllowedError(OpenApiAuthError):
     """Personal tokens may only call the knowledge list, file list and retrieve endpoints.
 

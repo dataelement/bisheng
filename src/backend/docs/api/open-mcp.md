@@ -38,7 +38,7 @@ PAT 直接调用开放 API 的 HTTP 接口时同样只开放这 6 个：`GET /ap
 
 | 工具 | scope | PAT | 主要输入 | 成功输出 |
 |---|---|---:|---|---|
-| `bisheng_knowledge_list` | `knowledge:read` | 是 | `type?`, `name?`, `sort_by?`, `page_size?`, `cursor?` | `ResourceListData` |
+| `bisheng_knowledge_list` | `knowledge:read` | 是 | `type?`（省略则文档库和知识空间两类都返回）, `name?`, `sort_by?`, `page_size?`, `cursor?` | `ResourceListData` |
 | `bisheng_knowledge_create` | `knowledge:write` | 是 | `name`, `type?`, `description?`, `model?`, `auth_type?`, `is_released?` | `KnowledgeResource` |
 | `bisheng_knowledge_update` | `knowledge:write` | 是 | `knowledge_id`, `name?`, `description?` | `KnowledgeResource` |
 | `bisheng_knowledge_delete` | `knowledge:write` | 否 | `knowledge_id` | `{"success":true}` |
@@ -55,6 +55,7 @@ PAT 直接调用开放 API 的 HTTP 接口时同样只开放这 6 个：`GET /ap
 客户端忽略：
 
 - `type` 为 `0` 或 `1` 时，创建工具的 `model` 必填。
+- 列表工具 `bisheng_knowledge_list` 的 `type` 可省略：省略时同时返回文档库（`type=0`）和知识空间（`type=3`），每类各取 `page_size` 条，所以一页最多 `2 * page_size` 条。省略模式翻页时 `next_cursor` 同时带两类的子游标，两类都取完才 `has_more=false`；这个游标只属于省略模式，传给显式 `type` 的调用会返回 26051，反之单类游标也不能当作省略模式的游标用（同样返回 26051）。显式传 `type` 的行为与之前完全一致。
 - 批量删除在 MCP 中为 object：`{"file_ids":[5001,5002]}`，不是顶层数组。
 - 上传不接受服务器本地 `file_path`；`content_base64` 和 `file_url` 必须二选一。
 - 成功返回的知识资源动作字段保留为 `actions`，文件标签保留为结构化
