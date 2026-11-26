@@ -15,7 +15,7 @@ describe('dataset API contract', () => {
         const data = { name: 'test', data_type: 'text' as const, source: 'ftp' as const, connection: { endpoint: 'ftp://files.example.com', password: 'secret' }, manifest_path: 'train.json', media_root: '' };
         vi.mocked(request.post).mockResolvedValueOnce(file).mockResolvedValueOnce({ ...file, dataset_report: { ...file.dataset_report, validated: false } });
         expect(await importTrainingDataset(data)).toEqual({ ...file, num: 8 });
-        expect(request.post).toHaveBeenCalledWith('/api/v1/finetune/datasets/import', data, { timeout: 600000, showError: false });
+        expect(request.post).toHaveBeenCalledWith('/api/v1/finetune/dataset-catalog/import', data, { timeout: 600000, showError: false });
         await expect(importTrainingDataset(data)).rejects.toThrow('Dataset validation did not complete');
     });
     it('uses the selected immutable version for preview and authenticated blob downloads', async () => {

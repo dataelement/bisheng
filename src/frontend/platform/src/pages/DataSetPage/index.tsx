@@ -1,127 +1,114 @@
-// @ts-strict-ignore
-import { Pagination, Button, SearchInput, notification } from '@bisheng/ui';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Button, Pagination, SearchInput, Select, Tag, toast } from '@bisheng/ui';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
+import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { usePaginationLocale } from '@/hooks/usePaginationLocale';
+import { userContext } from '@/contexts/userContext';
+import { showApiError } from '@/controllers/request';
+import { CatalogDataset, DatasetCategory, convertCatalogDataset, deleteCatalogDataset, downloadCatalogDataset, listDatasetCatalog } from '@/controllers/API/finetuneDatasets';
+import { downloadFile } from '@/util/utils';
+import { checkSassUrl } from '@/components/bs-comp/FileView';
+import { DatasetImportDialog } from '@/pages/ModelPage/components/DatasetImportDialog';
+import { SavedDatasetPreview } from '@/pages/ModelPage/components/SavedDatasetPreview';
+import CreateDataSet, { CreateDataSetHandle } from './CreateDataSet';
 
-import { checkSassUrl } from "@/components/bs-comp/FileView";
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-
-
-import { usePaginationLocale } from "@/hooks/usePaginationLocale";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-
-import { deleteDatasetApi, getFileUrlApi, getPresetFileApi } from "@/controllers/API/finetune";
-import { useTable } from "@/util/hook";
-import { downloadFile } from "@/util/utils";
-import { useContext, useEffect, useRef, useState } from "react";
-import { userContext } from "@/contexts/userContext";
-import { useTranslation } from "react-i18next";
-import CreateDataSet from "./CreateDataSet";
-
+const categories: DatasetCategory[] = ['legacy', 'text', 'image_text', 'video_text'];
 export default function DataSetPage() {
     const { user } = useContext(userContext);
-    const [viewRevision, setViewRevision] = useState(0);
+    const [revision, setRevision] = useState(0);
     useEffect(() => {
-        const reset = () => setViewRevision(value => value + 1);
-        window.addEventListener("bisheng:management-scope-changed", reset);
-        return () => window.removeEventListener("bisheng:management-scope-changed", reset);
+        const reset = () => setRevision(value => value + 1);
+        window.addEventListener('bisheng:management-scope-changed', reset);
+        return () => window.removeEventListener('bisheng:management-scope-changed', reset);
     }, []);
-    // Retire old rows, requests, pagination and dialogs before the new view loads.
-    return <DataSetContent key={`${user?.user_id}:${user?.leaf_tenant_id ?? user?.tenant_id}:${viewRevision}`} />;
+    return <DataSetContent key={`${user?.user_id}:${user?.leaf_tenant_id ?? user?.tenant_id}:${revision}`} />;
 }
 
 function DataSetContent() {
-    const active = useRef(true);
-    useEffect(() => {
-        active.current = true;
-        return () => { active.current = false; };
-    }, []);
-    const { t } = useTranslation();
+    const { t } = useTranslation('model');
+    const selectLabels = useSelectLabels();
     const paginationLocale = usePaginationLocale();
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
-        getPresetFileApi({ page_size: 20, page_num: param.page, keyword: param.keyword })
-    );
-
-    const handleDelete = (id) => {
-        bsConfirm({
-            desc: t('dataset.confirmDelete'),
-            onOk(next) {
-                if (!active.current) { next(); return Promise.resolve(); }
-                return deleteDatasetApi(id).then(() => {
-                    if (active.current) reload();
-                    next();
-                });
-            },
-        });
+    const [rows, setRows] = useState<CatalogDataset[]>([]);
+    const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
+    const [keyword, setKeyword] = useState('');
+    const [category, setCategory] = useState<DatasetCategory | 'all'>('all');
+    const [importType, setImportType] = useState<DatasetCategory>('text');
+    const [importOpen, setImportOpen] = useState(false);
+    const [preview, setPreview] = useState<CatalogDataset>();
+    const [loading, setLoading] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [failed, setFailed] = useState(false);
+    const [revision, setRevision] = useState(0);
+    const active = useRef(true);
+    const createRef = useRef<CreateDataSetHandle>(null);
+    useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+    const reload = useCallback(() => setRevision(value => value + 1), []);
+    useEffect(() => {
+        let current = true;
+        setLoading(true); setFailed(false);
+        void listDatasetCatalog({ page, limit: 20, keyword, ...(category !== 'all' ? { data_type: category } : {}) })
+            .then(result => { if (current) { setRows(result.data); setTotal(result.total); } })
+            .catch(() => { if (current) { setRows([]); setTotal(0); setFailed(true); } })
+            .finally(() => { if (current) setLoading(false); });
+        return () => { current = false; };
+    }, [page, keyword, category, revision]);
+    const handleConvert = async (row: CatalogDataset) => {
+        setBusy(true);
+        try {
+            await convertCatalogDataset(row.id);
+            if (active.current) { toast.show({ type: 'success', message: t('finetune.conversionSucceeded') }); reload(); }
+        } catch (error) { showApiError(error); }
+        finally { if (active.current) setBusy(false); }
     };
-
-    const modelRef = useRef(null);
-
-
-    const handleDownloadFile = async (name, url) => {
-        const res = await getFileUrlApi(url);
-        if (!active.current) return;
-        if (!res.url) {
-            return notification.open({ type: 'error', description: String(t('dataset.fileNotFound') ?? '') });
-        }
-        await downloadFile(checkSassUrl(res.url), name + '.json');
+    const handleDownload = async (row: CatalogDataset) => {
+        try {
+            const result = await downloadCatalogDataset(row.id);
+            if (active.current) await downloadFile(checkSassUrl(result.url), row.name + (row.url.endsWith('.zip') ? '.zip' : '.json'));
+        } catch (error) { showApiError(error); }
     };
-
-    return (
-        <div className="relative h-full px-2 py-4">
-            {loading && (
-                <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <LoadingIcon />
-                </div>
-            )}
-            <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
-                <div className="mr-2 flex justify-end gap-4 items-center">
-                    <SearchInput placeholder={t('dataset.name')} onChange={(e) => search(e.target.value)} className={"w-56 shrink-0"} />
-                    <Button onClick={() => modelRef.current.open()}>{t('dataset.create')}</Button>
-                </div>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[200px]">{t('dataset.name')}</TableHead>
-                            <TableHead>{t('dataset.creationTime')}</TableHead>
-                            <TableHead>{t('dataset.updateTime')}</TableHead>
-                            <TableHead>{t('dataset.createUser')}</TableHead>
-                            <TableHead className="text-right">{t('operations')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-
-                    <TableBody>
-                        {datalist.map((el) => (
-                            <TableRow key={el.id}>
-                                <TableCell className="font-medium max-w-[200px]">
-                                    <div className="truncate-multiline">{el.name}</div>
-                                </TableCell>
-                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                <TableCell className="max-w-[300px] break-all">
-                                    <div className="truncate-multiline">{el.user_name || '--'}</div>
-                                </TableCell>
-                                <TableCell onClick={() => { window.libname = el.name; }}>
-                                    <div className="flex justify-end gap-2">
-                                        <Button size="small" variant="link" onClick={() => handleDownloadFile(el.name, el.url)}>{t('dataset.download')}</Button>
-                                        <Button size="small" variant="link" color="danger" onClick={() => handleDelete(el.id)}>{t('delete')}</Button>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+    const handleDelete = (row: CatalogDataset) => bsConfirm({ desc: t('bs:dataset.confirmDelete'), onOk: async next => {
+        if (!active.current) { next(); return; }
+        await deleteCatalogDataset(row.id);
+        if (active.current) reload();
+        next();
+    } });
+    return <div className="relative h-full px-2 py-4">
+        <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10 space-y-4">
+            <div className="flex justify-end gap-3 items-center flex-wrap">
+                <SearchInput placeholder={t('bs:dataset.name')} onChange={event => { setKeyword(event.target.value); setPage(1); }} className="w-56" />
+                <Select {...selectLabels} value={category} aria-label={t('finetune.datasetCategory')} className="w-40" onChange={value => { setCategory(value as DatasetCategory | 'all'); setPage(1); }} options={[{ value: 'all', label: t('finetune.allDatasetCategories') }, ...categories.map(value => ({ value, label: t(`finetune.type_${value}`) }))]} />
+                <Button disabled={busy} onClick={() => setImportOpen(true)}>{t('finetune.datasetImport')}</Button>
+                <Button variant="outlined" onClick={() => createRef.current?.open()}>{t('finetune.addTextDataset')}</Button>
             </div>
-            <div className="bisheng-table-footer px-6 bg-background-login">
-                <div className="ml-auto">
-                    <Pagination locale={paginationLocale}
-                        current={page}
-                        pageSize={pageSize}
-                        total={total}
-                        onChange={(newPage) => setPage(newPage)}
-                    />
-                </div>
-            </div>
-            <CreateDataSet ref={modelRef} onChange={reload} />
+            {loading && <p role="status">{t('finetune.datasetLoading')}</p>}
+            {failed && <div role="alert"><span>{t('finetune.datasetListFailed')}</span><Button variant="link" onClick={reload}>{t('finetune.datasetRefresh')}</Button></div>}
+            <Table><TableHeader><TableRow>
+                <TableHead>{t('bs:dataset.name')}</TableHead><TableHead>{t('finetune.datasetCategory')}</TableHead><TableHead>{t('finetune.datasetOrigin')}</TableHead>
+                <TableHead>{t('bs:dataset.creationTime')}</TableHead><TableHead>{t('bs:dataset.createUser')}</TableHead><TableHead className="text-right">{t('bs:operations')}</TableHead>
+            </TableRow></TableHeader><TableBody>{rows.map(row => <TableRow key={row.id}>
+                <TableCell className="max-w-[240px] break-all">{row.name}</TableCell>
+                <TableCell><Tag>{t(`finetune.type_${row.data_type}`)}</Tag></TableCell><TableCell>{t(`finetune.datasetSource_${row.source_type}`)}</TableCell>
+                <TableCell>{row.create_time?.replace('T', ' ')}</TableCell><TableCell>{row.user_name || '--'}</TableCell>
+                <TableCell><div className="flex justify-end gap-2 flex-wrap">
+                    {row.data_type === 'legacy' && <Button size="small" variant="link" disabled={busy} onClick={() => void handleConvert(row)}>{t('finetune.convertToText')}</Button>}
+                    <Button size="small" variant="link" onClick={() => setPreview(row)}>{t('finetune.previewSamples')}</Button>
+                    <Button size="small" variant="link" disabled={row.dataset_report?.delivery === 'remote'} onClick={() => void handleDownload(row)}>{t('bs:dataset.download')}</Button>
+                    <Button size="small" variant="link" color="danger" onClick={() => handleDelete(row)}>{t('bs:delete')}</Button>
+                </div></TableCell>
+            </TableRow>)}</TableBody></Table>
+            {!loading && !failed && !rows.length && <p>{t('finetune.datasetEmpty')}</p>}
         </div>
-    );
+        <div className="bisheng-table-footer px-6 bg-background-login"><div className="ml-auto"><Pagination locale={paginationLocale} current={page} pageSize={20} total={total} onChange={setPage} /></div></div>
+        <CreateDataSet ref={createRef} onChange={reload} />
+        {importOpen && <DatasetImportDialog dataType={importType} onDataTypeChange={setImportType} onClose={() => setImportOpen(false)} onImported={() => { reload(); }} />}
+        <Dialog open={Boolean(preview)} onOpenChange={value => { if (!value) setPreview(undefined); }}><DialogContent className="max-w-[720px] max-h-[80vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>{preview?.name}</DialogTitle></DialogHeader>
+            {preview && (preview.dataset_report?.delivery === 'remote' && !preview.dataset_report.preview_url
+                ? <p>{t('finetune.datasetRemoteZipNoPreview')}</p> : <SavedDatasetPreview versionId={preview.id} kind="catalog" />)}
+        </DialogContent></Dialog>
+    </div>;
 }

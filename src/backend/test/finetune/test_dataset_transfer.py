@@ -251,7 +251,7 @@ async def test_remote_version_job_sends_the_source_to_ft_and_stores_no_secret(mo
     )
     report = {"data_type": "image_text", "sha256": SHA, "delivery": "remote", "remote": REMOTE, "samples": 1}
 
-    async def validate(finetune):
+    async def validate(finetune, user=None):
         finetune.dataset_report = {"files": [report]}
 
     monkeypatch.setattr(FinetuneService, "validate_uploaded_datasets", validate)
@@ -259,7 +259,9 @@ async def test_remote_version_job_sends_the_source_to_ft_and_stores_no_secret(mo
     monkeypatch.setattr(
         FinetuneService,
         "get_sft_server",
-        AsyncMock(return_value=SimpleNamespace(id=1, server="gpu", endpoint="http://rt", sft_endpoint="http://ft:8000")),
+        AsyncMock(
+            return_value=SimpleNamespace(id=1, server="gpu", endpoint="http://rt", sft_endpoint="http://ft:8000")
+        ),
     )
     monkeypatch.setattr(FinetuneService, "verify_job_model_name", AsyncMock())
     monkeypatch.setattr(

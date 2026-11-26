@@ -46,10 +46,17 @@ class FinetuneBase(SQLModelSerializable):
     model_name: str = Field(index=True, max_length=50, description="Name of the training model")
     method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description="Training Methods")
     data_type: str | None = Field(default=None, max_length=32, description="Training data modality; NULL means legacy")
+    transient_upload_id: str | None = Field(default=None, max_length=64, unique=True, index=True)
     stage: str | None = Field(default=None, max_length=32, description="Detailed execution stage")
-    capability_snapshot: dict | None = Field(default=None, sa_column=Column(JsonType), description="Frozen model capability")
-    dataset_report: dict | None = Field(default=None, sa_column=Column(JsonType), description="Dataset validation report")
-    artifact_report: dict | None = Field(default=None, sa_column=Column(JsonType), description="Training artifact report")
+    capability_snapshot: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Frozen model capability"
+    )
+    dataset_report: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Dataset validation report"
+    )
+    artifact_report: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Training artifact report"
+    )
     inference_validation: dict | None = Field(
         default=None, sa_column=Column(JsonType), description="Clean-process inference result"
     )
@@ -89,7 +96,12 @@ class FinetuneBase(SQLModelSerializable):
         if v is None or not isinstance(v, list):
             raise ValueError("Finetune.train_data must be a list")
         for one in v:
-            if not (one.get("name", None) and one.get("url", None)):
+            if not (
+                one.get("upload_id")
+                or one.get("version_id")
+                or one.get("catalog_id")
+                or (one.get("name") and one.get("url"))
+            ):
                 raise ValueError('Finetune.train_data each item must be {name:"",url:"",num:0}')
         return v
 

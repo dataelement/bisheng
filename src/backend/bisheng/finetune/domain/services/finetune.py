@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import io
 import json
 import re
@@ -7,6 +8,7 @@ from typing import Any
 from aiohttp import ClientError
 from loguru import logger
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.finetune import (
@@ -237,7 +239,36 @@ class FinetuneService(MultimodalFinetuneService):
 
     @classmethod
     async def create_job(cls, finetune: Finetune, user: UserPayload, credentials=None) -> Finetune:
-        await cls.validate_uploaded_datasets(finetune)
+        from bisheng.common.errcode.finetune import TaskUploadAlreadyUsedError
+
+        from ..repositories.dataset_catalog import DatasetCatalogRepository
+
+        upload_id = (finetune.train_data or [{}])[0].get("upload_id") if len(finetune.train_data or []) == 1 else None
+        fingerprint = None
+        if upload_id:
+            if (
+                finetune.preset_data
+                or finetune.train_data[0].get("catalog_id")
+                or finetune.train_data[0].get("version_id")
+            ):
+                from bisheng.common.errcode.finetune import InvalidDatasetPackageError
+
+                raise InvalidDatasetPackageError()
+            config = {
+                key: getattr(finetune, key) for key in ("server", "base_model", "model_name", "data_type", "method")
+            }
+            config["parameters"] = finetune.extra_params
+            fingerprint = hashlib.sha256(json.dumps(config, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
+            existing = await DatasetCatalogRepository.job_by_upload(upload_id)
+            if existing:
+                if (
+                    existing.user_id != user.user_id
+                    or (existing.dataset_report or {}).get("request_fingerprint") != fingerprint
+                ):
+                    raise TaskUploadAlreadyUsedError()
+                await cls._get_job(existing.id)
+                return existing
+        await cls.validate_uploaded_datasets(finetune, user)
         _ = cls.validate_params(finetune)
         if finetune.extra_params.get("contract_version") != 2:
             # Contract v2 uses a tenant dataset version, already re-read from its record by validate_uploaded_datasets.
@@ -311,7 +342,23 @@ class FinetuneService(MultimodalFinetuneService):
                 mode = "source"
             finetune.dataset_report = {**finetune.dataset_report, "transfer": mode}
         # Persist the stable ID first, so a transport timeout never loses a running remote job.
-        finetune = await FinetuneDao.insert_one(finetune)
+        if fingerprint:
+            finetune.dataset_report = {**finetune.dataset_report, "request_fingerprint": fingerprint}
+        try:
+            finetune = await FinetuneDao.insert_one(finetune)
+        except IntegrityError:
+            if upload_id:
+                existing = await DatasetCatalogRepository.job_by_upload(upload_id)
+                if (
+                    existing
+                    and existing.user_id == user.user_id
+                    and (existing.dataset_report or {}).get("request_fingerprint") == fingerprint
+                ):
+                    await cls._get_job(existing.id)
+                    return existing
+                if existing:
+                    raise TaskUploadAlreadyUsedError() from None
+            raise
         try:
             sft_ret = await SFTBackend.create_job(
                 host=parse_server_host(finetune.sft_endpoint), job_id=finetune.id, params=command_params

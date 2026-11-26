@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { CreateTask } from './CreateTask';
@@ -6,13 +7,13 @@ import { FinetuneValidation } from './FinetuneValidation';
 import { CreateTaskList } from './CreateTaskList';
 import { ApiError } from '@bisheng/api-client';
 import { DatasetImportDialog, safeDatasetImportError, validDatasetEndpoint } from './DatasetImportDialog';
-import { getTrainingDatasetPreview, getTrainingDatasetMedia, importTrainingDataset, listTrainingDatasets } from '@/controllers/API/finetuneDatasets';
+import { getTrainingDatasetPreview, getTrainingDatasetMedia, importTrainingDataset, listTrainingDatasets, uploadCatalogDataset, getDatasetPreview } from '@/controllers/API/finetuneDatasets';
 import { compatibleTrainingFiles, selectableTrainingModels, validTrainingParameters } from './finetuneHelpers';
 import type { TrainingCapability, TrainingFile, TrainingTask } from '@/controllers/API/finetuneV2';
 import { discoverTrainingModels, listTrainingServices, preflightTraining, submitTraining, runTrainingInference, uploadTrainingFile, uploadValidationMedia } from '@/controllers/API/finetuneV2';
 
 vi.mock('@/controllers/API/finetuneV2', () => ({ listTrainingServices: vi.fn(), discoverTrainingModels: vi.fn(), preflightTraining: vi.fn(), submitTraining: vi.fn(), runTrainingInference: vi.fn(), uploadValidationMedia: vi.fn(), uploadTrainingFile: vi.fn() }));
-vi.mock('@/controllers/API/finetuneDatasets', () => ({ listTrainingDatasets: vi.fn(), importTrainingDataset: vi.fn(), getTrainingDatasetPreview: vi.fn(), getTrainingDatasetMedia: vi.fn() }));
+vi.mock('@/controllers/API/finetuneDatasets', () => ({ listTrainingDatasets: vi.fn(), importTrainingDataset: vi.fn(), getTrainingDatasetPreview: vi.fn(), getTrainingDatasetMedia: vi.fn(), uploadCatalogDataset: vi.fn(), getDatasetPreview: vi.fn(), getDatasetPreviewMedia: vi.fn() }));
 vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (promise: Promise<unknown>) => promise.catch(() => undefined) }));
 const report = { data_type: 'video_text' as const, samples: 6, media: 6, sha256: 'abc', validated: true };
 const dataset: TrainingFile = { id: 'data1', url: 'object/key', name: 'video.zip', num: 6, dataset_report: report };
@@ -22,6 +23,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listTrainingDatasets).mockResolvedValue({ data: [], total: 0 });
     vi.mocked(getTrainingDatasetPreview).mockResolvedValue({ samples: [] });
+    vi.mocked(getDatasetPreview).mockResolvedValue({ samples: [] });
+    vi.mocked(uploadCatalogDataset).mockResolvedValue(dataset);
     URL.createObjectURL = vi.fn(() => 'blob:preview'); URL.revokeObjectURL = vi.fn();
 });
 describe('training capability and dataset boundaries', () => {
@@ -34,7 +37,7 @@ describe('training capability and dataset boundaries', () => {
     it('uses the authoritative upload sample count and report', async () => {
         vi.mocked(uploadTrainingFile).mockResolvedValue(dataset);
         const changed = vi.fn(); render(<CreateTaskList dataType="video_text" files={[]} onChange={changed} />);
-        fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImport' }));
+        fireEvent.click(screen.getByRole('button', { name: 'finetune.temporaryUpload' }));
         fireEvent.change(screen.getByLabelText('finetune.uploadDataset'), { target: { files: [new File(['data'], 'video.zip')] } });
         fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImportAndCheck' }));
         await waitFor(() => expect(changed).toHaveBeenCalledWith([dataset]));
@@ -42,7 +45,7 @@ describe('training capability and dataset boundaries', () => {
     it('does not accept an image dataset for a video task', async () => {
         vi.mocked(uploadTrainingFile).mockResolvedValue({ ...dataset, dataset_report: { ...report, data_type: 'image_text' } });
         const changed = vi.fn(); render(<CreateTaskList dataType="video_text" files={[]} onChange={changed} />);
-        fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImport' }));
+        fireEvent.click(screen.getByRole('button', { name: 'finetune.temporaryUpload' }));
         fireEvent.change(screen.getByLabelText('finetune.uploadDataset'), { target: { files: [new File(['data'], 'images.zip')] } });
         fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImportAndCheck' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('finetune.datasetTypeMismatch');
@@ -98,7 +101,7 @@ describe('formal single-page task submission', () => {
         await waitFor(() => expect(discoverTrainingModels).toHaveBeenCalledWith(7));
         await user.click(screen.getByRole('combobox', { name: 'finetune.baseModel' }));
         await user.click(await screen.findByRole('option', { name: 'Qwen3-0.6B' }));
-        fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImport' }));
+        fireEvent.click(screen.getByRole('button', { name: 'finetune.temporaryUpload' }));
         fireEvent.change(screen.getByLabelText('finetune.uploadDataset'), { target: { files: [new File(['data'], 'text.zip')] } });
         fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImportAndCheck' }));
         await screen.findByText('text.zip');
@@ -123,7 +126,7 @@ describe('single-package and epoch mode contract', () => {
         const old = { ...dataset, id: 'old', dataset_report: { ...report, sha256: 'old' } };
         const changed = vi.fn();
         render(<CreateTaskList dataType="video_text" files={[old]} onChange={changed} />);
-        fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImport' }));
+        fireEvent.click(screen.getByRole('button', { name: 'finetune.temporaryUpload' }));
         fireEvent.change(screen.getByLabelText('finetune.uploadDataset'), { target: { files: [new File(['data'], 'video.zip')] } });
         fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImportAndCheck' }));
         await waitFor(() => expect(changed).toHaveBeenCalledWith([dataset]));
@@ -338,5 +341,28 @@ describe('training method choice', () => {
         expect(sent.method).toBe('freeze');
         expect(sent.extra_params).toEqual(expect.objectContaining({ freeze_trainable_layers: 4, learning_rate: 0.0001 }));
         expect(sent.extra_params).not.toHaveProperty('lora_rank');
+    });
+});
+
+
+describe('temporary uploads remain outside the reusable dataset selector', () => {
+    it('shows a temporary selection without adding a version or reloading saved datasets', async () => {
+        const temporary = { ...dataset, id: 'temporary-id', upload_id: 'temporary-id', temporary: true, name: 'temporary.zip' };
+        vi.mocked(uploadTrainingFile).mockResolvedValue(temporary);
+        function Harness() {
+            const [files, setFiles] = useState<TrainingFile[]>([]);
+            return <CreateTaskList dataType="video_text" files={files} onChange={setFiles} />;
+        }
+        render(<Harness />);
+        await waitFor(() => expect(listTrainingDatasets).toHaveBeenCalledOnce());
+        fireEvent.click(screen.getByRole('button', { name: 'finetune.temporaryUpload' }));
+        fireEvent.change(screen.getByLabelText('finetune.uploadDataset'), { target: { files: [new File(['data'], 'temporary.zip')] } });
+        fireEvent.click(screen.getByRole('button', { name: 'finetune.datasetImportAndCheck' }));
+        await screen.findByText('finetune.temporaryDataset');
+        expect(screen.getByText('temporary.zip')).toBeVisible();
+        expect(listTrainingDatasets).toHaveBeenCalledOnce();
+        expect(uploadCatalogDataset).not.toHaveBeenCalled();
+        expect(importTrainingDataset).not.toHaveBeenCalled();
+        expect(getDatasetPreview).toHaveBeenCalledWith('temporary-id', 'temporary');
     });
 });

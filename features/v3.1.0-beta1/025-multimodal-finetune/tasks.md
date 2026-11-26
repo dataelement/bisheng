@@ -9,8 +9,9 @@
 
 | 步骤 | 状态 | 备注 |
 |---|---|---|
-| spec.md | ✅ 已评审 | 用户已确认 |
-| design.md | ✅ 已评审 | 用户已确认；接手时第一入口 |
+| Discovery（数据集迭代） | ✅ 已确认 | 2026-11-25 用户确认 D1—D5 |
+| spec.md | ✅ 已评审 | 2026-11-26 用户确认本轮规格；AC-40—AC-52 及 AC-09/24/26/27/29 修订 |
+| design.md | ✅ 已评审 | 2026-11-26 用户确认数据集迭代设计 |
 | tasks.md | ✅ 已拆解 | 11月3日新增已确认的数据集版本与远程导入任务 |
 | 实现 | 🟨 进行中 | 2026-11-19：远程数据直达训练服务和 2 GB 本地上传已在两机环境实测通过；旧训练方式去留、GPU 数据副本清理待用户决定 |
 
@@ -252,3 +253,105 @@
   **未覆盖**: Qwen2.5-1.5B、Qwen2-VL-2B 和视频的 Freeze / 全量，效果评估。
   **覆盖 AC**: AC-38, AC-39
 
+
+## 数据集迭代实施（2026-11-26 设计已确认）
+
+以下为本次增量，旧波次状态不自动改为通过。业务实现仅改 Platform 与平台后端；Client 只同步生成的错误码，Worker、FT 不改。自动检查通过与目标环境联合验收分别记录。
+
+- [x] **T033** [基础设施] 目录/任务模型与 DDL
+  **文件**: `src/backend/bisheng/finetune/domain/models/preset_train.py`、`finetune.py`（同目录）；`src/backend/bisheng/core/database/alembic/versions/v3_1_0_f025_dataset_catalog.py`
+  **逻辑**: 分类、来源、版本/来源关联、软删除及唯一上传 ID；接当前唯一 head。应用回退保留新增列与原数据，不执行删列 downgrade；结构 downgrade 仅去掉本 revision 新字段/索引。
+
+- [x] **T042** [基础设施] 错误码及三语生成
+  **文件**: `src/backend/bisheng/common/errcode/finetune.py`、`src/frontend/packages/locales/src/api_errors/{en,ja,zh-Hans}.json` 及生成产物
+  **逻辑**: 核对 10134/10135 无占用后定义；单一来源生成两端语言包，无 Client 业务修改。
+
+- [x] **T050** [基础设施] 上传代理配置适配
+  **文件**: `docker/nginx/conf.d/default.conf`、`src/frontend/nginx.conf`、`docker/helm/bisheng/templates/configmap-nginx.yaml`
+  **逻辑**: 新目录 files/import/convert 路由沿用任务上传的 2100m/1800s/关闭请求缓冲；修改同一条规则，不新增 location 体系。三份匹配与反例校验通过，真实 Nginx/网关验收见 T051。
+
+- [x] **T034** [后端 Domain · 测试] 目录与转换
+  **文件**: `src/backend/test/finetune/test_dataset_catalog.py`
+  **逻辑**: 会话保留、坏格式位置、SQL 分类分页、目录/版本事务、软删除、错误租户版本关联及历史登记 dry-run/重复执行。
+  **覆盖 AC**: AC-40, AC-41, AC-42, AC-43, AC-44, AC-45
+  **依赖**: T033, T042
+
+- [x] **T035** [后端 Domain] 格式转换与目录仓储
+  **文件**: `src/backend/bisheng/finetune/domain/services/legacy_dataset.py`、`src/backend/bisheng/finetune/domain/repositories/dataset_catalog.py`
+  **逻辑**: 纯函数 classify/convert，保留 system/history/input；Repository 提供 list/find/save/delete 与历史分页，严格租户作用域及目录/版本同事务。
+  **依赖**: T034
+
+- [x] **T036** [后端 Domain] 持久导入与旧入口
+  **文件**: `src/backend/bisheng/finetune/domain/services/datasets.py`、`finetune_file.py`（同目录）
+  **逻辑**: 按预期分类复核本地/远程内容；旧格式只保存目录，显式转换生成新文本；旧本地加入与 QA 调用保存新版 messages，原权限检查保留。
+  **依赖**: T035
+
+- [x] **T037** [后端 Domain · 测试] 临时上传与重试
+  **文件**: `src/backend/test/finetune/test_task_uploads.py`；重试 HTTP 断言见 T049
+  **逻辑**: 真实格式检查，断言不调用两个数据表 save；用户归属、过期、空名称失败后重试、重复提交与不同配置拒绝。
+  **覆盖 AC**: AC-29, AC-46, AC-47, AC-48, AC-51, AC-52
+  **依赖**: T033, T042
+
+- [x] **T038** [后端 Domain] 临时凭证与权威解析
+  **文件**: `src/backend/bisheng/finetune/domain/services/task_uploads.py`、`multimodal.py`（同目录）
+  **逻辑**: 私有对象及 Redis 24h 凭证绑定 tenant/user；返回 upload_id；任务提交按 upload_id 或活动 catalog/version 重查，覆盖浏览器报告。
+  **依赖**: T036, T037
+
+- [x] **T039** [后端 Domain] 创建幂等
+  **文件**: `src/backend/bisheng/finetune/domain/services/finetune.py`
+  **逻辑**: 同上传、同用户、同配置返回已创建任务；不同配置 10135；唯一上传约束解决并发写入冲突，复查当前服务归属后返回，FT 不重复创建。
+  **依赖**: T038
+
+- [x] **T040** [后端 API · 测试] API 权限与响应
+  **文件**: `src/backend/test/finetune/test_dataset_catalog_api.py`；既有 `test_dataset_menu_api.py` 与 `test_finetune_menu_api.py` 仅调整对应目录/临时契约夹具
+  **逻辑**: 数据集/模型菜单允许拒绝配对，列表响应、跨租户、临时归属；普通用户作用域和软删除不受伪造客户端字段影响。
+  **覆盖 AC**: AC-24, AC-26, AC-27, AC-29, AC-40, AC-45, AC-46, AC-49, AC-50, AC-52
+  **依赖**: T039
+
+- [x] **T041** [后端 API] 目录与临时路由
+  **文件**: `src/backend/bisheng/finetune/api/finetune.py`、`src/backend/bisheng/finetune/schemas.py`
+  **逻辑**: dataset-catalog 列表/持久导入/转换/删除/预览/下载用数据集权限；job/file 与 task-uploads 预览用任务权限；旧接口兼容与安全解析沿用。
+  **依赖**: T040
+
+- [x] **T043** [后端 Domain] 兼容登记脚本
+  **文件**: `src/backend/scripts/register_f025_dataset_catalog.py`、`src/backend/scripts/README.md`
+  **逻辑**: 默认 dry-run，显式 tenant-id，--apply 才写；分页检查真实格式与哈希，只登记 training，不复活删除项；保留原文件，错误按 ID 输出并退出非零。测试见 T034。
+  **依赖**: T036
+
+- [x] **T044** [前端 Platform] HTTP 类型与选数来源
+  **文件**: `src/frontend/platform/src/controllers/API/finetuneDatasets.ts`、`finetuneV2.ts`（同目录）；`src/frontend/packages/api-client/src/requestScopeRoutes.json` 为官方脚本生成产物
+  **逻辑**: 目录数据与临时凭证类型、保存/临时 API 分开；scope 清单新增 10 条路由，原条目不变。旧 preset POST 去掉尾部空格。
+  **依赖**: T041
+
+- [x] **T045** [前端 Platform] 目录页面
+  **文件**: `src/frontend/platform/src/pages/DataSetPage/index.tsx`
+  **逻辑**: 四分类及独立来源标签、筛选、显式转换、预览/下载/删除；保留 CreateDataSet 本地/QA 入口，管理作用域切换撤销旧响应与确认回调。
+  **依赖**: T044
+
+- [x] **T046** [前端 Platform] 任务临时上传与预览
+  **文件**: `src/frontend/platform/src/pages/ModelPage/components/CreateTaskList.tsx`、`TemporaryDatasetUpload.tsx`、`SavedDatasetPreview.tsx`
+  **逻辑**: 下拉只加载保存的匹配类型目录；临时本地上传独立卡片/预览，不加入候选数组；类型切换清空旧选择，保留鉴权 Blob 与卸载清理。
+  **依赖**: T044
+
+- [x] **T047** [前端 Platform] 持久导入及三语文案
+  **文件**: `src/frontend/platform/src/pages/ModelPage/components/DatasetImportDialog.tsx`、`src/frontend/platform/public/locales/{en-US,ja,zh-Hans}/model.json`
+  **逻辑**: 目录页复用现有连接器表单，四类选择；任务临时弹窗不承诺复用；三语分类、来源与转换提示齐全。
+  **依赖**: T045, T046
+
+- [x] **T048** [前端 Platform · 测试] 目录与任务交互
+  **文件**: `src/frontend/platform/src/pages/DataSetPage/index.test.tsx`、`src/frontend/platform/src/pages/ModelPage/components/finetuneV2.test.tsx`；已有 API 测试复用
+  **逻辑**: 分类筛选、显式转换后旧数据保留、临时不进入候选、类型切换、错误重试和旧作用域撤销。
+  **覆盖 AC**: AC-40, AC-41, AC-43, AC-45, AC-46, AC-47, AC-49, AC-50, AC-51
+  **依赖**: T047
+
+- [x] **T049** [后端 API · 自动验收] 隔离 HTTP E2E 与质量检查
+  **文件**: `src/backend/test/e2e/test_e2e_f025_datasets.py`；`dataset-iteration-validation.md`、`dataset-iteration-code-review.md`
+  **逻辑**: SQLite/真实 Service/ASGI，受控对象与缓存、菜单普通用户；测试前缀及独立库自动销毁。覆盖转换、无入库、失败重试、凭证过期后的任务快照及幂等；ruff/arch-guard/lint/typecheck/i18n/build 与七维复核。明确不是登录/真实 MinIO/GPU 验收。
+  **覆盖 AC**: AC-40, AC-41, AC-42, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-49, AC-50, AC-51, AC-52
+  **依赖**: T043, T048, T050
+
+- [ ] **T051** [前端 Platform · 联合验收] 目标环境浏览器与部署配置
+  **文件**: `e2e-checklist.md`、`test-cases.md`（本目录）
+  **逻辑**: 更新指定走查项目后执行迁移/兼容登记核对、真实四类/来源导入、旧本地/QA 入口、普通用户/跨租户、真实大文件代理和 FT 三类训练；MySQL/DM8 部署回归分别留证。当前未更新 109/20，不以本地测试冒充完成。
+  **覆盖 AC**: AC-40, AC-41, AC-42, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-49, AC-50, AC-51, AC-52
+  **依赖**: T049

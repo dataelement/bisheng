@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from bisheng.common.errcode.finetune import FinetuneInferenceValidationError, InvalidDatasetPackageError
 from bisheng.finetune.domain.models.finetune import Finetune, FinetuneDao
 from bisheng.finetune.domain.repositories.dataset import FinetuneDatasetRepository
+from bisheng.finetune.domain.repositories.dataset_catalog import DatasetCatalogRepository
 from bisheng.finetune.domain.services.dataset_validation import inspect_package, validate_records
 from bisheng.finetune.domain.services.finetune import FinetuneService
 from bisheng.finetune.domain.sft_backend import SFTBackend
@@ -72,10 +73,18 @@ async def test_creation_reloads_authoritative_dataset_report(monkeypatch):
     record = SimpleNamespace(
         id="version",
         name="train.zip",
+        url="stored",
         purpose="training",
-        report={"data_type": "video_text", "samples": 6, "sha256": "actual"},
+        report={"data_type": "video_text", "samples": 6, "sha256": "actual", "validated": True},
     )
-    monkeypatch.setattr(FinetuneDatasetRepository, "find_by_url", AsyncMock(return_value=record))
+    monkeypatch.setattr(FinetuneDatasetRepository, "find_by_id", AsyncMock(return_value=record))
+    monkeypatch.setattr(
+        DatasetCatalogRepository,
+        "find_url",
+        AsyncMock(
+            return_value=SimpleNamespace(id="catalog", version_id="version", data_type="video_text", name="train.zip")
+        ),
+    )
     task = Finetune(
         extra_params={"contract_version": 2},
         data_type="video_text",
@@ -88,7 +97,7 @@ async def test_creation_reloads_authoritative_dataset_report(monkeypatch):
 
 
 async def test_arbitrary_or_cross_tenant_dataset_is_rejected(monkeypatch):
-    monkeypatch.setattr(FinetuneDatasetRepository, "find_by_url", AsyncMock(return_value=None))
+    monkeypatch.setattr(DatasetCatalogRepository, "find_url", AsyncMock(return_value=None))
     task = Finetune(extra_params={"contract_version": 2}, data_type="text", train_data=[{"url": "someone-elses-file"}])
     with pytest.raises(InvalidDatasetPackageError):
         await FinetuneService.validate_uploaded_datasets(task)
@@ -303,7 +312,12 @@ async def test_async_cancel_acceptance_does_not_claim_process_stopped(monkeypatc
 
 async def test_cancelled_sync_retries_final_log_if_fetch_failed(monkeypatch):
     task = SimpleNamespace(
-        id="job", status=1, stage="cancelling", log_path="old-log", reason="", extra_params={"contract_version": 2},
+        id="job",
+        status=1,
+        stage="cancelling",
+        log_path="old-log",
+        reason="",
+        extra_params={"contract_version": 2},
         sft_endpoint="http://ft",
     )
     monkeypatch.setattr(FinetuneService, "_get_job", AsyncMock(return_value=task))

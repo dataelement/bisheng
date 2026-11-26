@@ -1,6 +1,8 @@
 """Real dataset routes and ORM isolation for ordinary menu-authorized people."""
 
+import io
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -16,7 +18,9 @@ from bisheng.finetune.domain.models.dataset import FinetuneDataset
 from bisheng.finetune.domain.models.preset_train import PresetTrainDao
 from bisheng.finetune.domain.repositories import dataset as dataset_repository
 from bisheng.finetune.domain.repositories.file_download_repository import FileDownloadRepository
+from bisheng.finetune.domain.services import datasets as dataset_service
 from bisheng.finetune.domain.services import finetune_file as service
+from bisheng.finetune.domain.services import task_uploads
 from bisheng.knowledge.domain import upload_file_size
 from bisheng.knowledge.domain.models import knowledge as knowledge_model
 from bisheng.knowledge.domain.models import knowledge_file as qa_model
@@ -39,9 +43,14 @@ class Objects:
     async def put_object_tmp(self, object_name, file, **kwargs):
         await self.put_object(bucket_name=self.tmp_bucket, object_name=object_name, file=file)
 
-    async def get_object(self, bucket_name, object_name):
+    async def get_object(self, bucket_name=None, object_name=None):
+        bucket_name = bucket_name or self.bucket
         self.reads.append((bucket_name, object_name))
         return self.data[bucket_name, object_name]
+
+    def download_object_sync(self, bucket_name, object_name):
+        stream = io.BytesIO(self.data[bucket_name, object_name])
+        return SimpleNamespace(read=stream.read, close=stream.close, release_conn=lambda: None)
 
     async def get_share_link(self, object_name, bucket=None, **kwargs):
         self.signatures.append((bucket or self.bucket, object_name))
@@ -71,6 +80,8 @@ async def web(datasets, monkeypatch):
     web.menu_check = AsyncMock(side_effect=menu)
     monkeypatch.setattr(UserPayload, "assert_effective_web_menu_contains", web.menu_check)
     monkeypatch.setattr(service, "get_minio_storage", AsyncMock(return_value=web.objects))
+    monkeypatch.setattr(dataset_service, "get_minio_storage", AsyncMock(return_value=web.objects))
+    monkeypatch.setattr(task_uploads, "get_minio_storage", AsyncMock(return_value=web.objects))
     monkeypatch.setattr(FileDownloadRepository, "preset_by_object", AsyncMock(return_value=None))
     monkeypatch.setattr(FileDownloadRepository, "owned_jobs", AsyncMock(return_value=[]))
 
@@ -89,6 +100,7 @@ async def web(datasets, monkeypatch):
     async def redis_client():
         return redis
 
+    monkeypatch.setattr(task_uploads, "get_redis_client", redis_client)
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.preview_source_service.get_redis_client",
         redis_client,
@@ -250,7 +262,8 @@ async def test_qa_creation_keeps_source_read_checks_and_exports_real_rows(qa_sou
     )
     assert created["tenant_id"] == 60 and created["type"] == 1
     samples = json.loads(web.objects.data[web.objects.bucket, created["url"]])
-    assert {row["instruction"] for row in samples} == {"Question 6001", "Question 6002"}
+    assert {row["messages"][0]["content"] for row in samples} == {"Question 6001", "Question 6002"}
+    assert created["data_type"] == "text"
     assert web.source_access.await_count == 2
     for call in web.source_access.await_args_list:
         assert call.args == (web.user,)
@@ -337,15 +350,18 @@ async def test_unknown_or_foreign_personal_uploads_are_not_signed(web, url):
     assert response.json()["status_code"] == 10120 and not web.objects.signatures
 
 
-async def test_personal_model_uploads_stay_downloadable_only_in_their_original_scope(web):
+async def test_temporary_model_upload_preview_is_bound_to_its_original_scope(web):
     web.model_menu = True
-    uploaded = result(
-        await web.client.post(
-            "/api/v1/finetune/job/file", files={"files": ("training.json", b'[{"instruction": "q", "output": "a"}]')}
-        )
-    )[0]
-    assert "/60/849/" in uploaded["url"]
-    result(await web.client.get("/api/v1/finetune/job/file/download", params={"file_url": uploaded["url"]}))
+    payload = json.dumps(
+        [{"messages": [{"role": "user", "content": "q"}, {"role": "assistant", "content": "a"}]}]
+    ).encode()
+    uploaded = result(await web.client.post("/api/v1/finetune/job/file", files={"files": ("training.json", payload)}))[
+        0
+    ]
+    assert "/60/849/" in uploaded["url"] and uploaded["temporary"]
+    path = f"/api/v1/finetune/task-uploads/{uploaded['upload_id']}/preview"
+    assert result(await web.client.get(path))["samples"][0]["messages"][0]["content"] == "q"
     web.user.tenant_id = 70
-    response = await web.client.get("/api/v1/finetune/job/file/download", params={"file_url": uploaded["url"]})
-    assert response.json()["status_code"] == 10120
+    web.selected.tenant_id = 70
+    response = await web.client.get(path)
+    assert response.json()["status_code"] == 10134

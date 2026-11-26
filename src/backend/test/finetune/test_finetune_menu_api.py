@@ -116,14 +116,21 @@ async def test_model_menu_can_complete_task_form_without_dataset_or_admin_menu(t
     presets = result(await tasks.client.get("/api/v1/finetune/training-data"))
     assert presets["total"] == 3 and {row["tenant_id"] for row in presets["list"]} == {60}
     result(await tasks.client.get("/api/v1/finetune/training-data/download", params={"file_url": "dataset/60/0.json"}))
-    upload = result(await tasks.client.post("/api/v1/finetune/job/file", files={"files": ("train.json", b'[{"instruction": "q", "output": "a"}]')}))[0]
-    created = result(
+    upload = result(
         await tasks.client.post(
-            "/api/v1/finetune/job", json=payload(train_data=[{"name": "personal", "url": upload["url"]}])
+            "/api/v1/finetune/job/file",
+            files={
+                "files": (
+                    "train.json",
+                    b'[{"messages":[{"role":"user","content":"q"},{"role":"assistant","content":"a"}]}]',
+                )
+            },
         )
-    )
+    )[0]
+    created = result(await tasks.client.post("/api/v1/finetune/job", json=payload()))
     assert created["tenant_id"] == 60 and created["user_id"] == 849
-    assert tasks.signed == [upload["url"], "dataset/60/0.json"]
+    assert upload["temporary"]
+    assert tasks.signed == ["dataset/60/0.json"]
     service.SFTBackend.create_job.assert_awaited_once()
     assert {row["tenant_id"] for row in result(await tasks.client.get("/api/v1/finetune/job"))["data"]} == {60}
     result(await tasks.client.get("/api/v1/finetune/job/info?job_id=job-60"))
@@ -164,7 +171,18 @@ TASK_REQUESTS = [
     ("post", "/job/publish?job_id=job-60", {}),
     ("post", "/job/publish/cancel?job_id=job-60", {}),
     ("patch", "/job/model", {"json": {"id": "job-60", "model_name": "renamed"}}),
-    ("post", "/job/file", {"files": {"files": ("train.json", b'[{"instruction": "q", "output": "a"}]')}}),
+    (
+        "post",
+        "/job/file",
+        {
+            "files": {
+                "files": (
+                    "train.json",
+                    b'[{"messages":[{"role":"user","content":"q"},{"role":"assistant","content":"a"}]}]',
+                )
+            }
+        },
+    ),
     ("get", "/server/filters", {}),
     ("get", "/server/options", {}),
     ("get", "/model/list?server_id=60", {}),
@@ -208,7 +226,17 @@ async def test_foreign_historical_creator_jobs_never_reach_remote_backend(tasks,
 
 
 async def test_reassignment_revokes_old_jobs_services_and_training_sources(tasks):
-    upload = result(await tasks.client.post("/api/v1/finetune/job/file", files={"files": ("train.json", b'[{"instruction": "q", "output": "a"}]')}))[0]
+    upload = result(
+        await tasks.client.post(
+            "/api/v1/finetune/job/file",
+            files={
+                "files": (
+                    "train.json",
+                    b'[{"messages":[{"role":"user","content":"q"},{"role":"assistant","content":"a"}]}]',
+                )
+            },
+        )
+    )[0]
     result(await tasks.client.get("/api/v1/finetune/job/info?job_id=job-60"))
     tasks.user.tenant_id = 70
     assert result(await tasks.client.get("/api/v1/finetune/server/options")) == [{"id": 70, "server": "FT-70"}]

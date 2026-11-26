@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DatasetSample, getTrainingDatasetMedia, getTrainingDatasetPreview } from '@/controllers/API/finetuneDatasets';
+import { DatasetSample, getTrainingDatasetMedia, getTrainingDatasetPreview, getDatasetPreview, getDatasetPreviewMedia } from '@/controllers/API/finetuneDatasets';
 
-interface Props { versionId: string }
-export function SavedDatasetPreview({ versionId }: Props) {
+interface Props { versionId: string; kind?: 'version' | 'catalog' | 'temporary' }
+export function SavedDatasetPreview({ versionId, kind = 'version' }: Props) {
     const { t } = useTranslation('model');
     const [samples, setSamples] = useState<DatasetSample[]>([]);
     const [loading, setLoading] = useState(true);
@@ -12,17 +12,17 @@ export function SavedDatasetPreview({ versionId }: Props) {
         let active = true;
         const urls: string[] = [];
         setSamples([]); setFailed(false); setLoading(true);
-        void getTrainingDatasetPreview(versionId).then(async response => {
+        void (kind === 'version' ? getTrainingDatasetPreview(versionId) : getDatasetPreview(versionId, kind)).then(async response => {
             const rows = await Promise.all(response.samples.slice(0, 3).map(async sample => ({ ...sample,
                 media: await Promise.all(sample.media.slice(0, 2).map(async media => {
-                    const blob = await getTrainingDatasetMedia(versionId, media.url);
+                    const blob = await (kind === 'version' ? getTrainingDatasetMedia(versionId, media.url) : getDatasetPreviewMedia(versionId, kind, media.url));
                     if (!active) return { ...media, url: '' };
                     const url = URL.createObjectURL(blob); urls.push(url); return { ...media, url };
                 })) })));
             if (active) setSamples(rows);
         }).catch(() => { if (active) setFailed(true); }).finally(() => { if (active) setLoading(false); });
         return () => { active = false; urls.forEach(url => URL.revokeObjectURL(url)); };
-    }, [versionId]);
+    }, [versionId, kind]);
     return <details className="pt-2"><summary className="text-sm cursor-pointer">{t('finetune.previewSamples')}</summary>
         {loading && <p role="status" className="text-sm">{t('finetune.datasetPreviewLoading')}</p>}
         {failed && <p role="alert" className="text-sm">{t('finetune.previewUnavailable')}</p>}

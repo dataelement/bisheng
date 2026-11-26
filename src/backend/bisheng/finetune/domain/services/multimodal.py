@@ -130,21 +130,63 @@ class MultimodalFinetuneService:
         return data
 
     @classmethod
-    async def validate_uploaded_datasets(cls, finetune):
+    async def validate_uploaded_datasets(cls, finetune, user=None):
         if finetune.extra_params.get("contract_version") != 2:
             return
         if finetune.preset_data or len(finetune.train_data or []) != 1:
-            raise InvalidDatasetPackageError.http_exception(msg="Select exactly one uploaded dataset version")
-        reports = []
-        for item in finetune.train_data:
-            record = await FinetuneDatasetRepository.find_by_url(item.get("url", ""))
-            if not record or record.purpose != "training" or record.report.get("data_type") != finetune.data_type:
+            raise InvalidDatasetPackageError.http_exception(msg="Select exactly one dataset")
+        from types import SimpleNamespace
+
+        from ..repositories.dataset_catalog import DatasetCatalogRepository
+        from .task_uploads import TaskUploadService
+
+        user = user or SimpleNamespace(user_id=finetune.user_id)
+        item = finetune.train_data[0]
+        if item.get("upload_id"):
+            if item.get("catalog_id") or item.get("version_id"):
                 raise InvalidDatasetPackageError()
-            item["id"] = record.id
-            item["name"] = record.name
-            item["num"] = record.report["samples"]
-            reports.append({**record.report, "version_id": record.id})
-        finetune.dataset_report = {"files": reports}
+            record = await TaskUploadService.resolve(item["upload_id"], user)
+            report = record["dataset_report"]
+            if report["data_type"] != finetune.data_type:
+                raise InvalidDatasetPackageError()
+            finetune.transient_upload_id = record["upload_id"]
+            finetune.train_data = [
+                {
+                    "id": record["id"],
+                    "upload_id": record["upload_id"],
+                    "name": record["name"],
+                    "url": record["url"],
+                    "num": report["samples"],
+                }
+            ]
+        else:
+            if item.get("catalog_id"):
+                catalog = await DatasetCatalogRepository.find(item["catalog_id"])
+            elif item.get("version_id"):
+                catalog = await DatasetCatalogRepository.find(item["version_id"], version=True)
+            else:
+                catalog = await DatasetCatalogRepository.find_url(item.get("url", ""))
+            if not catalog or catalog.data_type != finetune.data_type or not catalog.version_id:
+                raise InvalidDatasetPackageError()
+            if item.get("version_id") and item["version_id"] != catalog.version_id:
+                raise InvalidDatasetPackageError()
+            version = await FinetuneDatasetRepository.find_by_id(catalog.version_id)
+            if not version or version.purpose != "training" or version.report.get("data_type") != finetune.data_type:
+                raise InvalidDatasetPackageError()
+            report = {**version.report, "version_id": version.id, "catalog_id": catalog.id}
+            finetune.train_data = [
+                {
+                    "id": version.id,
+                    "version_id": version.id,
+                    "catalog_id": catalog.id,
+                    "name": catalog.name,
+                    "url": version.url,
+                    "num": report["samples"],
+                }
+            ]
+        if report.get("validated") is not True:
+            raise InvalidDatasetPackageError()
+        finetune.dataset_report = {"files": [report]}
 
     @classmethod
     async def upload_validation_media(cls, job_id, file, user):

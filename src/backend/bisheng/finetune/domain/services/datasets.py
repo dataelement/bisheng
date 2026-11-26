@@ -6,8 +6,10 @@ import zipfile
 from urllib.parse import urlencode
 
 from fastapi import UploadFile
+from minio.error import S3Error
 from PIL import Image
 from starlette.datastructures import Headers
+from urllib3.exceptions import HTTPError
 
 from bisheng.common.errcode.finetune import InvalidDatasetPackageError, TrainFileNotExistError
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -15,9 +17,12 @@ from bisheng.finetune.domain.repositories.dataset import FinetuneDatasetReposito
 from bisheng.utils import generate_uuid
 
 from ..models.dataset import FinetuneDataset
+from ..models.preset_train import PresetTrain
+from ..repositories.dataset_catalog import DatasetCatalogRepository
 from .dataset_validation import LEGACY_PREVIEW_MAX_BYTES, MANIFEST_NAMES, PREVIEW_SAMPLES, parse_manifest, safe_path
 from .finetune_file import FinetuneFileService
-from .remote_dataset import RemoteDatasetError, plan_remote_dataset, public_source
+from .legacy_dataset import classify_records, convert_legacy_records
+from .remote_dataset import RemoteDatasetError, plan_remote_dataset, public_source, remote_reader
 
 
 class DatasetService:
@@ -35,16 +40,48 @@ class DatasetService:
 
     @classmethod
     async def list_versions(cls, data_type, page, limit):
-        records, total = await FinetuneDatasetRepository.list_training(data_type, page, limit)
-        return {"data": [cls.public_version(record) for record in records], "total": total}
+        rows, total = await DatasetCatalogRepository.list(data_type=data_type, page=page, limit=limit, ready_only=True)
+        return {
+            "data": [
+                {
+                    **cls.public_version(version),
+                    "catalog_id": catalog.id,
+                    "data_type": catalog.data_type,
+                    "source_type": catalog.source_type,
+                }
+                for catalog, version in rows
+            ],
+            "total": total,
+        }
 
     @classmethod
     async def import_version(cls, request, user):
+        remote_request = request.model_copy(update={"data_type": "text"}) if request.data_type == "legacy" else request
         try:
-            plan, records, preview, facts = await asyncio.to_thread(plan_remote_dataset, request)
+            plan, records, preview, facts = await asyncio.to_thread(plan_remote_dataset, remote_request)
         except RemoteDatasetError as exc:
             raise InvalidDatasetPackageError(msg=str(exc)) from None
         name = request.name.strip().replace("/", "_").replace("\\", "_")
+        if plan is not None and request.data_type in {"legacy", "text"}:
+            from .dataset_validation import TEXT_MAX_BYTES
+
+            def read_text_zip():
+                with remote_reader(remote_request) as session:
+                    return session.read(plan["zip"]["path"], TEXT_MAX_BYTES + 1024 * 1024)
+
+            try:
+                content = await asyncio.to_thread(read_text_zip)
+            except RemoteDatasetError as exc:
+                raise InvalidDatasetPackageError(msg=str(exc)) from None
+            upload = UploadFile(io.BytesIO(content), filename=name + ".zip", size=len(content))
+            try:
+                return (
+                    await FinetuneFileService.upload_file(
+                        [upload], False, user, expected_type=request.data_type, name=name, source_type=request.source
+                    )
+                )[0]
+            finally:
+                await upload.close()
         if plan is None:
             # Text rows are the data itself, so they are stored and validated like a local JSON upload.
             content = json.dumps(records, ensure_ascii=False).encode("utf-8")
@@ -55,7 +92,11 @@ class DatasetService:
                 headers=Headers({"content-type": "application/json"}),
             )
             try:
-                return (await FinetuneFileService.upload_file([upload], False, user))[0]
+                return (
+                    await FinetuneFileService.upload_file(
+                        [upload], False, user, expected_type=request.data_type, name=name, source_type=request.source
+                    )
+                )[0]
             finally:
                 await upload.close()
         content = json.dumps(plan, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -80,16 +121,166 @@ class DatasetService:
         }
         if preview:
             report = await FinetuneFileService.store_preview(url, report, preview)
-        record = await FinetuneDatasetRepository.save(
-            FinetuneDataset(id=version_id, name=name, url=url, report=report, user_id=user.user_id)
+        record = FinetuneDataset(id=version_id, name=name, url=url, report=report, user_id=user.user_id)
+        catalog = PresetTrain(
+            id=version_id,
+            name=name,
+            url=url,
+            user_id=str(user.user_id),
+            user_name=user.user_name,
+            data_type=request.data_type,
+            source_type=request.source,
+            version_id=version_id,
         )
-        return {"id": record.id, "name": record.name, "url": url, "dataset_report": report, "version_id": record.id}
+        await DatasetCatalogRepository.save(catalog, record)
+        return {
+            **cls.public_version(record),
+            "catalog_id": catalog.id,
+            "data_type": request.data_type,
+            "source_type": request.source,
+        }
+
+    @classmethod
+    async def download_catalog(cls, identifier):
+        record = await cls.get_catalog(identifier)
+        if record.version_id:
+            version = await FinetuneDatasetRepository.find_by_id(record.version_id)
+            if not version or version.url != record.url:
+                raise TrainFileNotExistError()
+        storage = await get_minio_storage()
+        return {"url": await storage.get_share_link(record.url, clear_host=False)}
+
+    @staticmethod
+    async def get_catalog(identifier):
+        record = await DatasetCatalogRepository.find(identifier)
+        if not record:
+            raise TrainFileNotExistError()
+        return record
+
+    @staticmethod
+    async def list_catalog(data_type=None, source_type=None, keyword=None, page=1, limit=20):
+        rows, total = await DatasetCatalogRepository.list(data_type, source_type, keyword, page, limit)
+        return {
+            "data": [
+                {**row.model_dump(), "dataset_report": version.report if version else None} for row, version in rows
+            ],
+            "total": total,
+        }
+
+    @classmethod
+    async def save_text(cls, name, records, user, source_type="local", source_dataset_id=None, source_sha256=None):
+        if classify_records(records) != "text":
+            raise InvalidDatasetPackageError(msg="Expected messages-format text")
+        content = json.dumps(records, ensure_ascii=False).encode("utf-8")
+        upload = UploadFile(io.BytesIO(content), filename=name + ".json", size=len(content))
+        try:
+            return (
+                await FinetuneFileService.upload_file(
+                    [upload],
+                    False,
+                    user,
+                    expected_type="text",
+                    name=name,
+                    source_type=source_type,
+                    source_dataset_id=source_dataset_id,
+                    source_sha256=source_sha256,
+                )
+            )[0]
+        finally:
+            await upload.close()
+
+    @classmethod
+    async def convert(cls, identifier, user):
+        catalog = await DatasetCatalogRepository.find(identifier)
+        if not catalog or catalog.data_type != "legacy":
+            raise TrainFileNotExistError()
+        records, digest = await cls.read_original(catalog.url)
+        try:
+            converted = convert_legacy_records(records)
+        except ValueError as exc:
+            raise InvalidDatasetPackageError(msg=str(exc)) from None
+        return await cls.save_text(
+            catalog.name + "-text",
+            converted,
+            user,
+            source_type=catalog.source_type,
+            source_dataset_id=catalog.id,
+            source_sha256=digest,
+        )
+
+    @staticmethod
+    async def read_original(url):
+        import tempfile
+
+        from .dataset_validation import TEXT_MAX_BYTES, UPLOAD_MAX_BYTES
+
+        storage = await get_minio_storage()
+
+        def read():
+            response = storage.download_object_sync(storage.bucket, url)
+            digest = hashlib.sha256()
+            try:
+                with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as stream:
+                    size = 0
+                    while chunk := response.read(1024 * 1024):
+                        size += len(chunk)
+                        if size > UPLOAD_MAX_BYTES:
+                            raise ValueError("Dataset exceeds the upload limit")
+                        digest.update(chunk)
+                        stream.write(chunk)
+                    stream.seek(0)
+                    if url.lower().endswith(".zip"):
+                        with zipfile.ZipFile(stream) as archive:
+                            manifest = next((n for n in MANIFEST_NAMES if n in archive.namelist()), None)
+                            if not manifest or archive.getinfo(manifest).file_size > TEXT_MAX_BYTES:
+                                raise ValueError("Missing or oversized text manifest")
+                            raw = archive.read(manifest)
+                    else:
+                        manifest = url
+                        raw = stream.read(TEXT_MAX_BYTES + 1)
+                        if len(raw) > TEXT_MAX_BYTES:
+                            raise ValueError("Text manifest exceeds 200 MiB")
+                    return parse_manifest(raw, manifest), digest.hexdigest()
+            finally:
+                response.close()
+                response.release_conn()
+
+        try:
+            return await asyncio.to_thread(read)
+        except (S3Error, HTTPError) as exc:
+            raise InvalidDatasetPackageError(msg="Dataset object is unavailable; check its storage") from exc
+        except (ValueError, OSError, zipfile.BadZipFile) as exc:
+            raise InvalidDatasetPackageError(msg=str(exc)) from None
+
+    @classmethod
+    async def catalog_preview(cls, identifier):
+        catalog = await DatasetCatalogRepository.find(identifier)
+        if not catalog:
+            raise TrainFileNotExistError()
+        if catalog.version_id and catalog.data_type != "legacy":
+            response = await cls.preview(catalog.version_id)
+            for sample in response["samples"]:
+                for media in sample["media"]:
+                    media["url"] = media["url"].replace(
+                        f"/datasets/{catalog.version_id}/", f"/dataset-catalog/{identifier}/"
+                    )
+            return response
+        records, _ = await cls.read_original(catalog.url)
+        try:
+            converted = convert_legacy_records(records)
+        except ValueError as exc:
+            raise InvalidDatasetPackageError(msg=str(exc)) from None
+        return {"samples": [{"messages": row["messages"], "media": []} for row in converted[:PREVIEW_SAMPLES]]}
 
     @classmethod
     async def _load(cls, version_id):
         """Return the version and the package its preview reads: the stored preview, or legacy full bytes."""
         record = await FinetuneDatasetRepository.find_by_id(version_id)
-        if not record or record.purpose != "training":
+        if (
+            not record
+            or record.purpose != "training"
+            or not await DatasetCatalogRepository.find(version_id, version=True)
+        ):
             raise TrainFileNotExistError()
         report = record.report
         if report.get("delivery") == "remote" and not report.get("preview_url"):

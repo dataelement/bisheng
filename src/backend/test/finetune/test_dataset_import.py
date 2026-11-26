@@ -12,6 +12,7 @@ from PIL import Image
 
 from bisheng.common.errcode.finetune import InvalidDatasetPackageError, TrainFileNotExistError
 from bisheng.finetune.domain.repositories.dataset import FinetuneDatasetRepository
+from bisheng.finetune.domain.repositories.dataset_catalog import DatasetCatalogRepository
 from bisheng.finetune.domain.services import datasets, remote_dataset
 from bisheng.finetune.domain.services.dataset_validation import inspect_package
 from bisheng.finetune.domain.services.datasets import DatasetService
@@ -23,6 +24,12 @@ from bisheng.finetune.domain.services.remote_dataset import (
     public_source,
 )
 from bisheng.finetune.schemas import DatasetImportReq
+
+
+@pytest.fixture(autouse=True)
+def persisted_catalog(monkeypatch):
+    monkeypatch.setattr(DatasetCatalogRepository, "find", AsyncMock(return_value=SimpleNamespace(id="catalog")))
+    monkeypatch.setattr(DatasetCatalogRepository, "save", AsyncMock(side_effect=lambda row, version=None: row))
 
 
 def request(**changes):
@@ -261,16 +268,18 @@ def test_s3_error_never_exposes_connector_credentials(monkeypatch):
 
 
 async def test_text_import_is_stored_like_a_local_json_upload(monkeypatch):
-    rows = [{"instruction": "q", "output": "a"}]
+    rows = [{"messages": [{"role": "user", "content": "q"}, {"role": "assistant", "content": "a"}]}]
     monkeypatch.setattr(datasets, "plan_remote_dataset", lambda req: (None, rows, None, {"samples": 1}))
 
-    async def upload(files, preset, user):
+    async def upload(files, preset, user, **kwargs):
         assert json.loads(await files[0].read()) == rows
         assert files[0].filename == "Customer dataset.json" and preset is False
         return [{"id": "immutable-version", "url": "stored.json", "dataset_report": {"samples": 1}}]
 
     monkeypatch.setattr(datasets.FinetuneFileService, "upload_file", upload)
-    result = await DatasetService.import_version(request(data_type="text"), SimpleNamespace(user_id=1))
+    result = await DatasetService.import_version(
+        request(data_type="text"), SimpleNamespace(user_id=1, user_name="tester")
+    )
     assert result["id"] == "immutable-version"
     assert "connection" not in result
 
@@ -289,7 +298,7 @@ async def test_media_import_stores_a_plan_and_preview_without_secrets(monkeypatc
         AsyncMock(side_effect=lambda url, report, preview: {**report, "preview_url": url + ".preview.zip"}),
     )
     monkeypatch.setattr(FinetuneDatasetRepository, "save", AsyncMock(side_effect=lambda record: record))
-    result = await DatasetService.import_version(req, SimpleNamespace(user_id=1))
+    result = await DatasetService.import_version(req, SimpleNamespace(user_id=1, user_name="tester"))
     stored = storage.put_object.call_args.kwargs
     assert stored["object_name"] == result["url"] and result["url"].endswith(".plan.json")
     assert json.loads(stored["file"]) == built[0]

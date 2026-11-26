@@ -65,7 +65,7 @@ class DatasetConnection(BaseModel):
 class DatasetImportReq(BaseModel):
     model_config = {"extra": "forbid", "hide_input_in_errors": True}
     name: str = Field(min_length=1, max_length=100)
-    data_type: Literal["text", "image_text", "video_text"]
+    data_type: Literal["legacy", "text", "image_text", "video_text"]
     source: Literal["ftp", "sftp", "s3"]
     connection: DatasetConnection = Field(repr=False, exclude=True)
     manifest_path: str | None = Field(default=None, max_length=2048)

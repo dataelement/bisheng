@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
 from loguru import logger
 from pydantic import ValidationError
@@ -13,6 +13,7 @@ from bisheng.finetune.domain.models.finetune import Finetune, FinetuneChangeMode
 from bisheng.finetune.domain.services.datasets import DatasetService
 from bisheng.finetune.domain.services.finetune import FinetuneService
 from bisheng.finetune.domain.services.finetune_file import FinetuneFileService
+from bisheng.finetune.domain.services.task_uploads import TaskUploadService
 
 from ..schemas import DatasetImportReq, FinetuneCreateReq, FinetuneInferenceReq, FinetunePreflightReq
 
@@ -160,7 +161,9 @@ async def upload_file(
     login_user: UserPayload = Depends(get_finetune_user),
 ):
     try:
-        ret = await FinetuneFileService.upload_file(files, False, login_user)
+        if len(files) != 1:
+            raise InvalidDatasetPackageError(msg="Upload exactly one dataset")
+        ret = [await TaskUploadService.upload(files[0], login_user)]
         return resp_200(ret)
     except Exception as e:
         logger.error(f"upload finetune file error: {e}")
@@ -253,7 +256,7 @@ async def get_training_data(
     keyword: str | None = None,
     login_user: UserPayload = Depends(get_finetune_user),
 ):
-    return resp_200(await FinetuneFileService.get_preset_file(keyword, page_size, page_num))
+    return resp_200(await FinetuneFileService.get_preset_file(keyword, page_size, page_num, data_type="legacy"))
 
 
 @router.get("/training-data/download")
@@ -291,7 +294,7 @@ async def parse_dataset_import(request: Request) -> DatasetImportReq:
 @router.post("/datasets/import")
 async def import_dataset(
     request: DatasetImportReq = Depends(parse_dataset_import),
-    login_user: UserPayload = Depends(get_finetune_user),
+    login_user: UserPayload = Depends(get_dataset_user),
 ):
     return resp_200(await DatasetService.import_version(request, login_user))
 
@@ -308,6 +311,99 @@ async def preview_dataset_media(
     content, content_type = await DatasetService.media(version_id, path)
     return Response(
         content,
+        media_type=content_type,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get("/dataset-catalog")
+async def list_dataset_catalog(
+    data_type: Literal["legacy", "text", "image_text", "video_text"] | None = None,
+    source_type: Literal["local", "ftp", "sftp", "s3", "qa", "collection"] | None = None,
+    keyword: str | None = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    login_user: UserPayload = Depends(get_dataset_user),
+):
+    return resp_200(await DatasetService.list_catalog(data_type, source_type, keyword, page, limit))
+
+
+@router.post("/dataset-catalog/files")
+async def import_catalog_files(
+    files: list[UploadFile] = File(...),
+    name: str = Form(..., min_length=1, max_length=100),
+    data_type: Literal["legacy", "text", "image_text", "video_text"] = Form(...),
+    login_user: UserPayload = Depends(get_dataset_user),
+):
+    try:
+        if len(files) != 1 or not name.strip():
+            raise InvalidDatasetPackageError(msg="A name and exactly one dataset are required")
+        return resp_200(
+            (
+                await FinetuneFileService.upload_file(
+                    files, False, login_user, expected_type=data_type, name=name.strip()
+                )
+            )[0]
+        )
+    finally:
+        for file in files:
+            await file.close()
+
+
+@router.post("/dataset-catalog/import")
+async def import_catalog_remote(
+    request: DatasetImportReq = Depends(parse_dataset_import),
+    login_user: UserPayload = Depends(get_dataset_user),
+):
+    return resp_200(await DatasetService.import_version(request, login_user))
+
+
+@router.post("/dataset-catalog/{identifier}/convert")
+async def convert_catalog_dataset(identifier: str, login_user: UserPayload = Depends(get_dataset_user)):
+    return resp_200(await DatasetService.convert(identifier, login_user))
+
+
+@router.delete("/dataset-catalog/{identifier}")
+async def delete_catalog_dataset(identifier: str, login_user: UserPayload = Depends(get_dataset_user)):
+    await FinetuneFileService.delete_preset_file(identifier, login_user)
+    return resp_200()
+
+
+@router.get("/dataset-catalog/{identifier}/preview")
+async def preview_catalog_dataset(identifier: str, login_user: UserPayload = Depends(get_dataset_user)):
+    return resp_200(await DatasetService.catalog_preview(identifier))
+
+
+@router.get("/dataset-catalog/{identifier}/media")
+async def catalog_dataset_media(identifier: str, path: str, login_user: UserPayload = Depends(get_dataset_user)):
+    catalog = await DatasetService.get_catalog(identifier)
+    if not catalog or not catalog.version_id:
+        from bisheng.common.errcode.finetune import TrainFileNotExistError
+
+        raise TrainFileNotExistError()
+    content, content_type = await DatasetService.media(catalog.version_id, path)
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get("/dataset-catalog/{identifier}/download")
+async def download_catalog_dataset(identifier: str, login_user: UserPayload = Depends(get_dataset_user)):
+    return resp_200(await DatasetService.download_catalog(identifier))
+
+
+@router.get("/task-uploads/{upload_id}/preview")
+async def preview_task_upload(upload_id: str, login_user: UserPayload = Depends(get_finetune_user)):
+    return resp_200(await TaskUploadService.preview(upload_id, login_user))
+
+
+@router.get("/task-uploads/{upload_id}/media")
+async def task_upload_media(upload_id: str, path: str, login_user: UserPayload = Depends(get_finetune_user)):
+    content, content_type = await TaskUploadService.media(upload_id, path, login_user)
+    return Response(
+        content=content,
         media_type=content_type,
         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
     )

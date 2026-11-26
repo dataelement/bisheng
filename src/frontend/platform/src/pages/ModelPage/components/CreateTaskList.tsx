@@ -5,7 +5,7 @@ import { Select } from '@bisheng/ui';
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import { listTrainingDatasets } from '@/controllers/API/finetuneDatasets';
 import { TrainingDataType, TrainingFile } from '@/controllers/API/finetuneV2';
-import { DatasetImportDialog } from './DatasetImportDialog';
+import { TemporaryDatasetUpload } from './TemporaryDatasetUpload';
 import { SavedDatasetPreview } from './SavedDatasetPreview';
 import { formatArtifactSize } from './TrainingArtifacts';
 
@@ -38,17 +38,15 @@ export function CreateTaskList({ dataType, files, onChange, onBusyChange }: Prop
     }, [loadDatasets]);
     const handleImported = (file: TrainingFile) => {
         onChange([file]);
-        setDatasets(old => [file, ...old.filter(item => item.id !== file.id)]);
-        void loadDatasets(1);
     };
-    const options = [...files, ...datasets.filter(item => !files.some(file => file.id === item.id))].filter(item => item.id);
+    const options = [...files.filter(file => !file.temporary && !file.upload_id), ...datasets.filter(item => !files.some(file => file.id === item.id))].filter(item => item.id);
     const sampleType = dataType === 'text' ? 'text' : dataType === 'image_text' ? 'image' : 'video';
     return <div className="space-y-3">
         <p className="text-sm text-muted-foreground">{t('finetune.datasetSelectHint')}</p>
         <div className="flex items-center gap-3 flex-wrap">
-            <Select {...selectLabels} value={files[0]?.id || null} disabled={loading && !options.length} onChange={id => { const selected = options.find(file => file.id === String(id)); if (selected) onChange([selected]); }} className="max-w-[500px]" aria-label={t("finetune.datasetExistingVersion")} placeholder={t("finetune.datasetChooseVersion")} options={options.map(file => ({value: file.id, label: `${file.name} · ${(file.version_id || file.id).slice(0, 8)}`}))} />
+            <Select {...selectLabels} value={files[0]?.temporary || files[0]?.upload_id ? null : files[0]?.id || null} disabled={loading && !options.length} onChange={id => { const selected = options.find(file => file.id === String(id)); if (selected) onChange([selected]); }} className="max-w-[500px]" aria-label={t("finetune.datasetExistingVersion")} placeholder={t("finetune.datasetChooseVersion")} options={options.map(file => ({value: file.id, label: `${file.name} · ${(file.version_id || file.id).slice(0, 8)}`}))} />
             <Button type="button" variant="outlined" disabled={loading} onClick={() => void loadDatasets(1)}>{t('finetune.datasetRefresh')}</Button>
-            <Button type="button" variant="outlined" onClick={() => setImportOpen(true)}>{t('finetune.datasetImport')}</Button>
+            <Button type="button" variant="outlined" onClick={() => setImportOpen(true)}>{t('finetune.temporaryUpload')}</Button>
             <a href={`${import.meta.env.BASE_URL}finetune-samples/bisheng-${sampleType}-smoke.zip`} download className="text-sm underline whitespace-nowrap">{t('finetune.downloadSampleFile')}</a>
         </div>
         {loading && <p role="status" className="text-sm">{t('finetune.datasetLoading')}</p>}
@@ -58,15 +56,15 @@ export function CreateTaskList({ dataType, files, onChange, onBusyChange }: Prop
         {files.map(file => <div key={file.id} className="border rounded-md p-3 space-y-1">
             <div className="flex justify-between items-center gap-3"><span>{file.name}</span><Button type="button" size="small" variant="outlined" onClick={() => onChange([])}>{t('finetune.datasetUnselect')}</Button></div>
             <DatasetFacts file={file} />
-            <p className="text-xs text-muted-foreground break-all">{t('finetune.datasetVersion')}: {file.version_id || file.id}</p>
+            <p className="text-xs text-muted-foreground break-all">{file.temporary || file.upload_id ? t('finetune.temporaryDataset') : `${t('finetune.datasetVersion')}: ${file.version_id || file.id}`}</p>
             {file.create_time && <p className="text-xs text-muted-foreground">{t('finetune.datasetCreatedAt')}: {file.create_time.replace('T', ' ')}</p>}
             <p className="text-xs text-muted-foreground break-all">SHA-256: {file.dataset_report.sha256}</p>
             {dataType === 'video_text' && <p className="text-xs text-muted-foreground">{t('finetune.videoDecodeHint')}</p>}
             {file.dataset_report.delivery === 'remote' && !file.dataset_report.preview_url
                 ? <p className="text-xs text-muted-foreground">{t('finetune.datasetRemoteZipNoPreview')}</p>
-                : <SavedDatasetPreview versionId={file.version_id || file.id} />}
+                : <SavedDatasetPreview versionId={file.upload_id || file.version_id || file.id} kind={file.temporary || file.upload_id ? "temporary" : "version"} />}
         </div>)}
-        {importOpen && <DatasetImportDialog dataType={dataType} onClose={() => setImportOpen(false)} onImported={handleImported} onBusyChange={onBusyChange} />}
+        {importOpen && <TemporaryDatasetUpload dataType={dataType} onClose={() => setImportOpen(false)} onImported={handleImported} onBusyChange={onBusyChange} />}
     </div>;
 }
 

@@ -14,13 +14,13 @@ export interface RemoteDatasetLocation {
     layout: 'manifest' | 'zip'; path: string; media_root: string;
 }
 export interface DatasetReport {
-    data_type: TrainingDataType; samples: number; media: number; sha256: string; validated: boolean;
+    data_type: TrainingDataType | 'legacy'; samples: number; media: number; sha256: string; validated: boolean;
     // Versions imported from FTP / SFTP / S3 keep their files at the source; FT downloads them per job.
     delivery?: 'remote'; total_bytes?: number; remote?: RemoteDatasetLocation; preview_url?: string;
 }
 export type TrainingMethod = 'lora' | 'freeze' | 'full';
 export interface DatasetCredentials { password?: string; access_key?: string; secret_key?: string; session_token?: string }
-export interface TrainingFile { id: string; url: string; name: string; num: number; dataset_report: DatasetReport; version_id?: string; create_time?: string }
+export interface TrainingFile { catalog_id?: string; upload_id?: string; temporary?: boolean; expires_at?: string; id: string; url: string; name: string; num: number; dataset_report: DatasetReport; version_id?: string; create_time?: string }
 export interface TrainingRequest {
     contract_version: 2; data_type: TrainingDataType; server: number; base_model: number;
     capability_id: string; method: TrainingMethod; model_name: string; extra_params: Record<string, number>;

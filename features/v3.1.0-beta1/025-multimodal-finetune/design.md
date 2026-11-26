@@ -6,26 +6,26 @@
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)
 **版本**: v3.1.0-beta1（F025）
-**最后更新**: 11月3日
+**最后更新**: 2026-11-26（数据集迭代已本地实现；目标环境联合验收待执行）
 
 ---
 
 ## 1. 目标与非目标
 
 - **目标**：在保留旧文本任务的前提下，把毕昇微调入口改造成由训练服务能力驱动的文本/图文/视频 LoRA 闭环；平台负责租户、数据、任务和事实展示，训练服务负责模型适配、GPU 预检、训练、产物检查和独立样本推理。
-- **非目标**：本功能不建设通用训练编排平台，不建设独立数据集管理页、长期凭据库、定时同步或 SFTP 连接器，不开放音频、视频音轨、QLoRA 或大规模训练，不改变在线推理服务的发布协议，也不部署生产环境。
+- **非目标**：本功能不建设通用训练编排平台，不另建第二个数据集管理中心、长期凭据库或定时同步机制，不开放音频、视频音轨、QLoRA 或大规模训练，不改变在线推理服务的发布协议，也不部署生产环境。
 
 ---
 
 ## 2. 关键约束
 
-- 遵循 [`docs/constitution.md`](../../../docs/constitution.md) C1–C8；平台 API 保持 Router → Service → DAO/外部适配器，新增数据库字段使用双数据库兼容类型，租户继续由现有上下文自动注入。
+- 遵循 [`docs/constitution.md`](../../../docs/constitution.md) C1–C8；新增平台调用遵循 Router → Service → Repository/外部适配器，新增数据库字段使用双数据库兼容类型，租户继续由现有上下文自动注入。
 - 主平台和 `bisheng-ft` 是两个独立仓库、两个部署单元；跨边界只能依赖版本化 HTTP 契约，不能 import 对方源码。
 - 模型能力以“训练服务 + 精确基础模型标识 + 权重版本”为作用域；一次 GPU 实测不能升级为所有同名或同系列模型均支持。
 - 本次能力组合增加 `Qwen/Qwen3-0.6B + text + lora` 和 `Qwen/Qwen2.5-VL-3B-Instruct + image_text/video_text + lora`；验证状态由对应正式 FT 运行证据决定。旧文本白名单保留兼容状态，但不伪装为本轮重新验证。
-- 本轮目标环境是 Docker 内可见的 NVIDIA GPU；宿主分配卡 5、7，容器内编号可能重映射，页面不得把宿主编号当作稳定设备标识。
-- 每项任务使用一个不可变数据版本。文本支持 JSON/JSONL/ZIP；图文和视频最终形成 ZIP，根清单接受 `train.json`、`train.jsonl`、`data.json` 或 `data.jsonl`，媒体使用包内安全相对路径，不限定 `media/` 目录。解压后总量、路径穿越、符号链接、缺失媒体和图片解码必须在提交前检查。
-- 本地验证允许 FT 节点使用隔离任务目录作为执行工作区；该目录不是生产共享真相。正式多节点发布前，adapter 字节必须转存对象存储并通过内容哈希引用，符合 C8。
+- 本轮沿用 Docker 内可见的 NVIDIA GPU 及现有设备映射；2026-11-25 走查部署记录使用 GPU 7，数据集迭代不改映射，页面不得把宿主编号当作稳定设备标识。
+- 每项任务使用一份已保存的不可变数据版本或本次临时上传的数据快照。文本支持 JSON/JSONL/ZIP；图文和视频最终形成 ZIP，根清单接受 `train.json`、`train.jsonl`、`data.json` 或 `data.jsonl`，媒体使用包内安全相对路径，不限定 `media/` 目录。解压后总量、路径穿越、符号链接、缺失媒体和图片解码必须在提交前检查。
+- 基础模型和训练产物继续保存在 FT 容器挂载目录，由训练服务管理；平台只保存引用、任务快照和报告，不读取 API 节点本地模型文件，不新增模型 MinIO 归档。
 - 真实 GPU 训练和推理测试只证明链路；合成小数据集不得形成效果、容量或稳定性承诺。
 
 ---
@@ -83,13 +83,13 @@
 - **原因**：真实实验已经出现“产物重载”是独立必要步骤；同时本轮合成样本只能证明格式和链路，不能设通用效果阈值。
 - **何时该重新考虑**：客户提供正式评测集和签字阈值后，新增任务级效果验收，但仍不能替代产物完整性检查。
 
-### 决策 6：在创建任务内导入或复用数据，不增加复杂管理页面
+### 决策 6：现有数据集页统一管理，任务内临时上传不入库（2026-11-26）
 
-- **备选**：独立数据集中心与长期数据源凭据；或在现有单页创建任务内完成一次性导入和版本选择。
-- **选定**：后者，用户已于11月3日确认。训练数据区保留在单页表单，导入弹窗提供本地文件、FTP/显式 FTPS、S3/MinIO。远端连接和媒体根目录各填写一次，清单只含相对媒体路径。
-- **原因**：本轮验证企业首次使用的小规模链路，版本可复用即可满足需求；长期数据源、自动同步和异步导入需要单独生命周期，不在本轮混入。
-- **边界**：凭据只保留在本次请求；导入成功才保存不可变对象和校验报告。远端清单/ZIP 与本地清单二选一，完整 ZIP 自带媒体时忽略媒体根目录。FTPS 仅显式 TLS，不等同于 SFTP。
-- **何时重新考虑**：客户明确需要大数据量、持久数据源、同步计划或后台进度恢复时，再扩展凭据保管、异步任务和对象清单。
+- **备选**：A. 沿用两套列表，任务内每次导入均保存版本；B. 扩展现有 `DataSetPage` 为统一入口，任务内只选择已保存数据或上传临时文件；C. 新建另一套数据集中心并迁走全部旧数据。
+- **选定**：B，对应用户已确认 AC-40—AC-52，替代原任务内导入即永久保存的约定。
+- **原因**：代码已存在 `PresetTrain` 目录和 `FinetuneDataset` 版本两种职责；统一业务入口即可复用现有能力，同时避免临时试验污染长期列表。旧入口和历史任务不能被迁走或删除。
+- **边界**：数据集页支持旧格式/文本/图文/视频与本地/FTP/FTPS/SFTP/S3；任务临时上传仅本地文件，不保存为数据集。已有远程版本仍要求每次训练重新输入凭据。
+- **何时重新考虑**：用户另行要求任务内主动保存为数据集、长期凭据或后台同步时，再扩展入口；本次不自动增加这些行为。
 
 ### 决策 7：数据送达训练服务——能拉就拉，拉不到就直传（2026-11-18）
 
@@ -124,7 +124,34 @@
 
 ---
 
+### 决策 10：目录与版本保留两种职责，不保留两套可复用列表
+
+- **备选**：A. 用报表 JSON 中的类型字段并集合并旧、新接口；B. `PresetTrain` 作为统一目录，关联 `FinetuneDataset` 不可变版本；C. 删除旧表，把所有记录迁入新表。
+- **选定**：B。旧目录保留原 ID、文件和创建者；新增分类与版本关联。已保存的新版本补齐目录索引，任务只查询这一目录。
+- **原因**：`DataSetPage` 实际使用 `PresetTrain`，不是遗留的 `database/models/dataset.py`；新版本还承载推理媒体，不能把所有 `FinetuneDataset` 行都展示为训练数据。类型列和 SQL 分页也避免现在先读全表、再在 Python 中过滤报告。
+- **事务**：新格式导入一次写入目录和版本，使用同一 Repository 事务；保存失败不能留下可选目录。删除目录仅标记不可用，不删除不可变版本或训练文件；列表中消失且不能再被新任务选择，历史引用保留。此标记同时防止兼容登记脚本重新发现孤立版本后把已删除的数据复活。
+- **何时重新考虑**：明确需要数据集内多个版本的编辑、发布和回滚生命周期时再扩展；本轮每个目录项关联一个版本，不增加版本管理产品功能。
+
+### 决策 11：旧格式显式转换，分类依据实际内容
+
+- **备选**：A. 把历史 `report.data_type=text` 全部当作新版文本；B. 按实际清单识别格式，旧格式只在用户点击转换时规范化；C. 升级时批量覆盖旧文件。
+- **选定**：B。`instruction/input/output` 属于旧格式，`messages` 属于新版文本；图文、视频仍按现有媒体规则校验。远程纯文本 ZIP 由平台有界读取（200 MiB 清单上限加 1 MiB 压缩包开销）；图文/视频继续沿用 FT 直读来源计划。选择新版文本导入时不静默接受旧格式，提示使用旧格式分类并转换。
+- **原因**：现有 `validate_records()` 同时接受两种文本，报告中的 `text` 不足以证明已转换；用户明确要求保留旧格式，覆盖文件会破坏原数据和历史引用。
+- **转换**：纯函数输出 `messages`：可选 `system` 放第一条，合法 `history` 问答对顺序保留；`instruction` 与非空 `input` 用两个换行连接成当前 user，`output` 为 assistant。无输入不追加空文本。非字符串、无法识别的会话字段或损坏 history 报样本位置，不猜测或丢弃。转换结果重新校验后保存新目录、新版本，`source_dataset_id` 与源内容哈希用于追溯，原记录不更新。
+- **何时重新考虑**：用户确认新增旧格式方言时，增加有样例与测试的适配器；不能在通用校验中扩大隐式猜测。
+
+### 决策 12：临时上传凭证放 Redis，任务引用落任务表
+
+- **备选**：A. 在版本表中写临时行并靠过滤隐藏；B. 仅信任浏览器回传报告；C. 私有对象存储保存文件，Redis 保存有时效的服务端校验凭证，成功任务保存自身引用和快照。
+- **选定**：C。A 仍违背“不写数据集/版本表”，B 可伪造类型、数量和文件归属。
+- **范围**：上传产生随机 `upload_id`，凭证绑定 tenant、user、对象 key、类型、哈希、样本数和预览，默认有效期 24 小时；不保存源连接凭据。失效或 Redis 不可用时明确要求重新上传，不能改为信任客户端。
+- **重试**：预检或任务参数校验失败不消费凭证。成功提交时 `Finetune.transient_upload_id` 的唯一约束阻止同一临时上传重复创建任务；相同用户、相同规范化配置重试返回已创建任务，不重复发起 FT；配置不同则提示该上传已用于任务，需重新上传。比较用快照不包含密码/密钥。数据库提交前失败回滚后仍可重试，提交后 FT 失败按既有任务状态展示。
+- **生命周期**：任务提交成功后，执行和历史查看使用任务中的文件引用与报告，不依赖 Redis 后续存活。临时文件位于对象存储私有前缀，不是 API 本地目录；取消或过期不自动成为数据集，不新增后台清理机制或 FT 数据副本清理需求。
+- **何时重新考虑**：需要跨会话恢复未提交表单或长期保存临时材料时另行定义生命周期；本次只保证有效期内重试与已创建任务追溯。
+
 ## 4. 系统现状（接手必读）
+
+已核实基线为微调分支 `29f4c406` 加模型名修复 `3b7cc045`。本轮数据集迭代已在该基线上本地实现，§4.4—§4.8 描述当前代码；测试与部署边界见 dataset-iteration-validation.md，不表示走查环境已经升级。
 
 ### 4.1 数据流
 
@@ -138,7 +165,7 @@
 
 #### 数据上传与预检
 
-`单页选择已有版本，或弹窗导入本地/FTP/S3 → 正式导入器读取清单和媒体 → FinetuneFileService 安全检查 → MinIO 对象 + FinetuneDataset 不可变版本 → 数据报告及预览 → POST /api/v1/finetune/preflight → FT 复核模型/GPU/模板/方法`
+已核实基线：`单页选择已有版本，或任务弹窗导入 → 现有导入器/FinetuneFileService → 对象与 FinetuneDataset 版本 → 数据报告/预览 → 预检`。本轮以 §4.4 的目录与临时上传两条路径替换“任务导入即入库”。
 
 - 文本 JSON/JSONL 支持 Alpaca 和 `messages` 对话结构。ZIP 根清单支持 `train` 或 `data` 的 JSON/JSONL，媒体使用相对路径；平台拒绝绝对路径、`..`、符号链接、缺失媒体及不可解码图片。视频当前仅 MP4，平台先做结构检查，FT 再真实解码。
 - `GET /datasets` 按模态列出当前租户版本；前端保留完整版本对象作为唯一 `train_data`，创建时后端按租户及对象 URL 重新读取报告。
@@ -182,7 +209,7 @@
 | `model_name` | string | 模型管理中使用的精确名称 | 平台模型选择器 |
 | `model_path` | string | FT 节点内配置路径；不返回浏览器 | FT |
 | `input_types` | `string[]` | `text`、`image_text` 或 `video_text` | 页面筛选、预检 |
-| `training_methods` | string[] | 本轮可开放 `lora`；legacy 可保留旧值 | 页面、预检 |
+| `training_methods` | string[] | 以能力目录声明的 `lora/freeze/full` 为准，不能凭名称放行 | 页面、预检 |
 | `template` | string | LlamaFactory 模板 | FT adapter |
 | `validation_status` | enum | `gpu_smoke_passed/legacy/unverified/blocked` | 页面、提交门禁 |
 | `validation_evidence` | object | 环境、日期、基础模型版本和证据摘要 | 任务详情 |
@@ -195,9 +222,9 @@
 | `contract_version` | integer | 新任务固定为 `2`；缺失视为 legacy | 平台、FT |
 | `data_type` | enum | `text` / `image_text` / `video_text` | 平台、FT |
 | `capability_id` | string | 选择的精确能力条目 | 平台、FT |
-| `dataset` | object | MinIO 对象、SHA-256、检测报告和样本数 | 平台、FT |
-| `method` | enum | 本轮真实新组合只允许 `lora` | 平台、FT |
-| `parameters` | object | 只包含能力 schema 允许的训练参数 | 平台、FT |
+| `train_data` | array，长度为 1 | 平台创建请求携带已保存版本或临时上传的标识，服务端解析为实际对象引用和报告 | 平台 |
+| `method` | enum | 只允许当前能力目录提供的训练方式 | 平台、FT |
+| `parameters` / `extra_params` | object | 预检使用 parameters，创建使用 extra_params；只允许能力 schema 的训练参数 | 平台、FT |
 | `preflight` | object | `passed`、逐项 `checks` 和资源快照 | 页面、任务记录 |
 
 #### 远程数据计划（`remote_plan`，2026-11-19）
@@ -238,12 +265,92 @@
 | `finetune/domain/services/transfer.py` | 计划/数据包送达 FT（拉取或直传）；合并本次凭据并让 FT 预检数据源 | 不记录凭据、不持久化 `dataset_source` |
 | `ModelPage/components/DatasetSourceCredentials.tsx` | 远程版本提交前输入本次密码/密钥 | 不写入 store、浏览器存储或 URL |
 | `bisheng-ft/sft_server/remote_source.py` | FT 侧 FTP/FTPS/SFTP/S3 连接、SSRF 防护、按计划下载并核对大小 | 不把凭据写盘或写日志 |
-| `ModelPage/components/DatasetImportDialog.tsx`、`SavedDatasetPreview.tsx` | 单页内导入和鉴权预览 | 不伪造校验报告、不创建独立管理页 |
+| `ModelPage/components/DatasetImportDialog.tsx`、`SavedDatasetPreview.tsx` | 现有导入与鉴权预览；本轮拆分保存与临时预览调用 | 不伪造校验报告、不把临时上传写入数据集表 |
 | `ModelPage/components/CreateTask*` | 单页分区表单、能力筛选、检测和预检展示 | 不维护模型白名单、不伪造状态 |
 | `bisheng-ft/sft_server/capabilities.py` | 加载和校验能力清单 | 不从相似名称自动放行模型 |
 | `bisheng-ft/sft_server/preflight.py` | 检查模型文件、模板、依赖、GPU 和参数 | 不创建任务 |
 | `bisheng-ft/sft_server/sft_manage.py` | 隔离任务目录、进程生命周期、状态和产物清单 | 不决定平台租户权限 |
 | `bisheng-ft/llmtuner/wrapers/trainval.py` | 把能力条目和标准任务参数映射到 LlamaFactory | 不使用前端任意参数拼 shell |
+
+---
+
+### 4.4 数据集迭代的数据流（本地实现）
+
+```mermaid
+flowchart LR
+  A[数据集页：本地/FTP/SFTP/S3] --> B[类型识别与校验]
+  Q[原加入入口/QA 知识库] --> N[规范化新版文本]
+  N --> B
+  B --> C[统一目录 PresetTrain]
+  B --> V[不可变版本 FinetuneDataset]
+  C -->|关联 version_id| V
+  L[旧格式目录项] -->|显式转换，原数据保留| N
+  C -->|按分类与权限筛选| J[微调任务]
+  U[任务临时上传] --> R[私有文件对象 + Redis 凭证]
+  R -->|不写目录和版本表| J
+  J --> S[任务文件引用与校验快照]
+  S --> F[沿用现有 FT 契约]
+```
+
+### 4.5 数据模型与升级（本地实现）
+
+| 实体 | 本轮字段/约定 | 真相与查询规则 |
+|---|---|---|
+| `PresetTrain` | 新增 `data_type`：legacy/text/image_text/video_text；`source_type`：local/ftp/sftp/s3/qa/collection；可空 `version_id`、`source_dataset_id`，新增 `is_deleted` 默认 false | 训练数据集的唯一目录；列表和新任务选择仅取未删除项；现有 `type=0/1` 保留原义，不拿它承载四类分类 |
+| `FinetuneDataset` | 保留已有版本和推理媒体字段，增加明确的格式标识写入校验报告 | `purpose=training` 的版本由目录关联；`purpose=inference` 永不进入目录；对象 URL 与报告由服务端返回 |
+| `Finetune` | 新增可空 `transient_upload_id`，非空唯一；`train_data`、`dataset_report` 保存本次快照 | 已保存数据记录 catalog_id/version_id；临时数据记录 upload_id、私有对象 key 和服务端报告；不存源密码 |
+| Redis | `finetune:task-upload:{tenant_id}:{user_id}:{upload_id}`，带 TTL | 只作临时上传凭证；非持久目录，不跨用户读取；预览同样检查归属与有效期 |
+
+`version_id` 在目录中非空时唯一，重复导入流程必须在事务中处理唯一冲突，避免一个历史版本补登记多次。MySQL/DM8 使用同一类型与 Repository SQL；可空唯一列和索引由双数据库回归验证。
+
+升级先做纯 DDL；新 revision 为 `v310_f025_dataset_catalog`，接核实的唯一 head `v310_f025_merge_release_heads`。一次性兼容登记脚本位于 backend/scripts，支持 dry-run、分页和重复执行；不从 API 启动、列表请求或权限服务触发全量扫描。旧目录默认 legacy，脚本按实际清单判别：真实旧格式保留；已有 messages 文本补不可变版本与目录关联；旧 QA 来源恢复为 qa。历史独立训练版本也按真实清单补目录；原对象不重写。目录存在且 version_id 已关联时跳过；ID 碰撞不能覆盖不同数据，应换新目录 ID 并保留版本关联。清单无法读取或格式不明时保留原记录，报告为待核实，不伪造文本分类/已验证状态。
+
+兼容登记属于本轮升级步骤，在切换新版管理/任务入口前执行，并核对有效旧目录、历史训练版本与登记结果；失败项保留原行和文件并输出清单，不伪造分类。迁移或登记失败时保持原应用服务，不以半完成结果宣称升级通过。新 API 只查统一目录，不在列表请求中扫描对象存储或回退到第二套可复用列表，也不查询任何“升级完成账本”作为业务准入。脚本重复运行必须识别包含 is_deleted=true 的已有版本关联，不能重新加入已被用户删除的目录项；按租户执行作用域调用 Repository，不能在业务查询中手写 tenant_id 过滤。
+
+### 4.6 接口与权限（本地实现）
+
+| 接口 | 用途 | 权限/兼容 |
+|---|---|---|
+| `GET /finetune/dataset-catalog` | 四类管理列表，keyword/data_type/source_type/page/limit；返回 data/total | `get_dataset_user`；SQL 分页，列表与数量同条件 |
+| `POST /finetune/dataset-catalog/files` | 本地持久导入，显式 name/data_type | 数据集权限；检测后保存目录及必要版本 |
+| `POST /finetune/dataset-catalog/import` | 现有 FTP/FTPS/SFTP/S3 持久导入 | 数据集权限；复用连接器及凭据脱敏，不能借任务权限写目录 |
+| `POST /finetune/dataset-catalog/{id}/convert` | 旧格式转新文本 | 数据集权限与严格租户范围；返回新目录项，原记录不变 |
+| `DELETE /finetune/dataset-catalog/{id}` | 将目录标为已删除 | 数据集权限；新列表与新任务不可用，保留版本和历史引用，不扩大为物理文件清理 |
+| `GET /finetune/dataset-catalog/{id}/preview`、`/media`、`/download` | 管理页查看与下载 | 数据集权限；内部复用版本/旧格式读取，不能要求用户额外拥有模型菜单权限 |
+| `GET /finetune/datasets` | 任务候选，只含活动目录关联的已校验新版版本 | `get_finetune_user`；按任务三类筛选；返回值保留 TrainingFile 兼容字段并增加 catalog_id |
+| `POST /finetune/job/file` | 改为任务临时本地上传 | 任务权限；返回 `{id: upload_id, upload_id, name, url, dataset_report, expires_at, temporary:true}`，不写任何数据集表 |
+| `GET /finetune/task-uploads/{upload_id}/preview`、`/media` | 临时文件预览 | 任务权限 + tenant/user/TTL 校验；媒体路径继续限制为校验过的清单引用 |
+| 原 `POST /finetune/job/file/preset` | 保留原本地加入/QA 导入契约 | 数据集权限；旧格式输入规范化新版文本并保存，QA 原权限检查保留 |
+| 原 preset 列表/删除/下载与版本预览 | 兼容现有调用 | 通过统一目录 Repository 读取未删除项；历史对象仍按原归属鉴权 |
+
+URL 前缀为 `/api/v1`。新增接口不得出现 config 路径。管理页下载/预览使用专属目录路由和数据集权限，内部复用版本解析；任务已有版本预览须有任务权限与可用目录，临时预览须为本人。凭据字段继续使用 `SecretStr`，验证错误不回显原输入。临时上传无效/过期使用新增 10134，已用于不同配置的任务使用新增 10135；已核对基线无占用。定义放 finetune 错误模块，三语文案只维护在 packages/locales 并生成客户端产物。归属不匹配不透露目标文件或任务；旧格式/分类错误复用 InvalidDatasetPackageError，附样本位置。
+
+创建任务 `train_data` 仍只允许一份。已有数据发送 catalog_id/version_id；临时数据发送 upload_id，二者互斥。服务端重读目录/版本或 Redis 记录，忽略请求中的 url、分类、样本数和报告；如果已有目录删除、格式不符、临时凭证过期或不属于本人，在建任务及 FT 调用前拒绝。旧 contract_version=1 的历史调用保留其既有验证入口，只选择 legacy 目录；不把新版 temporary 标记当作授权。
+
+### 4.7 服务与页面改动（本地实现）
+
+| 位置 | 修改职责 | 不承担 |
+|---|---|---|
+| 新 `domain/repositories/dataset_catalog.py` | 目录分页/过滤、版本关联、原子保存、历史登记与旧接口适配 | 不访问 FTP/MinIO、不在 Service 写 ORM |
+| `datasets.py` + 新 `legacy_dataset.py` | 管理目录编排、旧格式识别与纯转换；复用现有校验/预览 | 不执行训练、不覆盖旧文件 |
+| 新 `task_uploads.py` | 临时上传、服务端凭证、预览和任务引用解析 | 不调用目录/版本 save，不保存为可复用数据 |
+| `finetune_file.py` | 复用对象存储、文件大小和哈希检查；原加入及 QA 输出走新版文本保存 | 不再让所有任务上传隐式保存版本 |
+| `multimodal.py` / `finetune.py` | 保存数据/临时数据两种解析、提交前复检和快照；唯一上传 ID 的重试处理 | 不从浏览器恢复“已验证”状态 |
+| `DataSetPage` / `CreateDataSet` | 四类标签、分类筛选；本地/远程/QA 入口；旧格式转换、下载、删除和预览 | 不另建一套管理页面 |
+| `DatasetImportDialog` | 抽出可复用持久导入表单供数据集页使用，回调处理保存结果 | 不在任务页展示“保存为可复用版本” |
+| `CreateTaskList` / `SavedDatasetPreview` | 下拉统一目录候选；独立本地临时上传及预览；切换类型清空不兼容选择 | 不将临时数据加入 datasets 下拉数组或刷新后长期显示 |
+| `finetuneV2.ts` / `finetuneDatasets.ts` / 三语文案 | 明确 saved/temporary 选择类型、API 与提示 | store 不发 HTTP、不保存连接密码 |
+
+“加入数据集”当前可核实的写入口是 `createDatasetApi → POST /job/file/preset`，及其本地/QA 两个分支。本轮保留这个契约并统一规范化新版文本，不能删除它后只保留新的远程导入。尚未在当前代码或针对该入口的历史搜索中找到独立同名按钮；不据此新增对话采集页面，也不宣称一个未找到的页面已验收。最终验收需验证实际已有调用者或提供对应入口。
+
+### 4.8 升级、失败与部署边界（本地实现）
+
+1. 先按现有单 head 执行加列迁移，再执行元数据兼容登记的 dry-run/实跑；每个历史项独立事务，可重复运行。验收登记结果后切换本次应用入口；失败保留原服务，不在业务鉴权、API 健康检查中引入升级标记。
+2. 所有源文件转换与新版本检查在保存目录事务之前完成；目录和版本同事务。数据库提交结果不明时不盲删已上传对象，避免删掉成功任务/版本材料；本次未新增自动回收机制。原对象不删除。
+3. 两种文本格式混杂、字段缺失或未知会话格式，返回对应样本位置；远程连接和媒体存在性错误沿用现有错误翻译，不显示凭据。
+4. 不修改 FT API、LlamaFactory、模型目录、输出目录和 GPU 配置。数据集与临时文件仍走平台已有对象存储；模型和训练产物仍在 FT 挂载目录。
+5. 应用回退保留加列、目录、不可变版本和原文件，不运行删列/覆盖文件的 downgrade；回退前核对旧客户端对新增目录项的兼容性，不能默认旧训练路径支持所有新格式。
+6. 设计已确认并完成本地代码及自动验证；本轮未改目标数据库或部署。既有走查地址为 `http://192.168.106.109:3002/dataset` 与 `/model/finetune`，只在明确更新该走查项目时使用；不操作其他项目。
 
 ---
 
@@ -273,6 +380,20 @@
 
 ---
 
+本轮数据集迭代新增的坑：
+
+| 事实 | 忽略后的结果 | 处理位置 |
+|---|---|---|
+| 旧 `type=0/1` 是文件/QA 来源，不是文本/图文分类 | 历史 QA 被错误标成图文 | catalog 新字段与兼容登记脚本 |
+| `validate_records()` 接受 Alpaca 和 messages 两种文本 | 只看 text 报告会跳过旧格式转换 | `legacy_dataset.py` 的结构识别与转换 |
+| 旧 `upload_file(False)` 会保存 `FinetuneDataset` | 仅改弹窗文案仍然污染数据集表 | 独立 `task_uploads.py`，测试断言两个表均无新增 |
+| 版本还含推理媒体，目录删除也不删除版本 | 直接枚举版本会出现推理文件或已删除数据 | catalog + purpose 过滤，任务预检复核目录 |
+| 临时校验凭证有 TTL，任务执行周期可能更长 | 执行依赖 Redis 会让已创建任务过期失效 | 成功任务使用自身已冻结的文件引用与校验快照 |
+| 任务权限与数据集管理权限不同 | 复用旧 import 接口会使任务用户获得持久写入权 | 临时上传用任务权限，保存/转换入口用数据集权限 |
+
+| SQL 租户过滤对外连接和聚合的处理不同 | 旧目录无版本会被外连接过滤隐藏；COUNT 可能漏掉关联版本租户条件 | 目录先分页后查版本；候选内连接的列表/数量都使用官方 tenant filter clause，含错租户关联的负向测试 |
+| 新目录上传 URL 与原任务 URL 不同 | 只改后端大小限制，新入口仍被 Nginx 拦截 | Compose、独立前端与 Helm 三处同一条大文件/长超时路由同步扩展 |
+
 ## 6. 对外契约与依赖
 
 ### 6.1 我提供给别人的（Outgoing）
@@ -284,7 +405,9 @@
 | `POST /api/v1/finetune/job` 扩展字段 | HTTP API，旧字段兼容 | platform、历史调用方 |
 | `POST /api/v1/finetune/job/{job_id}/validate` | JSON HTTP API；媒体先通过 `/media` 上传 | platform 任务详情页 |
 | `GET /api/v1/finetune/datasets?data_type=&page=&limit=` | `{data: TrainingFile[], total}` | 单页已有版本选择 |
-| `POST /api/v1/finetune/datasets/import` | JSON body；返回单个 TrainingFile | 导入弹窗 |
+| `POST /api/v1/finetune/datasets/import` | 兼容持久导入，现需数据集菜单权限 | 旧调用方 |
+| `/api/v1/finetune/dataset-catalog` 管理路由 | 分类列表、本地/远程导入、显式转换、软删除、预览/媒体/下载；详见 §4.6 | Platform 数据集页 |
+| `POST /api/v1/finetune/job/file` 与 `/task-uploads/{id}/preview,media` | 临时文件凭证与本人预览，不写目录/版本；详见 §4.6 | Platform 任务页 |
 | `GET /api/v1/finetune/datasets/{version_id}/preview` | `{samples:[{messages,media}],version_id,dataset_report}` | 版本样本预览 |
 | `GET /api/v1/finetune/datasets/{version_id}/media?path=` | 同源鉴权媒体字节，private/no-store | 前端 Blob 预览 |
 | `GET /v2.1/sft/capabilities` | FT HTTP API | 主平台 `SFTBackend` |
@@ -302,14 +425,14 @@
 |---|---|---|
 | 模型管理中的 `ModelDeploy.id/model/server` | 平台数据契约 | 模型改名或 server 归属变化会使能力匹配失败，必须显式报错 |
 | MinIO 私有对象和临时分享链接 | 对象存储契约 | 链接过期、FT 网络不可达会使预检或数据准备失败 |
-| MySQL/DM8 + tenant auto-filter | 平台基础设施 | 新字段/DAO 绕过 dialect helper 或租户上下文会违反 C2/C3 |
-| Redis | FT 队列和任务状态 | Redis 丢失时不能把本地目录猜成任务成功 |
+| MySQL/DM8 + tenant auto-filter | 平台基础设施 | 新字段/Repository 绕过 dialect helper 或租户上下文会违反 C2/C3 |
+| Redis | 平台临时上传凭证；现有 worker 基础设施 | 未提交凭证丢失需重新上传；已创建任务使用数据库快照，不依赖凭证继续存在 |
 | `paramiko>=3.5.1,<4`（LGPL-2.1） | SFTP 客户端 | 只用账号密码；主机指纹可选校验，不填则不校验（防冒充靠管理员填写指纹） |
 | FT 镜像内 `paramiko==3.5.1`、`minio==7.2.18` | FT 直连数据源 | 旧镜像缺这两个包时 SFTP/S3 直连失败；GPU 服务器到数据源的网络必须通 |
 | `nvidia-smi`、CUDA、PyTorch | 系统二进制/运行时 | 容器只装驱动库但 PyTorch 架构不匹配时预检必须失败 |
 | LlamaFactory 固定版本 | 第三方训练器 | 模板名、参数名或多模态数据格式升级会破坏 adapter |
 | Transformers + PEFT | 产物重载和推理 | 基础模型类或 processor 版本不匹配时验证失败 |
-| Qwen2.5-1.5B 与 Qwen2-VL-2B 权重 | 外部模型资产 | 路径存在不等于文件完整；能力条目必须配校验和/版本证据 |
+| Qwen3-0.6B 与 Qwen2.5-VL-3B-Instruct 权重 | 外部模型资产 | 路径存在不等于文件完整；能力条目必须配校验和/版本证据 |
 | 平台 i18n `model` namespace | 前端契约 | 新文案缺任一语言会显示 key 或错误回退 |
 
 ---
@@ -319,20 +442,20 @@
 - **单元测试**：平台覆盖能力筛选、旧服务 fallback、DTO/参数验证、ZIP 路径安全、状态转换和租户隔离；FT 覆盖目录 schema、预检、命令参数、产物清单和取消；前端覆盖数据类型切换、模型过滤、未验证禁用和提交 payload。
 - **集成测试**：用假的 FT HTTP server 验证平台 Router → Service → adapter；用临时目录和伪 `nvidia-smi` 验证 FT，不要求 GPU。数据库相关测试至少在 SQLite 快测并由设计审查保证 MySQL/DM8 helper 使用正确，DM8 留中央回归。
 - **页面测试**：启动本地平台后，创建页完成文本/图文切换、上传错误包、选择验证模型、预检失败/通过、提交和详情恢复。Playwright 尚未成为自动门禁时保留可重复手工清单。
-- **真实 GPU E2E**：在隔离容器中只映射宿主 已分配GPU，依次跑 Qwen2.5-1.5B 文本 LoRA 与 Qwen2-VL-2B 图文 LoRA；每项使用未参与训练的样本执行新进程重载。运行前后执行 `nvidia-smi`，禁止并发占用。
+- **真实 GPU E2E**：在隔离容器中只映射宿主 已分配GPU，按能力目录依次跑已准备的文本、图文与视频组合；每项使用未参与训练的样本执行新进程重载。运行前后执行 `nvidia-smi`，禁止并发占用。
 - **可观测**：平台日志记录 tenant/job/capability/stage 和 FT 请求结果，不记录数据正文；FT 日志记录 job、模型精确 ID、GPU UUID、命令参数摘要、退出码和 artifact hash。页面只展示真实返回值，网络失败显示失败/未知。
 
 手工入口：
 
 ```bash
-# 平台后端（development/bisheng/src/backend）
+# 平台后端（src/backend）
 uv run uvicorn bisheng.main:app --host 127.0.0.1 --port 7860 --workers 1 --no-access-log
 
-# 平台前端（development/bisheng/src/frontend）
-pnpm --filter platform dev
+# 平台前端（src/frontend）
+pnpm --filter bisheng start -- --host 127.0.0.1
 
-# FT 服务（development/bisheng-ft/src/sft_server）
-python main.py 8000
+# FT 服务（独立 bisheng-ft 仓库 src/sft_server）
+uvicorn multimodal_service:app --host 127.0.0.1 --port 8000 --workers 1
 
 # 快速契约检查
 curl -s http://127.0.0.1:8000/v2.1/sft/capabilities
@@ -342,12 +465,21 @@ curl -s http://127.0.0.1:8000/v2.1/sft/capabilities
 
 ---
 
+### 本轮数据集迭代的验证计划（待实施）
+
+- 单元测试覆盖旧/新文本识别、input/system/history 不丢失、逐样本错误、四类校验、临时凭证归属/TTL、目录与版本事务及唯一约束；前端测试覆盖四类列表、转换回显、任务类型切换和临时/已保存两条请求。
+- 集成测试验证本地/FTP/SFTP/S3 的持久导入、来源失败不入目录、旧数据兼容登记可重跑且不复活已删除项；MySQL/DM8 验证唯一可空版本关联、分页和计数一致，未跑中央 DM8 不得宣称双库已实测。
+- API E2E 与页面核对使用数据集菜单用户、模型菜单用户、兼具菜单用户和另一租户用户；重点断言临时上传、取消、创建失败与成功后，presettrain 与 finetunedataset 均没有新增临时记录；任务成功写入自身引用和快照。
+- 手动路径：在 `/dataset` 导入四类样例、转换旧格式并下载核对；在 `/model/finetune` 切换三类类型核对候选；临时上传后取消/重试/提交，再回到数据集页确认未新增。QA 导入须使用有权与无权知识库分别验证。实际加入入口或兼容调用者列入验收记录，不以新远程入口代替。
+- 拟执行命令：从 `src/backend/` 运行 `uv run pytest test/finetune/ -q`；从 `src/frontend/` 运行 `pnpm --filter bisheng exec vitest run` 的相关数据集/任务测试及 lint、typecheck、check-i18n；按仓库 `/e2e-test` 流程补 API 闭环。设计确认后生成正式八列 QA 用例，再拆实施任务。
+- 日志仅记录操作、目录/版本/上传 ID、类型、结果与耗时；转换异常定位样本索引，不记录整段训练样本或任何连接凭据。临时记录存续与实际训练是不同验收项，不用模拟任务冒充 GPU 训练。
+
 ## 8. 后续改进 / 不打算做的事
 
 - 本轮已实现 FTP/显式 FTPS、SFTP、S3/MinIO 远程数据直达训练服务（决策 8）；持久凭据、定时同步、断点续传和逐文件哈希校验仍需独立设计。
 - 视频必须完成模型、预处理、显存、产物重载和目标推理验证；音频及视频音轨明确不纳入本期。
 - 大数据集应改为对象清单和流式准备，ZIP 只服务本次小规模闭环。
-- 正式多节点部署必须把 adapter 和处理器转存对象存储；本地 FT 工作目录只可作为可丢弃缓存。
+- 模型和产物继续由 FT 挂载目录管理；不新增模型转存。
 - 发布到现有 RT 推理服务仍沿用 legacy 路径，本轮只保证独立重载验证；目标 RT 支持多模态 adapter 后另行设计发布适配。
 - 客户效果阈值、并发和容量在取得真实数据与压测结果前不进入默认配置。
 
@@ -363,6 +495,7 @@ curl -s http://127.0.0.1:8000/v2.1/sft/capabilities
 | 2026-11-20 | 合入 beta1@4bfe411b10：接入上游的模型菜单授权、`_get_job` 训练服务归属校验、服务选项接口和地址规范化；新接口统一用 `get_finetune_user` | 用户要求改到最新 3.1.0-beta1 分支开发 |
 | 2026-11-20 | 新增决策 9（新训练服务恢复 Freeze 和全量）、错误码 10133、坑 18–19 | 用户确认：原有的训练方式不能去掉 |
 | 2026-11-19 | 新增决策 8（远程数据直达训练服务、每次训练重新输入凭据）、本地上传 2 GiB、错误码 10132、坑 14–17 | 用户确认：远程来源一律直达 GPU、凭据每次重输、本地 2 GB 不做断点续传 |
+| 2026-11-26 | 设计经确认并本地实现：目录分类、显式转换、临时上传、兼容脚本、三种 Nginx 配置；补充租户聚合查询陷阱与自动测试证据 | 用户确认后实施，保留 FT/LlamaFactory 边界与历史数据 |
 
 ## 11月2日交付实现补充
 
@@ -379,3 +512,9 @@ curl -s http://127.0.0.1:8000/v2.1/sft/capabilities
 - 后端四个测试文件合并 **66 项通过**；前端组件与 API **20 项通过**，565 个严格类型文件通过，platform/client 两套生产资产已构建。详见 `backend-validation.md` 与 `frontend-validation.md`。
 - 正式连接器通过真实 FTP 和 S3 各三种模态的清单加媒体、完整 ZIP 读取与校验，共 **12 次通过**；证据为 `src/backend/test/finetune/evidence/formal-dataset-import-20261103.json`。
 - 这些结果分别证明代码契约和真实协议读取，**不表示完整平台浏览器/E2E 已完成**。平台登录、数据库/MinIO 版本持久化、浏览器版本复用、预览和训练提交链路仍由测试环境验收确认；FTPS证书握手与外部S3映射也未包含在上述12次验证中。
+
+## 2026-11-26 数据集迭代设计状态
+
+- 规格 AC-40—AC-52 及 AC-09/24/26/27/29 修订已由用户确认。
+- 本文决策 6、10—12 与 §4.4—§4.8 已实现。自动化证据见 dataset-iteration-validation.md；正式 QA 八列用例与浏览器清单仍待执行，不能用单元/API 测试代替真实部署验收。
+- 平台改动覆盖目录、转换、临时上传和选数；FT 与 LlamaFactory 均直接复用。

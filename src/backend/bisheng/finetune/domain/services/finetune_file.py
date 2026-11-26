@@ -30,6 +30,7 @@ from ..models.dataset import FinetuneDataset
 from ..models.finetune import FinetuneTrainingFile
 from ..models.preset_train import PresetTrain, PresetTrainDao
 from ..repositories.dataset import FinetuneDatasetRepository
+from ..repositories.dataset_catalog import DatasetCatalogRepository
 from .dataset_validation import (
     MEDIA_MAX_BYTES,
     TEXT_MAX_BYTES,
@@ -41,6 +42,7 @@ from .dataset_validation import (
     parse_manifest,
     validate_records,
 )
+from .legacy_dataset import classify_records, convert_legacy_records
 
 
 class FinetuneFileService(BaseModel):
@@ -48,7 +50,16 @@ class FinetuneFileService(BaseModel):
 
     @classmethod
     async def upload_file(
-        cls, files: list[UploadFile], is_preset: bool, user: UserPayload
+        cls,
+        files: list[UploadFile],
+        is_preset: bool,
+        user: UserPayload,
+        *,
+        expected_type=None,
+        name=None,
+        source_type="local",
+        source_dataset_id=None,
+        source_sha256=None,
     ) -> list[PresetTrain] | list[dict[str, Any]]:
         if len(files) == 0:
             raise TrainFileNotExistError()
@@ -56,6 +67,10 @@ class FinetuneFileService(BaseModel):
         inspections = []
         if not is_preset:
             inspections = [await cls.inspect_training_upload(file) for file in files]
+            if expected_type and any(report["data_type"] != expected_type for report, _ in inspections):
+                raise InvalidDatasetPackageError(
+                    msg="Dataset content does not match the selected category; convert legacy data before using it as text"
+                )
         file_root = cls.get_upload_file_root(is_preset)
         file_list = await cls.upload_file_to_minio(files, file_root, user)
         # Store preset data in database
@@ -67,16 +82,36 @@ class FinetuneFileService(BaseModel):
         result = []
         for item, (report, preview) in zip(file_list, inspections, strict=True):
             report = await cls.store_preview(item.url, report, preview)
-            record = await FinetuneDatasetRepository.save(
-                FinetuneDataset(
-                    id=item.id,
-                    name=item.name,
-                    url=item.url,
-                    report=report,
-                    user_id=user.user_id,
-                )
+            if source_sha256:
+                report = {**report, "source_sha256": source_sha256}
+            version = FinetuneDataset(
+                id=item.id, name=name or item.name, url=item.url, report=report, user_id=user.user_id
             )
-            result.append({**item.model_dump(), "dataset_report": report, "version_id": record.id})
+            catalog = PresetTrain(
+                id=item.id,
+                name=name or item.name,
+                url=item.url,
+                user_id=str(user.user_id),
+                user_name=user.user_name,
+                type=1 if source_type == "qa" else 0,
+                data_type=report["data_type"],
+                source_type=source_type,
+                source_dataset_id=source_dataset_id,
+                version_id=version.id if report["data_type"] != "legacy" else None,
+            )
+            await DatasetCatalogRepository.save(catalog, version if catalog.version_id else None)
+            result.append(
+                {
+                    **catalog.model_dump(),
+                    "id": catalog.id,
+                    "name": catalog.name,
+                    "catalog_id": catalog.id,
+                    "data_type": catalog.data_type,
+                    "source_type": source_type,
+                    "dataset_report": report,
+                    "version_id": catalog.version_id,
+                }
+            )
         return result
 
     @staticmethod
@@ -103,9 +138,18 @@ class FinetuneFileService(BaseModel):
             records = parse_manifest(raw, extension)
             validate_records(records)
             preview = build_preview(records, lambda name: b"")
-            modality, samples, media = "text", len(records), 0
+            modality, samples, media = classify_records(records), len(records), 0
         else:
             modality, samples, media = inspect_package(stream)
+            if modality == "text":
+                stream.seek(0)
+                with zipfile.ZipFile(stream) as archive:
+                    manifest = next(
+                        name
+                        for name in ("train.json", "train.jsonl", "data.json", "data.jsonl")
+                        if name in archive.namelist()
+                    )
+                    modality = classify_records(parse_manifest(archive.read(manifest), manifest))
             stream.seek(0)
             preview = package_preview(stream)
         stream.seek(0)
@@ -187,8 +231,11 @@ class FinetuneFileService(BaseModel):
     @classmethod
     async def create_dataset(
         cls, name: str, files: str | None, qa_ids: list[int] | None, user: UserPayload
-    ) -> PresetTrain:
-        tenant_id = cls._tenant_id()
+    ) -> dict[str, Any]:
+        cls._tenant_id()
+        if not isinstance(name, str) or not name.strip() or len(name) > 100:
+            raise InvalidExtraParamsError()
+        name = name.strip()
         minio = await get_minio_storage()
         if files:
             try:
@@ -225,15 +272,20 @@ class FinetuneFileService(BaseModel):
             raise TrainFileNotExistError()
         if payload is None:
             raise TrainFileNotExistError()
-        file_id = generate_uuid()
-        object_name = f"finetune/dataset/{tenant_id}/{file_id}.json"
-        await minio.put_object(bucket_name=minio.bucket, object_name=object_name, file=payload)
-        await PreviewSourceService.bind_owned_object(bucket=minio.bucket, object_name=object_name, login_user=user)
-        file_info = PresetTrain(
-            id=file_id, name=name, url=object_name, type=preset_type, user_id=user.user_id, user_name=user.user_name
+        from .datasets import DatasetService
+
+        try:
+            records = parse_manifest(payload, "train.json")
+            kind = classify_records(records)
+            if kind == "legacy":
+                records = convert_legacy_records(records)
+            elif kind != "text":
+                raise ValueError("The existing dataset entry accepts text samples only")
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise InvalidDatasetPackageError(msg=str(exc)) from None
+        return await DatasetService.save_text(
+            name, records, user, source_type="qa" if preset_type == 1 else "collection"
         )
-        await PresetTrainDao.insert_batch([file_info])
-        return file_info
 
     @classmethod
     async def validate_training_files(
@@ -249,7 +301,11 @@ class FinetuneFileService(BaseModel):
                     raise InvalidExtraParamsError() from exc
                 if is_preset:
                     dataset = await PresetTrainDao.find_by_url(source.url)
-                    if dataset is None or (source.id is not None and source.id != dataset.id):
+                    if (
+                        dataset is None
+                        or dataset.data_type != "legacy"
+                        or (source.id is not None and source.id != dataset.id)
+                    ):
                         raise TrainFileNotExistError()
                     # Use the canonical stored key, including on case-insensitive DBs.
                     source.url, source.id, source.name = dataset.url, dataset.id, dataset.name
@@ -314,6 +370,9 @@ class FinetuneFileService(BaseModel):
     @classmethod
     async def get_download_url(cls, file_url: str, user: UserPayload) -> str:
         if isinstance(file_url, str) and file_url.startswith("finetune/train_file/"):
+            catalog = await DatasetCatalogRepository.find_url(file_url, include_deleted=True)
+            if catalog is not None and catalog.is_deleted:
+                raise TrainFileNotExistError()
             return await cls._download_owned_training_file(file_url, user)
         # Dataset catalog keys are not training-file keys. Only a tenant-scoped row may be signed.
         if (
@@ -324,7 +383,7 @@ class FinetuneFileService(BaseModel):
             or not (file_url.startswith("finetune/dataset/") or file_url.startswith("dataset/"))
         ):
             raise TrainFileNotExistError()
-        dataset = await PresetTrainDao.find_by_url(file_url)
+        dataset = await DatasetCatalogRepository.find_url(file_url)
         if dataset is None or dataset.url != file_url:
             raise TrainFileNotExistError()
         minio = await get_minio_storage()
@@ -399,18 +458,20 @@ class FinetuneFileService(BaseModel):
 
     @classmethod
     async def get_preset_file(
-        cls, keyword: str | None = None, page_size: int | None = None, page_num: int | None = None
+        cls, keyword: str | None = None, page_size: int | None = None, page_num: int | None = None, data_type=None
     ) -> PageList:
-        list_res, total_count = await PresetTrainDao.search_name(keyword, page_size, page_num)
-        return PageList(list=list_res, total=total_count)
+        rows, total_count = await DatasetCatalogRepository.list(
+            keyword=keyword, page=page_num or 1, limit=page_size or 20, data_type=data_type
+        )
+        return PageList(list=[record for record, _ in rows], total=total_count)
 
     @classmethod
     async def delete_preset_file(cls, file_id: str, user: UserPayload) -> None:
-        file_data = await PresetTrainDao.find_one(file_id)
+        file_data = await DatasetCatalogRepository.find(file_id)
         if not file_data:
             raise TrainFileNotExistError()
 
         logger.info("delete preset train file, user_id={}, file_id={}", user.user_id, file_id)
-        await PresetTrainDao.delete_one(file_data)
+        await DatasetCatalogRepository.delete(file_id)
         logger.info("delete preset train file success")
         return None

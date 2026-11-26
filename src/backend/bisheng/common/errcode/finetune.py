@@ -105,3 +105,13 @@ class FinetuneDatasetSourceError(BaseErrorCode):
 class FinetuneServiceOutdatedError(BaseErrorCode):
     Code: int = 10133
     Msg: str = "The training service is too old for this page; upgrade it to the multimodal version"
+
+
+class TaskUploadExpiredError(BaseErrorCode):
+    Code: int = 10134
+    Msg: str = "The temporary dataset upload is invalid or expired; upload it again"
+
+
+class TaskUploadAlreadyUsedError(BaseErrorCode):
+    Code: int = 10135
+    Msg: str = "This temporary dataset has already been used by another task configuration; upload it again"
