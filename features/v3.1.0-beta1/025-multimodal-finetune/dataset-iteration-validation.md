@@ -28,7 +28,7 @@ flowchart LR
 | 前端本轮关联套件 | 5 个文件，34 项通过；目录分类/转换保留旧行、临时上传隔离、错误重试、类型切换与菜单入口 |
 | 扩大前端回归 | ModelPage + DataSetPage 共 43 文件、279 项断言通过，但有 1 个未处理异常；不能写为全绿。`knowledgeModelRetention.test.tsx` 缺 `LoadingIndicatorProvider` mock，在 `3b7cc045` 原始前端归档中单独复现相同错误；未扩大本轮范围修改该测试 |
 | 类型检查 | 前后两个 SPA 与共享包全工作区 typecheck 通过；最终 Platform 1450 个严格文件通过 |
-| lint / Ruff / arch-guard | 通过；前端原 `BatchTagDraftDialog.tsx:58` 有 1 条未使用 eslint-disable 警告；无新增 lint 错误 |
+| lint / Ruff / arch-guard | 通过；arch-guard 已逐文件检查本次 65 个变更；前端原 `BatchTagDraftDialog.tsx:58` 有 1 条未使用 eslint-disable 警告；无新增 lint 错误 |
 | i18n | 全工作区检查通过；错误码从 packages/locales 生成两端产物 |
 | Platform 生产构建 | 通过；现有 chunk 体积警告保留 |
 | 迁移 | 新唯一 head `v310_f025_dataset_catalog`，父 `v310_f025_merge_release_heads`；SQLite DDL 与事务测试通过；不等同 MySQL/DM8 实机迁移验收 |
@@ -48,7 +48,7 @@ pnpm build
 # src/frontend
 pnpm check-i18n
 # 仓库根
-bash scripts/arch-guard.sh
+git diff --name-only 3b7cc045...HEAD | while IFS= read -r path; do bash scripts/arch-guard.sh "$path"; done
 ```
 
 本轮 Python 使用 `/private/tmp/f025-dataset-python` 隔离环境补齐分支所需的 paramiko 3.5.1，未修改主工作区依赖；前端依赖也安装在隔离工作树。
