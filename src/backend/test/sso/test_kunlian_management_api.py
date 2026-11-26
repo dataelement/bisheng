@@ -205,3 +205,61 @@ async def test_disabled_actor_and_invalid_target_tenant_cannot_modify(management
         session.add(user)
         await session.commit()
     assert (await client.get(BASE + "/status")).status_code == 403
+
+
+async def test_list_tenants_merges_directory_and_bindings_and_enforces_super_admin(management_api):
+    from test.sso.test_kunlian_directory import publish
+
+    client, repository, _, users, controls, cfg, actor, _, _, _ = management_api
+    await publish(
+        repository,
+        tenants=[
+            {
+                "external_tenant_id": "ext-b",
+                "status": "ACTIVE",
+                "version": "1",
+                "summary": {"name": "Beta Tenant", "code": "beta"},
+            },
+            {
+                "external_tenant_id": "ext-s",
+                "status": "SUSPENDED",
+                "version": "1",
+                "summary": {"name": "Suspended Tenant", "code": "suspended"},
+            },
+        ],
+        members=[],
+    )
+    async with controls() as session:
+        session.add(
+            KunlianTenantBinding(connection_id=cfg.connection_id, external_tenant_id="ext-b", local_tenant_id=701, enabled=True)
+        )
+        session.add(
+            KunlianTenantBinding(
+                connection_id=cfg.connection_id, external_tenant_id="ext-bound-only", local_tenant_id=702, enabled=False
+            )
+        )
+        await session.commit()
+
+    response = await client.get(BASE + "/tenants")
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["connection_id"] == cfg.connection_id
+    items_by_id = {item["external_tenant_id"]: item for item in payload["items"]}
+    assert {"ext-b", "ext-s", "ext-bound-only"} <= set(items_by_id)
+    assert items_by_id["ext-b"]["name"] == "Beta Tenant"
+    assert items_by_id["ext-b"]["code"] == "beta"
+    assert items_by_id["ext-b"]["local_tenant_id"] == 701
+    assert items_by_id["ext-b"]["binding_enabled"] is True
+    assert items_by_id["ext-s"]["status"] == "SUSPENDED"
+    assert items_by_id["ext-bound-only"]["status"] == "BOUND"
+    assert items_by_id["ext-bound-only"]["binding_enabled"] is False
+    # ACTIVE tenant sorts before non-ACTIVE entries.
+    assert payload["items"][0]["external_tenant_id"] == "ext-b"
+
+    # Non-super admin cannot query the tenant list.
+    async with users() as session:
+        user = await session.get(User, actor.user_id)
+        user.delete = 1
+        session.add(user)
+        await session.commit()
+    assert (await client.get(BASE + "/tenants")).status_code == 403

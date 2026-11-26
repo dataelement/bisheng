@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from loguru import logger
 
 from bisheng.open_api.domain.models.kunlian_credential import (
+    KUNLIAN_ALL_TENANTS_WILDCARD,
     KUNLIAN_CAPABILITIES,
     KUNLIAN_KEY_PREFIX,
     KunlianCredential,
@@ -74,9 +75,19 @@ def _scope(values, *, capabilities=False):
     if not isinstance(values, (list, tuple)) or not values or len(values) > 1000:
         raise KunlianAccessError("INVALID_INPUT")
     result = list(dict.fromkeys(_identifier(value) for value in values))
-    if capabilities and not set(result) <= KUNLIAN_CAPABILITIES:
+    if capabilities:
+        if not set(result) <= KUNLIAN_CAPABILITIES:
+            raise KunlianAccessError("INVALID_INPUT")
+        return result
+    if KUNLIAN_ALL_TENANTS_WILDCARD in result and len(result) > 1:
         raise KunlianAccessError("INVALID_INPUT")
     return result
+
+
+def _allows_tenant(tenant_ids, external_tenant_id):
+    if not isinstance(external_tenant_id, str) or not external_tenant_id:
+        return False
+    return KUNLIAN_ALL_TENANTS_WILDCARD in tenant_ids or external_tenant_id in tenant_ids
 
 
 _UNSET = object()
@@ -164,7 +175,7 @@ class KunlianCredentialService:
 
     async def authenticate(self, authorization, *, external_tenant_id, capability):
         row = await self._authenticate_row(authorization, capability=capability)
-        if external_tenant_id not in row.tenant_ids:
+        if not _allows_tenant(row.tenant_ids, external_tenant_id):
             raise KunlianAccessError("FORBIDDEN")
         return KunlianPrincipal(
             row.id,
@@ -218,7 +229,7 @@ class KunlianCredentialService:
             or row.connection_id != connection_id
             or capability not in KUNLIAN_CAPABILITIES
             or capability not in row.capabilities
-            or external_tenant_id not in row.tenant_ids
+            or not _allows_tenant(row.tenant_ids, external_tenant_id)
         ):
             raise KunlianAccessError("FORBIDDEN")
         return KunlianPrincipal(

@@ -4288,5 +4288,139 @@
   },
   "memory": {
     "operation": "メモリ操作"
+  },
+  "kunlianApiKey": {
+    "tabTitle": "昆聯連携キー",
+    "subtitle": "昆聯サーバーから BiSheng ワークフロー公開 API（/api/v2/kunlian/*）を呼び出すための API キーを管理します。グローバルスーパー管理者のみ操作できます。",
+    "filters": {
+      "searchPlaceholder": "キーマスク、ID、接続 ID、またはテナント ID で検索",
+      "statusLabel": "状態フィルター",
+      "statusAll": "すべての状態"
+    },
+    "status": {
+      "active": "有効",
+      "expired": "期限切れ",
+      "revoked": "失効済み"
+    },
+    "columns": {
+      "key": "キー",
+      "connection": "接続・連携 ID",
+      "tenants": "許可された外部テナント",
+      "capabilities": "公開 API 権限",
+      "expiresAt": "有効期限",
+      "createdAt": "作成日時",
+      "status": "状態",
+      "revision": "リビジョン v{{revision}}",
+      "rotatedFrom": "#{{id}} からローテーション"
+    },
+    "fields": {
+      "connectionId": "接続 ID",
+      "integrationId": "連携 ID",
+      "tenantIds": "許可された外部テナント ID",
+      "tenantScope": "外部テナント許可範囲",
+      "capabilities": "公開 API 権限",
+      "expiresAt": "有効期限"
+    },
+    "actions": {
+      "issue": "キーを発行",
+      "refresh": "更新",
+      "rotate": "ローテーション",
+      "revoke": "失効",
+      "copy": "コピー",
+      "addTenant": "追加",
+      "clearTenants": "クリア",
+      "selectAllTenants": "すべて選択",
+      "selectActiveTenants": "有効のみ選択",
+      "refreshTenants": "テナント一覧を更新",
+      "removeTenant": "テナント {{tenantId}} を削除",
+      "selectAllCapabilities": "すべて選択",
+      "clearCapabilities": "クリア",
+      "neverExpires": "無期限"
+    },
+    "scope": {
+      "specificModeLabel": "外部テナントを指定",
+      "specificModeDesc": "同期済みディレクトリから外部テナントを選択（全選択可）、または手動で外部テナント ID を追加します。",
+      "allModeLabel": "すべての外部テナント（テナント範囲を検証しない）",
+      "allModeDesc": "この接続配下のすべての外部テナント（今後追加される同期テナントを含む）を許可し、ホワイトリスト検証を行いません。",
+      "allAlertTitle": "全テナント範囲（*）が有効です",
+      "allAlertDesc": "このキーは現在および今後同期されるすべての有効な外部テナントのマッピング済みユーザーを代理できます。接続 ID、API 権限、有効期限/失効、およびグローバルスーパー管理者代理禁止の制約は引き続き有効です。",
+      "allTenantsTag": "全テナント (*)",
+      "allTenantsTooltip": "外部テナント範囲を制限しない（*）：この接続配下の現在・将来の有効な外部テナントをすべて対象にします",
+      "searchTenantsPlaceholder": "テナント名、コード、または ID で検索",
+      "loadingTenants": "昆聯外部テナント一覧を読み込み中…",
+      "emptySyncedTenants": "同期済みの昆聯外部テナントがありません。下欄から外部テナント ID を手動入力できます。",
+      "noMatchingTenants": "一致する外部テナントがありません",
+      "boundLocalTenant": "ローカルテナント #{{id}}",
+      "manualTagsLabel": "手動追加された外部テナント ID"
+    },
+    "tenantStatus": {
+      "ACTIVE": "有効",
+      "SUSPENDED": "停止中",
+      "BOUND": "紐付け済み"
+    },
+    "states": {
+      "loading": "読み込み中…",
+      "empty": "昆聯連携キーがありません"
+    },
+    "form": {
+      "issueTitle": "昆聯連携キーを発行",
+      "editTitle": "昆聯連携キーを編集",
+      "description": "キーは許可された外部テナントおよび権限範囲内で、マッピング済みの昆聯ユーザーを代理してワークフロー API を呼び出せます。",
+      "connectionIdPlaceholder": "例: kunlian-workflow-test",
+      "integrationIdPlaceholder": "例: kunlian",
+      "tenantCount": "{{count}} / {{max}} 件選択",
+      "tenantPlaceholder": "外部テナント ID を入力し Enter または追加を押下",
+      "tenantHint": "カンマ、セミコロン、スペース、または改行区切りで複数の外部テナント ID を貼り付けできます（重複は自動除外）。",
+      "expiresAtPlaceholder": "空欄の場合は無期限",
+      "expiresAtHint": "設定する場合は現在時刻より後の日時を指定してください。"
+    },
+    "validation": {
+      "tenantTooLong": "外部テナント ID は 128 文字以内で指定してください。",
+      "tenantCountLimit": "1 つのキーに設定できる外部テナント ID は最大 {{max}} 件です。",
+      "wildcardUseModeToggle": "全テナントを許可する場合は、上の「すべての外部テナント（テナント範囲を検証しない）」を選択してください。",
+      "expiresFuture": "有効期限は現在時刻より後に設定してください。"
+    },
+    "capabilities": {
+      "read": {
+        "label": "ワークフロー参照",
+        "desc": "ワークフロー一覧、詳細、バージョン、権限情報を参照"
+      },
+      "write": {
+        "label": "ワークフロー編集",
+        "desc": "ワークフローの作成およびキャンバス・ドラフトの更新"
+      },
+      "publish": {
+        "label": "ワークフロー公開",
+        "desc": "ワークフローの公開または公開停止"
+      },
+      "invoke": {
+        "label": "ワークフロー実行",
+        "desc": "実行開始、対話入力送信、キャンセル、実行状態の照会"
+      },
+      "grant": {
+        "label": "権限管理",
+        "desc": "ワークフローへのアクセス権限の付与・剥奪"
+      }
+    },
+    "confirm": {
+      "rotateTitle": "キーをローテーション",
+      "rotateDesc": "既存のキー {{mask}} を即時失効し、テナント範囲・権限・有効期限を引き継ぐ新しいキーを発行します。続行しますか？",
+      "revokeTitle": "キーを失効",
+      "revokeDesc": "失効後、キー {{mask}} は直ちに無効となり復元できません。待機中の実行も停止します。失効しますか？"
+    },
+    "feedback": {
+      "issued": "新しいキーを発行しました。今すぐコピーして保存してください。",
+      "updated": "キー設定を更新しました。",
+      "rotated": "キーをローテーションしました。新しいキーを保存してください。",
+      "revoked": "キーを失効しました。",
+      "copied": "クリップボードにコピーしました。"
+    },
+    "reveal": {
+      "title": "昆聯連携キーを保存してください",
+      "onceHint": "完全なキーは発行またはローテーション直後に一度だけ表示され、後から再表示できません。",
+      "verifyTitle": "疎通確認コマンド",
+      "verifyHint": "<USER_ACCOUNT> を BiSheng にマッピング済みの昆聯ユーザーの user_name に置き換えて確認してください：",
+      "savedConfirm": "このキーをコピーして安全に保存しました"
+    }
   }
 }

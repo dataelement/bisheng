@@ -40,6 +40,9 @@ vi.mock("@/pages/SystemPage/components/PersonalToken", () => ({
 vi.mock("@/pages/SystemPage/components/ResourceTierTab", () => ({
   ResourceTierTab: () => <div data-testid="resource-tiers" />,
 }));
+vi.mock("@/pages/SystemPage/components/KunlianApiKey", () => ({
+  KunlianApiKey: () => <div data-testid="kunlian-api-keys" />,
+}));
 
 type UserShape = Record<string, unknown>;
 
@@ -80,6 +83,7 @@ const LEGACY = "system.userManagement";
 const SERVICE_ACCOUNT = "openApiManagement.serviceAccount.title";
 const PERSONAL_TOKEN = "openApiManagement.personalToken.title";
 const RESOURCE_TIER = "hostedApp.tierAdmin.title";
+const KUNLIAN_API_KEY = "kunlianApiKey.tabTitle";
 
 describe("SystemPage tab visibility (PRD §3.3)", () => {
   it("keeps DSH management out of system settings", () => {
@@ -157,5 +161,15 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
   it("user-group manager sees the user-group tab even without admin flags", () => {
     renderWithUser({ role: "user", can_manage_user_groups: true, user_id: 5 });
     expect(screen.getByRole("tab", { name: USER_GROUP })).toBeInTheDocument();
+  });
+
+  it("shows Kunlian API key tab exclusively to is_global_super", () => {
+    renderWithUser({ role: "admin", user_id: 1, is_global_super: true });
+    expect(screen.getByRole("tab", { name: KUNLIAN_API_KEY })).toBeInTheDocument();
+  });
+
+  it("hides Kunlian API key tab from tenant/child/department admins without is_global_super", () => {
+    renderWithUser({ role: "user", is_child_admin: true, user_id: 2 });
+    expect(screen.queryByRole("tab", { name: KUNLIAN_API_KEY })).toBeNull();
   });
 });

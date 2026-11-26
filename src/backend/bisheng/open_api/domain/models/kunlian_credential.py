@@ -10,6 +10,7 @@ from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.open_api.domain.models.api_credential import mask_key
 
 KUNLIAN_KEY_PREFIX = "bs-kl-"
+KUNLIAN_ALL_TENANTS_WILDCARD = "*"
 KUNLIAN_CAPABILITIES = frozenset({"read", "write", "publish", "invoke", "grant"})
 
 

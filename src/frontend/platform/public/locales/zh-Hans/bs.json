@@ -4288,5 +4288,139 @@
   },
   "memory": {
     "operation": "记忆操作"
+  },
+  "kunlianApiKey": {
+    "tabTitle": "昆联集成密钥",
+    "subtitle": "管理供昆联服务端调用毕昇工作流开放接口（/api/v2/kunlian/*）的 API Key，仅全局超级管理员可签发与维护。",
+    "filters": {
+      "searchPlaceholder": "搜索密钥掩码、ID、连接标识或租户 ID",
+      "statusLabel": "状态筛选",
+      "statusAll": "全部状态"
+    },
+    "status": {
+      "active": "有效",
+      "expired": "已过期",
+      "revoked": "已吊销"
+    },
+    "columns": {
+      "key": "密钥",
+      "connection": "连接与集成标识",
+      "tenants": "允许的外部租户",
+      "capabilities": "开放接口权限",
+      "expiresAt": "过期时间",
+      "createdAt": "创建时间",
+      "status": "状态",
+      "revision": "修订 v{{revision}}",
+      "rotatedFrom": "轮换自 #{{id}}"
+    },
+    "fields": {
+      "connectionId": "连接标识",
+      "integrationId": "集成标识",
+      "tenantIds": "允许的外部租户 ID",
+      "tenantScope": "允许的外部租户范围",
+      "capabilities": "开放接口权限",
+      "expiresAt": "过期时间"
+    },
+    "actions": {
+      "issue": "签发密钥",
+      "refresh": "刷新",
+      "rotate": "轮换",
+      "revoke": "吊销",
+      "copy": "复制",
+      "addTenant": "添加",
+      "clearTenants": "清空",
+      "selectAllTenants": "全选",
+      "selectActiveTenants": "仅选有效",
+      "refreshTenants": "刷新租户列表",
+      "removeTenant": "移除租户 {{tenantId}}",
+      "selectAllCapabilities": "全选",
+      "clearCapabilities": "清空",
+      "neverExpires": "永不过期"
+    },
+    "scope": {
+      "specificModeLabel": "指定外部租户",
+      "specificModeDesc": "从已同步目录中选择外部租户（支持全选），或手动补充外部租户 ID。",
+      "allModeLabel": "全部外部租户（不校验租户范围）",
+      "allModeDesc": "通配该连接下的所有外部租户（含后续新同步租户），调用时不限制外部租户白名单。",
+      "allAlertTitle": "已启用全租户授权范围（*）",
+      "allAlertDesc": "该密钥可代理当前及后续同步的所有有效外部租户下已映射用户；连接标识、接口权限、过期吊销及禁止代理全局超管等安全约束仍然生效。",
+      "allTenantsTag": "全部租户 (*)",
+      "allTenantsTooltip": "不限制外部租户范围（*）：支持该连接下的当前及后续全部有效外部租户",
+      "searchTenantsPlaceholder": "搜索租户名称、编码或 ID",
+      "loadingTenants": "正在加载昆联外部租户列表…",
+      "emptySyncedTenants": "暂无已同步的昆联外部租户，可在下方手动输入外部租户 ID。",
+      "noMatchingTenants": "没有匹配的外部租户",
+      "boundLocalTenant": "本地租户 #{{id}}",
+      "manualTagsLabel": "已手动补充的外部租户 ID"
+    },
+    "tenantStatus": {
+      "ACTIVE": "有效",
+      "SUSPENDED": "已停用",
+      "BOUND": "已绑定"
+    },
+    "states": {
+      "loading": "正在加载…",
+      "empty": "暂无昆联集成密钥"
+    },
+    "form": {
+      "issueTitle": "签发昆联集成密钥",
+      "editTitle": "编辑昆联集成密钥",
+      "description": "密钥仅可在获准的昆联外部租户与权限范围内代表已映射用户调用工作流接口。",
+      "connectionIdPlaceholder": "如 kunlian-workflow-test",
+      "integrationIdPlaceholder": "如 kunlian",
+      "tenantCount": "已选 {{count}} / {{max}}",
+      "tenantPlaceholder": "输入外部租户 ID，回车或点击添加",
+      "tenantHint": "支持使用逗号、分号、空格或换行一次粘贴多个外部租户 ID，服务端将按序去重。",
+      "expiresAtPlaceholder": "留空表示永不过期",
+      "expiresAtHint": "若设置过期时间，必须晚于当前时间。"
+    },
+    "validation": {
+      "tenantTooLong": "单个外部租户 ID 长度不能超过 128 个字符。",
+      "tenantCountLimit": "单个密钥最多允许配置 {{max}} 个外部租户 ID。",
+      "wildcardUseModeToggle": "如需授权全部租户，请直接在上方选择「全部外部租户（不校验租户范围）」。",
+      "expiresFuture": "过期时间必须晚于当前时间。"
+    },
+    "capabilities": {
+      "read": {
+        "label": "查询工作流",
+        "desc": "查询工作流列表、详情、版本及授权信息"
+      },
+      "write": {
+        "label": "编辑工作流",
+        "desc": "新建、修改工作流画布及版本草稿"
+      },
+      "publish": {
+        "label": "发布工作流",
+        "desc": "发布或下线工作流"
+      },
+      "invoke": {
+        "label": "执行工作流",
+        "desc": "触发运行、提交人工输入、取消及查询运行状态"
+      },
+      "grant": {
+        "label": "管理授权",
+        "desc": "授予或回收工作流访问及使用权限"
+      }
+    },
+    "confirm": {
+      "rotateTitle": "轮换密钥",
+      "rotateDesc": "将立即吊销原密钥 {{mask}}，并生成继承相同租户范围、权限与过期时间的新密钥。确认继续吗？",
+      "revokeTitle": "吊销密钥",
+      "revokeDesc": "吊销后密钥 {{mask}} 将立即失效且无法恢复，使用该密钥的排队或等待任务将停止推进。确认吊销吗？"
+    },
+    "feedback": {
+      "issued": "已签发新密钥，请立即复制保存。",
+      "updated": "密钥配置已更新。",
+      "rotated": "密钥已轮换，请立即保存新密钥。",
+      "revoked": "密钥已吊销。",
+      "copied": "已复制到剪贴板。"
+    },
+    "reveal": {
+      "title": "请保存昆联集成密钥",
+      "onceHint": "完整密钥仅在签发或轮换后展示这一次，关闭后无法再次查看。",
+      "verifyTitle": "验活命令示例",
+      "verifyHint": "将 <USER_ACCOUNT> 替换为已在毕昇映射生效的昆联用户登录账号（user_name）即可验证连通性：",
+      "savedConfirm": "我已复制并妥善保存该密钥"
+    }
   }
 }

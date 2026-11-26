@@ -902,6 +902,53 @@ class KunlianDirectoryRepository:
                 "last_run_at": latest.started_at if latest else None,
             }
 
+    async def list_tenants(self, connection_id: str) -> list[dict]:
+        """列出当前连接下最近已发布批次的外部租户与本地租户绑定状态。"""
+        async with self._session() as session:
+            state = await session.get(KunlianConnectionState, connection_id)
+            bindings = (
+                await session.exec(
+                    select(KunlianTenantBinding).where(KunlianTenantBinding.connection_id == connection_id)
+                )
+            ).all()
+            bindings_by_id = {row.external_tenant_id: row for row in bindings}
+            items_by_id: dict[str, dict] = {}
+            if state is not None and state.active_batch_id:
+                tenants = (
+                    await session.exec(
+                        select(KunlianDirectoryTenant).where(KunlianDirectoryTenant.batch_id == state.active_batch_id)
+                    )
+                ).all()
+                for row in tenants:
+                    summary = row.summary if isinstance(row.summary, dict) else {}
+                    binding = bindings_by_id.get(row.external_tenant_id)
+                    raw_code = summary.get("code")
+                    items_by_id[row.external_tenant_id] = {
+                        "external_tenant_id": row.external_tenant_id,
+                        "name": str(summary.get("name") or row.external_tenant_id),
+                        "code": str(raw_code) if raw_code else None,
+                        "status": row.status,
+                        "local_tenant_id": binding.local_tenant_id if binding else None,
+                        "binding_enabled": bool(binding.enabled) if binding else False,
+                        "materialized": bool(binding.materialized) if binding else False,
+                    }
+            for ext_id, binding in bindings_by_id.items():
+                if ext_id in items_by_id:
+                    continue
+                items_by_id[ext_id] = {
+                    "external_tenant_id": ext_id,
+                    "name": ext_id,
+                    "code": None,
+                    "status": "BOUND",
+                    "local_tenant_id": binding.local_tenant_id,
+                    "binding_enabled": bool(binding.enabled),
+                    "materialized": bool(binding.materialized),
+                }
+            return sorted(
+                items_by_id.values(),
+                key=lambda item: (0 if item["status"] == "ACTIVE" else 1, item["name"].lower(), item["external_tenant_id"]),
+            )
+
     def _seal(self, value: str) -> str:
         if not self.key_version or not callable(self.encrypt_value):
             raise KunlianDependencyUnavailableError()

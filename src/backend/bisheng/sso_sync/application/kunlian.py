@@ -233,6 +233,12 @@ class KunlianManagementApplication:
 
         return await self._dispatch(user, run)
 
+    async def list_tenants(self, user, connection_id: str | None = None):
+        async def run(actor):
+            return await self.service.management_list_tenants(connection_id)
+
+        return await self._dispatch(user, run)
+
     async def get_binding(self, user, external_tenant_id: str):
         async def run(actor):
             return await self.service.management_get_binding(external_tenant_id)

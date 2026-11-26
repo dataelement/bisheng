@@ -3,10 +3,11 @@ import { userContext } from "@/contexts/userContext";
 import { Tabs } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 // TODO(bisheng-icons): Replace these fallbacks when AI assistant and appearance icons are available.
-import { Bot, Palette } from "lucide-react";
+import { Bot, KeyRound, Palette } from "lucide-react";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import Config from "./components/Config";
+import { KunlianApiKey } from "./components/KunlianApiKey";
 import OrganizationAndMembers from "./components/OrganizationAndMembers";
 import OrgSync from "./components/OrgSync";
 import { PersonalToken } from "./components/PersonalToken";
@@ -51,6 +52,8 @@ export default function SystemPage() {
    *  super admin only — and only where the app-factory runtime layer is
    *  deployed; without it there is nothing the tiers would apply to. */
   const showResourceTierTab = isSuperAdmin && !!appConfig?.appRuntimeEnabled
+  /** F133 Kunlian integration API keys: control plane requires global super admin. */
+  const showKunlianKeyTab = Boolean(user?.is_global_super);
 
   const defaultTab = showOrgTab ? "organization" : showUserGroupTab ? "userGroup" : "user";
 
@@ -184,6 +187,16 @@ export default function SystemPage() {
             label: t("hostedApp.tierAdmin.title"),
             icon: <Outlined.Layer aria-hidden="true" />,
             children: <div className="min-h-0 flex-1 overflow-hidden"><ResourceTierTab /></div>,
+          }] : []),
+          ...(showKunlianKeyTab ? [{
+            key: "kunlianApiKey",
+            label: <> {t("kunlianApiKey.tabTitle")} </>,
+            icon: <KeyRound aria-hidden="true" />,
+            children: (
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <KunlianApiKey />
+              </div>
+            ),
           }] : []),
           ...(canAccessSystemConfig
             ? [

@@ -114,6 +114,13 @@ class KunlianDirectoryService:
         data.update(directory_age_seconds=age, ready=not reasons, reasons=tuple(dict.fromkeys(reasons)))
         return data
 
+    async def management_list_tenants(self, connection_id: str | None = None) -> dict:
+        target = (connection_id if connection_id is not None else self.config.connection_id or "").strip()
+        if not target or len(target) > 64:
+            raise KunlianBindingConflictError()
+        items = await self.repository.list_tenants(target)
+        return {"connection_id": target, "items": items}
+
     async def management_get_binding(self, external_tenant_id: str) -> dict:
         if not external_tenant_id or len(external_tenant_id) > 64:
             raise KunlianBindingConflictError()

@@ -4343,5 +4343,139 @@
   },
   "memory": {
     "operation": "Memory operation"
+  },
+  "kunlianApiKey": {
+    "tabTitle": "Kunlian API Keys",
+    "subtitle": "Manage API keys used by Kunlian servers to call BiSheng workflow endpoints (/api/v2/kunlian/*). Global super administrators only.",
+    "filters": {
+      "searchPlaceholder": "Search key mask, ID, connection ID, or tenant ID",
+      "statusLabel": "Status filter",
+      "statusAll": "All statuses"
+    },
+    "status": {
+      "active": "Active",
+      "expired": "Expired",
+      "revoked": "Revoked"
+    },
+    "columns": {
+      "key": "Key",
+      "connection": "Connection & Integration",
+      "tenants": "Allowed External Tenants",
+      "capabilities": "Capabilities",
+      "expiresAt": "Expires at",
+      "createdAt": "Created at",
+      "status": "Status",
+      "revision": "Revision v{{revision}}",
+      "rotatedFrom": "Rotated from #{{id}}"
+    },
+    "fields": {
+      "connectionId": "Connection ID",
+      "integrationId": "Integration ID",
+      "tenantIds": "Allowed External Tenant IDs",
+      "tenantScope": "External Tenant Scope",
+      "capabilities": "Capabilities",
+      "expiresAt": "Expiration"
+    },
+    "actions": {
+      "issue": "Issue key",
+      "refresh": "Refresh",
+      "rotate": "Rotate",
+      "revoke": "Revoke",
+      "copy": "Copy",
+      "addTenant": "Add",
+      "clearTenants": "Clear",
+      "selectAllTenants": "Select all",
+      "selectActiveTenants": "Active only",
+      "refreshTenants": "Refresh tenant list",
+      "removeTenant": "Remove tenant {{tenantId}}",
+      "selectAllCapabilities": "Select all",
+      "clearCapabilities": "Clear",
+      "neverExpires": "Never expires"
+    },
+    "scope": {
+      "specificModeLabel": "Specific external tenants",
+      "specificModeDesc": "Select synced external tenants from the directory (with Select all), or add tenant IDs manually.",
+      "allModeLabel": "All external tenants (skip tenant whitelist check)",
+      "allModeDesc": "Applies to all external tenants under this connection (including newly synced ones) without checking a tenant whitelist.",
+      "allAlertTitle": "All-tenant scope (*) enabled",
+      "allAlertDesc": "This key can represent mapped users in any active external tenant under this connection. Connection ID, capabilities, expiration/revocation, and the global super admin prohibition remain enforced.",
+      "allTenantsTag": "All tenants (*)",
+      "allTenantsTooltip": "Unrestricted external tenant scope (*): covers all current and future active external tenants on this connection",
+      "searchTenantsPlaceholder": "Search tenant name, code, or ID",
+      "loadingTenants": "Loading Kunlian external tenants…",
+      "emptySyncedTenants": "No synced Kunlian external tenants found. Enter external tenant IDs manually below.",
+      "noMatchingTenants": "No matching external tenants",
+      "boundLocalTenant": "Local tenant #{{id}}",
+      "manualTagsLabel": "Manually added external tenant IDs"
+    },
+    "tenantStatus": {
+      "ACTIVE": "Active",
+      "SUSPENDED": "Suspended",
+      "BOUND": "Bound"
+    },
+    "states": {
+      "loading": "Loading…",
+      "empty": "No Kunlian API keys found"
+    },
+    "form": {
+      "issueTitle": "Issue Kunlian API Key",
+      "editTitle": "Edit Kunlian API Key",
+      "description": "Keys can act only for mapped Kunlian users within the approved external tenants and capabilities.",
+      "connectionIdPlaceholder": "e.g. kunlian-workflow-test",
+      "integrationIdPlaceholder": "e.g. kunlian",
+      "tenantCount": "{{count}} / {{max}} selected",
+      "tenantPlaceholder": "Enter external tenant ID and press Enter or Add",
+      "tenantHint": "Paste multiple external tenant IDs separated by commas, semicolons, spaces, or new lines; duplicates are removed automatically.",
+      "expiresAtPlaceholder": "Leave empty for never expires",
+      "expiresAtHint": "If specified, expiration must be later than the current time."
+    },
+    "validation": {
+      "tenantTooLong": "Each external tenant ID must be at most 128 characters.",
+      "tenantCountLimit": "At most {{max}} external tenant IDs can be configured per key.",
+      "wildcardUseModeToggle": "To authorize all tenants, choose \"All external tenants (skip tenant whitelist check)\" above.",
+      "expiresFuture": "Expiration must be later than the current time."
+    },
+    "capabilities": {
+      "read": {
+        "label": "Read workflows",
+        "desc": "List workflows, inspect details, versions, and grants"
+      },
+      "write": {
+        "label": "Write workflows",
+        "desc": "Create and update workflow graphs and drafts"
+      },
+      "publish": {
+        "label": "Publish workflows",
+        "desc": "Publish or take workflows offline"
+      },
+      "invoke": {
+        "label": "Invoke workflows",
+        "desc": "Start runs, submit interactive input, cancel, and poll run status"
+      },
+      "grant": {
+        "label": "Manage grants",
+        "desc": "Grant or revoke workflow access permissions"
+      }
+    },
+    "confirm": {
+      "rotateTitle": "Rotate key",
+      "rotateDesc": "This immediately revokes {{mask}} and issues a new key inheriting its tenants, capabilities, and expiration. Continue?",
+      "revokeTitle": "Revoke key",
+      "revokeDesc": "Key {{mask}} will become invalid immediately and cannot be restored; queued or waiting runs using it will stop advancing. Revoke?"
+    },
+    "feedback": {
+      "issued": "New key issued. Copy and store it now.",
+      "updated": "Key configuration updated.",
+      "rotated": "Key rotated. Save the new key now.",
+      "revoked": "Key revoked.",
+      "copied": "Copied to clipboard."
+    },
+    "reveal": {
+      "title": "Save your Kunlian API key",
+      "onceHint": "The full key is shown only once after issuance or rotation and cannot be retrieved later.",
+      "verifyTitle": "Verification command",
+      "verifyHint": "Replace <USER_ACCOUNT> with a mapped Kunlian user's BiSheng user_name to verify connectivity:",
+      "savedConfirm": "I have copied and saved this key securely"
+    }
   }
 }

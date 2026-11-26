@@ -13,6 +13,7 @@ vi.mock('./components/RolesAndPermissions', () => ({ RolesAndPermissions: () => 
 vi.mock('./components/OrgSync', () => ({ default: () => <div>Sync content</div> }))
 vi.mock('./components/PersonalToken', () => ({ PersonalToken: () => <div>Tokens content</div> }))
 vi.mock('./components/ServiceAccount', () => ({ ServiceAccount: () => <div>Accounts content</div> }))
+vi.mock('./components/KunlianApiKey', () => ({ KunlianApiKey: () => <div>Kunlian keys content</div> }))
 vi.mock('./components/Config', () => ({ default: () => <div>Configuration content</div> }))
 vi.mock('./theme', () => ({ default: () => <div>Theme content</div> }))
 
@@ -52,4 +53,11 @@ it('respects the deployment flag and the legacy user-only entry', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(1)
     expect(screen.getByText('User content')).toBeVisible()
     expect(screen.queryByRole('tab', { name: 'openApiManagement.personalToken.title' })).not.toBeInTheDocument()
+})
+it('shows Kunlian API keys tab only when is_global_super is true', async () => {
+    render(<Fixture user={{ role: 'admin', is_global_super: true }} apiEnabled><SystemPage /></Fixture>)
+    const kunlianTab = screen.getByRole('tab', { name: 'kunlianApiKey.tabTitle' })
+    expect(kunlianTab).toBeInTheDocument()
+    await userEvent.click(kunlianTab)
+    expect(screen.getByText('Kunlian keys content')).toBeVisible()
 })

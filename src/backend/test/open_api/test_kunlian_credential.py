@@ -281,3 +281,55 @@ async def test_key_issuance_requires_platform_super_and_future_expiry():
         await service.issue(is_global_super=False, **arguments)
     with pytest.raises(module.KunlianAccessError, match="INVALID_INPUT"):
         await service.issue(is_global_super=True, expires_at=datetime.now(UTC) - timedelta(seconds=1), **arguments)
+
+
+async def test_all_tenants_wildcard_bypasses_tenant_whitelist_but_keeps_other_guards():
+    module = service_module()
+    service = module.KunlianCredentialService(Store())
+    with pytest.raises(module.KunlianAccessError, match="INVALID_INPUT"):
+        await service.issue(
+            is_global_super=True,
+            created_by=1,
+            connection_id="kunlian",
+            integration_id="main",
+            tenant_ids=["*", "a"],
+            capabilities=["read"],
+        )
+
+    issued = await service.issue(
+        is_global_super=True,
+        created_by=1,
+        connection_id="kunlian",
+        integration_id="main",
+        tenant_ids=["*"],
+        capabilities=["read", "invoke"],
+    )
+    assert issued["tenant_ids"] == ["*"]
+    principal = await service.authenticate("Bearer " + issued["api_key"], external_tenant_id="any-tenant", capability="read")
+    assert principal.external_tenant_id == "any-tenant"
+    ref = await service.validate_reference(
+        issued["id"],
+        integration_id="main",
+        connection_id="kunlian",
+        external_tenant_id="future-synced-tenant",
+        capability="invoke",
+    )
+    assert ref.external_tenant_id == "future-synced-tenant"
+
+    with pytest.raises(module.KunlianAccessError, match="FORBIDDEN"):
+        await service.authenticate("Bearer " + issued["api_key"], external_tenant_id="any-tenant", capability="grant")
+    with pytest.raises(module.KunlianAccessError, match="FORBIDDEN"):
+        await service.validate_reference(
+            issued["id"],
+            integration_id="main",
+            connection_id="other-conn",
+            external_tenant_id="any-tenant",
+            capability="invoke",
+        )
+
+    rotated = await service.rotate(issued["id"], is_global_super=True, created_by=2)
+    assert rotated["tenant_ids"] == ["*"]
+    narrowed = await service.update(rotated["id"], is_global_super=True, tenant_ids=["only-a"])
+    assert narrowed["tenant_ids"] == ["only-a"]
+    with pytest.raises(module.KunlianAccessError, match="FORBIDDEN"):
+        await service.authenticate("Bearer " + rotated["api_key"], external_tenant_id="other-tenant", capability="read")

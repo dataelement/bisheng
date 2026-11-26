@@ -77,3 +77,49 @@ async def test_formal_list_checks_real_key_tenant_scope_and_revocation():
         identities.resolve.assert_awaited_once_with(
             connection_id="kunlian", external_tenant_id="allowed", external_user_id="subject"
         )
+
+
+async def test_formal_list_allows_wildcard_all_tenants_key():
+    credentials = KunlianCredentialService(Store())
+    issued = await credentials.issue(
+        is_global_super=True,
+        created_by=1,
+        connection_id="kunlian",
+        integration_id="e2e-f133",
+        tenant_ids=["*"],
+        capabilities=["read"],
+    )
+    accounts = SimpleNamespace(
+        resolve_account=AsyncMock(
+            side_effect=[
+                SimpleNamespace(user_id=17, tenant_id=7, external_tenant_id="tenant-1", external_user_id="sub-1"),
+                SimpleNamespace(user_id=18, tenant_id=8, external_tenant_id="tenant-2", external_user_id="sub-2"),
+            ]
+        )
+    )
+    identities = SimpleNamespace(
+        resolve=AsyncMock(
+            side_effect=[
+                SimpleNamespace(user_id=17, tenant_id=7),
+                SimpleNamespace(user_id=18, tenant_id=8),
+            ]
+        )
+    )
+    app = FastAPI()
+    app.state.kunlian_access_service = KunlianAccessService(
+        credentials,
+        identities,
+        account_resolver=accounts,
+        privilege_reader=AsyncMock(return_value=(False, False)),
+    )
+    app.state.kunlian_request_limiter = AsyncMock()
+    app.state.kunlian_audit_service = SimpleNamespace(begin=AsyncMock(return_value="audit"), finish=AsyncMock())
+    business = AsyncMock(return_value={"data": [], "has_more": False})
+    app.state.kunlian_workflow_api = SimpleNamespace(list=business)
+    app.include_router(router)
+    headers = {"Authorization": "Bearer " + issued["api_key"]}
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
+        for account_name in ("u1", "u2"):
+            res = await client.get("/api/v2/kunlian/workflows", headers=headers, params={"user_account": account_name})
+            assert res.status_code == 200
+    assert business.await_count == 2

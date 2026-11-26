@@ -1,6 +1,6 @@
 """昆联专用路由。局部真实 HTTP 错误合同不影响旧 SSO。"""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -158,6 +158,15 @@ def management(bindings: KunlianApiBindings):
 @router.get("/identity-integrations/kunlian/status")
 async def status(user: UserPayload = Depends(UserPayload.get_login_user), bindings=Depends(get_api_bindings)):
     return resp_200(await management(bindings).status(user))
+
+
+@router.get("/identity-integrations/kunlian/tenants")
+async def list_tenants(
+    connection_id: str | None = Query(default=None, min_length=1, max_length=64),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    bindings=Depends(get_api_bindings),
+):
+    return resp_200(await management(bindings).list_tenants(user, connection_id=connection_id))
 
 
 @router.get("/identity-integrations/kunlian/tenant-bindings/{external_tenant_id}")
