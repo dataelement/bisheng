@@ -3653,6 +3653,8 @@
     },
     "hourOfDay": "{{hour}}:00",
     "launchAddressHelp": "Open Client from the workspace",
+    "platformPublicUrl": "Platform public URL",
+    "platformPublicUrlHelp": "Public origin for Desktop login, Chat and Work tools, e.g. https://ai.example.com. Leave empty to use the deployment value (BS_DSH_PLATFORM_PUBLIC_URL).",
     "launchAddress": "Client launch URL",
     "title": "Client",
     "loading": "Loading…",

@@ -1,8 +1,22 @@
 import request from '@/controllers/request'
 import { parseDshLaunchBase } from '@/utils/dshLaunch'
 
-export type DshManagementSettings = { enabled: boolean; download_url: string | null; launch_url: string }
+export type DshManagementSettings = { enabled: boolean; download_url: string | null; launch_url: string; platform_public_url?: string | null }
 export type DshBrowserConfig = DshManagementSettings & { management_enabled: boolean }
+
+/** Null/blank keeps the deployment value (BS_DSH_PLATFORM_PUBLIC_URL); otherwise a bare HTTP(S) origin. */
+function parsePlatformPublicUrl(raw: unknown): string | null {
+    if (raw === null || raw === undefined || raw === '') return null
+    if (typeof raw !== 'string') throw new Error('Invalid DSH platform URL')
+    const url = new URL(raw)
+    if (
+        !['http:', 'https:'].includes(url.protocol) || url.username || url.password
+        || !['', '/'].includes(url.pathname) || url.search || url.hash
+    ) {
+        throw new Error('Invalid DSH platform URL')
+    }
+    return url.origin
+}
 
 export function parseDshManagementSettings(raw: unknown): DshManagementSettings {
     if (!raw || typeof raw !== 'object' || !('enabled' in raw) || typeof raw.enabled !== 'boolean'
@@ -15,7 +29,13 @@ export function parseDshManagementSettings(raw: unknown): DshManagementSettings 
             throw new Error('Invalid DSH download URL')
         }
     }
-    return { enabled: raw.enabled, download_url: raw.download_url, launch_url: parseDshLaunchBase('launch_url' in raw ? raw.launch_url : undefined) }
+    const platformPublicUrl = parsePlatformPublicUrl('platform_public_url' in raw ? raw.platform_public_url : null)
+    return {
+        enabled: raw.enabled,
+        download_url: raw.download_url,
+        launch_url: parseDshLaunchBase('launch_url' in raw ? raw.launch_url : undefined),
+        platform_public_url: platformPublicUrl,
+    }
 }
 
 export async function getDshBrowserConfig(signal?: AbortSignal): Promise<DshBrowserConfig> {

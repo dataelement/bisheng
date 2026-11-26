@@ -65,7 +65,7 @@ describe('DSH deployment and business settings', () => {
         expect(screen.queryByText('dsh.settingsSaved')).toBeNull()
         expect(screen.getByRole('button', { name: 'dsh.editSettings' })).toBeEnabled()
         expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeDisabled()
-        expect(saveDshManagementSettings).toHaveBeenCalledWith({ enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop-test://login' })
+        expect(saveDshManagementSettings).toHaveBeenCalledWith({ enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop-test://login', platform_public_url: null })
     })
     it('retains the draft and shows a failure without claiming success', async () => {
         vi.mocked(saveDshManagementSettings).mockRejectedValue(new Error('Invalid URL'))

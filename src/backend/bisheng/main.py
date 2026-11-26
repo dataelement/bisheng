@@ -114,6 +114,26 @@ def _register_app_publish_composition() -> None:
         logger.exception("app_publish composition root failed to register; continuing startup")
 
 
+async def _apply_stored_dsh_public_url(app: FastAPI) -> None:
+    """Give the long-lived Work MCP transport the administrator-managed origin.
+
+    The DSH settings page stores ``dsh_management.platform_public_url``; when it
+    is set it wins over the deployment value (BS_DSH_PLATFORM_PUBLIC_URL). The
+    session manager is created before the database is ready, so the value is
+    applied once startup has initialised the app context.
+    """
+    try:
+        from bisheng.dsh.domain.services.settings import DshSettingsService
+        from bisheng.dsh.work_mcp import work_transport_security
+
+        public_url = await DshSettingsService().platform_public_url(settings.dsh.platform_public_url)
+        manager = getattr(app.state, "work_mcp_runtime", None)
+        if manager is not None:
+            manager.security_settings = work_transport_security(public_url)
+    except Exception:
+        logger.warning("DSH public URL could not be read at startup; keeping the deployment value")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncExitStack() as stack:
@@ -122,6 +142,7 @@ async def lifespan(app: FastAPI):
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
         _register_app_publish_composition()
+        await _apply_stored_dsh_public_url(app)
         from bisheng.app_runtime.domain.services.entry_authz_service import diagnose_obo_configuration
 
         diagnose_obo_configuration()
