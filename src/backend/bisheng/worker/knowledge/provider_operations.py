@@ -15,9 +15,56 @@ from bisheng.knowledge.domain.repositories.provider_operation_repository import 
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
-LEASE_SECONDS = 120
+# One provisioning step may run a full round of remote model probes, and the
+# send step always does (creation never trusts a cached probe), so a fixed budget
+# cannot work: 120s cut real sends off mid-write and the operation then retried
+# forever. The step and lease budgets are therefore derived from the operator's
+# probe budget.
+STEP_OVERHEAD_SECONDS = 120
+LEASE_MARGIN_SECONDS = 60
 INSTANCE_CONCURRENCY = 2
 ATTEMPT_BUDGET = 8
+# The states a wakeup can advance. A step that lands outside them is terminal or
+# parked for review and must not be woken again.
+_WAKEABLE = frozenset({"pending", "sending", "waiting_remote", "reconciling", "applying"})
+
+
+def should_chain_wakeup(*, state, delay) -> bool:
+    """A phase transition is due now; a retry waits for its own backoff."""
+    return delay == 0 and state in _WAKEABLE
+
+
+def wake_provider_operation(*, tenant_id, operation_id, expected_revision, queue="knowledge_celery") -> bool:
+    """Ask a worker to advance this operation now.
+
+    The periodic sweep stays the safety net, so a broker that is down must not
+    turn a committed operation into a failed request. ``expected_revision`` is
+    bound into the message: a wakeup for a revision the row has already left is
+    discarded by ``_execute`` instead of advancing someone else's claim.
+    """
+    try:
+        advance_provider_operation.apply_async(
+            kwargs={"operation_id": operation_id, "expected_revision": expected_revision},
+            headers={"tenant_id": tenant_id},
+            queue=queue,
+            retry=False,
+        )
+        return True
+    except Exception:
+        logger.warning("provider operation wakeup unavailable operation={}", operation_id)
+        return False
+
+
+def step_timeout_seconds() -> float:
+    """Wall-clock budget for one leased step (never less than before, so nothing regresses)."""
+    from bisheng.knowledge.application.provider_provision_runtime import probe_budget_seconds
+
+    return max(120.0, probe_budget_seconds() + STEP_OVERHEAD_SECONDS)
+
+
+def lease_seconds() -> int:
+    """Lease must outlive the step it covers, or a peer reclaims work that is still running."""
+    return int(step_timeout_seconds() + LEASE_MARGIN_SECONDS)
 
 
 @dataclass(frozen=True)
@@ -56,7 +103,17 @@ def utcnow():
 
 
 async def advance_one(
-    *, tenant_id, operation_id, expected_revision, attempt_budget, claim, send, reconcile, project, advance
+    *,
+    tenant_id,
+    operation_id,
+    expected_revision,
+    attempt_budget,
+    claim,
+    send,
+    reconcile,
+    project,
+    advance,
+    step_timeout=None,
 ):
     row = await claim(tenant_id=tenant_id, operation_id=operation_id, expected_revision=expected_revision)
     if row is None:
@@ -67,9 +124,18 @@ async def advance_one(
         expected_revision + 1,
     ) or not row.lease_token:
         raise RuntimeError("claimed operation disagrees with wakeup")
-    step = {"sending": send, "waiting_remote": reconcile, "reconciling": reconcile, "applying": project}[row.state]
+    # "pending" means "proven not sent yet" (a replay after verified absence), so
+    # it must re-send. Leaving it out of this map made every replay die on a
+    # KeyError before the send step ever ran.
+    step = {
+        "pending": send,
+        "sending": send,
+        "waiting_remote": reconcile,
+        "reconciling": reconcile,
+        "applying": project,
+    }[row.state]
     try:
-        async with asyncio.timeout(LEASE_SECONDS - 10):
+        async with asyncio.timeout(step_timeout if step_timeout is not None else step_timeout_seconds()):
             result = await step(row)
     except Exception as exc:
         # Provider exceptions can contain credentials or response bodies. Keep
@@ -129,7 +195,7 @@ async def _execute(tenant_id, operation_id, expected_revision):
                 kind=target.kind,
                 concurrency=INSTANCE_CONCURRENCY,
                 clock=utcnow,
-                lease_seconds=LEASE_SECONDS,
+                lease_seconds=lease_seconds(),
             )
             if row is not None:
                 session.expunge(row)
@@ -162,6 +228,11 @@ async def _execute(tenant_id, operation_id, expected_revision):
             logger.warning(
                 "provider operation requires review tenant={} operation={} phase={}", tenant_id, operation_id, row.phase
             )
+        if changed and should_chain_wakeup(state=state, delay=delay):
+            # A phase transition (send confirmed -> applying, checkpoint -> applying)
+            # is due immediately; waiting for the 30s sweep here is what made a
+            # created space appear in the provider a minute late.
+            wake_provider_operation(tenant_id=tenant_id, operation_id=operation_id, expected_revision=row.revision + 1)
         return changed
 
     with tenant_execution_scope(target.tenant_id):

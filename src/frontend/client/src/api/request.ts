@@ -156,11 +156,25 @@ async function _postTTS(url: string, formData: FormData, options?: AxiosRequestC
   return response.data;
 }
 
+/**
+ * Merge caller headers into the JSON request config instead of replacing them.
+ *
+ * Both `headers` and the spread of `options` appear here, so the order matters:
+ * spreading `options` last (or setting `headers` last) silently drops whichever
+ * side loses. That is how a required `X-Management-Tenant` scope header vanished
+ * from PUT/PATCH while GET/POST kept working, and the server answered 400 with no
+ * error log.
+ */
+function withJsonContentType(options?: AxiosRequestConfig & ErrorOptions) {
+  const { headers, ...rest } = options ?? {};
+  return {
+    ...rest,
+    headers: { ...(headers as Record<string, unknown> | undefined), "Content-Type": "application/json" },
+  };
+}
+
 async function _put(url: string, data?: any, options?: AxiosRequestConfig & ErrorOptions) {
-  const response = await customAxios.put(url, JSON.stringify(data), {
-    ...options,
-    headers: { "Content-Type": "application/json" },
-  });
+  const response = await customAxios.put(url, JSON.stringify(data), withJsonContentType(options));
   return response.data;
 }
 
@@ -179,10 +193,7 @@ async function _patch<T = unknown>(
   data?: any,
   options?: AxiosRequestConfig & ErrorOptions,
 ): Promise<T> {
-  const response = await customAxios.patch(url, JSON.stringify(data), {
-    ...options,
-    headers: { "Content-Type": "application/json" },
-  });
+  const response = await customAxios.patch(url, JSON.stringify(data), withJsonContentType(options));
   return response.data;
 }
 

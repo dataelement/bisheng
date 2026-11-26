@@ -331,7 +331,10 @@ function SpaceSettingsForm({ spaceId }: { spaceId?: string }) {
             <ProviderSettingsSection creating={settings.mode === 'create'} provider={settings.provider}
               onChange={settings.setProvider} disabled={settings.submitting}
               config={settings.mode === 'create' ? settings.preview?.preset?.config : settings.observed?.config}
-              failed={settings.preview?.failed} pending={settings.observed?.pending} />
+              failed={settings.preview?.failed} pending={settings.observed?.pending}
+              picker={settings.mode === 'create'
+                ? { ...settings.preview, refreshing: !!settings.preview.preset && !settings.preview.fresh }
+                : undefined} />
 
             {settings.autoTagFeatureVisible && settings.canEdit && (
               <section className="space-y-6">
@@ -475,7 +478,8 @@ function SpaceSettingsForm({ spaceId }: { spaceId?: string }) {
           onSubmit={() => void handleSubmit()}
           submitting={settings.submitting}
           disabled={!settings.form.name.trim() || (!settings.canEdit && !(settings.canManagePermissions && settings.permissionHasChanges))
-            || (settings.mode === 'create' && settings.provider === 'weknora' && !settings.preview.preset)}
+            || (settings.mode === 'create' && settings.provider === 'weknora'
+              && (!settings.preview.preset || !settings.preview.fresh))}
         />
       </div>
 

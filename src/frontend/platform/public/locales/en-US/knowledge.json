@@ -979,5 +979,24 @@
         "pendingCount": "Pending files ({{count}})",
         "similarity": "Similarity",
         "empty": "No similar documents awaiting review"
+    },
+    "providerInstance": {
+        "title": "WeKnora connection",
+        "intro": "Register the WeKnora address, workspace ID, API key, and upload signing secret for this tenant. Secrets are sent only when you save and are not shown again.",
+        "endpoint": "Service address",
+        "workspaceId": "Workspace ID",
+        "workspaceHint": "Open the avatar menu in WeKnora and read the workspace ID under workspace settings.",
+        "apiKey": "API key",
+        "apiKeyKeep": "Leave this blank when editing an existing connection to keep its key.",
+        "signedTokenSecret": "Upload signing secret",
+        "signedTokenSecretHint": "Must match the HMAC secret in the WeKnora workspace API principal config (signed_token). Uploads stay unavailable until this is set.",
+        "signedTokenSecretKeep": "Leave this blank when editing an existing connection to keep its upload signing secret.",
+        "singleHint": "Keep only one WeKnora connection per tenant; with more than one, WeKnora spaces cannot be created. Extract configuration is chosen when creating a knowledge space.",
+        "save": "Save",
+        "saved": "Saved",
+        "create": "New connection",
+        "empty": "No WeKnora connection yet",
+        "connectionId": "Connection {{id}}",
+        "back": "Back to knowledge spaces"
     }
 }

@@ -979,5 +979,24 @@
         "pendingCount": "待处理文件（{{count}}）",
         "similarity": "相似度",
         "empty": "暂无待处理的相似文档"
+    },
+    "providerInstance": {
+        "title": "WeKnora 连接",
+        "intro": "为当前租户登记 WeKnora 的服务地址、空间 ID、API Key，以及上传用的签名密钥。密钥只在保存时提交，保存后不再显示。",
+        "endpoint": "服务地址",
+        "workspaceId": "空间 ID",
+        "workspaceHint": "在 WeKnora 右上角头像的空间设置中查看空间 ID。",
+        "apiKey": "API Key",
+        "apiKeyKeep": "修改已有连接时留空，表示不更换密钥。",
+        "signedTokenSecret": "上传签名密钥",
+        "signedTokenSecretHint": "与 WeKnora 空间 API 主体配置（signed_token）中的 HMAC 密钥一致；未配置则无法上传。",
+        "signedTokenSecretKeep": "修改已有连接时留空，表示不更换上传签名密钥。",
+        "singleHint": "每个租户只能保留一个 WeKnora 连接；有多个时将无法创建 WeKnora 知识空间。抽取配置在创建知识空间时选择模板或自行填写。",
+        "save": "保存",
+        "saved": "已保存",
+        "create": "新建连接",
+        "empty": "还没有 WeKnora 连接",
+        "connectionId": "连接编号 {{id}}",
+        "back": "返回知识空间"
     }
 }

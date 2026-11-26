@@ -152,6 +152,21 @@ class F048PermissionRuntime:
         self._modes = modes
         self._explain = explain
 
+    async def recover_failed_closed_projection(self, operation_id: int):
+        """Forward-complete one fail-closed resource operation from its frozen fence.
+
+        A creation that fails closed while writing its last tuples cannot be
+        retried by simply calling the business operation again: the scope is
+        already reserved, so every retry is rejected. Callers that committed
+        their business row before projecting (the provider provisioning worker)
+        must complete the frozen AFTER state instead of leaving the resource
+        permanently stuck between created and usable.
+        """
+        preview = await self._projection.inspect_failed_closed_recovery(operation_id)
+        return await self._projection.recover_failed_closed_operation(
+            operation_id, confirmation_checksum=preview.confirmation_checksum
+        )
+
     @contextual_operation
     async def check_action(
         self,

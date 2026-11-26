@@ -7,7 +7,7 @@ from sqlalchemy import select, update
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument as Doc
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion as Version
-from bisheng.knowledge.domain.models.knowledge_file import FileType
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile as File
 from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding as B
 from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderGeneration as G
@@ -169,6 +169,23 @@ class ProcessingReadinessRepository:
         )
         if changed.rowcount != 1:
             return False
+        # Directory listing reads knowledgefile.status; keep it aligned with active readiness.
+        await db.execute(
+            update(File)
+            .where(
+                File.id == key.file_id,
+                File.tenant_id == key.tenant_id,
+                File.knowledge_id == key.space_id,
+                File.file_type == FileType.FILE.value,
+                File.status.in_(
+                    (
+                        KnowledgeFileStatus.WAITING.value,
+                        KnowledgeFileStatus.PROCESSING.value,
+                    )
+                ),
+            )
+            .values(status=KnowledgeFileStatus.SUCCESS.value)
+        )
         generation = await db.scalar(
             select(G)
             .where(G.tenant_id == key.tenant_id, G.space_id == key.space_id, G.generation == key.generation)

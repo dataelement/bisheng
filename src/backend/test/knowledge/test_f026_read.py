@@ -207,8 +207,9 @@ async def test_sql_facts_use_exact_binding_version_and_lifecycle(monkeypatch):
         assert await facts.count_files(tenant_id=1, space_id=7, root_card=False) == 0
         db.exec_driver_sql(f"UPDATE {m.Mapping.__tablename__} SET lifecycle_state='received' WHERE local_resource_id=1")
         assert await facts.count_files(tenant_id=1, space_id=7, root_card=True) == 1
+        # Received uploads remain visible in the directory (native WAITING UX).
         assert await facts.count_files(tenant_id=1, space_id=7, root_card=False) == 0
-        assert await load() == {4}
+        assert await load() == {1, 4}
         db.exec_driver_sql(f"UPDATE {m.Mapping.__tablename__} SET ready_revision=1, lifecycle_state='active'")
         assert await facts.count_files(tenant_id=1, space_id=7, root_card=False) == 1
         assert await load(2) == {2}  # Historical physical file has its own authorization.

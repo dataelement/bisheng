@@ -72,10 +72,85 @@ class ProviderSettingsPatch(BaseModel):
     patch: dict[Literal["summary_model_id", "vision_model_id", "tag_model_id", "wiki_model_id"], str | None]
 
 
+_ProviderModelId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")]
+_ExtractName = Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class ExtractNodeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    name: _ExtractName
+
+
+class ExtractRelationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    node1: _ExtractName
+    type: _ExtractName
+    node2: _ExtractName
+
+
+class ExtractConfigInput(BaseModel):
+    """Creator-supplied entity extraction; WeKnora receives enabled=True with this payload."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    text: str = Field(min_length=1, max_length=10_000)
+    tags: list[_ExtractName] = Field(min_length=1, max_length=50)
+    nodes: list[ExtractNodeInput] = Field(min_length=1, max_length=100)
+    relations: list[ExtractRelationInput] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def check_graph(self):
+        names = [node.name for node in self.nodes]
+        if len(set(names)) != len(names):
+            raise ValueError("extract node names must be unique")
+        known = set(names)
+        if not all(rel.node1 in known and rel.node2 in known for rel in self.relations):
+            raise ValueError("extract relations must reference declared nodes")
+        return self
+
+    def as_weknora(self) -> dict:
+        return {
+            "enabled": True,
+            "text": self.text,
+            "tags": list(self.tags),
+            "nodes": [{"name": node.name} for node in self.nodes],
+            "relations": [{"node1": rel.node1, "type": rel.type, "node2": rel.node2} for rel in self.relations],
+        }
+
+
+class ProviderSelection(BaseModel):
+    """What the creator picks for a WeKnora space; WeKnora proves it before creation."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    summary_model_id: _ProviderModelId
+    embedding_model_id: _ProviderModelId
+    vision_model_id: _ProviderModelId
+    chunk_size: int = Field(gt=0, le=100_000)
+    overlap: int = Field(ge=0)
+    extract_template_kb_id: _ProviderModelId | None = None
+    extract_config: ExtractConfigInput | None = None
+
+    @model_validator(mode="after")
+    def check_uses(self):
+        if self.overlap >= self.chunk_size:
+            raise ValueError("overlap must be smaller than chunk_size")
+        if len({self.summary_model_id, self.embedding_model_id, self.vision_model_id}) != 3:
+            raise ValueError("summary, embedding and vision models must differ")
+        if (self.extract_template_kb_id is None) == (self.extract_config is None):
+            raise ValueError("provide exactly one of extract_template_kb_id or extract_config")
+        return self
+
+
+class CreationSettingsPreviewReq(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    provider_key: Literal["weknora"]
+    provider_selection: ProviderSelection
+
+
 class KnowledgeSpaceCreateReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider_key: Literal["native", "weknora"] = "native"
     preset_summary: dict | None = None
+    provider_selection: ProviderSelection | None = None
     name: str = Field(..., max_length=200, description="Knowledge Space Name")
     description: str | None = Field(None, description="Knowledge Space Description")
     icon: str | None = Field(None, description="Icon Object Name")
@@ -184,6 +259,7 @@ class DepartmentKnowledgeSpaceBatchItem(BaseModel):
 class DepartmentProviderPreviewReq(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     department_id: int = Field(gt=0, le=2**63 - 1)
+    provider_selection: ProviderSelection
 
 
 class DepartmentProviderBatchStatusReq(BaseModel):
@@ -196,6 +272,7 @@ class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
     provider_key: Literal["native", "weknora"] = "native"
     request_key: str | None = Field(default=None, min_length=1, max_length=120)
     preset_summary: dict | None = None
+    provider_selection: ProviderSelection | None = None
     items: list[DepartmentKnowledgeSpaceBatchItem] = Field(
         default_factory=list,
         description="Department knowledge space batch create items",

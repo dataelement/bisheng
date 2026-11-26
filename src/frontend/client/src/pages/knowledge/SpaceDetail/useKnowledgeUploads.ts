@@ -24,6 +24,7 @@ export function useKnowledgeUploads({
   queryClient,
   canUploadFile,
   canUploadNativeExtras,
+  canUploadFolder,
   canUseContextMenuActions,
   showToast,
   confirm,
@@ -49,7 +50,7 @@ export function useKnowledgeUploads({
   };
 
   const triggerUploadFolder = () => {
-    if (!canUploadNativeExtras) return;
+    if (!canUploadFolder) return;
     folderInputRef.current?.click();
   };
 
@@ -223,7 +224,7 @@ export function useKnowledgeUploads({
   // (oversize / unsupported / hidden) — see useFileUpload.handleUploadFolder.
   const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const filesList = e.target.files;
-    if (filesList && filesList.length > 0 && canUploadNativeExtras) {
+    if (filesList && filesList.length > 0 && canUploadFolder) {
       onUploadFolder(filesList, {
         allowedExtensions,
         maxSizeMB: maxFileSizeMB,
@@ -238,8 +239,7 @@ export function useKnowledgeUploads({
     useFileDragDrop({
       onDragStateChange: canUploadFile ? onDragStateChange : undefined,
       onUploadFile: canUploadFile ? onUploadFile : () => undefined,
-      // Folder import uses Native registration; never dispatch it for external spaces.
-      onUploadFolder: canUploadNativeExtras ? onUploadFolder : undefined,
+      onUploadFolder: canUploadFolder ? onUploadFolder : undefined,
       maxFileSizeMB,
       uploadSizeLimits,
       enableEtl4lm,

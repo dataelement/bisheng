@@ -1,7 +1,26 @@
 import { useSpaceCapabilities } from './useSpaceCapabilities';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
-import { checkProviderFile, sendProviderFile, type UploadOutcome, type UploadReceipt, type UploadTarget } from '~/api/knowledgeProviderUploads';
+import {
+  checkProviderFile,
+  parentDirOfRelativePath,
+  prepareProviderFolderUpload,
+  sendProviderFile,
+  type UploadOutcome,
+  type UploadReceipt,
+  type UploadTarget,
+} from '~/api/knowledgeProviderUploads';
+import {
+  filterFolderUploadFiles,
+  getRootFolderName,
+  isHiddenName,
+  MAX_FOLDER_UPLOAD_COUNT,
+  type UploadSizeLimits,
+} from '../knowledgeUtils';
+import { showApiError } from '~/api/request';
+import { NotificationSeverity } from '~/common';
+import { useToastContext } from '~/Providers';
+import { useLocalize } from '~/hooks';
 
 type State = UploadOutcome['state'] | 'sending' | 'not_sent';
 export type ProviderUploadRow = { key: string; name: string; state: State; busy: boolean };
@@ -10,6 +29,8 @@ const sameReceipt = (a: UploadReceipt, b: UploadReceipt) => a.operation_id === b
 
 export function useProviderFileUploads(spaceId: string, parentId: string | undefined, hasUploadAction: boolean,
   nativeUpload: (files: File[]) => void, onReceived: () => void) {
+  const localize = useLocalize();
+  const { showToast } = useToastContext();
   const { identity, capabilities, proof, tagScope } = useSpaceCapabilities(spaceId);
   const unavailable = capabilities.error as { status_code?: number; response?: { headers?: Record<string, unknown> } } | null;
   const wikiTenant = proof?.native === false ? proof.tenant
@@ -17,11 +38,12 @@ export function useProviderFileUploads(spaceId: string, parentId: string | undef
       ? unavailable.response?.headers?.['x-management-tenant'] : undefined;
   const canUploadNativeExtras = hasUploadAction && proof?.native === true;
   const canSend = hasUploadAction && proof?.providerUpload === true;
+  const canUploadProviderFolder = canSend && proof?.providerFolderUpload === true;
   const scopeKey = JSON.stringify([spaceId, parentId, identity, capabilities.data?.tenant, capabilities.data?.revision]);
   const { entries: store } = useMemo(() => ({ scopeKey, entries: new Map<string, Entry>() }), [scopeKey]);
   const canCheck = hasUploadAction && proof?.native === false;
-  const active = useRef({ store, canSend, canCheck, canUploadNativeExtras, onReceived });
-  active.current = { store, canSend, canCheck, canUploadNativeExtras, onReceived };
+  const active = useRef({ store, canSend, canCheck, canUploadNativeExtras, canUploadProviderFolder, onReceived, proof });
+  active.current = { store, canSend, canCheck, canUploadNativeExtras, canUploadProviderFolder, onReceived, proof };
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -87,6 +109,75 @@ export function useProviderFileUploads(spaceId: string, parentId: string | undef
     // Refresh once: refreshing the file list also invalidates container permissions.
     if (received && inScope()) active.current.onReceived();
   };
+  const uploadFolder = async (
+    list: FileList | File[],
+    options: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
+  ) => {
+    if (!list?.length || !inScope() || !active.current.canUploadProviderFolder || !active.current.proof) return;
+    const proofNow = active.current.proof;
+    if (proofNow.native || !proofNow.providerFolderUpload) return;
+    const allFiles = Array.from(list);
+    const rootName = getRootFolderName(allFiles[0]?.webkitRelativePath || '');
+    if (!rootName || isHiddenName(rootName)) return;
+    if (allFiles.length > MAX_FOLDER_UPLOAD_COUNT) {
+      showToast({
+        message: localize('com_knowledge.folder_upload_exceed_limit', { 0: MAX_FOLDER_UPLOAD_COUNT }),
+        severity: NotificationSeverity.WARNING,
+      });
+      return;
+    }
+    const { valid, oversizeCount, unsupportedCount } = filterFolderUploadFiles(allFiles, options);
+    if (oversizeCount > 0 || unsupportedCount > 0) {
+      const parts: string[] = [];
+      if (oversizeCount > 0) parts.push(localize('com_knowledge.folder_upload_skipped_oversize', { 0: oversizeCount }));
+      if (unsupportedCount > 0) parts.push(localize('com_knowledge.folder_upload_skipped_unsupported', { 0: unsupportedCount }));
+      showToast({ message: parts.join('\n'), severity: NotificationSeverity.WARNING });
+    }
+    if (valid.length === 0) {
+      showToast({ message: localize('com_knowledge.folder_upload_no_valid_files'), severity: NotificationSeverity.WARNING });
+      return;
+    }
+    let prepared;
+    try {
+      prepared = await prepareProviderFolderUpload(
+        spaceId,
+        {
+          parent_id: parentId ? Number(parentId) : null,
+          paths: valid.map((file) => file.webkitRelativePath || file.name),
+        },
+        proofNow.tenant,
+      );
+    } catch (error) {
+      showApiError(error);
+      return;
+    }
+    if (!inScope() || !active.current.canUploadProviderFolder) return;
+    const folderByDir = new Map(prepared.folders.map((row) => [row.relative_dir, String(row.folder_id)]));
+    const entries = valid.map((file) => {
+      const key = uuid();
+      const relative = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+      const dir = parentDirOfRelativePath(relative);
+      const folderId = folderByDir.get(dir);
+      const entry: Entry = {
+        file,
+        row: { key, name: file.name, state: 'sending', busy: false },
+        target: { key, spaceId, parentId: folderId, tenant: proofNow.tenant },
+      };
+      store.set(key, entry);
+      return entry;
+    });
+    update();
+    let received = false;
+    for (const entry of entries) {
+      if (!current() || !active.current.canUploadProviderFolder) {
+        entry.row.state = 'not_sent';
+        update();
+        continue;
+      }
+      if (await run(entry, false)) received = true;
+    }
+    if ((received || prepared.folders.length > 0) && inScope()) active.current.onReceived();
+  };
   const recover = async (key: string, lookup: boolean) => {
     const entry = store.get(key);
     if (!entry || (lookup ? entry.row.state !== 'unknown' : !['reupload_required', 'not_sent'].includes(entry.row.state))) return;
@@ -94,8 +185,20 @@ export function useProviderFileUploads(spaceId: string, parentId: string | undef
   };
   const retry = (key: string) => void recover(key, false);
   const check = (key: string) => void recover(key, true);
-  return { tagScope, uploadFiles, retry, check, items: hasUploadAction ? Array.from(store.values(), e => ({ ...e.row, busy: e.row.busy || !(e.row.state === 'unknown' ? canCheck : canSend) })) : [],
+  return {
+    tagScope,
+    uploadFiles,
+    uploadFolder,
+    retry,
+    check,
+    items: hasUploadAction ? Array.from(store.values(), e => ({ ...e.row, busy: e.row.busy || !(e.row.state === 'unknown' ? canCheck : canSend) })) : [],
     // An unready binding cannot supply upload capabilities. Only the independently authorized Wiki status may identify it.
     wikiDiscovery: typeof wikiTenant === 'string' && /^[1-9]\d*$/.test(wikiTenant) ? { tenant: wikiTenant } : null,
-    canUploadFile: canUploadNativeExtras || canSend, canUploadNativeExtras, canPreview: proof?.preview === true, isNative: proof?.native === true };
+    canUploadFile: canUploadNativeExtras || canSend,
+    canUploadNativeExtras,
+    canUploadProviderFolder,
+    canUploadFolder: canUploadNativeExtras || canUploadProviderFolder,
+    canPreview: proof?.preview === true,
+    isNative: proof?.native === true,
+  };
 }

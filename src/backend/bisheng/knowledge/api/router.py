@@ -7,6 +7,7 @@ from .endpoints.knowledge_version import router as knowledge_version_router
 from .endpoints.move_processing import router as move_processing_router
 from .endpoints.processing import router as processing_router
 from .endpoints.provider_diagnostics import router as provider_diagnostics_router
+from .endpoints.provider_instances import router as provider_instances_router
 from .endpoints.provider_tags import router as provider_tags_router
 from .endpoints.provider_wiki import router as wiki_router
 from .endpoints.qa import router as qa_router
@@ -15,6 +16,7 @@ from .endpoints.space_copy import router as space_copy_router
 from .endpoints.upload_preview import router as upload_preview_router
 from .endpoints.upload_settings import router as upload_settings_router
 
+knowledge_router.include_router(provider_instances_router)
 knowledge_space_router.include_router(space_copy_router)
 knowledge_space_router.include_router(batch_router)
 knowledge_space_router.include_router(wiki_router)

@@ -37,6 +37,7 @@ interface KnowledgeSpaceHeaderProps {
   canCreateFolder?: boolean;
   canUploadFile?: boolean;
   canUploadNativeExtras?: boolean;
+  canUploadFolder?: boolean;
 
   // Batch Operation Props
   selectedCount: number;
@@ -91,6 +92,7 @@ export function KnowledgeSpaceHeader({
   canCreateFolder = false,
   canUploadFile = false,
   canUploadNativeExtras = false,
+  canUploadFolder = false,
   onBatchDownload,
   canBatchDownload = false,
   canBatchTag = false,
@@ -133,7 +135,7 @@ export function KnowledgeSpaceHeader({
   // segment, and a second copy up here would read as the current folder's.
   // Also hidden when every row is permission-gated away — an empty menu.
   const showSpaceSettingsButton = currentPath.length === 0 && getSpaceActionFlags(spaceActions).hasAny;
-  const showAddMenu = canCreateFolder || canUploadFile;
+  const showAddMenu = canCreateFolder || canUploadFile || canUploadFolder;
   const showProcessSimilar = Boolean(
     versionManagementEnabled && canEditSpace && hasSimilarSelected && onProcessSimilar,
   );
@@ -237,15 +239,17 @@ export function KnowledgeSpaceHeader({
                       </SharedTooltip>
                     </span>
                   </DropdownItem>
-                  {canUploadNativeExtras && <DropdownItem onSelect={onTriggerUploadFolder} icon={<FolderUp />}>
-                    {localize("com_knowledge.upload_folder")}
-                  </DropdownItem>}
                   {canUploadNativeExtras && knowledgeUploadCapabilities.webLink && (
                     <DropdownItem onSelect={onTriggerWebLink} icon={<Link2 />}>
                       {localize("com_knowledge.web_link")}
                     </DropdownItem>
                   )}
                 </>
+              )}
+              {canUploadFolder && (
+                <DropdownItem onSelect={onTriggerUploadFolder} icon={<FolderUp />}>
+                  {localize("com_knowledge.upload_folder")}
+                </DropdownItem>
               )}
             </>
           }

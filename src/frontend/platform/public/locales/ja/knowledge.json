@@ -973,5 +973,24 @@
         "pendingCount": "未処理ファイル（{{count}}）",
         "similarity": "類似度",
         "empty": "確認待ちの類似文書はありません"
+    },
+    "providerInstance": {
+        "title": "WeKnora 接続",
+        "intro": "このテナントで使う WeKnora のアドレス、スペース ID、API キー、アップロード署名鍵を登録します。鍵は保存時だけ送信され、その後は表示されません。",
+        "endpoint": "サービスアドレス",
+        "workspaceId": "スペース ID",
+        "workspaceHint": "WeKnora 右上のアバターからスペース設定を開き、スペース ID を確認します。",
+        "apiKey": "API キー",
+        "apiKeyKeep": "既存の接続を編集するときは空欄のままで、キーを変更しません。",
+        "signedTokenSecret": "アップロード署名鍵",
+        "signedTokenSecretHint": "WeKnora スペースの API 主体設定（signed_token）の HMAC 鍵と一致させてください。未設定だとアップロードできません。",
+        "signedTokenSecretKeep": "既存の接続を編集するときは空欄のままで、アップロード署名鍵を変更しません。",
+        "singleHint": "WeKnora 接続はテナントごとに 1 つだけにしてください。複数あると WeKnora スペースを作成できません。抽出設定はスペース作成時にテンプレート選択または手動入力します。",
+        "save": "保存",
+        "saved": "保存しました",
+        "create": "新しい接続",
+        "empty": "WeKnora 接続はまだありません",
+        "connectionId": "接続番号 {{id}}",
+        "back": "ナレッジスペースに戻る"
     }
 }

@@ -37,6 +37,7 @@ from bisheng.common.errcode.mcp_face import (
     RetrievalIdentityMissingError,
     RetrievalScopeTooLargeError,
 )
+from bisheng.knowledge.application.provider_external_token import provider_external_identity
 from bisheng.knowledge.application.provider_runtime import request_provider_retrieval
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.schemas.retrieval_facade import (
@@ -136,12 +137,13 @@ class RetrievalFacadeService:
 
             async with request_provider_retrieval() as providers:
                 engine = RetrievalEngine(identity.login_user, version_repo=version_repo, provider_retrieval=providers)
-                results = await engine.retrieve_many(
-                    reachable_rows,
-                    query=req.query,
-                    tag_filters=req.tag_filters,
-                    max_content=max_content,
-                )
+                with provider_external_identity(identity.login_user.user_id):
+                    results = await engine.retrieve_many(
+                        reachable_rows,
+                        query=req.query,
+                        tag_filters=req.tag_filters,
+                        max_content=max_content,
+                    )
                 results = results[:top_k]
                 await engine.attach_document_update_time(results)
         finally:

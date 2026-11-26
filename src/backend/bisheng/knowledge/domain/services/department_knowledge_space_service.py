@@ -440,6 +440,35 @@ class DepartmentKnowledgeSpaceService:
         return results
 
     @classmethod
+    async def _project_created_shell(cls, service, shell):
+        """Project the committed provider shell, completing a fail-closed attempt.
+
+        This worker step runs after the shell row is already committed, so a
+        projection that fails closed would otherwise stay FAILED_CLOSED forever:
+        the scope is reserved, every retry is rejected, and the space can
+        neither finish provisioning nor be deleted. Its frozen AFTER state is
+        forward-completed instead, then projected again (idempotent).
+        """
+        from bisheng.common.errcode.permission import (
+            PermissionProjectionFailedError,
+            PermissionVersionConflictError,
+        )
+        from bisheng.permission.application.access import get_f048_runtime
+        from bisheng.permission.domain.repositories.grant_repository import ResourcePermissionModeRepository
+
+        try:
+            await service._project_space_created(shell)
+            return
+        except (PermissionProjectionFailedError, PermissionVersionConflictError):
+            mode = await ResourcePermissionModeRepository().aget_mode(
+                resource_type="knowledge_space", resource_id=str(shell.id)
+            )
+            if mode is None or mode.projection_state != "FAILED_CLOSED" or not mode.operation_id:
+                raise
+            await (await get_f048_runtime()).recover_failed_closed_projection(int(mode.operation_id))
+        await service._project_space_created(shell)
+
+    @classmethod
     async def project_external_space(cls, op, *, request, login_user):
         """Project the actual reserved shell. Re-read grants; never resurrect removed admins."""
         if get_current_tenant_id() != op.tenant_id or login_user.user_id != op.actor_user_id:
@@ -455,7 +484,7 @@ class DepartmentKnowledgeSpaceService:
             if not link or (link.tenant_id, link.department_id) != (op.tenant_id, department_id):
                 raise UnAuthorizedError()
         service = KnowledgeSpaceService(request=request, login_user=login_user)
-        await service._project_space_created(shell)
+        await cls._project_created_shell(service, shell)
         if department_id is not None:
             await cls._grant_department_members_viewer(
                 space_id=op.space_id, department_id=department_id, operator_user_id=op.actor_user_id

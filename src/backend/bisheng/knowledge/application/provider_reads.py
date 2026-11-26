@@ -140,7 +140,7 @@ class ProviderReads:
         await self._require_space(actor, space_id)
         rows = await self._store.load(tenant_id=actor.current_tenant_id, space_id=space_id)
         allowed = await self._permissions.visible(actor, space_id, rows)
-        if parent_id is not None and ('folder', parent_id) not in allowed:
+        if parent_id is not None and ("folder", parent_id) not in allowed:
             raise PermissionDeniedError()
         return [r for r in rows if (r.kind, r.resource_id) in allowed]
 
@@ -189,10 +189,13 @@ class ProviderReads:
         return tuple(handles)
 
     @asynccontextmanager
-    async def open(self, actor, handle, *, range_header=None):
+    async def open(self, actor, handle, *, range_header=None, user_id=None):
+        from bisheng.knowledge.application.provider_external_token import provider_external_identity
+
         current, fact = await self._locate(actor, handle.space_id, handle.file_id, handle.operation)
         if current != handle:
             raise PermissionDeniedError()
         port = self._port(fact, handle.operation)
-        async with port.open_stream(fact.remote_id, range_header=range_header) as upstream:
-            yield upstream
+        with provider_external_identity(user_id):
+            async with port.open_stream(fact.remote_id, range_header=range_header) as upstream:
+                yield upstream

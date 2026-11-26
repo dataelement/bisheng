@@ -57,14 +57,20 @@ export function EditTagsModal(props: EditTagsModalProps) {
   if (props.tagScope.kind === 'native') {
     return <NativeEditTagsModal key={JSON.stringify([props.tagScope.key, props.spaceId, props.fileId, props.fileIds])} {...props} />;
   }
-  if (props.tagScope.kind === 'provider' && props.fileId && !props.fileIds?.length && props.canReadSpaceTags) {
-    return <ProviderTagEditor key={JSON.stringify([props.spaceId, props.tagScope.key, props.fileId, props.canEditFileTags, props.tagScope.editable])}
+  // Single-file provider editing is gated by the file's own write grant below, not by the
+  // space permission summary: a slow or failed summary lookup must not mask a usable file.
+  if (props.tagScope.kind === 'provider' && props.fileId && !props.fileIds?.length) {
+    return <ProviderTagEditor key={JSON.stringify([props.spaceId, props.tagScope.key, props.fileId, props.canEditFileTags, props.canManageSpaceTags, props.tagScope.editable])}
       spaceId={props.spaceId} fileId={props.fileId} scope={props.tagScope} canEdit={props.canEditFileTags === true}
+      canCreate={props.canManageSpaceTags === true}
       onClose={props.onClose} onSaved={props.onSaved} />;
   }
+  // Batch tagging has no external-provider contract yet; say that instead of implying the
+  // selected file is unreadable.
+  const batchUnavailable = props.tagScope.kind === 'provider' && !!props.fileIds?.length;
   return <Dialog open onOpenChange={(open) => !open && props.onClose(true)}><DialogContent>
-    <DialogHeader><DialogTitle>{localize('com_knowledge.edit_tags')}</DialogTitle></DialogHeader>
-    <p role="status">{localize('com_knowledge.provider_tags.edit_unavailable')}</p>
+    <DialogHeader><DialogTitle>{localize(batchUnavailable ? 'com_knowledge.batch_add_tags' : 'com_knowledge.edit_tags')}</DialogTitle></DialogHeader>
+    <p role="status">{localize(batchUnavailable ? 'com_knowledge.provider_tags.batch_unavailable' : 'com_knowledge.provider_tags.edit_unavailable')}</p>
     <DialogFooter><Button onClick={() => props.onClose(true)}>{localize('com_knowledge.close')}</Button></DialogFooter>
   </DialogContent></Dialog>;
 }

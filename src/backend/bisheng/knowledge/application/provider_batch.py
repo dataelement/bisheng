@@ -39,9 +39,12 @@ class ProviderBatchApplication(KnowledgeBatchApplication):
             raise KnowledgeOperationPlanChangedError(reason="provider_batch_unavailable")
         async with self.sessions() as db, db.begin():
             scope = await self.facts(db, space, command, lock=False)
-        self._writer(scope, command.operation)
+        # Download is a read-side eligibility probe; only mutating batches need a
+        # durable accept_batch write port before they can be offered.
+        if command.operation != "download":
+            self._writer(scope, command.operation)
         rows = {f["file_id"]: f for f in scope["files"]}
-        action = "delete" if command.operation == "delete" else "rename"
+        action = {"delete": "delete", "download": "download"}.get(command.operation, "rename")
         grants = (
             await self.permissions(
                 actual, resource_type="knowledge_file", resource_ids=list(rows), actions=("visible", action)

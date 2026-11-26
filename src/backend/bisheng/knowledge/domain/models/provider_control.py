@@ -57,6 +57,8 @@ class KnowledgeProviderInstance(_ControlRow, table=True):
     provider_key: str = Field(max_length=48)
     endpoint: str = Field(max_length=512, repr=False, exclude=True)
     credential_ref: str = Field(max_length=256, repr=False, exclude=True)
+    # Sealed HMAC shared with WeKnora APIPrincipalConfig (signed_token). Write-only.
+    upload_credential_ref: str | None = Field(default=None, max_length=256, repr=False, exclude=True)
     remote_scope_id: str = Field(sa_column=Column(OpaqueId(), nullable=False))
     capability_revision: int = 0
     state: str = Field(default="unverified", max_length=32)

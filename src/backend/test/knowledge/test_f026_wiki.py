@@ -145,7 +145,7 @@ async def test_writer_cas_release_only_for_pinned_library_and_delete(wiki):
             )
         async with sessions.begin() as session:
             with pytest.raises(KnowledgeOperationPlanConflictError):
-                await control.require_native_deletion(session, 11)
+                await control.require_provider_safe_deletion(session, 11, "knowledge_space_clear")
             assert await control.begin(session, scope, "delete1")
             assert not await control.begin(session, scope, "delete2")
             pending = replace(scope, pending="delete1", revision=5)

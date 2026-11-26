@@ -74,7 +74,16 @@ export default function KnowledgePage() {
           setInitialTab("file");
           navigate(key === "file" ? "/filelib" : `/filelib?view=${key}`);
         }}
-        extra={<div ref={setToolbarTarget} />}
+        extra={
+          <div className="flex items-center gap-2">
+            {canManage && (
+              <Button variant="outlined" color="default" onClick={() => navigate("/filelib/provider-instances")}>
+                {t("providerInstance.title")}
+              </Button>
+            )}
+            <div ref={setToolbarTarget} />
+          </div>
+        }
         className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
         items={[
           {

@@ -24,10 +24,15 @@ async def get_batch_application(request: Request, space_id: int, operation: str)
         # Both seams come from the deployment composition: a write port and the
         # control-plane session factory. Defaults keep the request on the shared
         # DB; tests inject a disposable one instead of touching an ambient DB.
-        return ProviderBatchApplication(
-            resolver=getattr(request.app.state, "provider_batch_resolver", None),
-            session_factory=getattr(request.app.state, "provider_batch_session_factory", None),
-        )
+        # Never pass session_factory=None — that overrides the default factory.
+        kwargs = {}
+        resolver = getattr(request.app.state, "provider_batch_resolver", None)
+        if resolver is not None:
+            kwargs["resolver"] = resolver
+        sessions = getattr(request.app.state, "provider_batch_session_factory", None)
+        if sessions is not None:
+            kwargs["session_factory"] = sessions
+        return ProviderBatchApplication(**kwargs)
     if operation == "delete":
         # Native deletion uses its dedicated reference-impact precheck.
         raise ProviderFeatureUnavailable()

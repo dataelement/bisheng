@@ -17,7 +17,9 @@ class WeKnoraSettings(BaseModel):
     remote_scope_id: str | None = None
     timeout_seconds: float = Field(default=30, gt=0, le=300)
     connect_timeout_seconds: float = Field(default=5, gt=0, le=60)
-    deployment: dict | None = Field(default=None, repr=False, exclude=True)
+    # Kept for compatibility with blocks written before the budget moved to the
+    # top-level `weknora_probe_timeout_seconds`; the top-level value wins.
+    probe_timeout_seconds: float | None = Field(default=None, gt=0, le=600)
 
     @field_validator("endpoint")
     @classmethod
@@ -39,7 +41,7 @@ class WeKnoraSettings(BaseModel):
 
     @model_validator(mode="after")
     def require_binding(self):
-        if self.api_key and self.api_key.get_secret_value() or self.deployment is not None:
+        if self.api_key and self.api_key.get_secret_value():
             if (
                 not self.tenant_id
                 or not self.instance_id

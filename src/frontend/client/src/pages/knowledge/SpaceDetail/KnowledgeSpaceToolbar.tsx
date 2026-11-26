@@ -1,5 +1,5 @@
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
-import { FolderPlus, Link2 } from "lucide-react";
+import { FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { SortDirection, SortType, SpaceRole } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { Dropdown, DropdownGroup, DropdownItem } from "@bisheng/ui";
@@ -102,7 +102,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
         type="file"
         multiple
         className="hidden"
-        disabled={!model.canUploadNativeExtras}
+        disabled={!model.canUploadFolder}
         ref={folderInputRef}
         onChange={handleFolderChange}
         // `webkitdirectory`/`directory` are non-standard but accepted by
@@ -253,6 +253,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
               {/* Hide the whole "..." trigger when every item is permission-gated
                                 away — an empty menu is confusing on mobile. */}
               {(canUploadFile ||
+                model.canUploadFolder ||
                 canCreateFolder ||
                 showShareInMenu ||
                 openSettings ||
@@ -272,6 +273,14 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
                           onSelect={triggerUpload}
                         >
                           {localize("com_knowledge.upload_file")}
+                        </DropdownItem>
+                      )}
+                      {model.canUploadFolder && (
+                        <DropdownItem
+                          icon={<FolderUp />}
+                          onSelect={triggerUploadFolder}
+                        >
+                          {localize("com_knowledge.upload_folder")}
                         </DropdownItem>
                       )}
                       {model.canUploadNativeExtras && knowledgeUploadCapabilities.webLink && (
@@ -359,6 +368,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
             canCreateFolder={canCreateFolder}
             canUploadFile={canUploadFile}
             canUploadNativeExtras={model.canUploadNativeExtras}
+            canUploadFolder={model.canUploadFolder}
             selectedCount={selectedFiles.size}
             hasFoldersSelected={hasFoldersSelected}
             hasFailedFiles={hasFailedFiles}

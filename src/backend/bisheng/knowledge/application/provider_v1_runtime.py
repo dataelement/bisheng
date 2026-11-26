@@ -8,17 +8,25 @@ from urllib.parse import quote, urlsplit
 import httpx
 from sqlalchemy import select
 
-from bisheng.common.errcode.knowledge_space import SpaceFileNotFoundError, SpaceNotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeUnificationError
+from bisheng.common.errcode.knowledge_space import SpaceFileNotFoundError, SpaceNotFoundError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.application.provider_external_token import (
+    EXTERNAL_USER_TOKEN_HEADER,
+    current_external_user_id,
+    mint_external_user_token,
+    unseal_external_token_secret,
+)
 from bisheng.knowledge.application.provider_reads import ProviderReads
 from bisheng.knowledge.application.provider_resolver import ProviderResolver
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.provider_control import (
-    KnowledgeProviderInstance as Instance,
     KnowledgeProviderGeneration as Generation,
+)
+from bisheng.knowledge.domain.models.provider_control import (
+    KnowledgeProviderInstance as Instance,
 )
 from bisheng.knowledge.domain.repositories.provider_retrieval_repository import (
     ProviderRetrievalRepository,
@@ -51,7 +59,34 @@ async def file_route(file_id):
     return file.knowledge_id, await resolve_space_route(file.knowledge_id)
 
 
-def _client_parameters(endpoint, ref, *, tenant_id=None, instance_id=None, scope=None):
+def _stored_parameters(endpoint, ref, *, timeout=None):
+    """Use the key sealed with this instance. A stored key cannot be redirected to a public origin."""
+    from bisheng.core.config.settings import decrypt_token
+    from bisheng.core.config.weknora import WeKnoraSettings
+
+    try:
+        base = WeKnoraSettings.normalize_endpoint(str(endpoint).removesuffix("/"))
+        secret = decrypt_token(ref.removeprefix("fernet:"))
+    except Exception:
+        raise ProviderFeatureUnavailable() from None
+    if not secret or not secret.isascii() or not secret.isprintable() or any(c.isspace() for c in secret):
+        raise ProviderFeatureUnavailable()
+    return {
+        "base_url": base + "/api/v1/",
+        "headers": {"X-API-Key": secret},
+        "trust_env": False,
+        "follow_redirects": False,
+        "timeout": timeout or httpx.Timeout(30, connect=5),
+    }
+
+
+def _client_parameters(endpoint, ref, *, tenant_id=None, instance_id=None, scope=None, timeout=None):
+    """Build transport parameters for one provider instance.
+
+    ``timeout`` overrides the configured/default budget. Blocking model probes
+    exceed any short request budget, so the provisioning runtime supplies its
+    own; retrieval and reads keep the fast default.
+    """
     from bisheng.common.services.config_service import settings
 
     cfg = settings.weknora
@@ -72,8 +107,11 @@ def _client_parameters(endpoint, ref, *, tenant_id=None, instance_id=None, scope
             headers={"X-API-Key": secret},
             trust_env=False,
             follow_redirects=False,
-            timeout=httpx.Timeout(cfg.timeout_seconds, connect=cfg.connect_timeout_seconds),
+            timeout=timeout or httpx.Timeout(cfg.timeout_seconds, connect=cfg.connect_timeout_seconds),
         )
+
+    if isinstance(ref, str) and ref.startswith("fernet:"):
+        return _stored_parameters(endpoint, ref, timeout=timeout)
 
     url = urlsplit(endpoint)
     if url.scheme == "http":
@@ -94,15 +132,37 @@ def _client_parameters(endpoint, ref, *, tenant_id=None, instance_id=None, scope
         headers={"X-API-Key": secret},
         trust_env=False,
         follow_redirects=False,
-        timeout=httpx.Timeout(30, connect=5),
+        timeout=timeout or httpx.Timeout(30, connect=5),
     )
+
+
+def _attach_external_identity(params, upload_ref, scope):
+    """Add the signed external-user token when the instance seals an HMAC.
+
+    Instances without a sealed secret keep API-key-only auth. Once a secret is
+    configured the workspace is expected to run in signed_token mode, so a
+    missing acting user is a capability failure rather than a quiet 401.
+    """
+    if not upload_ref:
+        return params
+    secret = unseal_external_token_secret(upload_ref)
+    user_id = current_external_user_id()
+    if secret is None or type(user_id) is not int or user_id <= 0:
+        raise ProviderFeatureUnavailable()
+    if not isinstance(scope, str) or not scope.isdigit() or int(scope) <= 0:
+        raise ProviderFeatureUnavailable()
+    headers = dict(params["headers"])
+    headers[EXTERNAL_USER_TOKEN_HEADER] = mint_external_user_token(
+        secret=secret, weknora_tenant_id=int(scope), external_user_id=str(user_id)
+    )
+    return {**params, "headers": headers}
 
 
 @asynccontextmanager
 async def provision_instance_client(*, tenant_id, instance_id, scope, capability_revision=None):
     if tenant_id != get_current_tenant_id() or is_tenant_filter_bypassed():
         raise ProviderFeatureUnavailable()
-    q = select(Instance.endpoint, Instance.credential_ref).where(
+    q = select(Instance.endpoint, Instance.credential_ref, Instance.upload_credential_ref).where(
         Instance.tenant_id == tenant_id,
         Instance.id == instance_id,
         Instance.remote_scope_id == scope,
@@ -116,9 +176,9 @@ async def provision_instance_client(*, tenant_id, instance_id, scope, capability
         row = (await session.execute(q)).one_or_none()
     if not row:
         raise ProviderFeatureUnavailable()
-    async with httpx.AsyncClient(
-        **_client_parameters(*row, tenant_id=tenant_id, instance_id=instance_id, scope=scope)
-    ) as client:
+    endpoint, credential_ref, upload_ref = row
+    params = _client_parameters(endpoint, credential_ref, tenant_id=tenant_id, instance_id=instance_id, scope=scope)
+    async with httpx.AsyncClient(**_attach_external_identity(params, upload_ref, scope)) as client:
         yield client
 
 
@@ -146,7 +206,7 @@ async def instance_client(context):
     async with get_async_db_session() as session:
         row = (
             await session.execute(
-                select(Instance.endpoint, Instance.credential_ref)
+                select(Instance.endpoint, Instance.credential_ref, Instance.upload_credential_ref)
                 .join(Generation, Generation.provider_instance_id == Instance.id)
                 .where(
                     Generation.tenant_id == route.tenant_id,
@@ -165,11 +225,11 @@ async def instance_client(context):
         ).one_or_none()
     if not row:
         raise ProviderFeatureUnavailable()
-    async with httpx.AsyncClient(
-        **_client_parameters(
-            *row, tenant_id=route.tenant_id, instance_id=route.instance_id, scope=route.remote_scope_id
-        )
-    ) as client:
+    endpoint, credential_ref, upload_ref = row
+    params = _client_parameters(
+        endpoint, credential_ref, tenant_id=route.tenant_id, instance_id=route.instance_id, scope=route.remote_scope_id
+    )
+    async with httpx.AsyncClient(**_attach_external_identity(params, upload_ref, route.remote_scope_id)) as client:
         yield client
 
 

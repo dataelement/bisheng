@@ -5,8 +5,9 @@ revision may checkpoint convergence in the transaction that finishes the write.
 """
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -25,6 +26,7 @@ from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderIn
 from bisheng.knowledge.domain.models.provider_control import (
     KnowledgeProviderMapping as Mapping,
 )
+from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderQuota as Quota
 
 
 class WikiUnavailable(ValueError):
@@ -194,8 +196,8 @@ class WikiControl:
             )
 
     @staticmethod
-    async def require_native_deletion(session, space_id):
-        """Never let native purge consume an external binding or its tombstones."""
+    async def _external_binding(session, space_id):
+        """Locked binding row when this space is externally backed (or has pending writes)."""
         row = await session.scalar(
             select(Binding)
             .where(Binding.tenant_id == get_current_tenant_id(), Binding.space_id == space_id)
@@ -206,7 +208,92 @@ class WikiControl:
             or row.active_generation is not None
             or row.pending_write_operation_id is not None
         ):
+            return row
+        return None
+
+    @staticmethod
+    async def is_externally_bound(session, space_id) -> bool:
+        """True when this space's content lives in an external provider.
+
+        Provider spaces own no local knowledge source index (they carry no
+        embedding model), so the deletion cutover must not prepare a knowledge
+        source binding for them.
+        """
+        return await WikiControl._external_binding(session, space_id) is not None
+
+    @staticmethod
+    async def require_provider_safe_deletion(session, space_id, operation):
+        """Refuse only the operations a provider space cannot retire safely.
+
+        File deletion removes the remote document first (see
+        ``provider_deletion``) and whole-space deletion retires every mapping at
+        the local cutover, so both are allowed. Clearing a provider space has no
+        remote equivalent, so it stays refused instead of silently leaving the
+        remote library behind.
+        """
+        if await WikiControl._external_binding(session, space_id) and operation not in {
+            "knowledge_file_delete",
+            "knowledge_space_delete",
+        }:
             raise KnowledgeOperationPlanConflictError(reason="external_deletion_requires_provider_operation")
+
+    @staticmethod
+    async def require_deletable_targets(session, space_id, scope):
+        """Refuse only what this deployment cannot retire safely.
+
+        A file with a live remote mapping is deleted by first removing the
+        remote document (see ``provider_deletion``), so it is allowed. An
+        in-flight provider write is not: its receipt is still unknown, and a
+        delete now could race the upload into a resurrected remote row.
+        """
+        binding = await WikiControl._external_binding(session, space_id)
+        if binding is None or not scope.resources:
+            return
+        if binding.pending_write_operation_id is not None:
+            raise KnowledgeOperationPlanConflictError(reason="external_deletion_pending_write")
+
+    @staticmethod
+    async def aretire_provider_rows(session, space_id, retired_ids, version_ids=()):
+        """Retire mappings (and charged bytes) of the rows the cutover just removed.
+
+        Folder mappings carry no remote object (``lf:{generation}:{id}``) and are
+        dropped. File mappings are tombstoned rather than deleted: the provider's
+        delete is asynchronous, so the remote id must stay available for
+        reconciliation until its cleanup is proven.
+        """
+        ids = tuple(retired_ids)
+        if ids and await WikiControl._external_binding(session, space_id):
+            await session.execute(
+                delete(Mapping).where(
+                    Mapping.tenant_id == get_current_tenant_id(),
+                    Mapping.space_id == space_id,
+                    Mapping.resource_type == "folder",
+                    Mapping.local_resource_id.in_(ids),
+                )
+            )
+            await session.execute(
+                update(Mapping)
+                .where(
+                    Mapping.tenant_id == get_current_tenant_id(),
+                    Mapping.space_id == space_id,
+                    Mapping.resource_type == "file",
+                    Mapping.local_resource_id.in_(ids),
+                    Mapping.tombstoned_at.is_(None),
+                )
+                .values(lifecycle_state="tombstoned", tombstoned_at=datetime.now(UTC).replace(tzinfo=None))
+            )
+        versions = tuple(version_ids)
+        if versions:
+            await session.execute(
+                update(Quota)
+                .where(
+                    Quota.tenant_id == get_current_tenant_id(),
+                    Quota.space_id == space_id,
+                    Quota.version_id.in_(versions),
+                    Quota.state.in_(("reserved", "charged")),
+                )
+                .values(state="released", receipt_checksum=None, revision=Quota.revision + 1)
+            )
 
     @staticmethod
     async def _cas(session, scope, **values):

@@ -10,7 +10,7 @@ from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument as Doc
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion as Version
-from bisheng.knowledge.domain.models.knowledge_file import FileType
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile as File
 from bisheng.knowledge.domain.models.provider_control import (
     KnowledgeProviderBinding as Binding,
@@ -83,7 +83,11 @@ class SqlReadFacts:
                 Generation.generation,
                 Generation.remote_scope_id,
                 Generation.remote_kb_id,
-                File.status, File.file_size, File.create_time, File.update_time,
+                Mapping.lifecycle_state,
+                File.status,
+                File.file_size,
+                File.create_time,
+                File.update_time,
             )
             .select_from(Binding)
             .join(Knowledge, and_(Knowledge.id == Binding.space_id, Knowledge.tenant_id == Binding.tenant_id))
@@ -129,9 +133,11 @@ class SqlReadFacts:
                 Binding.state == "ready",
                 Binding.provider_key != "native",
                 Instance.state == READY_INSTANCE,
+                # Directory listing includes received so uploads appear before
+                # processing-readiness promotes them to active (native WAITING UX).
                 Mapping.lifecycle_state.in_(("pending", "received", "active"))
                 if root_card
-                else Mapping.lifecycle_state == "active",
+                else Mapping.lifecycle_state.in_(("received", "active")),
                 Mapping.tombstoned_at.is_(None),
                 or_(and_(Mapping.resource_type == FOLDER_MAPPING, File.file_type == FileType.DIR.value), file_chain),
             )
@@ -157,10 +163,31 @@ class SqlReadFacts:
         async with get_async_db_session() as session:
             rows = (await session.execute(q)).all()
         result = []
-        for local, name, path, kind, version, epoch, remote, provider, instance, generation, scope, kb, status, size, created, updated in rows:
+        for (
+            local,
+            name,
+            path,
+            kind,
+            version,
+            epoch,
+            remote,
+            provider,
+            instance,
+            generation,
+            scope,
+            kb,
+            lifecycle,
+            status,
+            size,
+            created,
+            updated,
+        ) in rows:
             parents = tuple(p for p in (path or "").split("/") if p)
             if any(not p.isascii() or not p.isdecimal() or int(p) <= 0 for p in parents):
                 continue
+            # Active mappings are retrieval-ready; surface SUCCESS even if File.status lag.
+            if kind != "folder" and lifecycle == "active":
+                status = KnowledgeFileStatus.SUCCESS.value
             ctx = PortContext(tenant_id, space_id, provider, "read", instance, generation, scope, kb)
             result.append(
                 ReadFact(
@@ -171,7 +198,11 @@ class SqlReadFacts:
                     int(parents[-1]) if parents else None,
                     version,
                     epoch,
-                    remote, status, size, created, updated,
+                    remote,
+                    status,
+                    size,
+                    created,
+                    updated,
                 )
             )
         return result

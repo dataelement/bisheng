@@ -33,6 +33,7 @@ def proof(models=None):
         ("label",),
         ("a", "b"),
         (("a", "related", "b"),),
+        "d" * 64,
     )
 
 
@@ -43,6 +44,7 @@ def proof(models=None):
         {"nodes": ("a", "a")},
         {"graph_available": False},
         {"sample_text": ""},
+        {"extract_digest": ""},
     ],
 )
 def test_reject_invalid_extraction_preset(changes):
@@ -79,6 +81,7 @@ def test_preflight_freezes_uses_not_copies_of_summary():
     assert config["wiki_model_id"] is None and config["tag_model_id"] is None
     assert all(config[k] for k in ("wiki_enabled", "entities_enabled", "multimodal_enabled", "auto_tag_enabled"))
     assert config["chunk_size"] == 512 and config["type"] == "document"
+    assert config["extract_digest"] == "d" * 64
 
 
 async def test_stale_form_denied_before_any_remote_or_durable_write():

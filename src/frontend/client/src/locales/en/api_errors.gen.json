@@ -405,6 +405,7 @@
   "18086": "Review the impact and confirm the operation first.",
   "18087": "The operation impact changed. Review and confirm it again.",
   "18088": "The operation confirmation expired. Review and confirm it again.",
+  "18090": "The WeKnora connection is invalid. Check the service address, workspace ID, and API key",
   "18100": "Approval request not found",
   "18101": "No permission to view or process this approval",
   "18102": "Approval task already processed",

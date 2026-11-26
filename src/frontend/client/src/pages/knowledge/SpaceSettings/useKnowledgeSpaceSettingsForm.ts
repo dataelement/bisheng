@@ -314,7 +314,8 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       const payload = buildResourcePayload();
       if (mode === "create") {
         if (provider === 'weknora') {
-          if (!preview.preset) return null;
+          // A stale review must not be submitted: it describes a different selection.
+          if (!preview.preset || !preview.fresh) return null;
           const receipt = await createProviderSpace(preview.preset, creationRequestIdRef.current, {
             name: form.name.trim(), description: form.description.trim(), auth_type: form.visibility,
             is_released: form.visibility !== VisibilityType.PRIVATE && form.isReleased,
@@ -384,7 +385,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     buildResourcePayload,
     canEdit,
     canManagePermissions,
-    form, loading, loadError, provider, preview.preset,
+    form, loading, loadError, provider, preview.preset, preview.fresh,
     mode,
     permissionDiff.changes,
     permissionHasChanges,

@@ -172,3 +172,8 @@ class SpaceGrantedNotJoinedError(BaseErrorCode):
 class DepartmentKnowledgeSpacePrivateError(BaseErrorCode):
     Code: int = 18081
     Msg: str = "Department knowledge spaces cannot be private"
+
+
+class ProviderInstanceInvalidError(BaseErrorCode):
+    Code: int = 18090
+    Msg: str = "The WeKnora connection is invalid"

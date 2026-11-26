@@ -20,10 +20,15 @@ class UploadAdmission:
     tenant_limit: int
 
 
-# Only production resolvers with deployment-specific verification, authenticated
-# upstream actors, receipt validation and BOTH server budgets belong here.
-# WeKnora's read-only API-key client cannot act as a receipt principal.
-_UPLOAD_DEPLOYMENTS = MappingProxyType({})
+def _upload_deployments():
+    # WeKnora upload admits only when a signed-user HMAC secret and dual byte
+    # budgets are available; the tenant API key alone is not a receipt principal.
+    from bisheng.knowledge.application.provider_weknora_upload import resolve_weknora_upload
+
+    return MappingProxyType({"weknora": resolve_weknora_upload})
+
+
+_UPLOAD_DEPLOYMENTS = _upload_deployments()
 
 
 async def _actor(service):

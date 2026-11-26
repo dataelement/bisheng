@@ -57,6 +57,22 @@
 - **批处理会话可注入。** `get_batch_application` 接受 `app.state.provider_batch_session_factory`（生产默认共享库，测试用一次性 SQLite），写端口仍必须来自注册的 resolver。
 - **迁移期标签与 Wiki 水位。** 标签写事务占用同一 `pending_write_operation_id` 写槽，切主比对标签修订；切主凭目标库自身 source-revision 证明安装 `wiki_target/applied_revision`，不沿用旧库水位。
 
+### 4.2 不设建库预设（2026-11-25）
+
+WeKnora 侧的常规修改不应要求同步修改毕昇配置，也不应让已建空间失效。
+
+- **建在哪个实例。** 不再有预设：`weknora.deployment` 与 `BS_WEKNORA_PRESET_<租户>` 均已删除，YAML 里写 `deployment` 会在加载配置时报错。新空间建在该租户唯一一条 `provider_key=weknora`、`state=ready` 的 `knowledge_provider_instance` 上，实例 ID、`remote_scope_id`、`capability_revision` 都从这条记录读。没有或多于一条时拒绝创建，「WeKnora 连接」页在有多条连接时提示管理员处理。
+- **抽取配置（创建时选择）。** 不再把模板 ID 写在 `knowledge_provider_instance` 上（迁移 `f026_drop_instance_template` 删除 `template_kb_id`）。创建人必须二选一：
+  - `extract_template_kb_id`：从 `GET /api/v1/knowledge/space/provider-extract-templates` 列出的、本空间已开启且结构可用的 WeKnora 知识库中选一个，建库时拷贝其当前 `extract_config`；
+  - `extract_config`：结构化提交 `text` / `tags` / `nodes` / `relations`（`enabled` 由服务端固定为 true；节点名唯一，关系两端必须落在已声明节点上）。
+- **创建人选择（AC-03/05）。** 摘要对话模型、向量模型、视觉模型、分块长度和重叠长度，以及上述抽取来源，均在创建表单里选择：个人空间在 client 创建页，部门空间在平台部门批建。模型候选来自 `GET /api/v1/knowledge/space/provider-models`（本空间 KnowledgeQA、Embedding、VLLM；向量须带维度）。选择以 `ProviderSelection`（禁止多余字段，三模型互不相同，`0 ≤ overlap < chunk_size ≤ 100000`，且恰好一个抽取来源）提交：
+  - 预览：`POST /creation-settings`，体为 `{provider_key:"weknora", provider_selection}`；部门预览的请求体为 `provider_selection`。
+  - 创建：创建和部门批建在 `preset_summary` 旁同时提交 `provider_selection`。WeKnora 空间缺少它即拒绝，原生空间带上它也拒绝。抽取来源写入操作的 `target_manifest`，Worker 建库时再探测。
+  - 前端核对：预览摘要中的模型 ID 和分块若与所选不一致，前端拒绝。选择进入幂等身份，同一请求键改了选择会被拒绝。
+- **现场证明。** 实例修订号每次从 `ready` 实例行读取。模型按 ID 读目录并调用调试接口实测；版本取 WeKnora 模型的 `name`（实际调用的上游模型名），改 Key、限流等不会改变它。图谱每次检查 Neo4j。抽取：选模板则每次读该库当前 `extract_config`；手填则校验并摘要创建人提交的配置。
+- **按空间冻结。** 预览摘要带上本次读到的 `extract_digest` 和模型版本；创建前重新探测，与创建人确认的摘要不一致则拒绝，不留下半建空间。建库后的回读和设置读取按空间自身冻结的实例与修订寻址，不再与当前实例配置比对，因此更换模板或修改连接不影响已建空间。
+- **仍保留。** 向量强锁指纹由实例、空间 ID、向量模型 ID、上游模型名和维度组成；同一 ID 指向另一上游模型时仍被拦住。
+
 ## 5. 运行时陷阱与护栏
 
 | 已知事实／证据 | 后果 | 处理位置 |
@@ -104,3 +120,5 @@
 
 2026-11-24：基于用户已确认的F026规格形成技术设计初稿。
 2026-11-24：Wave4 落地后补充 §4.1（预览节选、任务范围持久化、Native 排序快路径、批处理会话 seam、迁移期标签/水位）。
+2026-11-25：经用户确认补充 §4.2，预设去掉 WeKnora 侧事实（revision、model_pins、extract_digest、graph_verified_at），改为现场探测并按空间冻结。同日按用户要求，三类模型与分块从预设移到创建表单（`ProviderSelection`、`provider-models` 接口），预设只剩实例与模板。随后又去掉预设：实例取自 `knowledge_provider_instance`，模板改为实例上的 `template_kb_id`。
+2026-11-26：按用户选择 C，抽取改为创建时选模板或结构化填写 `extract_config`；去掉实例 `template_kb_id`；新增 `provider-extract-templates`，WeKnora 预览改为 `POST /creation-settings`。

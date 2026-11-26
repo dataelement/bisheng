@@ -20,8 +20,10 @@ import {
   isKnowledgeItemUploading,
 } from "../knowledgeUtils";
 import FileIconRenderer from "./FileIcon";
+import { ProviderFileTags } from "./ProviderFileTags";
 import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import TagGroup from "./TagGroup";
+import type { TagScope } from "../hooks/useSpaceCapabilities";
 
 /**
  * Desktop list-view row (Figma 13198:75866).
@@ -154,6 +156,11 @@ export interface FileListRowProps {
   onEditEncoding?: (file: KnowledgeFile) => void;
   /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
   highlightedTagIds?: number[];
+  /**
+   * External-space tag supplement. Provider listings carry no per-row tags and the
+   * upstream has no batch tag read, so the row resolves them only when opened.
+   */
+  providerTags?: { spaceId: string; scope: Extract<TagScope, { kind: 'provider' }> };
   /** Keyword hit by the active search; matching substring in the file name is highlighted. */
   highlightKeyword?: string;
   // F034 drag-move: row is a drag source; folder rows are drop targets.
@@ -195,6 +202,7 @@ export function FileListRow({
   canEditEncoding = false,
   onEditEncoding,
   highlightedTagIds,
+  providerTags,
   highlightKeyword,
   rowDraggable = false,
   onRowDragStart,
@@ -492,6 +500,17 @@ export function FileListRow({
               <span className="shrink-0 text-[10px] leading-[18px] text-text-3 tabular-nums">
                 {formatTimeCard(file.updatedAt)}
               </span>
+              {!isFolder && !(file.tags && file.tags.length > 0) && providerTags && (
+                <>
+                  <span className="h-2.5 w-px shrink-0 bg-border-base" aria-hidden />
+                  <ProviderFileTags
+                    spaceId={providerTags.spaceId}
+                    fileId={file.id}
+                    scope={providerTags.scope}
+                    variant="text-list"
+                  />
+                </>
+              )}
               {!isFolder && file.tags && file.tags.length > 0 && (
                 <>
                   <span className="h-2.5 w-px shrink-0 bg-border-base" aria-hidden />

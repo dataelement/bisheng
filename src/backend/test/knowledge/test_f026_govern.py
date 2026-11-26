@@ -422,7 +422,8 @@ async def test_wiki_body_is_shared_but_original_sources_follow_file_permission()
 
 @asynccontextmanager
 async def batch_client(batch, monkeypatch, *, resolver=None, application=None):
-    from bisheng.knowledge.api.endpoints import batch as wire, processing
+    from bisheng.knowledge.api.endpoints import batch as wire
+    from bisheng.knowledge.api.endpoints import processing
     from bisheng.knowledge.application import knowledge_batch
 
     app = FastAPI()
@@ -452,7 +453,7 @@ def external_route(monkeypatch):
     monkeypatch.setattr(wire, "resolve_space_route", AsyncMock(return_value=NS(provider_key="weknora", generation=2)))
 
 
-@pytest.mark.parametrize("operation", ["download", "tag", "retry", "delete"])
+@pytest.mark.parametrize("operation", ["tag", "retry", "delete"])
 async def test_external_batch_without_write_port_is_refused_not_native(batch, monkeypatch, operation):
     from sqlalchemy import select
 
@@ -475,6 +476,23 @@ async def test_external_batch_without_write_port_is_refused_not_native(batch, mo
     assert all(not call.await_count for call in native.values())
     async with batch.db.sessions() as session:
         assert (await session.execute(select(KnowledgeOperationPlan))).scalars().all() == []
+
+
+async def test_external_download_inspect_does_not_require_write_port(batch, monkeypatch):
+    """Download eligibility is a read probe; refusing it without a write port was a 500/toast path."""
+    from bisheng.knowledge.domain.repositories.knowledge_batch_repository import KnowledgeBatchRepository
+
+    await seed_external_space(batch)
+    external_route(monkeypatch)
+    native = AsyncMock()
+    monkeypatch.setattr(KnowledgeBatchRepository, "aread", native)
+    async with batch_client(batch, monkeypatch) as client:
+        body = {"items": [{"id": 30, "type": "file"}]}
+        inspect = (await client.post("/1/files/batch/download/inspect", json=body)).json()
+    assert inspect["status_code"] == 200
+    assert inspect["data"]["can_execute"]
+    assert [row["id"] for row in inspect["data"]["valid_items"]] == [30]
+    assert native.await_count == 0
 
 
 async def test_external_batch_delete_freezes_plan_accepts_intent_and_replays_receipt(batch, monkeypatch):

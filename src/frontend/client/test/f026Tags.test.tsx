@@ -7,7 +7,7 @@ import { EditTagsModal } from '~/pages/knowledge/SpaceDetail/EditTagsModal';
 import { useSpaceCapabilities } from '~/pages/knowledge/hooks/useSpaceCapabilities';
 
 const native = vi.hoisted(() => ({ getSpaceTagsApi: vi.fn(), updateFileTagsApi: vi.fn() }));
-const http = vi.hoisted(() => ({ getResponse: vi.fn(), put: vi.fn() }));
+const http = vi.hoisted(() => ({ getResponse: vi.fn(), put: vi.fn(), post: vi.fn() }));
 vi.mock('~/api/knowledge', () => native);
 vi.mock('~/api/request', () => ({ default: http, prepareBrowserHeaders: async () => ({ 'X-Management-Tenant': '7' }), showApiError: vi.fn() }));
 vi.mock('~/hooks', () => ({ useLocalize: () => (k: string) => k, useAuthContext: () => ({ user: { id: '17', tenant_id: 7, role: 'member' } }) }));
@@ -16,7 +16,7 @@ vi.mock('~/utils', () => ({ cn: (...s: string[]) => s.join(' '), getFullWidthLen
 vi.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: vi.fn() }) }));
 vi.mock('~/pages/knowledge/hooks/useKnowledgeBatch', () => ({ useKnowledgeBatch: () => ({ view: null }) }));
 vi.mock('~/pages/knowledge/SpaceDetail/BatchOperationDialog', () => ({ BatchOperationDialog: () => null }));
-vi.mock('~/components/ui', async () => ({ ...await import('~/components/ui/Dialog'), ...await import('~/components/ui/Button') }));
+vi.mock('~/components/ui', async () => ({ ...await import('~/components/ui/Dialog'), ...await import('~/components/ui/Button'), ...await import('~/components/ui/Input') }));
 
 const nativeScope = { kind: 'native' as const, key: 'member-7' };
 const unavailable = { kind: 'unavailable' as const };
@@ -55,6 +55,81 @@ it('uses the provider catalog one page at a time, retaining previously unseen ma
   await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
   expect(http.put.mock.calls[0].slice(0,2)).toEqual(['/api/v1/knowledge/space/11/files/3/provider-tags', { generation: 4, mode: 'replace', expected_revision: 9, tag_ref_ids: [701,550] }]);
   expect(native.getSpaceTagsApi).not.toHaveBeenCalled(); expect(native.updateFileTagsApi).not.toHaveBeenCalled();
+});
+it('creates one space word on demand and attaches it with the frozen revision', async () => {
+  http.getResponse.mockImplementation(readTags);
+  http.post.mockResolvedValue({ status_code: 200, data: { tag_ref_id: 812, name: 'Pressure test', generation: 4 } });
+  http.put.mockResolvedValue({ status_code: 200, data: snapshot([701, 812], 10) });
+  const saved = vi.fn();
+  render(<EditTagsModal isOpen canEditFileTags canReadSpaceTags canManageSpaceTags spaceId="11" fileId="3"
+    tagScope={providerScope} onClose={vi.fn()} onSaved={saved} />, { wrapper: Wrapper });
+  const input = await screen.findByPlaceholderText(key('new_word_placeholder'));
+  fireEvent.change(input, { target: { value: '  Pressure test  ' } });
+  fireEvent.click(screen.getByRole('button', { name: key('new_word') }));
+  await vi.waitFor(() => expect(http.post).toHaveBeenCalledOnce());
+  expect(http.post.mock.calls[0].slice(0, 2)).toEqual(['/api/v1/knowledge/space/11/provider-tags',
+    { generation: 4, name: 'Pressure test' }]);
+  const chip = await screen.findByRole('button', { name: 'Pressure test' });
+  expect(chip.getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: 'com_knowledge.confirm' }));
+  await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  expect(http.put.mock.calls[0].slice(0, 2)).toEqual(['/api/v1/knowledge/space/11/files/3/provider-tags',
+    { generation: 4, mode: 'replace', expected_revision: 9, tag_ref_ids: [701, 812] }]);
+});
+it('opens single-file provider editing even when the space permission summary has not resolved', async () => {
+  http.getResponse.mockImplementation(readTags);
+  render(<EditTagsModal isOpen canEditFileTags canManageSpaceTags spaceId="11" fileId="3"
+    tagScope={providerScope} onClose={vi.fn()} />, { wrapper: Wrapper });
+  await screen.findByPlaceholderText(key('new_word_placeholder'));
+  expect(screen.queryByText(key('edit_unavailable'))).toBeNull();
+});
+it('reports batch tagging as unavailable for an external space without calling either API', async () => {
+  render(<EditTagsModal isOpen canReadSpaceTags canManageSpaceTags spaceId="11" fileIds={['3', '4']}
+    tagScope={providerScope} onClose={vi.fn()} />, { wrapper: Wrapper });
+  await screen.findByText(key('batch_unavailable'));
+  expect(screen.queryByText(key('edit_unavailable'))).toBeNull();
+  expect(http.getResponse).not.toHaveBeenCalled(); expect(http.put).not.toHaveBeenCalled();
+});
+it('warns and saves through the whole-set contract when the upstream has no manual route', async () => {
+  const whole = (refs: number[]) => ({ ...snapshot(refs), edit_contract: 'whole-tags-v1' });
+  http.getResponse.mockImplementation((url: string, opts: never) =>
+    url.includes('/files/') ? envelope(whole([701])) : readTags(url, opts));
+  http.put.mockResolvedValue({ status_code: 200, data: whole([701, 2]) });
+  const saved = vi.fn();
+  openProvider(saved);
+  await screen.findByText(key('whole_set_warning'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Word 2' }));
+  fireEvent.click(screen.getByRole('button', { name: 'com_knowledge.confirm' }));
+  await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  expect(http.put.mock.calls[0].slice(0, 2)).toEqual(['/api/v1/knowledge/space/11/files/3/provider-tags',
+    { generation: 4, mode: 'replace', expected_revision: 9, tag_ref_ids: [701, 2] }]);
+});
+it('never offers a new word without space tag management and never writes after a failed creation', async () => {
+  http.getResponse.mockImplementation(readTags);
+  http.post.mockRejectedValue({ status_code: 18089 });
+  const { unmount } = render(<EditTagsModal isOpen canEditFileTags canReadSpaceTags spaceId="11" fileId="3"
+    tagScope={providerScope} onClose={vi.fn()} />, { wrapper: Wrapper });
+  await screen.findByText(key('word_create_denied'));
+  expect(screen.queryByPlaceholderText(key('new_word_placeholder'))).toBeNull();
+  unmount();
+  render(<EditTagsModal isOpen canEditFileTags canReadSpaceTags canManageSpaceTags spaceId="11" fileId="3"
+    tagScope={providerScope} onClose={vi.fn()} />, { wrapper: Wrapper });
+  fireEvent.change(await screen.findByPlaceholderText(key('new_word_placeholder')), { target: { value: 'Reject me' } });
+  fireEvent.click(screen.getByRole('button', { name: key('new_word') }));
+  // A definite refusal must not be reported as an unknown outcome.
+  await screen.findByText(key('rejected'));
+  expect(http.post).toHaveBeenCalledOnce(); expect(http.put).not.toHaveBeenCalled();
+  expect((screen.getByRole('button', { name: 'com_knowledge.confirm' }) as HTMLButtonElement).disabled).toBe(true);
+});
+it('reports a refused save as rejected instead of claiming the result is unknown', async () => {
+  http.getResponse.mockImplementation(readTags);
+  http.put.mockRejectedValue({ status_code: 400 });
+  const saved = vi.fn(); openProvider(saved);
+  fireEvent.click(await screen.findByRole('button', { name: 'Word 2' }));
+  fireEvent.click(screen.getByRole('button', { name: 'com_knowledge.confirm' }));
+  await screen.findByText(key('rejected'));
+  expect(screen.queryByText(key('unconfirmed'))).toBeNull();
+  expect(saved).not.toHaveBeenCalled();
 });
 it('explicitly clears with the original revision and blocks a conflicting retry until a fresh review', async () => {
   let serverRevision = 9;

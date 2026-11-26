@@ -8,6 +8,7 @@ import { useToastContext } from "~/Providers";
 import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
 import { EditEncodingModal } from "./EditEncodingModal";
 import { FileListRow } from "./FileListRow";
+import type { TagScope } from "../hooks/useSpaceCapabilities";
 
 /**
  * Desktop list view — the scroll container plus its rows (Figma 13198:75843).
@@ -57,6 +58,8 @@ interface FileListViewProps {
     highlightedTagIds?: number[];
     /** Keyword hit by the active search; matching substring in the file name is highlighted. */
     highlightKeyword?: string;
+    /** External-space tag supplement; each row resolves it only when the user opens it. */
+    providerTags?: { spaceId: string; scope: Extract<TagScope, { kind: 'provider' }> };
     onScroll?: React.UIEventHandler<HTMLDivElement>;
     footer?: ReactNode;
     /** Extra spacing reserved below the last row (e.g. to clear a floating bottom dock). */
@@ -94,6 +97,7 @@ export function FileListView({
     canManageVersions = false,
     highlightedTagIds,
     highlightKeyword,
+    providerTags,
     onScroll,
     footer,
     bottomSpacing = 0,
@@ -191,6 +195,7 @@ export function FileListView({
                         canEditEncoding={canEditEncoding}
                         onEditEncoding={canEditEncoding ? setEditingEncodingFile : undefined}
                         highlightedTagIds={highlightedTagIds}
+                        providerTags={providerTags}
                         highlightKeyword={highlightKeyword}
                         rowDraggable={dragMoveEnabled}
                         onRowDragStart={handleRowDragStart(file)}

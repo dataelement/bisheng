@@ -14,11 +14,19 @@ from uuid import uuid4
 
 from bisheng.knowledge.domain.repositories.provider_tag_repository import TagConflict, TagScope
 
-__all__ = ["ProviderTags", "TagConflict", "TagScope", "TagWriteRejected"]
+__all__ = ["ProviderTags", "TagConflict", "TagContractUnavailable", "TagScope", "TagWriteRejected"]
 
 
 class TagWriteRejected(Exception):
     """A definitive refusal at the dedicated write route; nothing was committed."""
+
+
+class TagContractUnavailable(Exception):
+    """The bound upstream has no per-document manual tag contract.
+
+    Raised only when the dedicated route is absent, so the caller can decide
+    whether a documented whole-set fallback is permitted for this deployment.
+    """
 
 
 class ProviderTags:
@@ -109,6 +117,21 @@ class ProviderTags:
         remote = await self.repo.resolve(scope, refs)
         async with self._write_slot(scope, self._write_token("edit"), before_send=before_send):
             return await self.port.edit_manual(scope, file_id, mode, remote, expected_revision)
+
+    async def edit_whole(self, scope, file_id, mode, refs, *, write, before_send=None):
+        """Whole-set fallback for an upstream without the per-document contract.
+
+        The remote keeps one tag list per document and ignores revisions, so the
+        port re-reads and compares the browser revision immediately before it
+        writes. `write` performs that read/write/confirm and returns the new raw
+        revision; the shared write slot is still held for the whole mutation.
+        """
+        await self._require(scope, "edit_file", file_id)
+        if mode not in ("replace", "clear") or (mode == "clear") != (not refs):
+            raise TagConflict("use explicit clear")
+        remote = await self.repo.resolve(scope, refs) if refs else ()
+        async with self._write_slot(scope, self._write_token("edit"), before_send=before_send):
+            return await write(remote)
 
     async def precheck_append(self, scope, file_ids, refs, *, new_names=()):
         """Inspection only. Never create vocabulary, mutate relations or claim a receipt."""

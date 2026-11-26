@@ -240,19 +240,21 @@ class SearchKnowledgeBase(BaseTool):
         # A recorded task scope resolves the backend BEFORE any local embedding
         # lookup: an external space has no local Milvus collection to open.
         if self.task_scope is not None and self.task_scope.recorded:
+            from bisheng.knowledge.application.provider_external_token import provider_external_identity
             from bisheng.knowledge.application.provider_retrieval import RetrievalSelection
 
-            async with request_provider_retrieval() as providers:
-                route = await providers.route(knowledge_info)
-                if route is not None:
-                    from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
-                        KnowledgeFileVisibilityService,
-                    )
+            with provider_external_identity(self.login_user.user_id):
+                async with request_provider_retrieval() as providers:
+                    route = await providers.route(knowledge_info)
+                    if route is not None:
+                        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+                            KnowledgeFileVisibilityService,
+                        )
 
-                    selection = RetrievalSelection(tag_ref_ids=(tag_ref,) if tag_ref is not None else ())
-                    visibility = KnowledgeFileVisibilityService(request=None, login_user=self.login_user)
-                    hits = await providers.retrieve(knowledge_info, route, selection, query, 8000, visibility)
-                    return await self._format_provider_hits(hits, knowledge_info, knowledge_id)
+                        selection = RetrievalSelection(tag_ref_ids=(tag_ref,) if tag_ref is not None else ())
+                        visibility = KnowledgeFileVisibilityService(request=None, login_user=self.login_user)
+                        hits = await providers.retrieve(knowledge_info, route, selection, query, 8000, visibility)
+                        return await self._format_provider_hits(hits, knowledge_info, knowledge_id)
         if not knowledge_info.model:
             # "Knowledge Base Not ConfiguredembeddingModels"
             raise Exception("Knowledge Base Not ConfiguredembeddingModels")

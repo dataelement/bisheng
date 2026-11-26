@@ -65,9 +65,25 @@ def _slug(value):
     return value
 
 
+def _acting_user_id(user) -> int | None:
+    value = getattr(user, "user_id", None)
+    return value if type(value) is int and value > 0 else None
+
+
 class WikiApplication:
     def __init__(self, *, get, control=None, allowed=check_business_action):
         self.get, self.control, self.allowed = get, control or WikiControl(), allowed
+
+    def _bound_get(self, user_id):
+        """Bind the acting user for the signed external-user token on each read."""
+
+        from bisheng.knowledge.application.provider_external_token import provider_external_identity
+
+        async def get(scope, path, params):
+            with provider_external_identity(user_id):
+                return await self.get(scope, path, params)
+
+        return get
 
     @classmethod
     def from_runtime(cls, resolver):
@@ -107,12 +123,12 @@ class WikiApplication:
         if await self._scope(user, scope.space_id) != scope:
             raise WikiUnavailable()
 
-    async def _state(self, scope):
+    async def _state(self, scope, user_id):
         if scope.state != "ready":
             return "preparing"
         if scope.pending is not None or scope.target != scope.applied:
             return "updating"
-        wire = (await observe_revision(self.get, scope)).wire
+        wire = (await observe_revision(self._bound_get(user_id), scope)).wire
         if not read_proof(wire, scope.target):
             if (
                 isinstance(wire, dict)
@@ -126,17 +142,17 @@ class WikiApplication:
 
     async def status_detail(self, user, space):
         scope = await self._scope(user, space)
-        state = await self._state(scope)
+        state = await self._state(scope, _acting_user_id(user))
         await self._finish(user, scope)
         return {"state": state, "generation": scope.generation}
 
     async def status(self, user, space):
         return (await self.status_detail(user, space))["state"]
 
-    async def _read(self, scope, path, **params):
-        if await self._state(scope) not in ("empty", "ready"):
+    async def _read(self, scope, path, user_id, **params):
+        if await self._state(scope, user_id) not in ("empty", "ready"):
             raise WikiUnavailable()
-        return await self.get(scope, path, {"min_revision": scope.target, **params})
+        return await self._bound_get(user_id)(scope, path, {"min_revision": scope.target, **params})
 
     async def _file(self, user, scope, remote_id, action):
         file_id = await self.control.source(scope, remote_id)
@@ -169,7 +185,7 @@ class WikiApplication:
         scope = await self._scope(user, space, generation)
         if generation is None:
             raise WikiUnavailable()
-        row = await self._read(scope, "pages/" + quote(_slug(slug), safe="/"))
+        row = await self._read(scope, "pages/" + quote(_slug(slug), safe="/"), _acting_user_id(user))
         page = self._summary(scope, row)
         if page["slug"] != slug:
             raise WikiUnavailable()
@@ -187,7 +203,7 @@ class WikiApplication:
 
     async def graph(self, user, space, *, generation=None):
         scope = await self._scope(user, space, generation)
-        row = await self._read(scope, "graph")
+        row = await self._read(scope, "graph", _acting_user_id(user))
         result = {
             "nodes": [
                 {"slug": _slug(n["slug"]), "page_type": n["page_type"], "title": n["title"]} for n in row["nodes"] or ()
@@ -199,7 +215,7 @@ class WikiApplication:
 
     async def search(self, user, space, query, *, generation=None):
         scope = await self._scope(user, space, generation)
-        row = await self._read(scope, "search", q=query)
+        row = await self._read(scope, "search", _acting_user_id(user), q=query)
         result = [self._summary(scope, p) for p in row["pages"] or ()]
         await self._finish(user, scope)
         return result

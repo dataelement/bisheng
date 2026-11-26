@@ -98,6 +98,15 @@ class KnowledgeDeletionApplication:
         if session.new or session.dirty or session.deleted:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_pending_tail")
 
+    @staticmethod
+    def _retires_remote_library(job) -> bool:
+        """Only a whole-space delete owns the remote library.
+
+        ``knowledge_space_clear`` empties a space that keeps existing, so its
+        remote library must survive; file/folder deletes never own a library.
+        """
+        return job.operation_type == "knowledge_space_delete"
+
     @asynccontextmanager
     async def _session(self):
         tenant = admission.tenant()
@@ -300,22 +309,32 @@ class KnowledgeDeletionApplication:
             root, checksum = await self.execution.aroot(active, plan.space_id, lock=True)
             if checksum != plan.source_revisions["root"]:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_root_changed")
-            await WikiControl.require_native_deletion(active, plan.space_id)
+            await WikiControl.require_provider_safe_deletion(active, plan.space_id, plan.operation)
             require_space_deletion_allowed(root, operation=plan.operation)
             await self.execution.arequire_transfer_idle(active, space_id=plan.space_id)
             await SourceMoveInputRepository().arequire_released(active, space_id=plan.space_id)
-            facts_holder["facts"] = await self._collect(
+            facts = await self._collect(
                 active,
                 space_id=plan.space_id,
                 selections=selections,
                 operation=plan.operation,
                 operation_id=operation_id,
             )
+            await WikiControl.require_deletable_targets(active, plan.space_id, facts.scope)
+            facts_holder["facts"] = facts
             facts_holder["root"] = root
             return root
 
         binding = None
-        if plan.operation == "knowledge_space_delete":
+        if plan.operation != "knowledge_space_delete":
+            await root_lock(session)
+        elif await WikiControl.is_externally_bound(session, plan.space_id):
+            # A provider space never wrote a local knowledge source index (it
+            # has no embedding model), so there is no source to retire; the
+            # cutover retires its provider mappings instead. The root lock and
+            # its frozen facts still have to run exactly once.
+            await root_lock(session)
+        else:
             binding = await (await self._runtime()).aprepare_source_bindings(
                 session,
                 SourceKey(admission.tenant(), SourceType.KNOWLEDGE, str(plan.space_id), "current"),
@@ -324,8 +343,6 @@ class KnowledgeDeletionApplication:
                 lock_source_root=root_lock,
                 effective=False,
             )
-        else:
-            await root_lock(session)
         facts = facts_holder["facts"]
         scope = facts.scope if manifest is not None else _selected(facts.scope, tuple(values["valid_positions"]))
         expected_scope = plan.target_revisions["scope"] if manifest is None else manifest["execution"]["scope_digest"]
@@ -539,8 +556,20 @@ class KnowledgeDeletionApplication:
                             session, receipts=receipts, operation_id=job.id, operation_type=plan.operation, actor=actor
                         )
                     await self.execution.afinalize_scope(session, scope=scope)
-                    if binding is not None:
-                        await runtime.aapply_source_bindings(session, binding)
+                    if plan.operation == "knowledge_space_delete":
+                        if binding is not None:
+                            await runtime.aapply_source_bindings(session, binding)
+                        else:
+                            # Provider space: synthetic folder mappings go with the
+                            # directory rows, and remote-backed files are already
+                            # deleted (their documents were removed before this
+                            # cutover), so their mappings and charged bytes retire here.
+                            await WikiControl.aretire_provider_rows(
+                                session,
+                                plan.space_id,
+                                tuple(job.manifest["rows"]),
+                                tuple(job.manifest.get("version_ids", ())),
+                            )
                         await self.execution.acleanup_deleted_space(session, space_id=plan.space_id)
                         await session.delete(root)
                         await session.flush()
@@ -571,6 +600,31 @@ class KnowledgeDeletionApplication:
         async with self._session() as session:
             plan = await self.execution.apeek_plan(session, job.id)
             self.execution.validate_job(job, plan)
+        if job.business_phase == "prepared":
+            # Remote documents go before the local cutover, outside this
+            # transaction. An accepted (async) provider delete is enough: the
+            # mapping is retired locally and reconcile owns the remainder.
+            if job.manifest["file_ids"]:
+                from bisheng.knowledge.application.provider_deletion import retire_remote_documents
+
+                await retire_remote_documents(
+                    tenant_id=job.tenant_id,
+                    space_id=job.space_id,
+                    file_ids=tuple(job.manifest["file_ids"]),
+                    user_id=job.applicant_user_id,
+                )
+            if self._retires_remote_library(job):
+                # A whole-space delete also owns the remote library itself; a
+                # clear keeps the space, so it keeps the library. This must run
+                # before the cutover: afterwards the route facts are gone and the
+                # library would stay behind, still consuming the remote quota.
+                from bisheng.knowledge.application.provider_deletion import retire_remote_library
+
+                await retire_remote_library(
+                    tenant_id=job.tenant_id,
+                    space_id=job.space_id,
+                    user_id=job.applicant_user_id,
+                )
         if "fga" not in job.completed_steps:
             for raw in job.manifest["projection_targets"]:
                 await repository.advance(job)

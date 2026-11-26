@@ -19,8 +19,52 @@ export async function readFileCapabilities(spaceId: string, signal?: AbortSignal
       .every(state => state === 'supported' || state === 'conditional'),
     tagEditable: !native && (raw.capabilities.tag_edit === 'supported' || raw.capabilities.tag_edit === 'conditional'),
     providerUpload: !native && raw.capabilities.upload === 'supported' && /^[1-9]\d*$/.test(tenant),
+    providerFolderUpload: !native && raw.capabilities.folder_upload === 'supported' && /^[1-9]\d*$/.test(tenant),
     preview: raw.capabilities.preview === 'supported' || (!native && raw.capabilities.preview === 'conditional' && raw.capabilities.preview_representation === 'text_excerpt'),
   };
+}
+
+export type ProviderFolderPrepareResult = {
+  root_name: string;
+  folders: { relative_dir: string; folder_id: number }[];
+};
+
+/** Relative directory of a folder-upload file path (drop-point relative). */
+export function parentDirOfRelativePath(relativePath: string): string {
+  const parts = relativePath.replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.slice(0, -1).join('/');
+}
+
+export async function prepareProviderFolderUpload(
+  spaceId: string,
+  data: { parent_id?: number | null; paths: string[] },
+  tenant: string,
+): Promise<ProviderFolderPrepareResult> {
+  const endpoint = `${spacePath(spaceId)}/provider-folder-uploads/prepare`;
+  const headers = await prepareBrowserHeaders('POST', endpoint);
+  if (headers['X-Management-Tenant'] !== tenant) throw new Error('Upload scope changed');
+  const response = await request.postResponse<{ data: Envelope<ProviderFolderPrepareResult> }>(endpoint, data, {
+    managementContext: 'independent',
+    headers: { 'X-Management-Tenant': tenant },
+  });
+  const envelope = response.data;
+  const raw = envelope?.data;
+  if (
+    envelope?.status_code !== 200 ||
+    !raw ||
+    typeof raw.root_name !== 'string' ||
+    !raw.root_name ||
+    !Array.isArray(raw.folders) ||
+    raw.folders.some(
+      (row) =>
+        typeof row?.relative_dir !== 'string' ||
+        !row.relative_dir ||
+        !positiveId(row.folder_id),
+    )
+  ) {
+    throw new Error('Unverified folder prepare response');
+  }
+  return { root_name: raw.root_name, folders: raw.folders.map((row) => ({ relative_dir: row.relative_dir, folder_id: row.folder_id })) };
 }
 
 export type UploadReceipt = { operation_id: string; file_id: number; version_id: number };

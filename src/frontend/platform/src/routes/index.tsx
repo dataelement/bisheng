@@ -32,6 +32,9 @@ const KnowledgeSpaceCreatePage = lazy(() =>
 const KnowledgeSpaceSettingsPage = lazy(() =>
   import("@/pages/KnowledgePage/KnowledgeSpaceSettingsPage").then(({ KnowledgeSpaceSettingsPage }) => ({ default: KnowledgeSpaceSettingsPage })),
 );
+const ProviderInstancesPage = lazy(() =>
+  import("@/pages/KnowledgePage/ProviderInstancesPage").then(({ ProviderInstancesPage }) => ({ default: ProviderInstancesPage })),
+);
 const AdjustFilesUpload = lazy(() => import("@/pages/KnowledgePage/AdjustFilesUpload"));
 const FilesUpload = lazy(() => import("@/pages/KnowledgePage/filesUpload"));
 const QasPage = lazy(() => import("@/pages/KnowledgePage/qas"));
@@ -88,6 +91,7 @@ const privateRouter = [
       { path: "admin", element: <Navigate to="/label" replace /> },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/create", element: <KnowledgeSpaceCreatePage />, permission: 'knowledge', },
+      { path: "filelib/provider-instances", element: <ProviderInstancesPage />, permission: 'knowledge', },
       { path: "filelib/:id/settings", element: <KnowledgeSpaceSettingsPage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },

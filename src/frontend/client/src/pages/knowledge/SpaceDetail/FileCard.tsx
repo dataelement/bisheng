@@ -11,7 +11,9 @@ import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import { Card, CardContent } from "~/components/ui/Card";
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
+import { ProviderFileTags } from "./ProviderFileTags";
 import TagGroup from "./TagGroup";
+import type { TagScope } from "../hooks/useSpaceCapabilities";
 import { useInlineRename } from "../hooks/useInlineRename";
 import {
   formatTimeCard,
@@ -86,6 +88,8 @@ interface FileCardProps {
   hideDownloadActions?: boolean;
   /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
   highlightedTagIds?: number[];
+  /** External-space tag supplement; resolved only when the user asks for it. */
+  providerTags?: { spaceId: string; scope: Extract<TagScope, { kind: 'provider' }> };
   /** Keyword hit by the active search; matching substring in the file name is highlighted. */
   highlightKeyword?: string;
   // F034 drag-move: card is a drag source; folder cards are drop targets.
@@ -128,6 +132,7 @@ export function FileCard({
   mobileListMode = false,
   hideDownloadActions = false,
   highlightedTagIds,
+  providerTags,
   highlightKeyword,
   cardDraggable = false,
   onCardDragStart,
@@ -556,6 +561,17 @@ export function FileCard({
             <span className="shrink-0 text-xs leading-5 text-text-3 tabular-nums">
               {formatTimeCard(file.updatedAt)}
             </span>
+            {!isFolder && !(file.tags && file.tags.length > 0) && providerTags && (
+              <>
+                <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
+                <ProviderFileTags
+                  spaceId={providerTags.spaceId}
+                  fileId={file.id}
+                  scope={providerTags.scope}
+                  variant="text-h5"
+                />
+              </>
+            )}
             {!isFolder && file.tags && file.tags.length > 0 && (
               <>
                 <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
@@ -754,6 +770,14 @@ export function FileCard({
           {/* Footer (tags + time) */}
           <div className="flex min-w-0 items-center justify-between gap-2">
             <div className="flex min-h-[20px] min-w-0 flex-1 items-center">
+              {!isFolder && !(file.tags && file.tags.length > 0) && providerTags && (
+                <ProviderFileTags
+                  spaceId={providerTags.spaceId}
+                  fileId={file.id}
+                  scope={providerTags.scope}
+                  variant="text"
+                />
+              )}
               {!isFolder && file.tags && file.tags.length > 0 && (
                 <TagGroup tags={file.tags} variant="text" highlightedTagIds={highlightedTagIds} />
               )}

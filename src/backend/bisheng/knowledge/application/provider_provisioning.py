@@ -4,8 +4,19 @@ No Native indexing, routing, or implicit default provider is used here.
 """
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from hashlib import sha256
+
+
+class ProviderTargetAbsent(ValueError):
+    """The addressed remote object definitively does not exist (HTTP 404).
+
+    Distinct from a generic failure on purpose: a create that addressed an
+    explicit remote id may be replayed when the target is proven absent, while
+    any other error stays "unknown" so a possibly-committed write is never
+    repeated.
+    """
 
 
 @dataclass(frozen=True)
@@ -35,6 +46,9 @@ class Preset:
     vision: str
     chunk_size: int
     overlap: int
+    # Exactly one extract source: a WeKnora KB to copy, or a creator-supplied config.
+    extract_template_kb_id: str | None = None
+    extract_config: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +106,7 @@ class PresetProof:
     tags: tuple[str, ...]
     nodes: tuple[str, ...]
     relations: tuple[tuple[str, str, str], ...]  # source, type, target
+    extract_digest: str  # of the extract_config this probe read; the space keeps it
 
 
 def preflight(preset, proof):
@@ -106,6 +121,7 @@ def preflight(preset, proof):
         or len(set(proof.nodes)) != len(proof.nodes)
         or not proof.relations
         or not all(source in proof.nodes and kind and target in proof.nodes for source, kind, target in proof.relations)
+        or not re.fullmatch("[a-f0-9]{64}", proof.extract_digest or "")
     ):
         raise ValueError("invalid entity extraction preset")
     models = proof.models
@@ -119,6 +135,7 @@ def preflight(preset, proof):
         "preset_revision": preset.revision,
         "chunk_size": preset.chunk_size,
         "overlap": preset.overlap,
+        "extract_digest": proof.extract_digest,
         "wiki_enabled": True,
         "entities_enabled": True,
         "multimodal_enabled": True,
@@ -155,13 +172,18 @@ class ProviderProvisioning:
             raise PermissionError("management tenant changed")
 
     async def preview(self, *, tenant_id, actor, space, preset):
+        from bisheng.knowledge.application.provider_external_token import provider_external_identity
+
         self._scope(tenant_id, preset.tenant_id)
         await self._allowed(
             tenant_id, actor, "create_department" if space.department_id else "create_personal", space.department_id
         )
-        return preflight(preset, await self.remote.probe_preset(preset))
+        with provider_external_identity(actor):
+            return preflight(preset, await self.remote.probe_preset(preset))
 
     async def create(self, *, tenant_id, expected_tenant, actor, key, space, preset, summary):
+        from bisheng.knowledge.application.provider_external_token import provider_external_identity
+
         self._scope(tenant_id, expected_tenant)
         self._scope(tenant_id, preset.tenant_id)
         if not key:
@@ -175,20 +197,33 @@ class ProviderProvisioning:
         replay = await self.repo.replay(tenant_id, "create_space", item_key, actor, identity)
         if replay is not None:
             return replay
-        config = preflight(preset, await self.remote.probe_preset(preset))
+        with provider_external_identity(actor):
+            config = preflight(preset, await self.remote.probe_preset(preset))
         if config != summary:
             raise ValueError("displayed model or preset revision changed")
-        return await self.repo.reserve_create(preset, space, actor, item_key, identity, config)
+        op = await self.repo.reserve_create(preset, space, actor, item_key, identity, config)
+        # Committed intent is dispatchable right away. The periodic sweep remains
+        # the safety net for a broker that is down; the request already succeeded.
+        from bisheng.worker.knowledge.provider_operations import wake_provider_operation
+
+        if op.state in ("pending",):
+            wake_provider_operation(tenant_id=op.tenant_id, operation_id=op.operation_id, expected_revision=op.revision)
+        return op
 
     async def read_settings(self, *, tenant_id, actor, space_id):
+        from bisheng.knowledge.application.provider_external_token import provider_external_identity
+
         await self._allowed(tenant_id, actor, "read_settings", space_id)
         target = await self.repo.active_target(tenant_id, space_id)
-        observed = await self.remote.read_library(target)
+        with provider_external_identity(actor):
+            observed = await self.remote.read_library(target)
         if not self._matches(target, observed):
             raise ValueError("unverified settings read")
         return {"revision": target.revision, "settings": observed["config"], "pending": target.pending}
 
     async def settings(self, *, tenant_id, expected_tenant, actor, space_id, key, expected_revision, patch):
+        from bisheng.knowledge.application.provider_external_token import provider_external_identity
+
         self._scope(tenant_id, expected_tenant)
         await self._allowed(tenant_id, actor, "manage_settings", space_id)
         allowed = {"summary_model_id", "wiki_model_id", "tag_model_id", "vision_model_id"}
@@ -201,7 +236,8 @@ class ProviderProvisioning:
         target = await self.repo.active_target(tenant_id, space_id)
         if expected_revision != target.revision or target.pending:
             raise ValueError("settings revision or pending write conflict")
-        models, version = await self.remote.probe_settings(target, patch)
+        with provider_external_identity(actor):
+            models, version = await self.remote.probe_settings(target, patch)
         if type(version) is not int or not 0 <= version < 2**53 - 1:
             raise ValueError("unverified remote settings version")
         for field, value in patch.items():
@@ -214,7 +250,12 @@ class ProviderProvisioning:
                 target.provider_instance_id,
                 target.remote_scope_id,
             )
-        return await self.repo.reserve_settings(target, actor, key, identity, dict(patch), version)
+        op = await self.repo.reserve_settings(target, actor, key, identity, dict(patch), version)
+        from bisheng.worker.knowledge.provider_operations import wake_provider_operation
+
+        if op.state in ("pending",):
+            wake_provider_operation(tenant_id=op.tenant_id, operation_id=op.operation_id, expected_revision=op.revision)
+        return op
 
     @staticmethod
     def _matches(op, observed):
@@ -227,31 +268,44 @@ class ProviderProvisioning:
         )
 
     async def send(self, op):
+        from bisheng.knowledge.application.provider_external_token import provider_external_identity
+
         await self.repo.require_send_target(op)
         f = op.target_manifest[0]
         try:
-            if op.kind == "create_space":
-                await self._allowed(
-                    op.tenant_id,
-                    op.actor_user_id,
-                    "create_department" if f["department_id"] else "create_personal",
-                    f["department_id"],
-                )
-                await self.remote.create_library(op, f["name"], f["config"])
-            elif op.kind == "update_space_settings":
-                await self._allowed(op.tenant_id, op.actor_user_id, "manage_settings", op.space_id)
-                await self.remote.patch_library(op, f["patch"])
-            else:
-                raise ValueError("not a provisioning operation")
+            with provider_external_identity(op.actor_user_id):
+                if op.kind == "create_space":
+                    await self._allowed(
+                        op.tenant_id,
+                        op.actor_user_id,
+                        "create_department" if f["department_id"] else "create_personal",
+                        f["department_id"],
+                    )
+                    await self.remote.create_library(op, f["name"], f["config"])
+                elif op.kind == "update_space_settings":
+                    await self._allowed(op.tenant_id, op.actor_user_id, "manage_settings", op.space_id)
+                    await self.remote.patch_library(op, f["patch"])
+                else:
+                    raise ValueError("not a provisioning operation")
         except (TimeoutError, ConnectionError):
             return "unknown"
         return await self.reconcile(op)
 
     async def reconcile(self, op):
+        from bisheng.knowledge.application.provider_external_token import provider_external_identity
+
         try:
-            observed = await self.remote.read_library(op)
+            with provider_external_identity(op.actor_user_id):
+                observed = await self.remote.read_library(op)
         except (TimeoutError, ConnectionError):
             return "unknown"
+        except ProviderTargetAbsent:
+            # The library is provably not there. A create addresses an explicit
+            # remote id, so re-sending it cannot duplicate anything; anything
+            # else would be repeating a write against a target we cannot see.
+            if op.kind == "create_space":
+                return "verified_safe_replay"
+            raise
         if not self._matches(op, observed):
             return "unknown"
         f = op.target_manifest[0]

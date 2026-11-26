@@ -24,7 +24,15 @@ from bisheng.knowledge.domain.services import department_knowledge_space_service
 
 BASE = "/api/v1/knowledge/space/department"
 HEADERS = {"X-Management-Tenant": "7"}
-PREVIEW = {"department_id": 20}
+SELECTION = {
+    "summary_model_id": "s",
+    "embedding_model_id": "e",
+    "vision_model_id": "v",
+    "chunk_size": 512,
+    "overlap": 64,
+    "extract_template_kb_id": "tpl",
+}
+PREVIEW = {"department_id": 20, "provider_selection": SELECTION}
 STATUS = {"request_key": "batch", "department_ids": [20]}
 
 
@@ -77,6 +85,7 @@ async def test_preview_uses_department_gate_before_remote_probe(browser, monkeyp
         ("tag",),
         ("A", "B"),
         (("A", "to", "B"),),
+        "e" * 64,
     )
     probe = AsyncMock(return_value=proof)
     departments = AsyncMock(side_effect=DepartmentNotFoundError())
@@ -98,6 +107,7 @@ async def test_preview_uses_department_gate_before_remote_probe(browser, monkeyp
 @pytest.mark.parametrize(
     "route,body",
     [
+        ("provider-preview", {"department_id": 20}),
         ("provider-preview", {"department_id": True}),
         ("provider-preview", {"department_id": -1}),
         ("batch-status", {**STATUS, "actor": 1}),

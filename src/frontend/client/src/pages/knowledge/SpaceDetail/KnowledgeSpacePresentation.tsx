@@ -5,7 +5,7 @@ import { BatchOperationDialog } from "./BatchOperationDialog";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { Fragment } from "react";
 import { EmptyStateIllustration } from "~/components/illustrations";
-import { FolderPlus, Link2 } from "lucide-react";
+import { FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { FileType } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
@@ -88,6 +88,9 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
     onRenameFile,
     onCancelCreateFolder,
   } = model;
+  // Only an external space needs the per-row supplement; native rows already carry tags.
+  const tagScope = model.providerUploads.tagScope;
+  const providerTags = tagScope.kind === 'provider' ? { spaceId: space.id, scope: tagScope } : undefined;
   return (
     <div
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg max-[767px]:overflow-hidden"
@@ -115,6 +118,11 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                 {canUploadFile && (
                   <DropdownItem icon={<Outlined.Upload />} onSelect={triggerUpload}>
                     {localize("com_knowledge.upload_file")}
+                  </DropdownItem>
+                )}
+                {model.canUploadFolder && (
+                  <DropdownItem icon={<FolderUp />} onSelect={model.triggerUploadFolder}>
+                    {localize("com_knowledge.upload_folder")}
                   </DropdownItem>
                 )}
                 {model.canUploadNativeExtras && knowledgeUploadCapabilities.webLink && (
@@ -254,6 +262,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                       canDownload={downloadEntryIds.has(file.id)}
                       mobileListMode={isH5}
                       highlightedTagIds={searchTagIds}
+                      providerTags={providerTags}
                       highlightKeyword={searchQuery}
                       cardDraggable={cardDrag.enabled}
                       onCardDragStart={cardDrag.handleDragStart(file)}
@@ -312,6 +321,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                 onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                 canManageVersions={canEditSpace}
                 highlightedTagIds={searchTagIds}
+                providerTags={providerTags}
                 highlightKeyword={searchQuery}
                 footer={listBottomStatus}
               />

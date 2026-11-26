@@ -41,14 +41,51 @@ function receipts(ids: number[], data: { items: WireItem[] }): DepartmentReceipt
   });
 }
 
-export async function previewDepartmentPreset(tenant: number, departmentId: number): Promise<Record<string, unknown>> {
-  const response: { preset_summary: Record<string, unknown> } = await axios.post(`${base}/provider-preview`, { department_id: departmentId }, pinned(tenant));
+export type ExtractConfig = {
+  text: string;
+  tags: string[];
+  nodes: { name: string }[];
+  relations: { node1: string; type: string; node2: string }[];
+};
+export type ProviderSelection = {
+  summary_model_id: string; embedding_model_id: string; vision_model_id: string; chunk_size: number; overlap: number;
+} & (
+  | { extract_template_kb_id: string; extract_config?: never }
+  | { extract_config: ExtractConfig; extract_template_kb_id?: never }
+);
+export type ProviderModel = { id: string; name: string; display_name: string; dimension?: number };
+export type ProviderModels = Record<'chat' | 'embedding' | 'vision', ProviderModel[]>;
+export type ExtractTemplate = { id: string; name: string };
+const PREVIEW_KEYS = ['summary_model_id', 'embedding_model_id', 'vision_model_id', 'chunk_size', 'overlap'] as const;
+
+export async function listProviderModels(tenant: number): Promise<ProviderModels> {
+  const data: Record<string, unknown> = await axios.get(`/api/v1/knowledge/space/provider-models`, pinned(tenant));
+  const usable = (m: any, embedding: boolean) => [m?.id, m?.name, m?.display_name].every(v => typeof v === 'string' && v)
+    && (!embedding || (Number.isSafeInteger(m.dimension) && m.dimension > 0));
+  const kinds = ['chat', 'embedding', 'vision'] as const;
+  if (!kinds.every(kind => Array.isArray(data?.[kind]) && (data[kind] as unknown[]).every(m => usable(m, kind === 'embedding')))) {
+    throw new Error('Invalid model list');
+  }
+  return data as ProviderModels;
+}
+
+export async function listExtractTemplates(tenant: number): Promise<ExtractTemplate[]> {
+  const data: unknown = await axios.get(`/api/v1/knowledge/space/provider-extract-templates`, pinned(tenant));
+  if (!Array.isArray(data) || !data.every((row: any) => typeof row?.id === 'string' && row.id && typeof row?.name === 'string' && row.name)) {
+    throw new Error('Invalid extract templates');
+  }
+  return data as ExtractTemplate[];
+}
+
+export async function previewDepartmentPreset(tenant: number, departmentId: number, selection: ProviderSelection): Promise<Record<string, unknown>> {
+  const response: { preset_summary: Record<string, unknown> } = await axios.post(`${base}/provider-preview`, { department_id: departmentId, provider_selection: selection }, pinned(tenant));
+  if (PREVIEW_KEYS.some(key => response.preset_summary?.[key] !== selection[key])) throw new Error('Unverified preset');
   return response.preset_summary;
 }
 
-export async function createExternalDepartmentBatch(tenant: number, ids: number[], key: string, preset: Record<string, unknown>) {
+export async function createExternalDepartmentBatch(tenant: number, ids: number[], key: string, preset: Record<string, unknown>, selection: ProviderSelection) {
   const result: { items: WireItem[] } = await axios.post(`${base}/batch-create`, {
-    provider_key: 'weknora', request_key: key, preset_summary: preset, items: ids.map(department_id => ({ department_id })),
+    provider_key: 'weknora', request_key: key, preset_summary: preset, provider_selection: selection, items: ids.map(department_id => ({ department_id })),
   }, pinned(tenant));
   return receipts(ids, result);
 }

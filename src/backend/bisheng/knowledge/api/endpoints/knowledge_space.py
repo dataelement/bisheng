@@ -20,6 +20,10 @@ from bisheng.knowledge.api.dependencies import (
 from bisheng.knowledge.application import provider_upload_v1 as uploads
 from bisheng.knowledge.application import provider_v1_runtime as provider
 from bisheng.knowledge.application.creation_settings import get_space_creation_settings
+from bisheng.knowledge.application.provider_folder_upload import (
+    ProviderFolderPrepareRequest,
+    prepare_folder_tree,
+)
 from bisheng.knowledge.application.provider_provisioning import SpaceSpec
 from bisheng.knowledge.application.provider_reads import ReadHandle
 from bisheng.knowledge.application.provider_v1_listing import listing as provider_listing
@@ -33,6 +37,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDownloadReq,
     ChatFolderReq,
     ChatReq,
+    CreationSettingsPreviewReq,
     DepartmentKnowledgeSpaceBatchCreateReq,
     DepartmentKnowledgeSpaceVisibilityReq,
     DepartmentProviderBatchStatusReq,
@@ -92,23 +97,75 @@ async def retrieve_workspace_context(
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
 
 
+@router.get("/provider-models")
+async def list_provider_models(login_user: UserPayload = Depends(UserPayload.get_login_user)) -> Any:
+    from bisheng.knowledge.application.provider_external_token import provider_external_identity
+    from bisheng.knowledge.application.provider_provision_runtime import build_provisioning, list_models
+
+    tenant = get_current_tenant_id()
+    engine = await build_provisioning(login_user)
+    try:
+        if await engine.authorize(tenant, login_user.user_id, "create_personal", None) is not True:
+            raise PermissionError("space action denied")
+        with provider_external_identity(login_user.user_id):
+            models = await list_models(tenant)
+    except (ValueError, PermissionError, ConnectionError, TimeoutError) as exc:
+        raise provider.ProviderFeatureUnavailable() from exc
+    return resp_200(models)
+
+
+@router.get("/provider-extract-templates")
+async def list_provider_extract_templates(login_user: UserPayload = Depends(UserPayload.get_login_user)) -> Any:
+    from bisheng.knowledge.application.provider_external_token import provider_external_identity
+    from bisheng.knowledge.application.provider_provision_runtime import build_provisioning, list_extract_templates
+
+    tenant = get_current_tenant_id()
+    engine = await build_provisioning(login_user)
+    try:
+        if await engine.authorize(tenant, login_user.user_id, "create_personal", None) is not True:
+            raise PermissionError("space action denied")
+        with provider_external_identity(login_user.user_id):
+            templates = await list_extract_templates(tenant)
+    except (ValueError, PermissionError, ConnectionError, TimeoutError) as exc:
+        raise provider.ProviderFeatureUnavailable() from exc
+    return resp_200(templates)
+
+
 @router.get("/creation-settings")
 async def get_creation_settings(
-    login_user: UserPayload = Depends(UserPayload.get_login_user), provider_key: Literal["native", "weknora"] = "native"
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    provider_key: Literal["native"] = "native",
 ) -> Any:
-    if provider_key == "weknora":
-        from bisheng.knowledge.application.provider_provision_runtime import build_provisioning, load_preset
-
-        tenant = get_current_tenant_id()
-        preset = await load_preset(tenant)
-        provisioning = await build_provisioning(login_user)
-        return resp_200(
-            await provisioning.preview(
-                tenant_id=tenant, actor=login_user.user_id, space=SpaceSpec(name="preview"), preset=preset
-            )
-        )
     async with get_async_db_session() as session:
         return resp_200(await get_space_creation_settings(login_user, session=session))
+
+
+@router.post("/creation-settings")
+async def preview_creation_settings(
+    req: CreationSettingsPreviewReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    from bisheng.knowledge.application.provider_provision_runtime import build_provisioning, load_preset
+
+    tenant = get_current_tenant_id()
+    provisioning = await build_provisioning(login_user)
+    try:
+        summary = await provisioning.preview(
+            tenant_id=tenant,
+            actor=login_user.user_id,
+            space=SpaceSpec(name="preview"),
+            preset=await load_preset(tenant, req.provider_selection),
+        )
+    except (ValueError, PermissionError, ConnectionError, TimeoutError) as exc:
+        logger.opt(exception=True).warning(
+            "weknora creation-settings probe failed tenant={} actor={} extract_template={} err={}",
+            tenant,
+            login_user.user_id,
+            req.provider_selection.extract_template_kb_id,
+            exc,
+        )
+        raise provider.ProviderFeatureUnavailable() from exc
+    return resp_200(summary)
 
 
 # No `@require_quota` here, unlike assistant / workflow / tool. Those have no
@@ -133,6 +190,7 @@ async def create_space(
         if (
             not req.creation_request_id
             or req.preset_summary is None
+            or req.provider_selection is None
             or req.embedding_model_id is not None
             or req.processing_defaults is not None
             or req.initial_permissions is not None
@@ -154,11 +212,11 @@ async def create_space(
                 auth_type=req.auth_type.value,
                 is_released=req.is_released,
             ),
-            preset=await load_preset(tenant),
+            preset=await load_preset(tenant, req.provider_selection),
             summary=req.preset_summary,
         )
         return resp_200(_receipt(receipt))
-    if req.preset_summary is not None:
+    if req.preset_summary is not None or req.provider_selection is not None:
         raise provider.ProviderFeatureUnavailable()
     advanced = {}
     if req.embedding_model_id is not None or req.processing_defaults is not None:
@@ -310,7 +368,7 @@ async def preview_department_provider(
             tenant_id=tenant,
             actor=login_user.user_id,
             space=SpaceSpec(name="preview", department_id=req.department_id),
-            preset=await load_preset(tenant),
+            preset=await load_preset(tenant, req.provider_selection),
         )
     except (ValueError, PermissionError, ConnectionError, TimeoutError) as exc:
         raise provider.ProviderFeatureUnavailable() from exc
@@ -380,14 +438,24 @@ async def read_provider_upload_item(
     return resp_200(await uploads.read_upload(svc, space_id, request_key, parent_id=parent_id))
 
 
+@router.post("/{space_id}/provider-folder-uploads/prepare")
+async def prepare_provider_folder_upload(
+    space_id: int,
+    body: ProviderFolderPrepareRequest,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    return resp_200(await prepare_folder_tree(svc, space_id, body))
+
+
 @router.get("/{space_id}/capabilities")
 async def get_capabilities(space_id: int, svc: KnowledgeSpaceService = Depends(get_knowledge_space_service)):
     await svc._require_action("knowledge_space", space_id, "visible")
     route = await provider.resolve_space_route(space_id)
-    states = (
-        {"preview": "supported", "download": "supported", "bbox": "conditional", "listing": "supported"}
-        if route is None
-        else {
+    if route is None:
+        states = {"preview": "supported", "download": "supported", "bbox": "conditional", "listing": "supported"}
+    else:
+        upload_state = "supported" if await uploads.upload_admission(svc, route) else "unverified"
+        states = {
             "preview": "conditional",
             "preview_representation": "text_excerpt",
             "download": "conditional",
@@ -400,10 +468,10 @@ async def get_capabilities(space_id: int, svc: KnowledgeSpaceService = Depends(g
             "tag_edit": "conditional",  # Requires a verified file-specific manual-tags-v1 contract.
             "batch_download": "unsupported",
             "settings_write": "unverified",
-            "upload": "supported" if await uploads.upload_admission(svc, route) else "unverified",
+            "upload": upload_state,
+            "folder_upload": upload_state,
             "preview_edit": "unsupported",
         }
-    )
     return resp_200(
         {
             "provider_key": route.provider_key if route else "native",
@@ -622,7 +690,7 @@ async def batch_create_department_spaces(
             from bisheng.knowledge.application.provider_provision_runtime import build_provisioning, load_preset
 
             tenant = await _expected_provider_tenant(request, login_user)
-            if not req.request_key or req.preset_summary is None or not req.items:
+            if not req.request_key or req.preset_summary is None or req.provider_selection is None or not req.items:
                 raise provider.ProviderFeatureUnavailable()
             await DepartmentKnowledgeSpaceService._ensure_tenant_admin(login_user)
             items = [
@@ -645,12 +713,12 @@ async def batch_create_department_spaces(
                 login_user=login_user,
                 expected_tenant=str(tenant),
                 items=items,
-                preset=await load_preset(tenant),
+                preset=await load_preset(tenant, req.provider_selection),
                 key=req.request_key,
                 provisioning=await build_provisioning(login_user),
             )
             return resp_200({"items": results})
-        if req.request_key is not None or req.preset_summary is not None:
+        if req.request_key is not None or req.preset_summary is not None or req.provider_selection is not None:
             raise provider.ProviderFeatureUnavailable()
         spaces = await DepartmentKnowledgeSpaceService.batch_create_spaces(
             request=request,
@@ -979,13 +1047,16 @@ async def get_file_download(
 
 
 class _ControlledDownload(StreamingResponse):
-    def __init__(self, reads, actor, handle, range_header):
+    def __init__(self, reads, actor, handle, range_header, user_id=None):
         super().__init__(iter(()))
         self.reads, self.actor, self.handle, self.range_header = reads, actor, handle, range_header
+        self.user_id = user_id
 
     async def __call__(self, scope, receive, send):
         # Acquire before headers, close even on cancellation or response-start failure.
-        async with self.reads.open(self.actor, self.handle, range_header=self.range_header) as upstream:
+        async with self.reads.open(
+            self.actor, self.handle, range_header=self.range_header, user_id=self.user_id
+        ) as upstream:
             preview = self.handle.operation == "preview"
             headers = {
                 "Cache-Control": "private, no-store",
@@ -1023,6 +1094,7 @@ async def fetch_provider_content(
         await svc._permission_actor(),
         ReadHandle(space_id, file_id, version_id, generation, epoch, operation),
         request.headers.get("Range"),
+        svc.login_user.user_id,
     )
 
 

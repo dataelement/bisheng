@@ -132,7 +132,6 @@ async def test_cas_conflict_never_replays_releases_slot_and_clear_is_explicit(en
 @pytest.mark.parametrize(
     "bad",
     [
-        httpx.Response(404),
         selection(None),
         selection([], knowledge_id="wrong"),
         selection([], contract="legacy"),
@@ -150,6 +149,20 @@ async def test_unproven_contract_is_never_a_write_or_empty(bad, env):
             )
         assert exc.value.Code == 18089
     assert all(call.args == (MANUAL,) for call in client.get.await_args_list)
+    client.put.assert_not_awaited()
+
+
+async def test_absent_route_falls_back_but_never_invents_an_empty_selection(env):
+    """A 404 alone is not proof of 'no tags': the fallback must read a real list first."""
+    request, client, _, _, _ = env
+    client.get.return_value = httpx.Response(404)
+    for write in (False, True):
+        with pytest.raises(bridge.ProviderFeatureUnavailable) as exc:
+            await request(22, write).file_selection(
+                ManualTagEdit(generation=1, mode="clear", tag_ref_ids=[], expected_revision=0) if write else None
+            )
+        assert exc.value.Code == 18089
+    assert all(call.args == (MANUAL,) or call.args == ("knowledge/remote-doc",) for call in client.get.await_args_list)
     client.put.assert_not_awaited()
 
 
@@ -185,6 +198,162 @@ async def test_permission_generation_and_file_version_rechecked(env):
     mapping.load_candidates.return_value = ([FILE], [])
     client.put.return_value = selection([])
     assert (await request(22, True).file_selection(clear))["revision"] == before["revision"]
+
+
+async def test_whole_set_fallback_reads_writes_and_confirms_without_manual_route(env):
+    """An upstream without `manual-tags-v1` still supports add/edit through its whole-set route."""
+    request, client, _, _, _ = env
+    tags = [
+        {"id": "remote-a", "knowledge_base_id": "remote-kb", "tenant_id": 7, "name": "A"},
+        {"id": "remote-b", "knowledge_base_id": "remote-kb", "tenant_id": 7, "name": "B"},
+    ]
+    state = {"ids": ["remote-a"]}
+
+    def detail(ids):
+        return {
+            "id": "remote-doc",
+            "knowledge_base_id": "remote-kb",
+            "tenant_id": 7,
+            "tags": [tag for tag in tags if tag["id"] in ids],
+        }
+
+    async def get(path, params=None):
+        if path == MANUAL:
+            return httpx.Response(404)
+        assert path == "knowledge/remote-doc"
+        return ok(detail(state["ids"]))
+
+    async def put(path, json=None):
+        assert path == "knowledge/tags"
+        assert (json["kb_id"], list(json["updates"])) == ("remote-kb", ["remote-doc"])
+        state["ids"] = json["updates"]["remote-doc"]
+        return httpx.Response(200, json={"success": True})
+
+    client.get.side_effect = get
+    client.put.side_effect = put
+    before = await request(22).file_selection()
+    assert before["edit_contract"] == "whole-tags-v1" and len(before["tag_ref_ids"]) == 1
+    client.put.assert_not_awaited()
+
+    state["ids"] = ["remote-a", "remote-b"]  # remote moved on after the read
+    with pytest.raises(bridge.KnowledgeOperationPlanConflictError) as stale:
+        await request(22, True).file_selection(
+            ManualTagEdit(generation=1, mode="clear", tag_ref_ids=[], expected_revision=before["revision"])
+        )
+    assert stale.value.Code == 10998
+    client.put.assert_not_awaited()
+
+    fresh = await request(22).file_selection()
+    assert len(fresh["tag_ref_ids"]) == 2
+    after = await request(22, True).file_selection(
+        ManualTagEdit(
+            generation=1, mode="replace", tag_ref_ids=fresh["tag_ref_ids"], expected_revision=fresh["revision"]
+        )
+    )
+    assert after["edit_contract"] == "whole-tags-v1"
+    assert sorted(state["ids"]) == ["remote-a", "remote-b"]
+    assert after["tag_ref_ids"] == fresh["tag_ref_ids"]
+    # Clear is explicit and lands as an empty whole set, confirmed by a re-read.
+    cleared = await request(22, True).file_selection(
+        ManualTagEdit(generation=1, mode="clear", tag_ref_ids=[], expected_revision=after["revision"])
+    )
+    assert cleared["tag_ref_ids"] == [] and state["ids"] == []
+
+
+@pytest.mark.parametrize("tags", [{"missing": True}, "not-a-list"])
+async def test_whole_set_fallback_refuses_an_unproven_tag_list(tags, env):
+    request, client, _, _, _ = env
+    detail = {"id": "remote-doc", "knowledge_base_id": "remote-kb", "tenant_id": 7}
+    if tags != {"missing": True}:
+        detail["tags"] = tags
+    client.get.side_effect = lambda path, params=None: httpx.Response(404) if path == MANUAL else ok(detail)
+    with pytest.raises(bridge.ProviderFeatureUnavailable) as exc:
+        await request(22).file_selection()
+    assert exc.value.Code == 18089
+    client.put.assert_not_awaited()
+
+
+async def test_whole_set_fallback_lets_an_untagged_document_receive_its_first_tag(env):
+    """v0.9.0 marshals a nil relation slice as null; that is its 'no tags', not a missing proof."""
+    request, client, _, _, _ = env
+    state = {"ids": None}
+
+    async def get(path, params=None):
+        if path == MANUAL:
+            return httpx.Response(404)
+        if path == VOCAB:
+            return ok(
+                {
+                    "data": [{"id": "remote-a", "knowledge_base_id": "remote-kb", "tenant_id": 7, "name": "A"}],
+                    "total": 1,
+                    "page": 1,
+                    "page_size": 50,
+                }
+            )
+        tags = (
+            None
+            if state["ids"] is None
+            else [{"id": tag, "knowledge_base_id": "remote-kb", "tenant_id": 7} for tag in state["ids"]]
+        )
+        return ok({"id": "remote-doc", "knowledge_base_id": "remote-kb", "tenant_id": 7, "tags": tags})
+
+    async def put(path, json=None):
+        assert path == "knowledge/tags"
+        state["ids"] = json["updates"]["remote-doc"]
+        return httpx.Response(200, json={"success": True})
+
+    client.get.side_effect = get
+    client.put.side_effect = put
+    ref = (await request().page(1, 50))["data"][0]["tag_ref_id"]
+    before = await request(22).file_selection()
+    assert before["edit_contract"] == "whole-tags-v1" and before["tag_ref_ids"] == []
+    after = await request(22, True).file_selection(
+        ManualTagEdit(generation=1, mode="replace", tag_ref_ids=[ref], expected_revision=before["revision"])
+    )
+    assert state["ids"] == ["remote-a"] and after["tag_ref_ids"] == [ref]
+
+
+async def test_labels_read_the_document_detail_once_and_never_require_the_manual_route(env):
+    """The file list shows names from the document detail; it must not need the edit contract."""
+    request, client, _, _, _ = env
+    client.get.return_value = ok(
+        {
+            "id": "remote-doc",
+            "knowledge_base_id": "remote-kb",
+            "tenant_id": 7,
+            "tags": [
+                {"id": "remote-a", "knowledge_base_id": "remote-kb", "tenant_id": 7, "name": "测试"},
+                {"id": "remote-b", "knowledge_base_id": "remote-kb", "tenant_id": 7, "name": "测试2"},
+            ],
+        }
+    )
+    assert await request(22).file_labels() == {"names": ["测试", "测试2"], "generation": 1}
+    # One remote read, and the edit-only route is never touched.
+    assert [call.args for call in client.get.await_args_list] == [("knowledge/remote-doc",)]
+    client.put.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "detail",
+    [
+        {"id": "remote-doc", "knowledge_base_id": "remote-kb", "tenant_id": 7},
+        {"id": "remote-doc", "knowledge_base_id": "remote-kb", "tenant_id": 7, "tags": "x"},
+        {"id": "remote-doc", "knowledge_base_id": "other-kb", "tenant_id": 7, "tags": []},
+        {
+            "id": "remote-doc",
+            "knowledge_base_id": "remote-kb",
+            "tenant_id": 7,
+            "tags": [{"id": "remote-a", "knowledge_base_id": "remote-kb", "tenant_id": 7}],
+        },
+    ],
+)
+async def test_labels_fail_closed_on_an_unproven_details_payload(detail, env):
+    request, client, _, _, _ = env
+    client.get.return_value = ok(detail)
+    with pytest.raises(bridge.ProviderFeatureUnavailable) as exc:
+        await request(22).file_labels()
+    assert exc.value.Code == 18089
+    client.put.assert_not_awaited()
 
 
 async def test_uncertain_write_keeps_slot_and_never_returns_invented_success(env):
@@ -250,6 +419,17 @@ async def test_registered_routes_and_envelope(env, monkeypatch):
         client.put.return_value = selection([])
         assert (await browser.put(file, json=command)).json()["data"] == state
         assert (await browser.put(file, json={**command, "remote_id": "x"})).status_code == 422
+        client.post.return_value = ok(
+            {"id": "remote-word", "knowledge_base_id": "remote-kb", "tenant_id": 7, "name": "检修"}
+        )
+        created = (await browser.post(base + "/provider-tags", json={"generation": 1, "name": "  检修  "})).json()
+        assert created["status_code"] == 200
+        assert created["data"]["name"] == "检修" and type(created["data"]["tag_ref_id"]) is int
+        assert (await browser.post(base + "/provider-tags", json={"generation": 1, "name": "   "})).status_code == 422
+        assert (
+            await browser.post(base + "/provider-tags", json={"generation": 1, "name": "x", "remote_id": "y"})
+        ).status_code == 422
+        assert (await browser.post(base + "/provider-tags", json={"generation": 0, "name": "x"})).status_code == 422
 
 
 async def test_vocab_mismatched_scope_no_ref_issued(env):
@@ -270,3 +450,68 @@ async def test_vocab_mismatched_scope_no_ref_issued(env):
     with pytest.raises(SpacePermissionDeniedError):
         await request().page(1, 50)
     client.get.assert_not_awaited()
+
+
+def word(name="检修", remote="remote-word", **fields):
+    return ok(dict({"id": remote, "knowledge_base_id": "remote-kb", "tenant_id": 7, "name": name}, **fields))
+
+
+async def test_create_word_requires_space_management_and_returns_a_local_ref(env):
+    request, client, service, _, _ = env
+    client.post.return_value = word()
+    created = await request().create_word("检修")
+    service._require_action.assert_any_await("knowledge_space", 8, "edit")
+    client.post.assert_awaited_once_with(VOCAB, json={"name": "检修"})
+    assert created["name"] == "检修" and created["generation"] == 1
+    # Browser gets a local safe integer, never the remote tag identity.
+    assert type(created["tag_ref_id"]) is int and 0 < created["tag_ref_id"] < 2**53
+    assert created["tag_ref_id"] != "remote-word"
+    service._require_action.side_effect = SpacePermissionDeniedError()
+    client.post.reset_mock()
+    with pytest.raises(SpacePermissionDeniedError):
+        await request().create_word("检修")
+    client.post.assert_not_awaited()
+
+
+async def test_duplicate_word_reuses_the_existing_identity(env):
+    request, client, _, _, _ = env
+    client.post.return_value = httpx.Response(409)
+    client.get.return_value = ok(
+        {
+            "page": 1,
+            "page_size": 200,
+            "total": 1,
+            "data": [{"knowledge_base_id": "remote-kb", "tenant_id": 7, "id": "remote-old", "name": "检修"}],
+        }
+    )
+    created = await request().create_word("检修")
+    client.get.assert_awaited_once_with(VOCAB, params={"page": 1, "page_size": 200, "keyword": "检修"})
+    assert created["name"] == "检修" and created["tag_ref_id"] > 0
+    # Same name, same local reference: one tag per name.
+    assert created == await request().create_word("检修")
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        word(name="别的"),
+        word(remote="bad id!"),
+        word(tenant_id=70),
+        word(knowledge_base_id="other"),
+        httpx.Response(200),
+    ],
+)
+async def test_unproven_word_creation_is_never_a_ref(bad, env):
+    request, client, _, _, _ = env
+    client.post.return_value = bad
+    with pytest.raises(bridge.ProviderFeatureUnavailable) as exc:
+        await request().create_word("检修")
+    assert exc.value.Code == 18089
+
+
+async def test_word_creation_rejects_an_incompatible_generation(env):
+    request, client, _, resolve, _ = env
+    resolve.return_value = replace(ROUTE, generation=2)
+    with pytest.raises(bridge.KnowledgeOperationPlanConflictError):
+        await request().create_word("检修")
+    client.post.assert_not_awaited()

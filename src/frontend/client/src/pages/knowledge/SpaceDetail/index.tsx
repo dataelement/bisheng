@@ -227,7 +227,7 @@ function useKnowledgeSpaceDetail(
   } = filePermissions;
 
   const providerUploads = useProviderFileUploads(space.id, currentFolderId, hasUploadAction, onUploadFile, () => onDeleteFile(""));
-  const { canUploadFile, canUploadNativeExtras } = providerUploads;
+  const { canUploadFile, canUploadNativeExtras, canUploadFolder } = providerUploads;
   const canCreateFolder = providerUploads.isNative && hasCreateFolderAction;
   const versionManagementEnabled = providerUploads.isNative && nativeVersionsEnabled;
 
@@ -249,6 +249,7 @@ function useKnowledgeSpaceDetail(
     queryClient,
     canUploadFile,
     canUploadNativeExtras,
+    canUploadFolder,
     canUseContextMenuActions,
     showToast,
     confirm,
@@ -260,7 +261,7 @@ function useKnowledgeSpaceDetail(
     allowedExtensions,
     space,
     onUploadFile: providerUploads.uploadFiles,
-    onUploadFolder,
+    onUploadFolder: providerUploads.isNative ? onUploadFolder : providerUploads.uploadFolder,
     onDeleteFile,
     currentFolderId,
     onDragStateChange,
@@ -322,6 +323,7 @@ function useKnowledgeSpaceDetail(
   const canBatchDelete = actionableSelection.some((file) => deleteEntryIds.has(file.id));
   const canBatchDownload = actionableSelection.some((file) => downloadEntryIds.has(file.id));
   const canBatchTag =
+    providerUploads.isNative &&
     actionableSelection.length > 0 &&
     actionableSelection.every((file) => file.type !== FileType.FOLDER) &&
     actionableSelection.some(
@@ -434,6 +436,7 @@ function useKnowledgeSpaceDetail(
     providerUploads,
     canUploadFile,
     canUploadNativeExtras,
+    canUploadFolder,
     canCreateFolder,
     ...uploadActions,
     ...fileActions,

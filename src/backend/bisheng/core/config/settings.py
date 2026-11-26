@@ -1021,6 +1021,15 @@ class Settings(BaseModel):
     weknora_http_endpoint: str | None = Field(
         default=None, description="Optional trusted private HTTP origin for WeKnora"
     )
+    # Blocking model probes are a full remote inference, so they need a budget of
+    # their own. Top-level on purpose: tuning it must not require declaring a
+    # `weknora` block, whose endpoint/api_key would otherwise become mandatory.
+    weknora_probe_timeout_seconds: float = Field(default=180, gt=0, le=600)
+    # A successful probe is a full remote inference. Reusing its proof for a few
+    # minutes is what keeps an editable creation form responsive: an unchanged
+    # model must not be re-proved for every keystroke in an unrelated field.
+    # Only the creation preview reuses it; creating a space always re-proves.
+    weknora_model_probe_cache_seconds: float = Field(default=1800, ge=0, le=86400)
 
     @field_validator("weknora_http_endpoint")
     @classmethod

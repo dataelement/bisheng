@@ -142,6 +142,7 @@ export interface UseKnowledgeUploadsOptions {
   queryClient: QueryClient;
   canUploadFile: boolean;
   canUploadNativeExtras: boolean;
+  canUploadFolder: boolean;
   canUseContextMenuActions: boolean;
   showToast: KnowledgeUiPorts["showToast"];
   confirm: KnowledgeUiPorts["confirm"];

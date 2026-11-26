@@ -116,9 +116,35 @@ class KnowledgeSpaceDirectDeleteService:
         else:
             await self.repository.advance(job)
 
+    async def _provider_owned(self, job) -> bool:
+        """True when this space's content lives in an external provider.
+
+        Such a space owns no local Elasticsearch index, Milvus collection or
+        MinIO object namespace; its remote documents are retired before the
+        cutover, so the local index/object steps must not run against them.
+        """
+        from sqlalchemy import select
+
+        from bisheng.knowledge.domain.models.provider_control import KnowledgeProviderBinding as Binding
+
+        async with self.session_factory() as session:
+            binding = (
+                await session.execute(
+                    select(Binding.provider_key, Binding.active_generation).where(
+                        Binding.tenant_id == job.tenant_id, Binding.space_id == job.space_id
+                    )
+                )
+            ).one_or_none()
+        if binding is None:
+            return False
+        provider_key, active_generation = binding
+        return provider_key != "native" or active_generation is not None
+
     async def _purge_step(self, step: str, job, *, verification=False) -> None:
         manifest = job.manifest
         file_ids = manifest["file_ids"]
+        if step != "fga" and await self._provider_owned(job):
+            return
         if step == "fga":
             from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgeFilePermissionRecord
             from bisheng.permission.application.access import get_f048_resource_adapter

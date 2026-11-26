@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from bisheng.common.services import config_service
-from bisheng.knowledge.application.provider_provision_runtime import _deployment
 from bisheng.knowledge.application.provider_v1_runtime import ProviderFeatureUnavailable, _client_parameters
 
 
@@ -80,25 +79,6 @@ def test_deny_invalid_yaml_profile(load, invalid):
         load(**invalid)
 
 
-def test_yaml_provisioning_uses_verified_preset_shape(load, monkeypatch):
-    doc = {
-        "preset": {
-            "tenant_id": 31,
-            "instance_id": 4,
-            "scope": "7",
-            "revision": 1,
-            "summary": "s",
-            "embedding": "e",
-            "vision": "v",
-            "chunk_size": 400,
-            "overlap": 20,
-        },
-        "template_id": "tpl",
-        "extract_digest": "a" * 64,
-    }
-    load(deployment=doc)
-    monkeypatch.delenv("BS_WEKNORA_PRESET_31", raising=False)
-    assert _deployment(31)[1] == doc
-    load(deployment={**doc, "preset": {**doc["preset"], "instance_id": 9}})
-    with pytest.raises(ValueError):
-        _deployment(31)
+def test_yaml_has_no_creation_preset(load):
+    with pytest.raises(ValidationError):
+        load(deployment={"preset": {"tenant_id": 31, "instance_id": 4, "scope": "7"}, "template_id": "tpl"})

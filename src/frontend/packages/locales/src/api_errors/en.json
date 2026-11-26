@@ -369,6 +369,7 @@
   "18071": "This space is granted to you through a department or user group and cannot be left for now.",
   "18072": "This creation request ID was already used with different knowledge space settings. Refresh and try again.",
   "18080": "This space is open to you through a permission grant and cannot be exited",
+  "18090": "The WeKnora connection is invalid. Check the service address, workspace ID, and API key",
   "18100": "Approval request not found",
   "18101": "No permission to view or process this approval",
   "18102": "Approval task already processed",

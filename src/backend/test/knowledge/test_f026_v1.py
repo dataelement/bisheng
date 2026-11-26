@@ -41,7 +41,9 @@ async def test_external_preview_never_issues_native_original(monkeypatch):
 @pytest.mark.parametrize("owner", ["kb", "other"])
 async def test_preview_stream_uses_scoped_parsed_text_only(monkeypatch, owner):
     from contextlib import asynccontextmanager
+
     import httpx
+
     from bisheng.knowledge.application import provider_v1_runtime as runtime
 
     def upstream(req):
@@ -96,19 +98,30 @@ async def test_provision_create_submits_managed_policy(monkeypatch):
         chunk_size=64,
         overlap=0,
     )
-    config = {"summary_model_id": "a", "embedding_model_id": "b"}
-    monkeypatch.setattr(pr, "_target", lambda op: (p, {}))
+    config = {
+        "summary_model_id": "a",
+        "embedding_model_id": "b",
+        "vision_model_id": "v",
+        "chunk_size": 64,
+        "overlap": 0,
+    }
+    monkeypatch.setattr(pr, "_target", lambda op: p)
 
     @asynccontextmanager
     async def client(_preset):
         yield object()
 
     monkeypatch.setattr(pr, "_client", client)
-    monkeypatch.setattr(pr, "_template", AsyncMock(return_value=(object(), {})))
+    monkeypatch.setattr(pr, "_resolve_extract", AsyncMock(return_value=(object(), {})))
     monkeypatch.setattr(pr, "preflight", lambda *args: config)
     post = AsyncMock(return_value={})
     monkeypatch.setattr(pr, "_data", post)
-    await pr.ProvisionRemote().create_library(SimpleNamespace(remote_kb_id="kb"), "dept", config)
+    op = SimpleNamespace(
+        remote_kb_id="kb",
+        tenant_id=1,
+        target_manifest=[{"extract_template_kb_id": "tpl", "extract_config": None}],
+    )
+    await pr.ProvisionRemote().create_library(op, "dept", config)
     assert post.await_args.kwargs["json"].get("model_policy") == "bisheng-v1"
 
 
@@ -123,6 +136,49 @@ async def test_native_preview_keeps_original_response(monkeypatch):
     svc.get_file_preview.assert_awaited_once_with(6, space_id=5)
 
 
+SELECTION = {
+    "summary_model_id": "s",
+    "embedding_model_id": "e",
+    "vision_model_id": "v",
+    "chunk_size": 512,
+    "overlap": 64,
+    "extract_template_kb_id": "tpl",
+}
+
+
+async def test_weknora_create_requires_the_creators_selection(monkeypatch):
+    monkeypatch.setattr(api, "_expected_provider_tenant", AsyncMock(return_value=1))
+    req = KnowledgeSpaceCreateReq(name="x", provider_key="weknora", creation_request_id="k", preset_summary={})
+    with pytest.raises(api.provider.ProviderFeatureUnavailable):
+        await api.create_space(req, SimpleNamespace(), SimpleNamespace(), SimpleNamespace(user_id=7))
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"overlap": 512},
+        {"vision_model_id": "s"},
+        {"chunk_size": "512"},
+        {"summary_model_id": "a/b"},
+        {"extract_template_kb_id": None},
+        {
+            "extract_template_kb_id": "tpl",
+            "extract_config": {
+                "text": "t",
+                "tags": ["x"],
+                "nodes": [{"name": "a"}],
+                "relations": [{"node1": "a", "type": "r", "node2": "a"}],
+            },
+        },
+    ],
+)
+def test_provider_selection_rejects_unusable_choices(change):
+    from bisheng.knowledge.domain.schemas.knowledge_space_schema import ProviderSelection
+
+    with pytest.raises(ValidationError):
+        ProviderSelection(**{**SELECTION, **change})
+
+
 async def test_unavailable_model_cannot_provision_or_fall_back(monkeypatch):
     from bisheng.knowledge.application import provider_provision_runtime as pr
 
@@ -132,7 +188,11 @@ async def test_unavailable_model_cannot_provision_or_fall_back(monkeypatch):
     monkeypatch.setattr(pr, "load_preset", AsyncMock(side_effect=ValueError("model unavailable")))
     native = SimpleNamespace(create_knowledge_space=AsyncMock())
     req = KnowledgeSpaceCreateReq(
-        name="external", provider_key="weknora", creation_request_id="contract-key", preset_summary={}
+        name="external",
+        provider_key="weknora",
+        creation_request_id="contract-key",
+        preset_summary={},
+        provider_selection=SELECTION,
     )
     with pytest.raises(ValueError, match="model unavailable"):
         await api.create_space(req, SimpleNamespace(), native, SimpleNamespace(user_id=7))
@@ -154,7 +214,11 @@ async def test_department_request_with_provider_never_calls_native_creator(monke
     monkeypatch.setattr(pr, "build_provisioning", AsyncMock())
     result = await api.batch_create_department_spaces(
         DepartmentKnowledgeSpaceBatchCreateReq(
-            provider_key="weknora", request_key="K", preset_summary={}, items=[{"department_id": 12, "name": "工程"}]
+            provider_key="weknora",
+            request_key="K",
+            preset_summary={},
+            provider_selection=SELECTION,
+            items=[{"department_id": 12, "name": "工程"}],
         ),
         SimpleNamespace(),
         SimpleNamespace(),

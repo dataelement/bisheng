@@ -96,7 +96,15 @@ class ProvisionRepository:
                 operation_epoch=1,
                 phase="create",
                 capability_revision=inst.capability_revision,
-                target_manifest=[{"department_id": space.department_id, "name": space.name, "config": config}],
+                target_manifest=[
+                    {
+                        "department_id": space.department_id,
+                        "name": space.name,
+                        "config": config,
+                        "extract_template_kb_id": preset.extract_template_kb_id,
+                        "extract_config": preset.extract_config,
+                    }
+                ],
             )
             result = await self.ledger.accept(s, op)
             if result is op:

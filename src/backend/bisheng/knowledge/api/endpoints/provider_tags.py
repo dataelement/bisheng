@@ -29,6 +29,20 @@ class ManualTagEdit(BaseModel):
         return self
 
 
+class TagWordCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    generation: Ref
+    name: Annotated[str, Field(min_length=1, max_length=128)]
+
+    @model_validator(mode="after")
+    def check_name(self):
+        trimmed = self.name.strip()
+        if not trimmed or len(trimmed) > 128:
+            raise ValueError("tag name must be 1-128 characters without surrounding blanks")
+        self.name = trimmed
+        return self
+
+
 @router.get("/{space_id}/provider-tags")
 async def page_provider_tags(
     space_id: Id,
@@ -40,11 +54,24 @@ async def page_provider_tags(
     return resp_200(await TagRequest(service, space_id, generation).page(page, page_size))
 
 
+@router.post("/{space_id}/provider-tags")
+async def create_provider_tag(space_id: Id, command: TagWordCreate, service=Depends(get_knowledge_space_service)):
+    return resp_200(await TagRequest(service, space_id, command.generation).create_word(command.name))
+
+
 @router.get("/{space_id}/files/{file_id}/provider-tags")
 async def file_provider_tags(
     space_id: Id, file_id: Id, generation: Generation, service=Depends(get_knowledge_space_service)
 ):
     return resp_200(await TagRequest(service, space_id, generation, file_id).file_selection())
+
+
+@router.get("/{space_id}/files/{file_id}/provider-tag-labels")
+async def file_provider_tag_labels(
+    space_id: Id, file_id: Id, generation: Generation, service=Depends(get_knowledge_space_service)
+):
+    """Display-only names for one document; the file list loads it per opened row."""
+    return resp_200(await TagRequest(service, space_id, generation, file_id).file_labels())
 
 
 @router.put("/{space_id}/files/{file_id}/provider-tags")
