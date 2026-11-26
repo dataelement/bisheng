@@ -32,6 +32,7 @@ import { useDesktopConversationActivity, useDesktopConversationRenamed } from "~
 import { runningConversationIds } from "~/components/Chat/runningConversations";
 import { configuredKnowledgeDefaults } from "~/components/Chat/Input/composerKnowledge";
 import { bindProjectChatCreation, captureProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
+import type { PreparedMobileHostSend } from "~/utils/mobileHostBridge";
 import { useUnifiedRun } from "~/hooks/useUnifiedRun";
 import type { SentComposerReference } from "~/components/Chat/Input/composerReferences";
 
@@ -432,24 +433,37 @@ export default function useAiChat(
     }, [setParsingMediaFor, setMessagesFor]);
 
     const sendMessage = useCallback(
-        async (text: string, files?: any[] | null, opts?: { taskMode?: boolean; composerReferences?: SentComposerReference[] }) => {
+        async (text: string, files?: any[] | null, opts?: {
+            taskMode?: boolean;
+            composerReferences?: SentComposerReference[];
+            hostDraft?: PreparedMobileHostSend;
+            onTurnCreated?: (conversationId: string) => void;
+        }) => {
+            // The phone passes the draft in this call. Recoil written in the
+            // same tick is still the previous closure, so the payload reads
+            // hostDraft instead.
+            const hostDraft = opts?.hostDraft;
+            const turnModel = hostDraft?.model ?? chatModel;
+            const turnTools = hostDraft?.tools ?? selectedAgentTools;
+            const turnKnowledge = hostDraft?.knowledge ?? selectedOrgKbs;
+            const turnSkills = hostDraft?.skills ?? dailyTaskSkills;
             // A share view only displays the conversation.
             if (shareToken || (!text.trim() && !(files?.length)) || isStreaming) return false;
             // The lease may take time. Keep this send's original project even if
             // the user opens another draft before the request can be submitted.
             const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
             const turnMessages = messagesRef.current;
-            if (knowledgeAccessBlocked) {
+            if (!hostDraft && knowledgeAccessBlocked) {
                 if (!knowledgeAccessVerifying && knowledgeAccessMessage) {
                     showToast({ message: knowledgeAccessMessage, status: "warning" });
                 }
                 return false;
             }
-            if (opts?.taskMode && selectedOrgKbs.some(item => item.type === 'space' && item.tag)) {
+            if (opts?.taskMode && turnKnowledge.some(item => item.type === 'space' && item.tag)) {
                 showToast({ message: localize("com_knowledge.tag_filter_daily_only"), status: "warning" });
                 return false;
             }
-            const vision = bsConfig?.models?.some(model => String(model.id) === String(chatModel.id) && model.visual) ?? false;
+            const vision = bsConfig?.models?.some(model => String(model.id) === String(turnModel.id) && model.visual) ?? false;
             if (!opts?.taskMode && files?.some(file => !canProcessChatImage(
                 file.name || file.filename || file.file_name || '', vision, !!bsConfig?.enable_etl4lm,
             ))) {
@@ -470,7 +484,7 @@ export default function useAiChat(
             // what makes that true for all of the callbacks at once: `turn.cid`
             // is the single place the id lives, so a mid-stream promotion from
             // "new" to a real id carries the whole turn with it.
-            const turn = { cid: conversationId, bucketId: activeBucketId, knowledge: selectedOrgKbs };
+            const turn = { cid: conversationId, bucketId: activeBucketId, knowledge: turnKnowledge };
             if (activeBucketRef.current === turn.bucketId) setSelectedOrgKbs(turn.knowledge);
             const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
                 setMessagesFor(turn.bucketId, updater);
@@ -540,7 +554,7 @@ export default function useAiChat(
             const responseMessageId = `${userMessageId}_`;
             const initialResponse: ChatMessage = {
                 text: "",
-                sender: chatModel.name || "AI",
+                sender: turnModel.name || "AI",
                 isCreatedByUser: false,
                 parentMessageId: userMessageId,
                 conversationId: currentConvoId ?? "",
@@ -564,8 +578,8 @@ export default function useAiChat(
             const orgKbDisabled = (bsConfig as any)?.knowledgeBase?.enabled === false;
             const orgKbs = orgKbDisabled
                 ? []
-                : selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id));
-            const spaceKbs = selectedOrgKbs
+                : turnKnowledge.filter((kb) => kb.type === 'org').map((kb) => Number(kb.id));
+            const spaceKbs = turnKnowledge
                 .filter((kb) => kb.type === 'space')
                 .map((kb) => Number(kb.id));
             const payload = {
@@ -576,12 +590,12 @@ export default function useAiChat(
                 messageId: userMessageId,
                 endpoint: "",
                 endpointType: "custom",
-                model: chatModel.id + "",
+                model: turnModel.id + "",
                 use_knowledge_base: {
                     personal_knowledge_enabled: false,
                     organization_knowledge_ids: orgKbs,
                     knowledge_space_ids: spaceKbs,
-                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(selectedOrgKbs),
+                    knowledge_space_tag_filters: knowledgeSpaceTagFilters(turnKnowledge),
                 },
                 isContinued: false,
                 isTemporary: false,
@@ -590,7 +604,7 @@ export default function useAiChat(
                 // v2.5: present `tools` array → backend agent flow.
                 // Absent (null/undefined) → legacy flow. We always send the
                 // field when the user has toggled any tool on.
-                tools: selectedAgentTools.flatMap((g) =>
+                tools: turnTools.flatMap((g) =>
                     (g.children || []).map((c) => ({
                         id: c.id,
                         tool_key: c.tool_key,
@@ -601,8 +615,8 @@ export default function useAiChat(
                 // Deep research: the same entry starts the run with the task profile.
                 task_mode: taskMode,
                 // Both daily chat and deep research mount the selected skills (F004 AC-45).
-                skills: dailyTaskSkills.map((s) => s.name),
-                skill_ids: dailyTaskSkills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])),
+                skills: turnSkills.map((s) => s.name),
+                skill_ids: turnSkills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])),
             };
 
             // F004: one JSON answer instead of a stream; the run's progress
@@ -615,6 +629,7 @@ export default function useAiChat(
                 userMessageId,
                 setMessages,
                 onConversation: (serverConvoId) => {
+                    if (serverConvoId) opts?.onTurnCreated?.(serverConvoId);
                     if (serverConvoId === turn.cid) return;
                     // The optimistic rows are the truth for this turn; a
                     // refetch now would replace them with the question alone.
@@ -635,7 +650,7 @@ export default function useAiChat(
                         title: localize('com_ui_new_chat'),
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
-                        model: chatModel.name || '',
+                        model: turnModel.name || '',
                         endpoint: '',
                         endpointType: 'custom',
                         isArchived: false,

@@ -10,9 +10,10 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState } from "recoil";
 import { useTaskInviteQuota } from "~/components/Chat/TaskInviteQuota";
 import { getLinsightSessionVersionList } from "~/api/linsight";
-import { taskModeState } from "~/store/linsight";
+import { taskModeSkillsState, taskModeState } from "~/store/linsight";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
 import { useDesktopConversation } from "./useDesktopConversation";
+import { useMobileHostBridge } from "./useMobileHostBridge";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/queries";
@@ -96,6 +97,8 @@ function useChatView(
   const { user } = useAuthContext();
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
+  const [, setHostTools] = useRecoilState(store.selectedAgentTools);
+  const [, setHostSkills] = useRecoilState(taskModeSkillsState("new"));
   // Landing-only: the input box reports whether its attachment bar is showing
   // so the welcome subtitle can hide without shifting the title / input box.
   const [landingHasSelection, setLandingHasSelection] = useState(false);
@@ -296,6 +299,28 @@ function useChatView(
   const { handleSend, handleSendAnswer, handleRetryTaskTurn } = useChatSendActions({
     taskMode, canUseTaskMode, conversationId: activeConvoId,
     sendMessage, allowInviteSend, composerIdentity, composerIdentityRef, setInputText,
+  });
+  useMobileHostBridge({
+    userLoaded: Boolean(user),
+    isLoading,
+    conversationId,
+    messageCount: messages.length,
+    navigate: (path, opts) => navigate(path, opts),
+    sendMessage,
+    apply: (prepared) => {
+      if (prepared.model) {
+        setChatModel({
+          ...prepared.model,
+          manual: true,
+          mode: prepared.taskMode ? "task" : "daily",
+        });
+      }
+      setHostTools(prepared.tools);
+      setSelectedOrgKbs(prepared.knowledge);
+      setHostSkills(prepared.skills);
+      setTaskMode(prepared.taskMode);
+      setSearchType(prepared.searchEnabled ? "netSearch" : "");
+    },
   });
   useReturnedDraft(activeConvoId, setInputText);
 
