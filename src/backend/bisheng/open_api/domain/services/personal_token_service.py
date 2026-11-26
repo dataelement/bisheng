@@ -26,7 +26,9 @@ from bisheng.open_api.domain.schemas.personal_token import (
 from bisheng.open_api.domain.services.credential_service import CredentialService
 from bisheng.open_api.domain.services.tenant_setting_service import TenantSettingService
 
-PERSONAL_TOKEN_SCOPE = "knowledge:read"
+# 个人令牌固定带读和写两个权限位：知识库列表、文件列表、检索，以及创建、更新、上传。
+# 删除类接口（删除、清空、删文件、批量删文件）仍不开放给个人令牌。
+PERSONAL_TOKEN_SCOPES = ["knowledge:read", "knowledge:write"]
 PERSONAL_TOKEN_NAME = "Personal access token"
 
 
@@ -73,7 +75,7 @@ class PersonalTokenService:
             subject_id=user_id,
             request=KeyIssueRequest(
                 name=PERSONAL_TOKEN_NAME,
-                scopes=[PERSONAL_TOKEN_SCOPE],
+                scopes=list(PERSONAL_TOKEN_SCOPES),
                 expires_at=datetime.now() + timedelta(days=ttl_days),
             ),
             created_by=operator.user_id,

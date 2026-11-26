@@ -89,6 +89,8 @@ class CredentialService:
             entries=request.delegate_scopes,
         )
         if subject_kind == SUBJECT_KIND_NATURAL_PERSON:
+            # 个人令牌一律带读和写两个权限位；请求里给的权限位按只读补齐
+            scopes = sorted(set(scopes) | {"knowledge:read", "knowledge:write"})
             await cls._validate_personal_token(scopes=scopes, expires_at=request.expires_at, tenant_id=tenant_id)
         prefix = credential_prefix(subject_kind)
         secret = secrets.token_urlsafe(32)
@@ -294,7 +296,7 @@ class CredentialService:
         expires_at: datetime | None,
         tenant_id: int,
     ) -> None:
-        if scopes != ["knowledge:read"]:
+        if sorted(scopes) not in (["knowledge:read"], ["knowledge:read", "knowledge:write"]):
             raise PersonalTokenScopeInvalidError()
         from datetime import timedelta
 

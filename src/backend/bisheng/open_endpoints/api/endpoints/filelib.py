@@ -149,7 +149,7 @@ def _build_space_service(
 
 
 @router.post("/", status_code=200)
-@open_api_scope("knowledge:write")
+@open_api_scope("knowledge:write", pat=True)
 async def create(
     request: Request,
     knowledge: KnowledgeCreate,
@@ -198,7 +198,7 @@ async def create(
 
 
 @router.put("/", status_code=200)
-@open_api_scope("knowledge:write")
+@open_api_scope("knowledge:write", pat=True)
 async def update_knowledge(
     *,
     request: Request,
@@ -332,7 +332,7 @@ async def clear_knowledge_files(
 
 
 @router.post("/file/{knowledge_id}")
-@open_api_scope("knowledge:write")
+@open_api_scope("knowledge:write", pat=True)
 async def upload_file(
     request: Request,
     knowledge_id: int,

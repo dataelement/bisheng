@@ -69,30 +69,48 @@ def test_personal_token_tools_and_endpoints_require_the_same_scope_and_modes():
         assert marker.modes == tool.modes, tool.name
 
 
-def test_personal_token_is_read_only_on_both_paths():
+def test_personal_token_may_write_but_never_delete():
+    """个人令牌带读和写权限位：可以创建、更新、上传，删除类始终不开放。"""
+    destructive = {"bisheng_knowledge_delete", "bisheng_knowledge_clear",
+                  "bisheng_knowledge_file_delete", "bisheng_knowledge_files_delete"}
+    allowed = [tool for tool in TOOL_DEFINITIONS if tool.allow_pat]
+    assert {tool.name for tool in allowed} & destructive == set()
+    assert {"bisheng_knowledge_create", "bisheng_knowledge_update", "bisheng_knowledge_file_upload"} <= {
+        tool.name for tool in allowed
+    }
     for key, marker in _http_endpoints().items():
         if marker.pat_allowed:
-            assert marker.scope == "knowledge:read", key
-    for tool in TOOL_DEFINITIONS:
-        if tool.allow_pat:
-            assert tool.scope == "knowledge:read", tool.name
+            assert marker.scope in ("knowledge:read", "knowledge:write"), key
 
 
 def test_personal_token_discovers_only_what_http_allows():
     http_allowed = {key for key, marker in _http_endpoints().items() if marker.pat_allowed}
     visible = {
         (TOOL_REGISTRY[tool.name].source_method, TOOL_REGISTRY[tool.name].source_route)
-        for tool in list_tools_for(_principal(actor_kind="natural_person", scopes=frozenset({"knowledge:read"})))
+        for tool in list_tools_for(_principal(actor_kind="natural_person"))
     }
 
     assert visible == http_allowed
+    assert len(visible) == 6
+
+
+def test_personal_token_sees_read_and_write_but_no_destructive_tool():
+    visible = {tool.name for tool in list_tools_for(_principal(actor_kind="natural_person"))}
+    assert visible == {
+        "bisheng_knowledge_list",
+        "bisheng_knowledge_file_list",
+        "bisheng_knowledge_retrieve",
+        "bisheng_knowledge_create",
+        "bisheng_knowledge_update",
+        "bisheng_knowledge_file_upload",
+    }
 
 
 @pytest.mark.parametrize("tool_name", sorted(tool.name for tool in TOOL_DEFINITIONS if not tool.allow_pat))
 def test_personal_token_cannot_call_a_hidden_tool_even_by_name(tool_name):
     definition = TOOL_REGISTRY[tool_name]
-    assert not definition.visible_to(_principal(actor_kind="natural_person", scopes=frozenset({"knowledge:read"})))
     assert not definition.visible_to(_principal(actor_kind="natural_person"))
+    assert not definition.visible_to(_principal(actor_kind="natural_person", scopes=frozenset({"knowledge:read"})))
 
 
 @pytest.mark.asyncio
@@ -102,13 +120,13 @@ async def test_calling_a_hidden_tool_with_a_personal_token_never_executes_it(mon
     runtime = mcp_server.create_open_mcp_runtime()
     execute = AsyncMock()
     monkeypatch.setattr(mcp_server, "execute_tool", execute)
-    token = set_current_open_api_principal(_principal(actor_kind="natural_person", scopes=frozenset({"knowledge:read"})))
+    token = set_current_open_api_principal(_principal(actor_kind="natural_person"))
     try:
         handler = runtime.manager.app.request_handlers[types.CallToolRequest]
         result = await handler(
             types.CallToolRequest(
                 method="tools/call",
-                params=types.CallToolRequestParams(name="bisheng_knowledge_create", arguments={"name": "n"}),
+                params=types.CallToolRequestParams(name="bisheng_knowledge_delete", arguments={"knowledge_id": 1}),
             )
         )
     finally:

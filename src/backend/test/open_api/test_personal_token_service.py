@@ -60,6 +60,32 @@ async def test_issue_is_one_time_plaintext_and_regeneration_revokes_old(
     assert all(first.plaintext not in repr(event) and second.plaintext not in repr(event) for event in events)
 
 
+async def test_personal_token_carries_read_and_write_scopes(open_api_db, fake_redis, monkeypatch):
+    """个人令牌一律带读和写两个权限位，删除类接口仍不开放。"""
+    holder = await _seed(open_api_db)
+
+    async def not_admin(_user_id, _tenant_id):
+        return False
+
+    async def audit(**_kwargs):
+        return None
+
+    monkeypatch.setattr(PersonalTokenService, "_is_admin", not_admin)
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.personal_token_service.AuditLogDao.ainsert_v2",
+        audit,
+    )
+    monkeypatch.setattr(
+        "bisheng.open_api.domain.services.tenant_setting_service.settings.open_api.pat_enabled",
+        True,
+    )
+    operator = SimpleNamespace(user_id=holder.user_id, tenant_id=1)
+    await PersonalTokenService.issue(tenant_id=1, user_id=holder.user_id, operator=operator)
+
+    rows = await CredentialRepository.list_by_subject("natural_person", holder.user_id)
+    assert sorted(rows[0].scopes) == ["knowledge:read", "knowledge:write"]
+
+
 async def test_admin_holder_ttl_is_capped_and_flagged(open_api_db, fake_redis, monkeypatch):
     holder = await _seed(open_api_db)
 

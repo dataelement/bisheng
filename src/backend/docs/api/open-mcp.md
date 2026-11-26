@@ -26,9 +26,9 @@ scope、租户、数据范围和资源权限判定。`tools/list` 只返回当�
 |---|---|---|
 | 服务账号自身身份（S） | `Authorization: Bearer <API_KEY>` | 由 API Key 的 `knowledge:read` / `knowledge:write` scope 决定 |
 | 服务账号委托身份（D） | 上述 header + `X-On-Behalf-Of: <BISHENG_PLATFORM_USER_ID>` | 另需凭据允许委托，按被代表用户执行 |
-| PAT | `Authorization: Bearer <PAT>` | 仅可发现和调用 3 个 `knowledge:read` 工具 |
+| PAT | `Authorization: Bearer <PAT>` | 可发现和调用 6 个工具：3 个 `knowledge:read` 和 3 个 `knowledge:write`（创建、更新、上传）；删除类不开放 |
 
-PAT 直接调用开放 API 的 HTTP 接口时同样只能调用 3 个：`GET /api/v2/filelib/`（知识库列表）、`GET /api/v2/filelib/file/list`（文件列表）、`POST /api/v2/filelib/retrieve`（检索）。调用其他接口（服务端作答、问答查询、问答详情、引用查询、下载统计文件、全部写入类接口）返回 HTTP 403、错误码 26050，不执行业务逻辑；服务账号和委托身份不受影响。
+PAT 直接调用开放 API 的 HTTP 接口时同样只开放这 6 个：`GET /api/v2/filelib/`（知识库列表）、`GET /api/v2/filelib/file/list`（文件列表）、`POST /api/v2/filelib/retrieve`（检索）、`POST /api/v2/filelib/`（创建）、`PUT /api/v2/filelib/`（更新）、`POST /api/v2/filelib/file/{knowledge_id}`（上传）。调用其他接口（服务端作答、问答查询、问答详情、引用查询、下载统计文件、删除类和其余写入类接口）返回 HTTP 403、错误码 26050，不执行业务逻辑；服务账号和委托身份不受影响。个人令牌一律带 `knowledge:read` 和 `knowledge:write` 两个权限位，写操作按令牌持有人的权限和数据范围判断。
 
 `X-End-User: <external_user_partition>` 只用于已有 F053 终端用户分区语义，不能与
 `X-On-Behalf-Of` 同时使用。`Authorization`、`X-On-Behalf-Of`、`X-End-User`、
@@ -39,12 +39,12 @@ PAT 直接调用开放 API 的 HTTP 接口时同样只能调用 3 个：`GET /ap
 | 工具 | scope | PAT | 主要输入 | 成功输出 |
 |---|---|---:|---|---|
 | `bisheng_knowledge_list` | `knowledge:read` | 是 | `type?`, `name?`, `sort_by?`, `page_size?`, `cursor?` | `ResourceListData` |
-| `bisheng_knowledge_create` | `knowledge:write` | 否 | `name`, `type?`, `description?`, `model?`, `auth_type?`, `is_released?` | `KnowledgeResource` |
-| `bisheng_knowledge_update` | `knowledge:write` | 否 | `knowledge_id`, `name?`, `description?` | `KnowledgeResource` |
+| `bisheng_knowledge_create` | `knowledge:write` | 是 | `name`, `type?`, `description?`, `model?`, `auth_type?`, `is_released?` | `KnowledgeResource` |
+| `bisheng_knowledge_update` | `knowledge:write` | 是 | `knowledge_id`, `name?`, `description?` | `KnowledgeResource` |
 | `bisheng_knowledge_delete` | `knowledge:write` | 否 | `knowledge_id` | `{"success":true}` |
 | `bisheng_knowledge_clear` | `knowledge:write` | 否 | `knowledge_id` | `{"success":true}` |
 | `bisheng_knowledge_retrieve` | `knowledge:read` | 是 | `query`, `knowledge_base_ids`, `filters?`, `top_k?`, `max_content?` | `RetrieveData` |
-| `bisheng_knowledge_file_upload` | `knowledge:write` | 否 | `knowledge_id` + base64 或受控 URL，以及解析参数 | `FileRecord` |
+| `bisheng_knowledge_file_upload` | `knowledge:write` | 是 | `knowledge_id` + base64 或受控 URL，以及解析参数 | `FileRecord` |
 | `bisheng_knowledge_file_list` | `knowledge:read` | 是 | `knowledge_id`, `parent_id?`, `keyword?`, `status?`, `page_size?`, `cursor?` | `FileListData` |
 | `bisheng_knowledge_file_delete` | `knowledge:write` | 否 | `file_id` | `{"success":true}` |
 | `bisheng_knowledge_files_delete` | `knowledge:write` | 否 | `file_ids` | `{"success":true}` |
@@ -215,7 +215,8 @@ export BISHENG_API_KEY='<full-scope-api-key>'
   --arguments-json '{"type":0,"page_size":1}'
 ```
 
-PAT 预期只看到 `bisheng_knowledge_list`、`bisheng_knowledge_retrieve` 和
-`bisheng_knowledge_file_list`，验证时显式传 `--expected-profile pat`。对于有意收窄 scope
+PAT 预期看到 6 个工具：`bisheng_knowledge_list`、`bisheng_knowledge_retrieve`、
+`bisheng_knowledge_file_list`、`bisheng_knowledge_create`、`bisheng_knowledge_update` 和
+`bisheng_knowledge_file_upload`；验证时显式传 `--expected-profile pat`。对于有意收窄 scope
 的 API Key，可使用 `--expected-profile scope-filtered` 仅做诊断；该模式不构成 10 工具
 发布验收证据。验收写入工具时必须使用专用测试租户和可清理数据，不要用本脚本扩展写操作。
