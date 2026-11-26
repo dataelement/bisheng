@@ -143,6 +143,10 @@ async def read_upload(service, space_id, request_key, *, parent_id=None):
         "succeeded": "accepted",
         "failed": "reupload_required" if row.last_error_code == "not_received" else "conflict",
         "manual_review": "conflict",
+        # A pending row was never claimed, so no byte left the browser; saying
+        # "unknown" here left the file unrecoverable ("check" can never resolve
+        # it). Report it as re-sendable instead.
+        "pending": "reupload_required",
     }.get(row.state, "unknown")
     return {
         "state": state,

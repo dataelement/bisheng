@@ -49,7 +49,9 @@ class UploadItemResult:
 
 
 def _now():
-    return datetime.now(UTC).replace(tzinfo=None)
+    # Whole seconds: DATETIME(0) rounds a fractional value up, which made a
+    # just-inserted upload operation not-yet-due for its own first claim.
+    return datetime.now(UTC).replace(tzinfo=None, microsecond=0)
 
 
 async def _require_upload_instance(db, scope, cap):
@@ -208,6 +210,13 @@ async def upload_item(
         if op.capability_revision != cap:
             raise RequestKeyConflict("original upload capability revision changed")
         resend = op.state == "failed" and op.last_error_code == "not_received"
+        # "pending" is this codebase's proof of non-execution: no sender ever
+        # claimed it (claim() flips pending to sending in the same transaction
+        # that reads it). A request that lost its own claim — e.g. the deadline
+        # rounding fixed by provider_control._now — therefore left bytes unsent
+        # and may be sent by a later attempt. It keeps its epoch and holds its
+        # reservation, so only the send guard below needs to know.
+        unsent = op.state == "pending"
         if resend:
             # Tenant lock serializes client retries; the new epoch fences old receipts.
             op.operation_epoch += 1
@@ -242,7 +251,7 @@ async def upload_item(
         if owner is None:
             return item_result("unknown")
         token, revision, state = owner.lease_token, owner.revision, owner.state
-        if state == "sending" and op is not intent and not resend:
+        if state == "sending" and op is not intent and not resend and not unsent:
             raise RequestKeyConflict("prior upload cannot be sent blindly")
     await app._check_identity(tenant)
     if state == "sending":

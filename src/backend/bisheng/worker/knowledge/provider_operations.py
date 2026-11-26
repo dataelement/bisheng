@@ -99,7 +99,10 @@ register_provision_handlers(PROVIDER_HANDLERS, ProviderHandlers)
 
 
 def utcnow():
-    return datetime.now(UTC).replace(tzinfo=None)
+    # Whole seconds: the scheduling columns are DATETIME(0) and MySQL rounds
+    # fractions up, so a deadline written from .5s can sit one second ahead of
+    # the clock that wrote it.
+    return datetime.now(UTC).replace(tzinfo=None, microsecond=0)
 
 
 async def advance_one(

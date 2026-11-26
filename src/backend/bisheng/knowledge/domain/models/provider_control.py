@@ -18,7 +18,13 @@ from bisheng.core.database.dialect_helpers import JsonType
 
 
 def _now() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+    # The scheduling columns are DATETIME(0), and MySQL *rounds* fractional
+    # seconds on insert. A timestamp taken at .7s therefore lands one second in
+    # the future, so a row created and claimed inside the same request looked
+    # "not due yet" and its step never ran (see provider_upload_item). Truncate
+    # to whole seconds so a freshly written deadline is never ahead of the clock
+    # that wrote it — the same rule deletion_now() already follows.
+    return datetime.now(UTC).replace(tzinfo=None, microsecond=0)
 
 
 class OpaqueId(TypeDecorator):
