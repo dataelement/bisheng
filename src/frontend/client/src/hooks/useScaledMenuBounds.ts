@@ -1,24 +1,32 @@
 import { useLayoutEffect, useState } from 'react';
-import { getLogicalViewport, getRectScale, getRectViewport } from '~/utils/fontSize';
+import { getDisplayScale, getRectScale } from '~/utils/fontSize';
 
 function readBounds() {
   const viewport = window.visualViewport;
   const width = viewport?.width ?? document.documentElement.clientWidth;
   const height = viewport?.height ?? document.documentElement.clientHeight;
-  const rectViewport = getRectViewport();
-  const inset = 8 * getRectScale();
+  const rectScale = getRectScale();
+  const displayScale = getDisplayScale();
+  const correction = 1 - rectScale / displayScale;
+  const left = viewport?.offsetLeft ?? 0;
+  const top = viewport?.offsetTop ?? 0;
+  const inset = 8 * rectScale;
+  const logicalHeight = height / displayScale;
 
   return {
     // Use CSS pixels directly: older embedded engines may not support dvh.
-    maxHeight: Math.max(0, Math.min(440, getLogicalViewport().height - 48)),
+    maxHeight: Math.max(0, Math.min(440, logicalHeight - 48)),
+    // A menu capped to the current side's remaining space can shrink before
+    // Radix flips it. Keep room for the larger side instead.
+    actionMenuMaxHeight: Math.max(0, logicalHeight / 2 - 32),
     collisionPadding: {
-      top: inset,
-      left: inset,
-      // Floating UI's viewport uses physical pixels, while older WeCom rects
-      // use layout pixels. Correct the far edges, retaining its horizontal flip.
-      right: width - rectViewport.width + inset,
-      bottom: height - rectViewport.height + inset,
+      // Keep the visible viewport and the anchor in the same coordinate space.
+      top: inset - top * correction,
+      left: inset - left * correction,
+      right: inset + (left + width) * correction,
+      bottom: inset + (top + height) * correction,
     },
+    isScaled: displayScale !== 1,
   };
 }
 
@@ -31,9 +39,11 @@ export function useScaledMenuBounds() {
     update();
     window.addEventListener('resize', update);
     window.visualViewport?.addEventListener('resize', update);
+    window.visualViewport?.addEventListener('scroll', update);
     return () => {
       window.removeEventListener('resize', update);
       window.visualViewport?.removeEventListener('resize', update);
+      window.visualViewport?.removeEventListener('scroll', update);
     };
   }, []);
 

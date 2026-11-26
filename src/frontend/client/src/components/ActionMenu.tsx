@@ -80,6 +80,7 @@ export const ActionMenuContent = React.forwardRef<
     return (
         <DropdownMenuContent
             ref={ref}
+            fitScaledViewport
             align={align}
             sideOffset={sideOffset}
             className={cn(actionMenuContentClassName, className)}

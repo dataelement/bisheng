@@ -344,7 +344,7 @@ export const ChatKnowledge = ({
           {/* The knowledge pill already shows its label inline, so it needs no
               tooltip; only the icon-only "+" trigger gets one. */}
           {variant !== 'knowledge' && (
-            <TooltipContent side="bottom" sideOffset={6}>
+            <TooltipContent side="top" sideOffset={6} collisionPadding={submenuBounds.collisionPadding}>
               {localize('com_knowledge_add_file')}
             </TooltipContent>
           )}
@@ -360,7 +360,7 @@ export const ChatKnowledge = ({
         // alignment — it sits mid-toolbar, where the input edge means nothing.
         alignOffset={variant === 'plus' ? -INPUT_INNER_INSET : undefined}
         side={isMobile ? mobileMenuSide : 'bottom'}
-        collisionPadding={isMobile ? MOBILE_MENU_COLLISION : BOTTOM_GAP}
+        collisionPadding={isMobile ? MOBILE_MENU_COLLISION : submenuBounds.isScaled ? submenuBounds.collisionPadding : BOTTOM_GAP}
         sticky={isMobile ? 'partial' : undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
         className={cn(

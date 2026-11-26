@@ -3,6 +3,7 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Check, Circle } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 import { cn } from '~/utils';
+import { useScaledMenuBounds } from '~/hooks/useScaledMenuBounds';
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 
@@ -62,20 +63,34 @@ const DropdownMenuSubContent = React.forwardRef<
 ));
 DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName;
 
-const DropdownMenuContent = React.forwardRef<
+const DropdownMenuPanel = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className = '', sideOffset = 4, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content> & { fitScaledViewport?: boolean }
+>(function DropdownMenuPanel({ className = '', sideOffset = 4, collisionPadding, fitScaledViewport, style, ...props }, ref) {
+  const bounds = useScaledMenuBounds();
+  const limitHeight = fitScaledViewport && bounds.isScaled;
+  return (
     <DropdownMenuPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
+      collisionPadding={collisionPadding ?? (bounds.isScaled ? bounds.collisionPadding : undefined)}
+      style={limitHeight ? { maxHeight: bounds.actionMenuMaxHeight, ...style } : style}
       className={cn(
         'z-50 flex min-w-[8rem] flex-col gap-0 overflow-hidden rounded-lg border-0 bg-white p-2 text-gray-700 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)] animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:bg-gray-800 dark:text-gray-400',
+        limitHeight && 'overflow-y-auto overscroll-contain',
         className,
       )}
       {...props}
     />
+  );
+});
+
+const DropdownMenuContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPanel>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPanel>
+>((props, ref) => (
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPanel ref={ref} {...props} />
   </DropdownMenuPrimitive.Portal>
 ));
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
