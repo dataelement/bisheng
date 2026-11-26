@@ -365,7 +365,7 @@ class FinetuneFileService(BaseModel):
                     break
         if not bound:
             raise TrainFileNotExistError()
-        return await minio.get_share_link(object_name, clear_host=False)
+        return await minio.get_share_link(object_name, clear_host=True)
 
     @classmethod
     async def get_download_url(cls, file_url: str, user: UserPayload) -> str:
@@ -387,7 +387,7 @@ class FinetuneFileService(BaseModel):
         if dataset is None or dataset.url != file_url:
             raise TrainFileNotExistError()
         minio = await get_minio_storage()
-        return await minio.get_share_link(dataset.url, clear_host=False)
+        return await minio.get_share_link(dataset.url, clear_host=True)
 
     @classmethod
     async def upload_validation_media(cls, job_id: str, modality: str, file: UploadFile, user: UserPayload):

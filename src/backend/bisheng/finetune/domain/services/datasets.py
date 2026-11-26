@@ -148,7 +148,7 @@ class DatasetService:
             if not version or version.url != record.url:
                 raise TrainFileNotExistError()
         storage = await get_minio_storage()
-        return {"url": await storage.get_share_link(record.url, clear_host=False)}
+        return {"url": await storage.get_share_link(record.url, clear_host=True)}
 
     @staticmethod
     async def get_catalog(identifier):
