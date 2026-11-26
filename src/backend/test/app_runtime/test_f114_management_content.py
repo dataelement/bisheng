@@ -118,7 +118,7 @@ async def test_production_data_is_edit_not_owner(management):
     allowed.add("edit")
     await AppDataService._require_editor(app, actor)
     allowed.clear()
-    allowed.add("use")
+    allowed.add("visible")
     with pytest.raises(PermissionDeniedError):
         await AppDataService._require_editor(app, actor)
 

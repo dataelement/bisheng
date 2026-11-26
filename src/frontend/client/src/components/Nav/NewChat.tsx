@@ -69,6 +69,23 @@ export function useStartNewChat(): (projectId?: string) => void {
   }, []);
 }
 
+/**
+ * Opens a new conversation with deep research turned on. Replaces the current
+ * history entry: the old task-mode landing (`/linsight/new`) sends its visitors
+ * here (F004, decision 11). Lives here because it needs recoil (frozen for new files).
+ */
+export function useOpenDeepResearchChat(): () => void {
+  const navigate = useNavigate();
+  const { newConversation } = useNewConvo(0);
+  const setTaskMode = useSetRecoilState(taskModeState);
+  return useCallback(() => {
+    newConversation();
+    setTaskMode(true);
+    navigate('/c/new', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- newConversation identity is not a trigger
+  }, [navigate, setTaskMode]);
+}
+
 export default function NewChat({
   index = 0,
   toggleNav,

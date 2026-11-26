@@ -1,4 +1,4 @@
-import { isApiError, shouldRetryApiError, resolveErrorMessageTemplate } from "@bisheng/api-client";
+import { isApiError, shouldRetryApiError, referenceErrorMessage, resolveErrorMessageTemplate } from "@bisheng/api-client";
 import { showApiError } from "~/api/request";
 import { useState, useCallback, useRef } from "react";
 import i18next, { type TOptions } from "i18next";
@@ -57,7 +57,9 @@ interface UploadErrorLike {
  * append the generic browser-upload hint as a last-resort fallback.
  */
 function resolveUploadErrorReason(err: UploadErrorLike): string {
-  const { statusCode, errorData } = readUploadError(err);
+  const { statusCode, errorData, referenceData } = readUploadError(err);
+  const referenceMessage = referenceErrorMessage({ status_code: statusCode, data: referenceData }, (key, values) => String(i18next.t(`api_errors.${key}` as `api_errors.${keyof typeof import('../../../locales/en/api_errors.gen.json')}`, { ...values, defaultValue: "" })));
+  if (referenceMessage) return referenceMessage;
   if (statusCode != null) {
     // Typed i18next keys reject a runtime-built string; TranslationKeys is
     // the codebase's escape hatch for exactly this (same as useLocalize).
@@ -87,6 +89,7 @@ function readUploadError(err: unknown): {
   statusCode?: number;
   /** Interpolation values for the api_errors template — scalars only. */
   errorData?: Record<string, string | number>;
+  referenceData?: unknown;
 } {
   if (typeof err !== "object" || err === null) return {};
   const source = err as {
@@ -101,6 +104,7 @@ function readUploadError(err: unknown): {
   return {
     statusCode: typeof rawCode === "number" ? rawCode : undefined,
     errorData: toInterpolationValues(source.data ?? source.errorData ?? source.response?.data?.data),
+    referenceData: source.data ?? source.errorData ?? source.response?.data?.data,
   };
 }
 

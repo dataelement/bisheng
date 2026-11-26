@@ -9,7 +9,8 @@ inserted, and the unified conversation rendered the whole task panel twice
 second, one holding the answer and one an empty placeholder).
 
 Writing the row first turns the worker's call into a plain in-place update.
-Both API-side writers are covered: the unified ``/c`` task submit and the legacy
+Both API-side writers are covered: the task submit core (``submit_task_turn``,
+used by the unified send entry and the Open API) and the legacy
 ``/workbench/start-execute`` endpoint. Pure unit tests: all I/O faked.
 """
 
@@ -27,7 +28,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
     SessionVersionStatusEnum,
 )
-from bisheng.workstation.domain.services import chat_service
+from bisheng.workstation.domain.services import task_submit_service
 
 
 def _order_recorder(calls: list, *, persist_raises: bool = False):
@@ -36,19 +37,15 @@ def _order_recorder(calls: list, *, persist_raises: bool = False):
         if persist_raises:
             raise RuntimeError("db down")
 
-    async def _enqueue(_session_model):
+    async def _enqueue(_session_model, **_kwargs):
         calls.append("enqueue")
 
     return _persist, _enqueue
 
 
 # ---------------------------------------------------------------------------
-# unified /c task submit (workstation chat_service)
+# the task submit core (workstation task_submit_service)
 # ---------------------------------------------------------------------------
-async def _drain(response) -> list:
-    return [chunk async for chunk in response.body_iterator]
-
-
 def _task_data() -> APIChatCompletion:
     return APIChatCompletion(
         clientTimestamp="2026-09-20T00:00:00Z",
@@ -61,32 +58,27 @@ def _task_data() -> APIChatCompletion:
 
 @pytest.fixture
 def unified_submit(monkeypatch):
-    monkeypatch.setattr(
-        chat_service.SensitiveWordPolicyService,
-        "evaluate_workbench_user_text",
-        staticmethod(lambda *_a, **_k: None),
-    )
-    session_version = SimpleNamespace(id="sv-1", session_id="chat-1")
+    session_version = SimpleNamespace(id="sv-1", session_id="chat-1", api_meta=None)
     monkeypatch.setattr(
         "bisheng.linsight.domain.services.workbench_impl.LinsightWorkbenchImpl.submit_user_question",
         AsyncMock(return_value=(MagicMock(), session_version)),
     )
-    monkeypatch.setattr(chat_service.LLMService, "get_bisheng_llm", AsyncMock(return_value=MagicMock()))
-    monkeypatch.setattr(chat_service, "gen_title", AsyncMock(return_value=None))
-    monkeypatch.setattr(chat_service, "_TITLE_GEN_TIMEOUT_S", 0.1)
+    monkeypatch.setattr(task_submit_service, "_consume_task_invite", AsyncMock(return_value=False))
+    monkeypatch.setattr(task_submit_service.LinsightSessionVersionDao, "insert_one", AsyncMock())
 
     def _run(calls: list, *, persist_raises: bool = False):
         persist, enqueue = _order_recorder(calls, persist_raises=persist_raises)
         monkeypatch.setattr("bisheng.linsight.domain.utils.persist_task_turn_message", persist)
         monkeypatch.setattr("bisheng.linsight.domain.utils.enqueue_session_for_execution", enqueue)
-        return chat_service._task_mode_stream_completion(MagicMock(), _task_data(), MagicMock())
+        # As the unified send entry calls it: with the run id the conversation was reserved under.
+        return task_submit_service.submit_task_turn(_task_data(), MagicMock(), run_id="run-1")
 
     return _run
 
 
 async def test_unified_submit_persists_task_turn_before_enqueue(unified_submit):
     calls: list = []
-    await _drain(await unified_submit(calls))
+    await unified_submit(calls)
     assert calls == ["persist", "enqueue"]
 
 
@@ -94,7 +86,7 @@ async def test_unified_submit_persist_failure_still_enqueues(unified_submit):
     """The row is best-effort (the worker writes it at start regardless); the
     run itself must never be lost because the placeholder could not be written."""
     calls: list = []
-    await _drain(await unified_submit(calls, persist_raises=True))
+    await unified_submit(calls, persist_raises=True)
     assert calls == ["persist", "enqueue"]
 
 
@@ -122,7 +114,10 @@ def start_execute(monkeypatch):
     # test_start_execute_persists_task_turn.py for why the stub is shaped so)
     fake_worker = ModuleType("bisheng.linsight.worker")
     fake_worker.LinsightQueue = lambda *a, **k: SimpleNamespace(put=AsyncMock())
-    fake_worker.encode_queue_item = lambda session_version_id, **kwargs: {"session_version_id": session_version_id, **kwargs}
+    fake_worker.encode_queue_item = lambda session_version_id, **kwargs: {
+        "session_version_id": session_version_id,
+        **kwargs,
+    }
     monkeypatch.setitem(sys.modules, "bisheng.linsight.worker", fake_worker)
 
     def _run(calls: list, *, persist_raises: bool = False):

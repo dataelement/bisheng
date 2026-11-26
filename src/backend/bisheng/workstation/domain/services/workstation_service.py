@@ -333,6 +333,7 @@ class WorkStationService(BaseService):
                     "is_preset": parent.is_preset,
                     "description": parent.description,
                     "default_checked": False,
+                    "auto_enabled": False,
                     "children": [],
                 }
                 order.append(parent.id)
@@ -438,6 +439,7 @@ class WorkStationService(BaseService):
                     "is_preset": parent_row.is_preset if parent_row else group.get("is_preset"),
                     "description": parent_row.description if parent_row else group.get("description"),
                     "default_checked": bool(group.get("default_checked")),
+                    "auto_enabled": bool(group.get("auto_enabled")),
                     "children": group_children,
                 }
             )
@@ -459,6 +461,7 @@ class WorkStationService(BaseService):
             if not group:
                 continue
             default_checked = bool(group.get("default_checked"))
+            auto_enabled = bool(group.get("auto_enabled"))
             for child in group.get("children", []) or []:
                 child = cls._to_plain_dict(child)
                 if not child:
@@ -467,6 +470,7 @@ class WorkStationService(BaseService):
                     {
                         "tool_key": child.get("tool_key"),
                         "default_checked": default_checked,
+                        "auto_enabled": auto_enabled,
                     }
                 )
         tool_keys = [item["tool_key"] for item in raw_children if item.get("tool_key")]
@@ -505,6 +509,7 @@ class WorkStationService(BaseService):
         tool_by_key = {row.tool_key: row for row in tool_rows}
         projected_rows: list[GptsTools] = []
         default_checked_types: set[int] = set()
+        auto_enabled_types: set[int] = set()
         seen_tool_ids: set[int] = set()
         for item in raw_children:
             row = tool_by_key.get(item.get("tool_key"))
@@ -514,9 +519,13 @@ class WorkStationService(BaseService):
             projected_rows.append(row)
             if item.get("default_checked"):
                 default_checked_types.add(row.type)
+            if item.get("auto_enabled"):
+                auto_enabled_types.add(row.type)
         grouped = cls._group_tool_rows(projected_rows, type_rows)
         for group in grouped:
-            if group["id"] in default_checked_types:
+            if group["id"] in auto_enabled_types:
+                group["auto_enabled"] = True
+            elif group["id"] in default_checked_types:
                 group["default_checked"] = True
         return grouped
 
@@ -579,7 +588,7 @@ class WorkStationService(BaseService):
         identified = [group for group in tools if group.get("id") is not None]
         if len(identified) != len(tools):
             logger.warning(
-                "[workstation.tools] dropped {} tool group(s) without an id while filtering by use permission",
+                "[workstation.tools] dropped {} tool group(s) without an id while filtering by visibility permission",
                 len(tools) - len(identified),
             )
         if not identified:
@@ -589,9 +598,101 @@ class WorkStationService(BaseService):
             login_user,
             resource_type="tool",
             resource_ids=[group["id"] for group in identified],
-            actions=("use",),
+            actions=("visible",),
         )
-        return [group for group in identified if "use" in action_map.get(str(group["id"]), frozenset())]
+        return [group for group in identified if "visible" in action_map.get(str(group["id"]), frozenset())]
+
+    # -- F005: auto-enabled tools -------------------------------------------
+    @staticmethod
+    def _auto_enabled_tool_keys_from(value: str | None) -> set[str]:
+        """``tool_key`` of every leaf under an auto-enabled group of a stored workstation payload.
+
+        Keys, not ids: an inherited config carries the root tenant's ids, while a
+        key names the same tool in every tenant, so no projection is needed.
+        """
+        if not value:
+            return set()
+        try:
+            raw = json.loads(value)
+        except (TypeError, ValueError):
+            logger.warning("workstation config: stored payload is not JSON; no auto-enabled tools")
+            return set()
+        keys: set[str] = set()
+        for group in raw.get("tools") or [] if isinstance(raw, dict) else []:
+            if not (isinstance(group, dict) and group.get("auto_enabled")):
+                continue
+            for child in group.get("children") or []:
+                if isinstance(child, dict) and child.get("tool_key"):
+                    keys.add(str(child["tool_key"]))
+        return keys
+
+    @classmethod
+    def auto_enabled_tool_ids(cls) -> set[int]:
+        """Ids, in the current tenant, of the tools its workstation config auto-enables (sync)."""
+        value, _, _, _ = cls._resolve_tenant_config(ConfigKeyEnum.WORKSTATION)
+        keys = cls._auto_enabled_tool_keys_from(value)
+        ids: set[int] = set()
+        for key in keys:
+            row = cls._lookup_builtin_tool(key)
+            if row is not None and row.id is not None:
+                ids.add(int(row.id))
+        return ids
+
+    @classmethod
+    async def aauto_enabled_tool_ids(cls) -> set[int]:
+        """Async ``auto_enabled_tool_ids``."""
+        value, _, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
+        keys = cls._auto_enabled_tool_keys_from(value)
+        if not keys:
+            return set()
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                rows = await session.exec(
+                    select(GptsTools.id).where(col(GptsTools.tool_key).in_(sorted(keys)), GptsTools.is_delete == 0)
+                )
+                return {int(row[0] if isinstance(row, tuple) else row) for row in rows.all()}
+
+    @classmethod
+    async def awith_auto_enabled_tools(cls, data: Any, login_user: UserPayload) -> Any:
+        """Return ``data`` with the auto-enabled tools this user may use added to ``data.tools``.
+
+        Only the login-state workbench entry calls this; the open API sends what
+        its caller passed (F005 AC-21). Tools already in the request are not
+        added twice. The added tools travel with the message, so a relay run that
+        reads it from the inbox carries them as well.
+        """
+        from bisheng.workstation.domain.schemas.chat import ToolPayload
+
+        config = await cls.get_daily_chat_config()
+        # The tenant projection writes the groups back as plain dicts, a stored config as ToolConfig.
+        groups = [
+            group
+            for group in (
+                tool if isinstance(tool, dict) else tool.model_dump(mode="json")
+                for tool in (config.tools if config else None) or []
+            )
+            if group.get("auto_enabled")
+        ]
+        if not groups:
+            return data
+        groups = await cls.afilter_tools_by_use_permission(groups, login_user)
+        present = {int(tool.id) for tool in data.tools or [] if tool.id}
+        added: list = []
+        for group in groups:
+            for child in group.get("children") or []:
+                tool_id = child.get("id")
+                if not tool_id or int(tool_id) in present:
+                    continue
+                present.add(int(tool_id))
+                added.append(ToolPayload(id=int(tool_id), tool_key=child.get("tool_key"), type="tool"))
+        if not added:
+            return data
+        logger.info(
+            "workstation send: added auto-enabled tools {} for user={}",
+            [tool.tool_key for tool in added],
+            login_user.user_id,
+        )
+        return data.model_copy(update={"tools": [*(data.tools or []), *added]})
 
     @classmethod
     async def afilter_org_kbs_by_visible_permission(
@@ -621,13 +722,30 @@ class WorkStationService(BaseService):
         if not identified:
             return []
 
-        action_map = await batch_check_business_actions(
-            login_user,
-            resource_type="knowledge_library",
-            resource_ids=[item["id"] for item in identified],
-            actions=("visible",),
+        from bisheng.knowledge.domain.repositories.knowledge_compatibility_repository import (
+            KnowledgeCompatibilityRepository,
         )
-        return [item for item in identified if "visible" in action_map.get(str(item["id"]), frozenset())]
+
+        # Since the 3.1 knowledge merge an admin configures knowledge spaces here.
+        # A space is checked as ``knowledge_space``; checked as ``knowledge_library``
+        # it resolves to nothing and every non-admin lost it. Group the ids by their
+        # actual type, as the HTTP permission endpoints do. Unknown ids drop out.
+        ids = [int(item["id"]) for item in identified if str(item["id"]).isdecimal()]
+        actual_types = await KnowledgeCompatibilityRepository().aresource_types(ids)
+        by_type: dict[str, list[int]] = {}
+        for resource_id in ids:
+            if resource_id in actual_types:
+                by_type.setdefault(actual_types[resource_id], []).append(resource_id)
+        visible: set[str] = set()
+        for resource_type, resource_ids in by_type.items():
+            action_map = await batch_check_business_actions(
+                login_user,
+                resource_type=resource_type,
+                resource_ids=resource_ids,
+                actions=("visible",),
+            )
+            visible.update(key for key, actions in action_map.items() if "visible" in actions)
+        return [item for item in identified if str(item["id"]) in visible]
 
     @classmethod
     async def _aproject_daily_config_for_current_tenant(
@@ -668,6 +786,23 @@ class WorkStationService(BaseService):
         config: KnowledgeSpaceConfig | None,
     ) -> KnowledgeSpaceConfig | None:
         return config
+
+    @staticmethod
+    def _upgrade_legacy_org_kbs(org_kbs: Any) -> Any:
+        """Read a pre-F005-revision ``orgKbs`` list in the new shape (design decision 9).
+
+        Before the revision an item carried ``default_checked``; now every configured
+        knowledge base is preselected and ``show_in_composer`` decides only its tag.
+        Every save since then writes the key on each item, so a list where no item has
+        it was saved before the upgrade: keep only the items that were default-checked,
+        and show them in the composer.
+        """
+        if not isinstance(org_kbs, list):
+            return org_kbs
+        items = [item for item in org_kbs if isinstance(item, dict)]
+        if any("show_in_composer" in item for item in items):
+            return org_kbs
+        return [{**item, "show_in_composer": True} for item in items if item.get("default_checked") is True]
 
     @classmethod
     def parse_config(cls, config: Any) -> WorkstationConfig | None:
@@ -716,6 +851,7 @@ class WorkStationService(BaseService):
                 # Best-effort; fall through and let Pydantic drop unknown keys.
                 pass
 
+        raw["orgKbs"] = cls._upgrade_legacy_org_kbs(raw.get("orgKbs"))
         ret = WorkstationConfig(**raw)
 
         # Platform default: the built-in web_search tool must always appear in
@@ -795,7 +931,9 @@ class WorkStationService(BaseService):
         return {"assistantIcon": icon.model_dump() if icon else None}
 
     @classmethod
-    async def get_daily_chat_config(cls, *, for_picker: bool = False) -> WorkstationConfig | None:
+    async def get_daily_chat_config(
+        cls, *, for_picker: bool = False, include_models: bool = True
+    ) -> WorkstationConfig | None:
         """Get the default workstation configuration for daily chat."""
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
@@ -806,6 +944,8 @@ class WorkStationService(BaseService):
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
+        if not include_models:
+            return ret
         workbench_config = await (
             LLMService.get_workbench_llm_for_picker() if for_picker else LLMService.get_workbench_llm_candidates()
         )
@@ -834,9 +974,10 @@ class WorkStationService(BaseService):
     async def update_daily_chat_config(cls, data: WorkstationConfig) -> WorkstationConfig:
         """Update the default workstation configuration for daily chat."""
         workstation_payload = data.model_copy(update={"models": None})
+        payload = workstation_payload.model_dump(mode="json")
         await cls._aupsert_tenant_config(
             ConfigKeyEnum.WORKSTATION,
-            payload=json.dumps(workstation_payload.model_dump(mode="json"), ensure_ascii=True),
+            payload=json.dumps(payload, ensure_ascii=True),
         )
         config, *_ = await cls.get_daily_chat_config_with_meta()
         return config
@@ -1286,7 +1427,7 @@ class WorkStationService(BaseService):
                 permitted_org_ids = await KnowledgePermissionService().filter_knowledge_ids_by_action_async(
                     login_user,
                     org_kb_ids,
-                    "use",
+                    "visible",
                 )
                 denied_org_ids = [kb_id for kb_id in org_kb_ids if kb_id not in set(permitted_org_ids)]
                 for kb_id in denied_org_ids:

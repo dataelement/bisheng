@@ -641,6 +641,7 @@ class TenantService:
         ``TenantResolver`` so v2.5.0 ``aadd_users`` residue rows do not
         surface as phantom members. Return shape unchanged.
         """
+
         from fastapi import HTTPException
 
         from bisheng.common.subject_search import normalize_keyword

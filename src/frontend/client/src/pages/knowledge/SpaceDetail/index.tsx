@@ -152,6 +152,7 @@ function useKnowledgeSpaceDetail(
     canDeleteSpace,
     canManageMembers,
     canEditSpace,
+    canReadSpaceTags,
     canLeaveSpace,
     versionManagementEnabled,
     queryClient,
@@ -164,13 +165,14 @@ function useKnowledgeSpaceDetail(
     setSimilarDialogOpen,
     similarRestrictIds,
     setSimilarRestrictIds,
-    handleProcessSimilar,
+    handleProcessSimilar: openSimilarSelection,
     handleVersionAction,
     showShareInMenu,
     handleCopyShareLink,
   } = useKnowledgeSpaceHeader({
     selectedFiles,
     space,
+    currentFolderId,
     onDeleteFile,
     localize,
     showToast,
@@ -220,6 +222,7 @@ function useKnowledgeSpaceDetail(
     moveEntryIds,
     deleteEntryIds,
     renameEntryIds,
+    editEntryIds,
     downloadEntryIds,
   } = filePermissions;
 
@@ -296,14 +299,15 @@ function useKnowledgeSpaceDetail(
   );
   const selectedList = displayFiles.filter((f) => selectedFiles.has(f.id));
   const selectedPermissionKey = selectedList.map((file) => file.id).sort().join("|");
+  const similarPermissionKey = versionManagementEnabled ? displayFiles.filter(file => file.has_similar && !file.is_multi_version && file.status === FileStatus.SUCCESS).map(file => file.id).join("|") : "";
   const listedFiles = useRef(displayFiles);
   listedFiles.current = displayFiles;
   useEffect(() => {
-    const wanted = new Set(selectedPermissionKey.split("|").filter(Boolean));
+    const wanted = new Set([...selectedPermissionKey.split("|"), ...similarPermissionKey.split("|")].filter(Boolean));
     for (const file of listedFiles.current) {
       if (wanted.has(file.id)) void ensureFilePermissions(file);
     }
-  }, [ensureFilePermissions, selectedPermissionKey]);
+  }, [ensureFilePermissions, selectedPermissionKey, similarPermissionKey]);
   // Each batch entry follows the effective action the server will enforce.
   // A selection with none of that action does not offer the entry.
   const actionableSelection = selectedList.filter(
@@ -368,8 +372,12 @@ function useKnowledgeSpaceDetail(
   // appears whenever ANY selected file is a pending similar document. The dialog is then
   // scoped to exactly the selected files (see handleProcessSimilar).
   const hasSimilarSelected = selectedList.some(
-    (f) => f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS,
+    (f) => editEntryIds.has(f.id) && f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS,
   );
+
+  const handleProcessSimilar = () => {
+    openSimilarSelection(selectedList.filter(file => editEntryIds.has(file.id)).map(file => file.id));
+  };
 
   // Mobile only ever shows the list form — never the multi-column card grid.
   const effectiveViewMode: "card" | "list" = isH5 ? "list" : viewMode;
@@ -385,7 +393,7 @@ function useKnowledgeSpaceDetail(
   const { batchActions, inlineActions, overflowActions } = getKnowledgeBatchActions({
     selectedFiles,
     isAdmin,
-    canManageMembers,
+    canEditSpace,
     versionManagementEnabled,
     handleProcessSimilar,
     handleManagePermission,
@@ -448,6 +456,7 @@ function useKnowledgeSpaceDetail(
     canDeleteSpace,
     canManageMembers,
     canEditSpace,
+    canReadSpaceTags,
     canLeaveSpace,
     versionManagementEnabled,
     setVersionMgmtFile,

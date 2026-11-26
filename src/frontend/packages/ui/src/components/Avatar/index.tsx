@@ -1,6 +1,7 @@
 import { forwardRef, useState } from 'react';
 import type { HTMLAttributes, ImgHTMLAttributes } from 'react';
 import cn from '../../utils/cn';
+import { Filled } from 'bisheng-icons';
 
 export const Avatar = forwardRef<HTMLSpanElement, HTMLAttributes<HTMLSpanElement>>(
   ({ className, ...props }, ref) => (
@@ -26,7 +27,7 @@ interface AvatarNameProps extends HTMLAttributes<HTMLDivElement> {
 
 export const AvatarName = forwardRef<HTMLDivElement, AvatarNameProps>(
   ({ className, name, ...props }, ref) => {
-    const [initial = '?'] = Array.from(name?.trim() ?? '');
+    const initial = Array.from(name?.trim() ?? '')[0]?.toUpperCase();
 
     return (
       <div
@@ -37,7 +38,7 @@ export const AvatarName = forwardRef<HTMLDivElement, AvatarNameProps>(
         )}
         {...props}
       >
-        {initial.toUpperCase()}
+        {initial ?? <Filled.Person className="h-3/5 w-3/5" aria-hidden />}
       </div>
     );
   },

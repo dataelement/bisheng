@@ -2,12 +2,12 @@
 
 import asyncio
 import os
-import pickle
 from uuid import uuid4
 
 import pytest
 from redis.asyncio import Redis
 
+from bisheng.core.cache.serialization import encode_redis_value
 from bisheng.linsight.domain.services.task_message_broadcast import task_message_subscription
 
 
@@ -44,7 +44,7 @@ async def test_two_clients_receive_the_same_ordered_stream_and_final_event(redis
             async with task_message_subscription(other, key) as browser:
                 expected = [{"event_type": "task_execute_step", "data": {"sequence": i}} for i in range(12)]
                 expected.append({"event_type": "final_result", "data": {"output_result": {"answer": "done"}}})
-                await redis.rpush(key, *(pickle.dumps(frame) for frame in expected))
+                await redis.rpush(key, *(encode_redis_value(key, frame) for frame in expected))
                 left, right = await asyncio.gather(receive(desktop, len(expected)), receive(browser, len(expected)))
                 assert left == right == expected
                 assert await redis.llen(key) == 0
@@ -52,10 +52,10 @@ async def test_two_clients_receive_the_same_ordered_stream_and_final_event(redis
         await other.aclose()
 
 
-async def test_pre_connection_backlog_and_legacy_worker_writes_are_delivered(redis_queue):
+async def test_pre_connection_backlog_and_authenticated_worker_writes_are_delivered(redis_queue):
     redis, key = redis_queue
     expected = {"event_type": "task_generate", "data": {"tasks": [{"id": "task-1"}]}}
-    await redis.rpush(key, pickle.dumps(expected))
+    await redis.rpush(key, encode_redis_value(key, expected))
     async with task_message_subscription(redis, key) as desktop:
         assert await receive(desktop, 1) == [expected]
 
@@ -67,7 +67,7 @@ async def test_disconnect_releases_only_its_subscription(redis_queue):
             assert (await redis.pubsub_numsub(f"{key}:broadcast"))[0][1] == 2
         assert (await redis.pubsub_numsub(f"{key}:broadcast"))[0][1] == 1
         final = {"event_type": "final_result", "data": {"output_result": {}}}
-        await redis.rpush(key, pickle.dumps(final))
+        await redis.rpush(key, encode_redis_value(key, final))
         assert await receive(desktop, 1) == [final]
     assert (await redis.pubsub_numsub(f"{key}:broadcast"))[0][1] == 0
 
@@ -78,8 +78,8 @@ async def test_distinct_tasks_keep_their_events_separate(redis_queue):
     try:
         async with task_message_subscription(redis, key) as left:
             async with task_message_subscription(redis, other_key) as right:
-                await redis.rpush(key, pickle.dumps({"id": "left"}))
-                await redis.rpush(other_key, pickle.dumps({"id": "right"}))
+                await redis.rpush(key, encode_redis_value(key, {"id": "left"}))
+                await redis.rpush(other_key, encode_redis_value(other_key, {"id": "right"}))
                 assert await asyncio.gather(receive(left, 1), receive(right, 1)) == [
                     [{"id": "left"}],
                     [{"id": "right"}],
@@ -135,7 +135,7 @@ async def test_real_websockets_both_finish_the_same_task(redis_queue, monkeypatc
                     {"event_type": "task_end", "data": {"id": "one", "status": "success"}},
                     {"event_type": "final_result", "data": {"output_result": {"answer": "done", "final_files": []}}},
                 ]
-                await redis.rpush(key, *(pickle.dumps(frame) for frame in events))
+                await redis.rpush(key, *(encode_redis_value(key, frame) for frame in events))
 
                 async def read(socket):
                     import json

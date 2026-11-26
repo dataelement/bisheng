@@ -118,6 +118,32 @@
           "queueing": "Queueing",
           "timeout": "Timeout",
           "violation": "Violation"
+        },
+        "empty": "—",
+        "uncertain": "The result could not be confirmed. Close this dialog and refresh the list to check the result.",
+        "actions": {
+          "preview": "Preview",
+          "download": "Download",
+          "primary": "Set as primary",
+          "delete": "Delete"
+        },
+        "confirm": {
+          "primary": {
+            "title": "Switch primary version",
+            "description": "V{{version}} will become the primary version. RAG retrieval and chat will use the new version immediately."
+          },
+          "delete": {
+            "title": "Delete history version",
+            "description": "V{{version}} will be permanently deleted. This cannot be undone."
+          }
+        },
+        "feedback": {
+          "primary": "Primary version updated",
+          "delete": "Version deleted"
+        },
+        "download_feedback": {
+          "no_url": "Failed to get download link",
+          "failed": "Download failed"
         }
       }
     },

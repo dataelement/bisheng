@@ -221,10 +221,16 @@ it.each(["file", "folder"])(
 );
 
 it("stages the complete tree before one original registration with exact relative paths", async () => {
+  const append = vi.spyOn(FormData.prototype, "append");
   mount();
   await pick();
   await proceed();
   await waitFor(() => expect(registers()).toHaveLength(1));
+  const uploadNames = append.mock.calls
+    .filter(([field]) => field === "file")
+    .map(([, , filename]) => filename);
+  append.mockRestore();
+  expect(uploadNames).toEqual(["a.txt", "b.csv"]);
   expect(stages()).toHaveLength(2);
   expect(registers()[0][1]).toMatchObject({
     parent_id: 9,

@@ -62,7 +62,6 @@ from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelPermissionRecord,
 )
 from bisheng.channel.domain.services.reference_extractor import (
-    CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
     channel_sync_scope,
     extract_channel_sync_references,
     is_legacy_channel_folder_id,
@@ -122,10 +121,10 @@ from bisheng.permission.application.prospective_grant import ProspectiveGrantApp
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
-from bisheng.resource_reference.application.contracts import ReferenceState, SourceKey, SourceType, reference_set_digest
+from bisheng.resource_reference.application.contracts import ReferenceState, SourceType
 from bisheng.resource_reference.application.source_access import get_reference_read_runtime
 from bisheng.resource_reference.application.source_contracts import SourceReadRequest
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
@@ -2006,7 +2005,6 @@ class ChannelService:
         resume=False,
     ) -> Channel:
         repository = ChannelReferenceBindingRepository()
-        runtime = await get_reference_binding_runtime()
         visibility_transition = None
         async with get_async_db_session() as session:
             is_new = new_channel is not None
@@ -2048,22 +2046,8 @@ class ChannelService:
                     )
                 return locked
 
-            source = SourceKey(candidate.tenant_id, SourceType.CHANNEL_SYNC, channel_id, "current")
-            prepared = await runtime.aprepare_source_bindings(
-                session,
-                source,
-                references,
-                extractor_version=CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
-                lock_source_root=lock_root,
-                new_source=is_new,
-                effective=not deleting,
-            )
-            if prepared.verified.context.old_references_digest != reference_set_digest(old_references):
-                raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
+            await lock_root(session)
             added = set(references) - set(old_references)
-            facts = {receipt.target.key: receipt.target for receipt in prepared.verified.context.receipts}
-            if any(facts[ref.target].state != ReferenceState.VALID for ref in added):
-                raise ResourceReferenceInvalidError(reason="new_invalid_reference")
             selected = [
                 row.model_dump()
                 for row in final_rows
@@ -2128,9 +2112,8 @@ class ChannelService:
                 if locked.visibility != old_visibility:
                     visibility_transition = (old_visibility, locked.visibility)
                     await self._transition_channel_members(session, repository, locked, old_visibility, login_user)
-            if not resume:
-                await runtime.aapply_source_bindings(session, prepared)
             await session.commit()
+            await notify_reference_sync(locked.tenant_id, SourceType.CHANNEL_SYNC, channel_id)
         if deleting:
             await adapter.cleanup_deleted(record=record, actor=await resolve_permission_actor(login_user))
             await self._send_channel_event_notification(

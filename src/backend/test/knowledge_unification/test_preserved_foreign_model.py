@@ -128,14 +128,16 @@ async def test_native_read_details_classify_but_execution_and_preview_refuse(mod
     async with AsyncSession(ctx.engine) as session:
         scope = await ctx.verifier.aissue_scope(session, reads.knowledge.REQUEST, ctx.identity)
         fact = (await ctx.model.ainspect_source_targets(session, scope, (ref.target,), identity=ctx.identity))[0]
-        assert fact.state == "invalid_scope" and not fact.is_valid and fact.target_tenant_id == 202
+        assert fact.state == "invalid_missing" and not fact.is_valid and fact.target_tenant_id is None
         with pytest.raises(ResourceReferenceInvalidError):
             await runtime.arequire_source_valid(session, scope, ctx.identity)
         preview = await ctx.verifier.aissue_transient_scope(
             session, TransientTargetRequest("workflow", "workflow-a", reads.knowledge.payload((ref,))), ctx.identity
         )
-        with pytest.raises(ResourceReferenceInvalidError):
+        transient = (
             await ctx.model.ainspect_transient_targets(session, preview, (ref.target,), identity=ctx.identity)
+        )[0]
+        assert not transient.is_valid
 
 
 def test_sync_native_read_also_classifies_without_loading_foreign_configuration(native):
@@ -162,7 +164,7 @@ def test_sync_native_read_also_classifies_without_loading_foreign_configuration(
     with Session(ctx.engine) as session:
         scope = ctx.verifier.issue_scope(session, sync_reads.scopes.REQUEST, ctx.identity)
         fact = target.inspect_source_targets(session, scope, (ref.target,), identity=ctx.identity)[0]
-        assert fact.state == "invalid_scope" and fact.target_tenant_id == 202 and not fact.is_valid
+        assert fact.state == "invalid_missing" and fact.target_tenant_id is None and not fact.is_valid
         with pytest.raises(ResourceReferenceInvalidError):
             runtime.require_source_valid(session, scope, ctx.identity)
 

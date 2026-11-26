@@ -565,6 +565,9 @@ importers:
       zod:
         specifier: ^3.22.4
         version: 3.25.76
+      zustand:
+        specifier: ^4.5.7
+        version: 4.5.7(@types/react@18.3.31)(immer@10.2.0)(react@18.3.1)
     devDependencies:
       '@babel/plugin-transform-runtime':
         specifier: ^7.22.15

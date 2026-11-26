@@ -33,6 +33,8 @@ import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { SopStatus } from '~/store/linsight';
+import { selectIsRunning, useRunStore } from '~/store/runStore';
+import { useTaskTurnRetry } from '~/components/Chat/runPageContext';
 import { AnswerFallback } from './AnswerFallback';
 import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
@@ -62,29 +64,53 @@ interface TaskTurnPanelProps {
     /** Preview a result document in the chat-embedded inline workspace panel
         (ChatView owns it). A doc link opens the file directly — no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
+    /**
+     * F004 (T061): false on the conversation page, which follows the run
+     * events of its conversation. The panel then only shows what is stored: it opens no task
+     * WebSocket and offers no clarify / cancel action (a question is answered
+     * and a run is stopped through the page's send and stop entries). "Retry"
+     * of a failed turn sends the turn's question again through the page's
+     * send entry (`TaskTurnRetryContext`) instead of the task channel.
+     * While the stored status still says "running" and the conversation has no
+     * run in progress, it asks the server for the final state. Default true:
+     * the carriers that follow no run events keep the task channel, except a
+     * share page, which shows the stored snapshot only.
+     */
+    liveChannel?: boolean;
 }
 
-export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
+/** Waits between two "has this turn ended?" requests of a panel without a live channel. */
+const REVIEW_RECONCILE_DELAYS_MS = [0, 2000, 5000, 10000];
+
+export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile, liveChannel = true }: TaskTurnPanelProps) {
     const localize = useLocalize();
     // Share routes supply the token for history hydration and cannot continue
     // tasks, even when their carrier omits the explicit readOnly prop.
     const { token: shareToken } = useParams<{ token?: string }>();
     const retryReadOnly = readOnly || Boolean(shareToken);
-    const { getLinsight, retryConversation, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
+    // A share page shows the stored snapshot only: no task WebSocket, no queue
+    // polling, no clarify or cancel action (F004, decision 11).
+    const channelOpen = liveChannel && !shareToken;
+    const { getLinsight, retryConversation, switchAndUpdateLinsight, updateLinsight, reconcileLinsightFromServer } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
-    // historical turn is a no-op (no connection opened).
-    const { sendInput, stop, networkFailure } = useLinsightWebSocket(versionId);
+    // historical turn is a no-op (no connection opened). Without a live channel
+    // it gets no version id, so it never connects.
+    const { sendInput, stop, networkFailure } = useLinsightWebSocket(channelOpen ? versionId : '');
 
     const linsight = getLinsight(versionId);
     const [loadFailed, setLoadFailedState] = useState(false);
     const [retrying, setRetrying] = useState(false);
     const retryPendingRef = useRef(false);
+    // F004: retry entry of the conversation page; null everywhere else.
+    const unifiedRetry = useTaskTurnRetry();
     const handleRetry = async () => {
         if (retryReadOnly || !linsight?.question || retryPendingRef.current) return;
+        if (!liveChannel && !unifiedRetry) return;
         retryPendingRef.current = true;
         setRetrying(true);
         try {
-            await retryConversation(versionId, linsight.question);
+            if (liveChannel) await retryConversation(versionId, linsight.question);
+            else await unifiedRetry?.(linsight.question);
         } finally {
             retryPendingRef.current = false;
             setRetrying(false);
@@ -142,12 +168,43 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         [running, sessionSteps, tasks],
     );
 
+    // F004 (T061): no live channel. A stored status of "running" can be out of
+    // date (the run ended after this panel loaded it). Once the conversation
+    // has no run in progress, take the final state from the server.
+    const conversationRunning = useRunStore(selectIsRunning(liveChannel ? '' : conversationId || ''));
+    const notEnded = status === SopStatus.Running || status === SopStatus.NotStarted;
+    useEffect(() => {
+        if (liveChannel || !versionId || !notEnded || conversationRunning) return undefined;
+        let cancelled = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const attempt = (index: number) => {
+            if (cancelled || index >= REVIEW_RECONCILE_DELAYS_MS.length) return;
+            timer = setTimeout(() => {
+                if (cancelled) return;
+                Promise.resolve(reconcileLinsightFromServer(versionId))
+                    .then((adopted) => {
+                        if (!adopted) attempt(index + 1);
+                    })
+                    .catch(() => attempt(index + 1));
+            }, REVIEW_RECONCILE_DELAYS_MS[index]);
+        };
+        attempt(0);
+        return () => {
+            cancelled = true;
+            if (timer) clearTimeout(timer);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- reconcile fn identity is not a trigger
+    }, [liveChannel, versionId, notEnded, conversationRunning]);
+
     // Queued in the worker queue: running but the worker hasn't started us yet
     // (no task list / steps produced). Poll queue-status only in this window so
     // the badge clears the moment the worker picks us up (index → 0) or any
     // execution output arrives over the WS.
     const noProgressYet = !tasks.length && !sessionSteps.length;
-    useLinsightQueuePolling(versionId, running && noProgressYet);
+    // AC-36: the conversation page (no live channel) also asks while a stored turn
+    // still waits in the worker queue, e.g. after a reload; a share page never asks.
+    const followsQueue = channelOpen || (!liveChannel && !shareToken);
+    useLinsightQueuePolling(versionId, followsQueue && running && noProgressYet);
     // Gate on noProgressYet too: once steps/tasks arrive polling stops and the
     // last-polled queueCount may stay stale >0, so this prevents the queue card
     // from lingering next to real task rows.
@@ -218,7 +275,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         <ExecutionLiveContext.Provider value={running && !pendingInput && !tasks.length}>
         <div ref={rootRef} className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
-            {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
+            {queueing && followsQueue && <QueueCard position={linsight!.queueCount} onCancel={channelOpen ? stop : undefined} />}
 
             {/* session-level steps (planning-stage tools etc.); an answered clarify
                 renders as an inline IntentRow at its chronological position here
@@ -239,7 +296,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
             ))}
 
             {/* active clarify card (HITL stays on linsight WS) */}
-            {pendingInput && (
+            {pendingInput && channelOpen && (
                 <ClarifyCard data={pendingInput} disabled={readOnly} onSubmit={handleClarifySubmit} />
             )}
 
@@ -253,7 +310,10 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                     detail={linsight.taskErrorInfo?.detail ?? linsight?.output_result?.detail}
                     referenceId={linsight.taskErrorInfo?.reference_id ?? linsight?.output_result?.reference_id}
                     fallbackMessage={linsight.taskError}
-                    onRetry={retryReadOnly || !linsight.question || !isTransientErrorType(linsight.taskErrorInfo?.error_type)
+                    // Without a live channel the retry starts a new run, so it
+                    // is offered only while the conversation has none in progress.
+                    onRetry={(!liveChannel && (!unifiedRetry || conversationRunning)) || retryReadOnly || !linsight.question
+                        || !isTransientErrorType(linsight.taskErrorInfo?.error_type)
                         ? undefined : handleRetry}
                     retrying={retrying}
                 />

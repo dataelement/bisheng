@@ -97,6 +97,37 @@ def service():
     return value
 
 
+@pytest.mark.parametrize("tool_key", ["dalle_image_generator", "image_generation"])
+async def test_image_directory_normalizes_title_without_changing_invocation(tool_key):
+    app = service()
+    tool = app._tools.return_value[7]
+    tool.tool_key = tool_key
+    tool.name = "Dalle3绘画"
+    rows = await app.list_tools()
+    assert rows[0]["title"] == "图像生成"
+    assert rows[0]["description"] == "Search customers"
+    assert rows[0]["name"] == tool_key
+    assert tool.name == "Dalle3绘画"
+    tool.desc = ""
+    rows = await app.list_tools()
+    assert rows[0]["title"] == "图像生成"
+    assert rows[0]["description"] == "图像生成"
+    await app.call_tool(tool_key, {"query": "a forest"})
+    app._executor.return_value.ainvoke.assert_awaited_once()
+
+
+async def test_custom_image_tool_keeps_its_display_title():
+    app = service()
+    tool = app._tools.return_value[7]
+    tool.is_preset = 2
+    tool.tool_key = "dalle_image_generator"
+    tool.extra = {"name": "dalle_image_generator"}
+    tool.name = "Custom image service"
+    rows = await app.list_tools()
+    assert rows[0]["name"] == "dalle_image_generator"
+    assert rows[0]["title"] == "Custom image service"
+
+
 async def test_tool_directory_and_execution_recheck_permission_and_publication():
     app = service()
     catalog = await app.list_tools()

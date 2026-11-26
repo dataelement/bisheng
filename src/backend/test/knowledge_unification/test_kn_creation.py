@@ -70,7 +70,7 @@ async def test_explicit_model_and_full_defaults_commit_with_actual_creator_and_r
     after = fixtures.state(context)
     assert len(after["space_channel_member"]) == len(before["space_channel_member"]) + 1
     refs = [item for item in after["business_resource_reference"] if item["source_id"] == str(result.id)]
-    assert [(item["slot_key"], item["target_id"]) for item in refs] == [("model", str(model))]
+    assert refs == []
     adapter.authorize_created.assert_awaited_once()
 
 

@@ -8,21 +8,21 @@ from hashlib import sha256
 from types import SimpleNamespace
 from urllib.parse import quote
 
-from pydantic import ValidationError
+from loguru import logger
+from sqlalchemy.exc import SQLAlchemyError
 
 from bisheng.app_publish.application.reference_read_identity import (
     AppManagementSourceReadIdentity,
     AppSourceReadIdentity,
 )
-from bisheng.app_publish.application.reference_resolution import resolve_app_references
 from bisheng.app_publish.domain.repositories.reference_source_repository import HostedAppReferenceSourceRepository
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.services.preview_access_service import PreviewQualification
 from bisheng.app_publish.domain.services.reference_extractor import (
     APP_REFERENCE_EXTRACTOR_VERSION,
     extract_app_reference_requests,
-    extract_app_references,
 )
+from bisheng.app_publish.domain.services.saved_bindings import saved_bindings
 from bisheng.app_runtime.application.authorization import authorize_loaded_app, resolve_app_actor
 from bisheng.app_runtime.domain.schemas.app_authorization import APP_ACTIONS, MANAGEMENT_ACTIONS
 from bisheng.app_runtime.domain.services.f048_app_permission import AppPermissionRecord
@@ -46,10 +46,8 @@ from bisheng.permission.application.business_authorization import require_busine
 from bisheng.resource_reference.application.contracts import (
     SourceKey,
     SourceType,
-    TargetKey,
     TargetType,
     TransactionIdentity,
-    reference_set_digest,
 )
 from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 from bisheng.resource_reference.application.source_contracts import (
@@ -235,24 +233,39 @@ class HostedAppReferenceSourceOwner:
 
     async def assert_model_binding_current(self, session, snapshot, identity, requested, resolved):
         registered = self._registered_plan(session, snapshot, identity)
-        if not registered.admitted or registered.request.purpose != "execute" or registered.plan is None:
+        if not registered.admitted or registered.request.purpose != "execute":
             raise _invalid("app_source_execution_required")
+        payload = json.loads(snapshot.payload_json)
+        declaration = CapabilityDeclaration.model_validate(payload["capabilities"])
+        requests = {
+            item.slot_key: item.requested_name
+            for item in extract_app_reference_requests(declaration)
+            if item.target_type == TargetType.MODEL
+        }
+        bound = {
+            item.slot_key: int(item.target.target_id)
+            for item in snapshot.references
+            if item.target.target_type == TargetType.MODEL
+        }
+        exact = {slot for slot, name in requests.items() if name == requested}
+        if exact and not any(slot in bound for slot in exact):
+            raise _invalid("app_model_binding_unresolved")
         names = get_model_name_resolution_port()
+        plan = await names.aprepare_model_names_current(
+            session, snapshot.source_key.tenant_id, (requested,), identity=identity
+        )
         current = await names.resolve_model_alias_current(
-            session, snapshot.source_key.tenant_id, requested, identity=identity, plan=registered.plan
+            session, snapshot.source_key.tenant_id, requested, identity=identity, plan=plan
         )
-        model_ids = tuple(
-            sorted(
-                {int(ref.target.target_id) for ref in snapshot.references if ref.target.target_type == TargetType.MODEL}
-            )
-        )
-        frozen = await names.aresolve_frozen_model_identities(
-            session, snapshot.source_key.tenant_id, model_ids, identity=identity
-        )
-        if (current.model_id, current.server_id) != (resolved.model_id, resolved.server_id) or (
-            current.model_id,
-            current.server_id,
-        ) not in {(one.model_id, one.server_id) for one in frozen}:
+        if (current.model_id, current.server_id) != (resolved.model_id, resolved.server_id):
+            raise KnowledgeOperationPlanConflictError(reason="model_binding_identity_changed")
+        aliases = {current.model_name, current.qualified_name}
+        slots = {slot for slot, name in requests.items() if name in aliases}
+        if not slots or not any(bound.get(slot) == current.model_id for slot in slots):
+            if any(name == requested for name in requests.values()) and all(
+                slot not in bound for slot, name in requests.items() if name == requested
+            ):
+                raise _invalid("app_model_binding_unresolved")
             raise KnowledgeOperationPlanConflictError(reason="model_binding_identity_changed")
 
     async def _management_context(self, session, root, version, identity, *, for_update):
@@ -427,24 +440,15 @@ class HostedAppReferenceSourceOwner:
 
     async def _frozen(self, session, root, version):
         key = SourceKey(root["tenant_id"], SourceType.HOSTED_APP_VERSION, root["id"], version["id"])
-        with session.no_autoflush:
-            source = await self.references.aget_source_set(session, key)
-            raw = await self.references.alist_source_references(session, key)
-        try:
-            declaration = CapabilityDeclaration.model_validate(version["capabilities"])
-            mapping = {row.slot_key: TargetKey(row.target_type, row.target_id) for row in raw}
-            references = extract_app_references(declaration, resolved_targets=mapping)
-        except (TypeError, ValueError, ValidationError) as error:
-            raise ReferenceCoverageNotReadyError(reason="app_source_configuration_drift") from error
-        if (
-            source is None
-            or not source.ready
-            or source.extractor_version != APP_REFERENCE_EXTRACTOR_VERSION
-            or len(raw) != len(mapping)
-            or source.digest != reference_set_digest(references)
-            or any(row.source_revision != source.source_revision for row in raw)
-        ):
-            raise ReferenceCoverageNotReadyError(reason="app_source_not_indexed")
+        raw = ()
+        if "resource_bindings" not in (version.get("injections") or {}):
+            try:
+                # A failed auxiliary lookup cannot poison the business transaction.
+                async with session.begin_nested():
+                    raw = await self.references.alist_source_references(session, key)
+            except SQLAlchemyError:
+                logger.warning("Legacy app bindings unavailable app={} version={}", root["id"], version["id"])
+        declaration, references, _unresolved = saved_bindings(version["capabilities"], version.get("injections"), raw)
         return key, declaration, references
 
     async def _load(self, session, request, identity, *, for_update, prepared=None):
@@ -455,17 +459,6 @@ class HostedAppReferenceSourceOwner:
             or not isinstance(identity, (UserPayload, OpenApiPrincipal))
         ):
             raise _invalid()
-        # Consume only the original target/name plan before taking the business root.
-        if prepared is not None and prepared.plan is not None:
-            old = prepared.snapshot
-            await resolve_app_references(
-                session,
-                CapabilityDeclaration.model_validate(json.loads(old.payload_json)["capabilities"]),
-                identity=identity,
-                source_tenant_id=old.source_key.tenant_id,
-                model_name_plan=prepared.plan,
-                frozen_references=old.references,
-            )
         root = await self.repository.aget_root(session, request.source_id, for_update=for_update)
         preview = None
         hosted = isinstance(identity, OpenApiPrincipal) and identity.actor_kind == "hosted_app"
@@ -532,44 +525,13 @@ class HostedAppReferenceSourceOwner:
             )
             if identity.authorization_subject_id != ceiling or identity.preview_capability_user_id != ceiling:
                 raise OpenApiCredentialInvalidError()
-        key, declaration, references = await self._frozen(session, root, version)
+        if prepared is None:
+            key, _declaration, references = await self._frozen(session, root, version)
+        else:
+            # Old identity evidence is consumed once for this request. Only the immutable
+            # business version and real authorization are revalidated afterwards.
+            key, references = prepared.snapshot.source_key, prepared.snapshot.references
         plan = prepared.plan if prepared is not None else None
-        if request.purpose == "execute" and prepared is None:
-            names = get_model_name_resolution_port()
-            frozen = await names.aresolve_frozen_model_identities(
-                session,
-                root["tenant_id"],
-                tuple(
-                    sorted(
-                        {
-                            int(item.target.target_id)
-                            for item in references
-                            if item.target.target_type == TargetType.MODEL
-                        }
-                    )
-                ),
-                identity=identity,
-            )
-            requested = tuple(
-                sorted(
-                    {
-                        item.requested_name
-                        for item in extract_app_reference_requests(declaration)
-                        if item.target_type == TargetType.MODEL
-                    }
-                )
-            )
-            plan = await names.aprepare_model_names_current(
-                session, root["tenant_id"], requested, identity=identity, frozen_models=frozen
-            )
-            await resolve_app_references(
-                session,
-                declaration,
-                identity=identity,
-                source_tenant_id=root["tenant_id"],
-                model_name_plan=plan,
-                frozen_references=references,
-            )
         payload = canonical_payload_json(
             _json_value(
                 {

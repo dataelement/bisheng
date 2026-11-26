@@ -29,6 +29,8 @@ from pathlib import Path
 from typing import Union
 from urllib.parse import urlparse
 
+from bisheng.common.utils.markdown_cmpnt.image_resources import image_bytes, route_export_resource
+
 logger = logging.getLogger(__name__)
 
 # Dependent Import and Error Handling
@@ -224,9 +226,11 @@ def _sanitize_url_attr_value(value: str, *, allow_anchor_only: bool, allow_data_
         return None
 
     if allow_data_uri and scheme == "data":
-        if normalized_value.lower().startswith("data:image/"):
-            return normalized_value
-        return None
+        try:
+            image_bytes(normalized_value)
+        except ValueError:
+            return None
+        return normalized_value
 
     allowed_schemes = SAFE_LINK_SCHEMES if allow_anchor_only else SAFE_RESOURCE_SCHEMES
     if scheme in allowed_schemes:
@@ -411,7 +415,7 @@ class MarkdownToPdfConverter:
                 f"Unsupported page format: {page_format}Supported Formats: {self.SUPPORTED_PAGE_FORMATS}"
             )
 
-        if not isinstance(margin_mm, (int, float)) or margin_mm < 0:
+        if not isinstance(margin_mm, int | float) or margin_mm < 0:
             raise MarkdownToPdfError("Margins must be non-negative")
 
         self.default_css = default_css or DEFAULT_CSS
@@ -601,7 +605,7 @@ class MarkdownToPdfConverter:
                 browser = playwright.chromium.launch()
                 try:
                     page = browser.new_page()
-                    page.route("file://*", lambda route: route.abort())
+                    page.route("**/*", route_export_resource)
                     page.set_content(html_content, wait_until="load", timeout=self.DEFAULT_TIMEOUT)
 
                     # If enabled MathJax, waiting for typesetting to complete
@@ -631,7 +635,7 @@ class MarkdownToPdfConverter:
                 browser = playwright.chromium.launch()
                 try:
                     page = browser.new_page()
-                    page.route("file://*", lambda route: route.abort())
+                    page.route("**/*", route_export_resource)
                     page.set_content(html_content, wait_until="load", timeout=self.DEFAULT_TIMEOUT)
 
                     # If enabled MathJax, waiting for typesetting to complete
@@ -810,7 +814,7 @@ class MarkdownToPdfConverter:
 
 
 # Backward compatibility function
-def render_markdown_to_html(md_text: str, css: str = None, enable_math: bool = False) -> str:
+def render_markdown_to_html(md_text: str, css: str | None = None, enable_math: bool = False) -> str:
     """Legacy functions for backward compatibility."""
     converter = MarkdownToPdfConverter(enable_math=enable_math)
     return converter.render_markdown_to_html(md_text, custom_css=css, enable_math=enable_math)
@@ -825,7 +829,7 @@ def html_to_pdf_with_playwright(html: str, output_path: str, format: str = "A4",
 def md_to_pdf(
     input_md: str,
     output_pdf: str,
-    css_file: str = None,
+    css_file: str | None = None,
     is_path: bool = False,
     enable_math: bool = False,
     page_format: str = "A4",
@@ -845,7 +849,7 @@ def md_to_pdf(
 
 def md_to_pdf_bytes(
     input_md: str,
-    css_file: str = None,
+    css_file: str | None = None,
     is_path: bool = False,
     enable_math: bool = False,
     page_format: str = "A4",

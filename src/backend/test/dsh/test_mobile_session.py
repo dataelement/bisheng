@@ -453,11 +453,11 @@ async def test_missing_current_key_can_be_published_if_still_missing(mobile):
 
 async def test_current_session_cas_uses_real_redis_cache_serialization(monkeypatch):
     import importlib
-    import pickle
     from unittest.mock import AsyncMock
 
     import fakeredis.aioredis
 
+    from bisheng.core.cache.serialization import decode_redis_value
     from bisheng.dsh.domain.services.mobile_session import RedisCurrentSession
     from bisheng.user.domain.const import USER_CURRENT_SESSION
 
@@ -469,12 +469,12 @@ async def test_current_session_cas_uses_real_redis_cache_serialization(monkeypat
     key = USER_CURRENT_SESSION.format(7)
     try:
         assert await current.replace(7, None, "first", 100)
-        assert pickle.loads(await redis.get(key)) == "first"
+        assert decode_redis_value(key, await redis.get(key)) == "first"
         assert 0 < await redis.ttl(key) <= 100
         assert not await current.replace(7, None, "stale", 100)
         assert not await current.replace(7, "other", "stale", 100)
         assert await current.replace(7, "first", "second", 200)
-        assert pickle.loads(await redis.get(key)) == "second"
+        assert decode_redis_value(key, await redis.get(key)) == "second"
         assert 100 < await redis.ttl(key) <= 200
         await redis.delete(key)
         assert not await current.replace(7, "second", "stale", 100)

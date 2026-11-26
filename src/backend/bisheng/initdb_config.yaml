@@ -1,5 +1,5 @@
 knowledges: # 知识库相关配置
-  loader_provider: "etl4lm" # 文档解析模型提供商，支持etl4lm、mineru、mineru_v4、paddle_ocr，默认为etl4lm
+  loader_provider: "etl4lm" # 文档解析模型提供商，支持etl4lm、mineru、mineru_v4、paddle_ocr、minicpm_ocr，默认为etl4lm
   etl4lm:
     # 文档解析模型服务配置，包括OCR、版式分析、表格识别、公式识别等
     url: ""  # http://192.168.106.12:8180/v1/etl4llm/predict
@@ -40,6 +40,27 @@ knowledges: # 知识库相关配置
       x-api-key: "11"
     request_kwargs:
       useChartRecognition: false
+  minicpm_ocr:
+    # MiniCPM-OCR 1.3B，通过 OpenAI 兼容端点提供服务（vLLM / SGLang / llama.cpp 等）
+    # 示例: vllm serve openbmb/MiniCPM-OCR-1.0 --served-model-name minicpm-ocr
+    base_url: ""  # http://127.0.0.1:8000/v1
+    model: "minicpm-ocr"
+    api_key: ""
+    prompt: "Text Recognition:"  # 可选 Table Recognition: / Formula Recognition:
+    timeout: 120
+    # 瞬时拥塞（限流、5xx、连接失败）采用指数退避重试
+    max_retries: 3
+    retry_backoff: 1
+    concurrency: 4  # 每页一次请求，按页并发
+    dpi: 200  # PDF 逐页渲染分辨率
+    max_tokens: 4096
+    temperature: 0
+    # 请求级多模态处理参数，默认不发送：vLLM 需启动时加 --trust-request-mm-kwargs 才接受，
+    # 官方部署已在服务端固定 --mm-processor-kwargs '{"downsample_mode":"4x"}'
+    mm_processor_kwargs: null
+    # 额外的 chat/completions 请求字段，例如 {"chat_template_kwargs": {"enable_thinking": false}}
+    request_kwargs: {}
+    headers: {}
   version_management:
     enabled: false
     simhash_similarity_threshold: 0.85

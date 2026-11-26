@@ -51,10 +51,8 @@ async def get_policy_admin(request: Request):
 
 
 def _missing_row_visible_to_everyone() -> bool:
-    """Without DSH every online model is offered until an administrator narrows it."""
-    from bisheng.common.services.config_service import settings
-
-    return not settings.dsh.enabled
+    """Every online model is offered until an administrator narrows it."""
+    return True
 
 
 @router.get("/admin/models/{model_id}/visibility")

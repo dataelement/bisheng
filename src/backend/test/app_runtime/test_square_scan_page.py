@@ -93,13 +93,13 @@ def square_env(build_list_env, monkeypatch):
 
     monkeypatch.setattr("bisheng.api.services.workflow.batch_check_business_actions", _batch_check)
 
-    def only_allow(resource_ids, actions=("use", "edit", "share")):
+    def only_allow(resource_ids, actions=("visible", "edit", "share")):
         grant_all["value"] = False
         granted.clear()
         for resource_id in resource_ids:
             granted[str(resource_id)] = set(actions)
 
-    def allow(resource_ids, actions=("use", "edit", "share")):
+    def allow(resource_ids, actions=("visible", "edit", "share")):
         grant_all["value"] = False
         for resource_id in resource_ids:
             granted.setdefault(str(resource_id), set()).update(actions)
@@ -137,51 +137,34 @@ def square_env(build_list_env, monkeypatch):
 
 
 async def test_square_buckets_ask_only_their_visibility_action(square_env, tenant_scope):
-    """Every bucket is asked for exactly one action — ``use`` for hosted apps too.
-
-    The square stopped asking for ``edit`` / ``share`` up front when per-card
-    actions went lazy (``additional_actions=()``, beta1 ``7559c9871``): the
-    answer would be discarded with the action map. The hosted-application
-    override may swap *which* action decides visibility (AC-06: ``use``, the
-    entry's own decision) but must not re-add extras the caller dropped.
-
-    Both entries are asserted: the tagged tab decides with ``use`` for every
-    type, the "uncategorised" tab keeps ``visible`` for workflows / assistants
-    and still asks ``use`` for hosted apps.
-    """
+    """Every resource type asks only visibility before lazy card actions load."""
     tenant_scope(ROOT_TENANT_ID)
     square_env.seed_app(name="hosted")
     square_env.seed_flow(name="wf")
     square_env.seed_assistant(name="asst")
 
     await _tagged_tab(square_env)
-    assert dict(square_env.asked_actions) == {"app": ("use",), "workflow": ("use",), "assistant": ("use",)}
+    assert dict(square_env.asked_actions) == {"app": ("visible",), "workflow": ("visible",), "assistant": ("visible",)}
 
     square_env.asked_actions.clear()
     await _uncategorized_tab(square_env)
-    assert dict(square_env.asked_actions) == {"app": ("use",), "workflow": ("visible",), "assistant": ("visible",)}
+    assert dict(square_env.asked_actions) == {"app": ("visible",), "workflow": ("visible",), "assistant": ("visible",)}
 
 
 async def test_kept_filter_per_row_type(square_env, tenant_scope):
-    """A row visible only through ``use`` survives; ``visible`` alone does not.
-
-    This is AC-06's machine guard. The public entry decides with
-    ``check_business_action("app", id, actor, "use")``; if the square kept using
-    ``visible`` — a different FGA relation — a user granted ``editor`` but not
-    ``use`` would see a card they cannot open.
-    """
+    """Every card requires visibility; concrete management actions alone cannot admit it."""
     tenant_scope(ROOT_TENANT_ID)
     app = square_env.seed_app(name="hosted")
     flow = square_env.seed_flow(name="wf")
 
-    square_env.only_allow([app.id], actions=("use", "edit"))
-    square_env.allow([flow.id], actions=("use", "edit", "share"))
+    square_env.only_allow([app.id], actions=("visible", "edit"))
+    square_env.allow([flow.id], actions=("visible", "edit", "share"))
     assert {row["id"] for row in await _tagged_tab(square_env)} == {app.id, flow.id}
 
-    # Grant the hosted app everything except ``use`` — it must drop out while
+    # Grant the hosted app everything except visibility — it must drop out while
     # the workflow, judged by its own action, stays.
     square_env.only_allow([app.id], actions=("edit",))
-    square_env.allow([flow.id], actions=("use", "edit", "share"))
+    square_env.allow([flow.id], actions=("visible", "edit", "share"))
     assert {row["id"] for row in await _tagged_tab(square_env)} == {flow.id}
 
 

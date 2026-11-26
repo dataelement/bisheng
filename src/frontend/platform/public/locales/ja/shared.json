@@ -118,6 +118,32 @@
           "queueing": "待機中",
           "timeout": "タイムアウト",
           "violation": "違反"
+        },
+        "empty": "—",
+        "uncertain": "操作結果を確認できませんでした。このダイアログを閉じて一覧を更新し、結果を確認してください。",
+        "actions": {
+          "preview": "プレビュー",
+          "download": "ダウンロード",
+          "primary": "主バージョンに設定",
+          "delete": "削除"
+        },
+        "confirm": {
+          "primary": {
+            "title": "主バージョンを切り替え",
+            "description": "V{{version}} が主バージョンになり、RAG 検索とチャットに即時反映されます。"
+          },
+          "delete": {
+            "title": "履歴バージョンを削除",
+            "description": "V{{version}} は完全に削除されます。元に戻せません。"
+          }
+        },
+        "feedback": {
+          "primary": "主バージョンを更新しました",
+          "delete": "バージョンを削除しました"
+        },
+        "download_feedback": {
+          "no_url": "ダウンロードリンクの取得に失敗しました",
+          "failed": "ダウンロードに失敗しました"
         }
       }
     },

@@ -459,9 +459,10 @@ class UserService:
 
         validate_account(user.external_id)
         validate_nickname(user.user_name)
-        db_user = User.model_validate(user)
+        # Validate the stored hash, not the RSA ciphertext (344 characters).
+        password_hash = cls.decrypt_md5_password_strict(user.password)
+        db_user = User.model_validate(user, update={"password": password_hash})
         db_user.source, db_user.delete, db_user.disable_source = "local", 0, None
-        db_user.password = cls.decrypt_md5_password_strict(user.password)
         # Under JudgmentadminDoes the user exist
         assigned_tenant_id = await cls._resolve_registration_tenant_id()
 
@@ -480,6 +481,10 @@ class UserService:
                 tenant_id=assigned_tenant_id,
             )
             await cls._ensure_user_guest_department_membership(db_user.user_id)
+            if settings.multi_tenant.enabled:
+                from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
+
+                await UserTenantSyncService.sync_user(db_user.user_id)
             await cls.areconcile_first_user_dashboard_permissions(db_user.user_id)
             return db_user
         finally:

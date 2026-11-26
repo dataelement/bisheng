@@ -2,7 +2,6 @@
 
 import asyncio
 import hashlib
-import pickle
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -24,6 +23,7 @@ from bisheng.common.errcode.dsh import (
     DshSessionExpiredError,
     DshSessionRevokedError,
 )
+from bisheng.core.cache.serialization import decode_redis_value, encode_redis_value
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.infrastructure.token_keys import successor_mobile_refresh_token
 
@@ -91,20 +91,24 @@ class RedisCurrentSession:
         await redis.aset(USER_CURRENT_SESSION.format(user_id), token, expiration=ttl)
 
     async def replace(self, user_id: int, expected: str | None, token: str, ttl: int) -> bool:
-        """Compare and publish atomically, using RedisCache's existing pickle format."""
+        """Authenticate first, then atomically compare the exact observed ciphertext."""
         from bisheng.core.cache.redis_manager import get_redis_client
         from bisheng.user.domain.const import USER_CURRENT_SESSION
 
         redis = await get_redis_client()
         key = USER_CURRENT_SESSION.format(user_id)
         await redis.acluster_nodes(key)
+        observed = await redis.async_connection.get(key)
+        current = decode_redis_value(key, observed) if observed is not None else None
+        if current != expected:
+            return False
         result = await redis.async_connection.eval(
             _REPLACE_CURRENT_SESSION,
             1,
             key,
-            "missing" if expected is None else "present",
-            pickle.dumps(expected) if expected is not None else b"",
-            pickle.dumps(token),
+            "missing" if observed is None else "present",
+            observed if observed is not None else b"",
+            encode_redis_value(key, token),
             ttl,
         )
         return bool(result)

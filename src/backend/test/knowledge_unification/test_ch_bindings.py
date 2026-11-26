@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
-from test.knowledge_unification import test_ch_repository as fixtures
 
 from bisheng.channel.domain.models import channel_knowledge_sync as sync_module
 from bisheng.channel.domain.models.channel import Channel
@@ -23,23 +22,27 @@ from bisheng.channel.domain.services import channel_service as service_module
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import ChannelCreationRequestConflictError, ChannelNotFoundError
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.models import space_channel_member as member_module
 from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.common.repositories.implementations.space_channel_member_repository_impl import (
     SpaceChannelMemberRepositoryImpl,
 )
+from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.resource_reference.application.source_sync import refresh_root
 from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
+from test.knowledge_unification import test_ch_repository as fixtures
 
 store = fixtures.store
 tenant = fixtures.tenant
@@ -51,6 +54,7 @@ async def business(store, monkeypatch):
         await connection.run_sync(lambda conn: Knowledge.__table__.create(conn))
         await connection.run_sync(lambda conn: KnowledgeFile.__table__.create(conn))
         for model in (
+            Tenant,
             KnowledgeSpaceDeleteJob,
             BusinessReferenceSet,
             BusinessResourceReference,
@@ -64,6 +68,7 @@ async def business(store, monkeypatch):
             yield session
 
     async with sessions() as session, session.begin():
+        session.add(Tenant(id=101, tenant_code="leaf", tenant_name="Leaf"))
         for ident in (10, 20):
             session.add(Knowledge(id=ident, tenant_id=101, user_id=7, name=f"space-{ident}", type=3))
             session.add(
@@ -87,6 +92,7 @@ async def business(store, monkeypatch):
     monkeypatch.setattr(service_module, "get_reference_binding_runtime", AsyncMock(return_value=runtime), raising=False)
     monkeypatch.setattr(service_module, "get_f048_resource_adapter", AsyncMock(return_value=adapter))
     monkeypatch.setattr(service_module, "require_business_action", AsyncMock())
+    monkeypatch.setattr(service_module, "notify_reference_sync", AsyncMock())
     # F009 policy loading is upstream of these native reference transactions.
     monkeypatch.setattr(ChannelService, "_assert_channel_creation_quota", AsyncMock())
     monkeypatch.setattr(
@@ -124,12 +130,23 @@ def config(*spaces, enabled=True, folder=None, sub=None):
 
 
 async def create(context, *, sync=None, key=None, name="created"):
-    return await context.service.create_channel(
+    before = await state(context)
+    result = await context.service.create_channel(
         CreateChannelRequest(
             name=name, visibility="public", knowledge_sync=config(10) if sync is None else sync, creation_request_id=key
         ),
         context.user,
     )
+
+    assert await source_rows(context, result.id) == [
+        row for row in before["business_resource_reference"] if row["source_id"] == result.id
+    ]
+    await refresh(context, result.id)
+    return result
+
+
+async def refresh(context, channel_id):
+    await refresh_root(101, "channel_sync", channel_id, session_factory=context.sessions)
 
 
 async def state(context):
@@ -161,17 +178,15 @@ async def test_create_contains_root_creator_complete_source_and_targets(business
         ("main.folder", "30"),
     }
     assert len([row for row in value["space_channel_member"] if row["business_id"] == root.id]) == 1
-    assert len([row for row in value["business_reference_set"] if row["source_id"] == root.id]) == 2
+    assert len([row for row in value["business_reference_set"] if row["source_id"] == root.id]) == 1
 
 
-async def test_binding_failure_leaves_no_channel_creator_or_configuration(business, monkeypatch):
-    before = await state(business)
-    monkeypatch.setattr(
-        business.runtime, "aapply_source_bindings", AsyncMock(side_effect=RuntimeError("binding failed"))
-    )
-    with pytest.raises(RuntimeError, match="binding failed"):
-        await create(business)
-    assert await state(business) == before
+async def test_legacy_binding_failure_does_not_block_channel_creation(business, monkeypatch):
+    binding = AsyncMock(side_effect=RuntimeError("binding failed"))
+    monkeypatch.setattr(business.runtime, "aapply_source_bindings", binding)
+    root = await create(business)
+    assert any(row["id"] == root.id for row in (await state(business))["channel"])
+    binding.assert_not_awaited()
 
 
 async def test_zero_source_is_indexed_and_missing_existing_index_is_not_bootstrapped(business):
@@ -181,8 +196,8 @@ async def test_zero_source_is_indexed_and_missing_existing_index_is_not_bootstra
         row["source_id"] == root.id and row["source_version"] == "current" and row["ready"]
         for row in value["business_reference_set"]
     )
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await business.service.update_channel("own", UpdateChannelRequest(name="cannot bootstrap"), business.user)
+    await business.service.update_channel("own", UpdateChannelRequest(name="unindexed edit"), business.user)
+    assert not [row for row in (await state(business))["business_reference_set"] if row["source_id"] == "own"]
 
 
 async def test_existing_legacy_placeholder_can_be_manually_rebound_without_accepting_new_ones(business):
@@ -207,7 +222,8 @@ async def test_existing_legacy_placeholder_can_be_manually_rebound_without_accep
     )
     changed = [row for row in (await state(business))["channel_knowledge_sync"] if row["channel_id"] == root.id]
     assert len(changed) == 1 and changed[0]["folder_id"] == "30"
-    assert {row.target_id for row in await source_rows(business, root.id)} == {"10", "30"}
+    await refresh(business, root.id)
+    assert {row["target_id"] for row in await source_rows(business, root.id)} == {"10", "30"}
 
 
 async def test_pause_retains_targets_and_replacement_uuids_do_not_duplicate_refs(business):
@@ -230,6 +246,7 @@ async def test_explicit_remove_releases_but_filter_rule_change_keeps_selection(b
     await business.service.update_channel(root.id, UpdateChannelRequest(filter_rules=[]), business.user)
     assert len(await source_rows(business, root.id)) == 1
     await business.service.update_channel(root.id, UpdateChannelRequest(knowledge_sync=config()), business.user)
+    await refresh(business, root.id)
     assert await source_rows(business, root.id) == []
 
 
@@ -255,18 +272,20 @@ async def test_old_invalid_retains_and_partial_repair_new_slot_cannot_borrow_it(
     root = await create(business)
     await deleted_space(business)
     await business.service.update_channel(root.id, UpdateChannelRequest(knowledge_sync=config(10, 20)), business.user)
+    await refresh(business, root.id)
     assert {row["target_id"] for row in await source_rows(business, root.id)} == {"10", "20"}
     before = await state(business)
-    with pytest.raises(ResourceReferenceInvalidError):
+    with pytest.raises(SpacePermissionDeniedError):
         await business.service.update_channel(
             root.id, UpdateChannelRequest(knowledge_sync=config(10, sub="new")), business.user
         )
     assert await state(business) == before
     await business.service.update_channel(root.id, UpdateChannelRequest(knowledge_sync=config(20)), business.user)
+    await refresh(business, root.id)
     assert {row["target_id"] for row in await source_rows(business, root.id)} == {"20"}
 
 
-async def test_configuration_drift_is_not_saved_as_a_repair(business):
+async def test_stale_auxiliary_configuration_does_not_block_real_selection(business):
     root = await create(business)
     async with business.sessions() as session, session.begin():
         await session.execute(
@@ -274,10 +293,9 @@ async def test_configuration_drift_is_not_saved_as_a_repair(business):
             .where(ChannelKnowledgeSync.channel_id == root.id)
             .values(knowledge_space_id="20")
         )
-    before = await state(business)
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await business.service.update_channel(root.id, UpdateChannelRequest(knowledge_sync=config(10)), business.user)
-    assert await state(business) == before
+    await business.service.update_channel(root.id, UpdateChannelRequest(knowledge_sync=config(10)), business.user)
+    configs = [row for row in (await state(business))["channel_knowledge_sync"] if row["channel_id"] == root.id]
+    assert [row["knowledge_space_id"] for row in configs] == ["10"]
 
 
 async def test_dismiss_projection_failure_preserves_every_sql_row_then_success_removes_refs(business):
@@ -293,6 +311,7 @@ async def test_dismiss_projection_failure_preserves_every_sql_row_then_success_r
     assert not any(row["id"] == root.id for row in value["channel"])
     assert not any(row["channel_id"] == root.id for row in value["channel_knowledge_sync"])
     assert not any(row["business_id"] == root.id for row in value["space_channel_member"])
+    await refresh(business, root.id)
     assert await source_rows(business, root.id) == []
 
 

@@ -5,6 +5,9 @@
   write carries ``tenant_id``, ``user_id`` and ``item_id`` metadata, and every
   search filters on the scope produced by ``build_scope_filter``.
 - Does not reuse ``core/vectorstore/multi_retriever.py``; fusion is in search.py.
+- The keyword search looks for jieba words of the query, stopwords removed,
+  each as a phrase (``keyword_terms.py``): the index splits Chinese into single
+  characters, and a plain ``match`` would find items sharing one character.
 - Embedding uses the tenant's knowledge default embedding model, called as the
   memory owner with application type ``memory``; each call times out after 3 s.
 """
@@ -16,6 +19,7 @@ import asyncio
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.llm.domain.services.llm import LLMService
 from bisheng.memory.domain.ports import IndexHit, MemoryContext, VectorUnconfigured, build_scope_filter
+from bisheng.memory.domain.services.keyword_terms import phrase_query, query_terms
 
 ES_INDEX_NAME = "bisheng_memory_item"
 EMBED_TIMEOUT_SECONDS = 3.0
@@ -134,11 +138,18 @@ class PlatformMemoryIndex:
             await asyncio.to_thread(milvus.delete, expr=_milvus_scope(scope))
 
     async def keyword_search(self, scope: dict, query: str, limit: int) -> list[IndexHit]:
+        # jieba words without stopwords, each as a phrase (keyword_terms.py). The
+        # first call loads the jieba dictionary, so it runs off the event loop.
+        terms = await asyncio.to_thread(query_terms, query)
+        if not terms:
+            return []
         flt = [
             {"term": {"metadata.tenant_id": scope["tenant_id"]}},
             {"term": {"metadata.user_id": scope["user_id"]}},
         ]
-        results = await self._get_es().asimilarity_search_with_score(query, k=limit, filter=flt)
+        results = await self._get_es().asimilarity_search_with_score(
+            query, k=limit, filter=flt, custom_query=phrase_query(terms)
+        )
         return [IndexHit(item_id=doc.metadata["item_id"], score=float(score)) for doc, score in results]
 
     async def vector_search(self, ctx: MemoryContext, scope: dict, query: str, limit: int) -> list[IndexHit]:

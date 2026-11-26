@@ -15,7 +15,7 @@ from bisheng.tool.domain.schemas import TestToolReq
 from bisheng.tool.domain.services.egress import map_tool_egress_error
 from bisheng.tool.domain.services.openapi import OpenApiSchema
 from bisheng.tool.domain.services.sandbox_conf_service import SandboxConfService
-from bisheng.tool.domain.services.test_openapi import TestOpenApiTools
+from bisheng.tool.domain.services.test_openapi import TestOpenApiTools, run_saved_openapi_test
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng.tool.domain.services.web_search import SettingsWrite
 from bisheng.utils import get_request_ip
@@ -25,18 +25,11 @@ from bisheng_langchain.utils.safe_http_errors import RequestFailed, RequestTimeo
 router = APIRouter(prefix="/tool", tags=["Tool"])
 
 
-async def _require_search_admin(user: UserPayload):
-    from bisheng.utils.http_middleware import _check_is_global_super
-
-    if not user.is_global_super or not await _check_is_global_super(user.user_id):
-        raise UnAuthorizedError()
-
-
 @router.get("/{tool_type_id}/web-search/settings")
 async def get_web_search_settings(tool_type_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     from bisheng.tool.domain.services.web_search import get_settings
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await get_settings(tool_type_id))
 
 
@@ -49,7 +42,7 @@ async def put_web_search_settings(
 
     from bisheng.tool.domain.services.web_search import put_settings
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     try:
         validated = SettingsWrite.model_validate(req)
     except ValidationError:
@@ -63,7 +56,7 @@ async def import_web_search_schema(
 ):
     from bisheng.tool.domain.services.web_search import schema_preview
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await schema_preview(tool_type_id, req))
 
 
@@ -73,7 +66,7 @@ async def test_web_search(
 ):
     from bisheng.tool.domain.services.web_search import search_preview
 
-    await _require_search_admin(login_user)
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
     return resp_200(data=await search_preview(tool_type_id, req))
 
 
@@ -81,13 +74,13 @@ async def test_web_search(
 async def get_tool_list(
     *,
     is_preset: int | None = None,
-    action: Literal["visible", "use"] = "visible",
+    action: Literal["visible"] = "visible",
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Query all visibletool Vertical"""
     res = await ToolServices(login_user=login_user).get_tool_list(
         is_preset,
-        "visible" if action == "use" else action,
+        action,
     )
     return resp_200(data=res)
 
@@ -187,6 +180,19 @@ async def tool_run(*, login_user: UserPayload = Depends(UserPayload.get_login_us
     except (DestinationDenied, RequestFailed, RequestTimeout, ResponseTooLarge) as exc:
         raise map_tool_egress_error(exc) from None
     return resp_200(data=resp)
+
+
+@router.post("/{tool_type_id}/operations/{operation_id}/test")
+async def saved_tool_run(
+    tool_type_id: int,
+    operation_id: int,
+    request_params: dict[str, Any] = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    if not login_user.is_global_super:
+        raise UnAuthorizedError()
+    result = await run_saved_openapi_test(login_user, tool_type_id, operation_id, request_params)
+    return resp_200(data=result)
 
 
 @router.post("/mcp/test")

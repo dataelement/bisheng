@@ -22,13 +22,12 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.schemas.telemetry.event_data_schema import DeleteMessageSessionEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, bypass_tenant_filter_if
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
-from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
@@ -46,6 +45,11 @@ def _message_author(message: ChatMessage) -> tuple[int, int] | None:
     if message.is_bot or not message.tenant_id or not message.user_id:
         return None
     return message.tenant_id, message.user_id
+
+
+def slides_preview_key(object_name: str) -> str:
+    """Where the PDF preview of a kept slide deck is cached: next to the deck."""
+    return f"{object_name}.preview.pdf"
 
 
 class ChatSessionService:
@@ -256,6 +260,8 @@ class ChatSessionService:
             if not object_names:
                 return
             minio_client = await get_minio_storage()
+            # A deck may also hold the PDF its preview was converted to.
+            object_names |= {slides_preview_key(n) for n in object_names if n.lower().endswith((".ppt", ".pptx"))}
             for object_name in object_names:
                 try:
                     await minio_client.remove_object(object_name=object_name)
@@ -265,7 +271,9 @@ class ChatSessionService:
             logger.exception("failed to clean up attachments of chat {}", chat_id)
 
     @staticmethod
-    async def resolve_attachment_url(chat_id: str, file_id: str, login_user: UserPayload) -> str:
+    async def resolve_attachment_url(
+        chat_id: str, file_id: str, login_user: UserPayload, *, alias_key: str | None = None
+    ) -> str:
         """Issue a fresh link for one attachment of one conversation.
 
         The link handed out at upload time expires, so the client comes back
@@ -273,9 +281,14 @@ class ChatSessionService:
         conversation's messages and never taken from the caller -- signing a
         caller-supplied name would open the whole bucket to anyone with an
         account.
+
+        ``alias_key`` (F004): when no stored attachment has this ``file_id``, the
+        newest one whose ``alias_key`` field equals it is signed instead. The
+        unified runtime passes ``workspace_file_id``: the id a generated file had
+        in the live events of its run, kept on the answer's copy.
         """
         owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
-        return await ChatSessionService._sign_attachment(chat_id, file_id, owner)
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner, alias_key=alias_key)
 
     @staticmethod
     async def resolve_audit_attachment_url(chat_id: str, file_id: str) -> str:
@@ -290,9 +303,23 @@ class ChatSessionService:
         return await ChatSessionService._sign_attachment(chat_id, file_id, owner, only_source="code_interpreter")
 
     @staticmethod
-    async def _sign_attachment(chat_id: str, file_id: str, owner, *, only_source: str | None = None) -> str:
+    async def _sign_attachment(
+        chat_id: str, file_id: str, owner, *, only_source: str | None = None, alias_key: str | None = None
+    ) -> str:
+        object_name = await ChatSessionService._attachment_object_name(
+            chat_id, file_id, owner, only_source=only_source, alias_key=alias_key
+        )
+        minio_client = await get_minio_storage()
+        return await minio_client.get_share_link(object_name)
+
+    @staticmethod
+    async def _attachment_object_name(
+        chat_id: str, file_id: str, owner, *, only_source: str | None = None, alias_key: str | None = None
+    ) -> str:
+        """Object name of one attachment, read from the conversation's own rows, or NotFound."""
         messages = await WorkflowFileRepository.attachment_messages(chat_id)
-        for attachment in ChatSessionService._attachment_objects(messages, owner):
+        attachments = ChatSessionService._attachment_objects(messages, owner)
+        for attachment in attachments:
             if str(attachment.get("file_id")) != str(file_id):
                 continue
             if only_source is not None and attachment.get("source") != only_source:
@@ -304,10 +331,52 @@ class ChatSessionService:
                 # Written before attachments were made permanent: the file is
                 # gone with the temp bucket. Say so rather than guess.
                 break
-            minio_client = await get_minio_storage()
-            return await minio_client.get_share_link(object_name)
+            return object_name
+        else:
+            if alias_key:
+                # No attachment has this id. Rows are in insertion order, so the
+                # last match is the newest answer that kept a copy of that file.
+                for attachment in reversed(attachments):
+                    if str(attachment.get(alias_key) or "") != str(file_id) or attachment.get("_workflow_image"):
+                        continue
+                    if only_source is not None and attachment.get("source") != only_source:
+                        continue
+                    if not attachment.get("object_name"):
+                        continue
+                    return attachment["object_name"]
 
         raise NotFoundError.http_exception()
+
+    @staticmethod
+    async def slides_preview(
+        chat_id: str, file_id: str, login_user: UserPayload, share_link=None, *, alias_key: str | None = None
+    ) -> dict:
+        """PDF preview of a ``.ppt``/``.pptx`` kept on a conversation.
+
+        The reader is the conversation owner, or anyone holding a share link to
+        this conversation -- the same rule as reading its messages. The deck is
+        found on the conversation's own rows, never taken from the caller.
+        """
+        from bisheng.linsight.domain.services.artifact_preview_service import is_slide_key, preview_slides_as_pdf
+
+        shared = share_link is not None and share_link.resource_id == chat_id
+        if shared:
+            with bypass_tenant_filter():
+                owner = await MessageSessionDao.async_get_one(chat_id)
+            if owner is None or owner.is_delete:
+                raise NotFoundError.http_exception()
+        else:
+            owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        with bypass_tenant_filter_if(shared):
+            object_name = await ChatSessionService._attachment_object_name(chat_id, file_id, owner, alias_key=alias_key)
+        if not is_slide_key(object_name):
+            raise NotFoundError.http_exception()
+        return await preview_slides_as_pdf(
+            object_name,
+            preview_key=slides_preview_key(object_name),
+            lock_id=f"chat:{chat_id}:{file_id}",
+            log_tag=f"chat_id={chat_id} file_id={file_id}",
+        )
 
     @staticmethod
     async def delete_session(chat_id: str, login_user: UserPayload, request_ip: str) -> None:
@@ -367,25 +436,15 @@ class ChatSessionService:
         flow_ids: list = []
         user_ids: list = []
 
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+        from bisheng.utils.async_utils import run_async_safe
 
         if task_id:
-            if not login_user.is_admin():
-                task = MarkTaskDao.get_task_byid(task_id)
-                if str(login_user.user_id) not in task.process_users.split(","):
-                    raise UnAuthorizedError()
-                if user_groups:
-                    task = MarkTaskDao.get_task_byid(task_id)
-                    group_flow_ids = task.app_id.split(",")
-                    if not group_flow_ids:
-                        return PageList(list=[], total=0)
-                else:
-                    task = MarkTaskDao.get_task_byid(task_id)
-                    if str(login_user.user_id) not in task.process_users.split(","):
-                        raise UnAuthorizedError()
-                    group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
-            else:
-                group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+            from bisheng.chat_session.domain.services.mark_read_authorization import require_mark_task_reader
+
+            task = run_async_safe(require_mark_task_reader(task_id, login_user))
+            group_flow_ids = [value.strip() for value in task.app_id.split(",") if value.strip()]
+            if not group_flow_ids:
+                return PageList(list=[], total=0)
 
         if keyword:
             flows = WorkflowHistoryRepository.search_by_name(keyword)
@@ -402,11 +461,28 @@ class ChatSessionService:
 
         if group_flow_ids:
             if flow_ids and keyword:
-                flow_ids = flow_ids
+                flow_ids = sorted(set(flow_ids) & set(group_flow_ids))
+                if not flow_ids:
+                    return PageList(list=[], total=0)
             else:
                 flow_ids = group_flow_ids
 
-        res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
+        res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids, include_delete=False)
+        from bisheng.chat_session.domain.services.session_read_authorization import require_session_read
+
+        authorized = []
+        for session in res:
+            if task_id:
+                if session.is_delete or session.tenant_id != task.tenant_id or session.flow_id not in group_flow_ids:
+                    continue
+            else:
+                try:
+                    run_async_safe(require_session_read(session, login_user))
+                except UnAuthorizedError:
+                    continue
+            if flow_type is None or session.flow_type == flow_type:
+                authorized.append(session)
+        res = authorized
         total = len(res)
 
         chat_status_ids = [one.chat_id for one in res]
@@ -442,6 +518,7 @@ class ChatSessionService:
                     continue
             result.append(tmp)
 
+        total = len(result)
         result = result[(page_num - 1) * page_size : page_num * page_size]
         return PageList(list=result, total=total)
 

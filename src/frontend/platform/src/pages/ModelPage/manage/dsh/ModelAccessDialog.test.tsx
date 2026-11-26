@@ -95,12 +95,14 @@ it('preserves the selected-member draft when the all-members switch collapses an
     expect(saveModelVisibility).not.toHaveBeenCalled()
 })
 
-it('refuses to limit a model to nobody', async () => {
+it('saves an empty grant and explains that nobody can use the model', async () => {
     vi.mocked(getModelVisibility).mockResolvedValue({ version: 1, everyone: true, subjects: [] })
     const user = userEvent.setup()
     render(<ModelAccessDialog model={{ id: 7, name: 'Model' }} onClose={vi.fn()} />)
     await user.click(await screen.findByRole('switch', { name: 'model:model.currentTenantEveryone' }))
     expect(screen.getByRole('note')).toHaveTextContent('dsh.unified.selectedVisibleEmpty')
-    expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeDisabled()
-    expect(saveModelVisibility).not.toHaveBeenCalled()
+    const save = screen.getByRole('button', { name: 'dsh.unified.save' })
+    expect(save).toBeEnabled()
+    await user.click(save)
+    await waitFor(() => expect(saveModelVisibility).toHaveBeenCalledWith(7, { version: 1, everyone: false, subjects: [] }))
 })

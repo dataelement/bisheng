@@ -134,6 +134,28 @@ def test_first_boot_race_returns_winner(monkeypatch):
     assert m._load_or_create_db_secret() == "winner-secret"
 
 
+@pytest.mark.parametrize("legacy", sorted(m.LEGACY_JWT_SECRETS))
+def test_public_legacy_db_secret_fails_closed(monkeypatch, legacy):
+    from bisheng.common.models import config as config_mod
+
+    monkeypatch.setattr(config_mod.ConfigDao, "get_config", classmethod(lambda cls, key: SimpleNamespace(value=legacy)))
+    with pytest.raises(ValueError, match="publicly disclosed") as caught:
+        m._load_or_create_db_secret()
+    assert legacy not in str(caught.value)
+
+
+def test_first_boot_race_rejects_public_legacy_winner(monkeypatch):
+    from bisheng.common.models import config as config_mod
+
+    legacy = sorted(m.LEGACY_JWT_SECRETS)[0]
+    reads = iter([None, SimpleNamespace(value=legacy)])
+    monkeypatch.setattr(config_mod.ConfigDao, "get_config", classmethod(lambda cls, key: next(reads)))
+    session = _FakeSession(fail_commit=IntegrityError("insert", {}, Exception("dup")))
+    monkeypatch.setattr("bisheng.core.database.get_sync_db_session", lambda: session)
+    with pytest.raises(ValueError, match="publicly disclosed"):
+        m._load_or_create_db_secret()
+
+
 def test_settings_ships_no_default_secret():
     from bisheng.core.config.settings import Settings
 

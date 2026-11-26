@@ -5,8 +5,9 @@ import { useKnowledgeCandidates } from '@/components/bs-comp/selectComponent/use
 import { Select } from '@bisheng/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useKnowledgeReferenceErrors } from '../../hooks/useKnowledgeReferenceErrors';
 
-export default function KnowledgeQaSelectItem({ data, onChange, onValidate, onVarEvent, i18nPrefix }) {
+export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const { t } = useTranslation('flow');
     const selectLabels = useSelectLabels();
     const candidates = useKnowledgeCandidates('qa');
@@ -17,6 +18,7 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate, onVa
     // Disabled placeholders retain labels and IDs without enabling a new binding.
     const displayed = [...options, ...value.filter(item => !known.has(String(item.value))).map(item => ({ ...item, disabled: true }))];
     const [error, setError] = useState(false);
+    const referenceErrors = useKnowledgeReferenceErrors(nodeId, data.key, value.map(item => String(item.value)));
     useEffect(() => {
         onValidate(() => {
             const missing = data.required && !data.value.length;
@@ -35,7 +37,7 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate, onVa
             {data.required && <span className="text-red-500">*</span>}{t(`${i18nPrefix}label`)}
         </Label>
         <Select {...selectLabels} id="knowledge-qaselect" multiple showSearch className="nodrag"
-            status={error ? 'error' : 'default'} value={value.map(item => item.value)} options={displayed}
+            status={error || referenceErrors.length ? 'error' : 'default'} value={value.map(item => item.value)} options={displayed}
             placeholder={t(`${i18nPrefix}placeholder`)} aria-label={t(`${i18nPrefix}label`)}
             onChange={(ids) => onChange(ids.map(id => {
                 const old = data.value.find(item => String(item.key) === String(id));
@@ -43,6 +45,9 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate, onVa
             }))}
             onOpenChange={open => { if (open) candidates.refresh(); }} onSearch={candidates.search}
             onLoadMore={candidates.loadMore} loading={candidates.loading} loadingMore={candidates.loadingMore} />
+        {referenceErrors.map(item => <p key={item.target_id} role="alert" className="text-xs text-red-500">
+            {value.find(value => String(value.value) === item.target_id)?.label} (ID: {item.target_id}): {t('referencePreflight.reselect')}
+        </p>)}
         {value.some(item => !known.has(String(item.value))) && <p className="text-xs text-text-3">{t('references.unconfirmed', { ns: 'bs' })}</p>}
     </div>;
 }

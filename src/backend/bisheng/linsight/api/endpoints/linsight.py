@@ -50,6 +50,7 @@ from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStat
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
+    get_run_thread_id,
 )
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOPDao
 from bisheng.linsight.domain.schemas.linsight_schema import (
@@ -517,6 +518,31 @@ async def user_input(
     return resp_200(data=True, message="User input submitted")
 
 
+async def _request_unified_stop(session_version_model) -> None:
+    """Ask the unified runtime to stop this run."""
+    from bisheng.workstation.domain.services import run_send
+
+    try:
+        outcome = await run_send.stop_conversation_run(
+            session_version_model.session_id,
+            session_version_id=session_version_model.id,
+            # The record is terminated by the caller, as before.
+            terminate_record=False,
+        )
+    except Exception:
+        # The termination below still stops the run through its record; only the
+        # conversation lease may stay held until it lapses or the run ends.
+        logger.exception(
+            "unified stop failed for session version {} conversation {}",
+            session_version_model.id,
+            session_version_model.session_id,
+        )
+        return
+    logger.info(
+        "terminate-execute: unified stop of session version {} -> {}", session_version_model.id, outcome["status"]
+    )
+
+
 # workbench Termination
 @router.post(
     "/workbench/terminate-execute", summary="Termination of execution of Ideas", response_model=UnifiedResponseModel
@@ -548,6 +574,11 @@ async def terminate_execute(
     if session_version_model.status == SessionVersionStatusEnum.TERMINATED:
         # return resp_500(code=400, message="Execution terminated for Inspiration session version")
         return InvalidOperationError.return_resp()
+
+    # F004: on the unified runtime the conversation is held through the run
+    # lease. Without this a run parked on a question would keep the conversation
+    # "waiting" and the next message would be taken as its answer.
+    await _request_unified_stop(session_version_model)
 
     # F073: the termination itself is shared with the Open API; the ownership
     # and state checks above stay here (v1 behaviour unchanged).
@@ -880,7 +911,9 @@ async def download_md_to_pdf_or_docx(
             deliverable = find_deliverable(version, file_key, minio_client.bucket)
             source_path = deliverable_workspace_path(version, deliverable) if deliverable else None
             if source_path:
-                md_str, _ = await inline_local_images(md_str, source_path, workspace_fetcher(version.id))
+                md_str, _ = await inline_local_images(
+                    md_str, source_path, workspace_fetcher(get_run_thread_id(version))
+                )
 
         # Filename Removal Extension
         file_name = os.path.splitext(file_name)[0]
@@ -940,7 +973,7 @@ async def download_md_bundle(
         md_str = await bake_citations_for_export(file_bytes.decode("utf-8"), login_user)
         source_path = deliverable_workspace_path(version, deliverable)
         bundle = (
-            await build_markdown_bundle(md_str, file_name, source_path, workspace_fetcher(version.id))
+            await build_markdown_bundle(md_str, file_name, source_path, workspace_fetcher(get_run_thread_id(version)))
             if source_path
             else None
         )

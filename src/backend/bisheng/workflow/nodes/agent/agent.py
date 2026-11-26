@@ -307,9 +307,9 @@ class AgentNode(BaseNode):
         # Determine whether it is a knowledge base or a temporary file list
         self._knowledge_type = self.node_params["knowledge_id"]["type"]
         self._knowledge_ids = [one["key"] for one in self.node_params["knowledge_id"]["value"]]
-        # F041: 用户知识库权限校验 toggle (default OFF, preserves current behavior).
-        # ON  → filter knowledge-space retrieval by the runtime user's view_file;
-        # OFF → by the config author's (flow creator) view_file.
+        # F041: 用户知识库权限校验 toggle (default OFF).
+        # ON  → filter by the runtime user's permissions;
+        # OFF → no permission check on bound knowledge / spaces.
         self._knowledge_auth = self.node_params.get("user_auth", False)
 
         # Supported or notnl2sql
@@ -435,25 +435,33 @@ class AgentNode(BaseNode):
         if not self._knowledge_ids:
             return []
         if self._knowledge_type == "space":
-            # F041: one tool covering all selected knowledge spaces, retrieving
-            # through the F029 view_file filter (identity = runtime user when the
-            # permission toggle is ON, config author when OFF).
+            # F041: one tool covering all selected knowledge spaces. ON → runtime
+            # user view_file filter; OFF → no permission check.
             from bisheng.knowledge.domain.services.space_flow_retrieval import build_space_knowledge_tool
 
-            identity_user_id = self.user_id if self._knowledge_auth else self.flow_user_id
             space_tool = build_space_knowledge_tool(
                 name="knowledge_space_retriever",
                 description="在知识空间中检索与查询相关的文档内容。",
                 llm=self._llm,
                 space_ids=self._knowledge_ids,
-                identity_user_id=identity_user_id,
+                identity_user_id=self.user_id if self._knowledge_auth else None,
                 tenant_id=self.tenant_id,
                 max_content=knowledge_retriever.get("max_content", 15000),
                 access_scope="per_user" if self._knowledge_auth else "shared",
             )
             return [space_tool]
+        knowledge_ids = self._knowledge_ids
+        if self._knowledge_type == "knowledge":
+            from bisheng.knowledge.domain.services.workflow_knowledge_authorization import authorized_knowledge_ids
+
+            knowledge_ids = authorized_knowledge_ids(
+                identity_user_id=self.user_id if self._knowledge_auth else self.flow_user_id,
+                tenant_id=self.tenant_id,
+                knowledge_ids=self._knowledge_ids,
+                check_permission=self._knowledge_auth,
+            )
         tools = []
-        for index, knowledge_id in enumerate(self._knowledge_ids):
+        for index, knowledge_id in enumerate(knowledge_ids):
             if self._knowledge_type == "knowledge":
                 knowledge_tool = ToolExecutor.init_knowledge_tool_sync(
                     self.user_id, knowledge_id, llm=self._llm, **knowledge_retriever
@@ -582,7 +590,7 @@ class AgentNode(BaseNode):
         logger.debug("agent_over result={}", ret)
         if self._output_user:
             # Nonstream Mode, processing results
-            for k, v in ret.items():
+            for _k, v in ret.items():
                 answer = v
                 self.graph_state.save_context(content=answer, msg_sender="AI")
 
@@ -624,7 +632,7 @@ class AgentNode(BaseNode):
             tool_logs = list(tool_invoke_info.values())
             tool_logs = self._dedupe_web_search_tool_logs(tool_logs)
             for one in tool_logs:
-                # knowledge_retriever_tool belong into rag logic，not show in tool log
+                # knowledge_retriever_tool belong into rag logic, not show in tool log
                 if one["name"] == "knowledge_retriever_tool":
                     continue
                 ret.append(
@@ -659,7 +667,11 @@ class AgentNode(BaseNode):
         return [item for index, item in enumerate(tool_logs) if index == keep_index or index not in web_search_indexes]
 
     def _run_once(
-        self, input_variable: str = None, unique_id: str = None, output_key: str = None, tool_invoke_list: list = None
+        self,
+        input_variable: str | None = None,
+        unique_id: str | None = None,
+        output_key: str | None = None,
+        tool_invoke_list: list | None = None,
     ) -> (str, str, list[CitationRegistryItemSchema]):
         """
         params:
@@ -713,7 +725,7 @@ class AgentNode(BaseNode):
             )
             output = result["agent_outcome"].return_values["output"]
             if isinstance(output, dict):
-                output = list(output.values())[0]
+                output = next(iter(output.values()))
             round_messages = [human_message]
             round_messages.extend(_format_intermediate_steps(result.get("intermediate_steps", [])))
             round_messages.append(AIMessage(content=output))

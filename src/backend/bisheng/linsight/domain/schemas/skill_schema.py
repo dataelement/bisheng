@@ -27,6 +27,8 @@ class SkillBrief(BaseModel):
     description: str
     enabled: bool
     default_checked: bool = False
+    # F005: hidden from end-user pickers and always available while enabled.
+    auto_enabled: bool = False
     source: str
     create_time: datetime | None = None
     update_time: datetime | None = None
@@ -40,6 +42,7 @@ class SkillBrief(BaseModel):
             description=skill.description,
             enabled=bool(skill.enabled),
             default_checked=bool(skill.default_checked),
+            auto_enabled=bool(getattr(skill, "auto_enabled", False)),
             source=skill.source,
             create_time=skill.create_time,
             # never-edited skills report their creation time as the modified time
@@ -95,6 +98,10 @@ class SkillStatusUpdate(BaseModel):
 
 class SkillDefaultCheckedUpdate(BaseModel):
     default_checked: bool
+
+
+class SkillAutoEnabledUpdate(BaseModel):
+    auto_enabled: bool
 
 
 class SkillCreateForm(BaseModel):

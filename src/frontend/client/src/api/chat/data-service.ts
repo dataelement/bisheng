@@ -1093,3 +1093,23 @@ export function getLinsightFilePreviewApi(
     { headers, skip403Redirect: true } as any,
   );
 }
+
+/**
+ * PDF preview of a .ppt/.pptx kept on a conversation (a deck of a direct answer,
+ * which has no task version for getLinsightFilePreviewApi). Same `ready` /
+ * `converting` contract. The share token lets a share-page reader in; errors
+ * reject without a toast, the preview panel shows the failure itself.
+ */
+export function getConversationSlidesPreviewApi(
+  conversationId: string,
+  fileId: string,
+  shareToken?: string,
+): Promise<{ data: LinsightFilePreviewResult }> {
+  const headers = shareToken ? { 'share-token': shareToken } : {};
+  return request.post(
+    `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/files/${encodeURIComponent(fileId)}/slides-preview`,
+    {},
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- skip403Redirect / showError are ErrorOptions extras, not on AxiosRequestConfig
+    { headers, skip403Redirect: true, showError: false } as any,
+  );
+}

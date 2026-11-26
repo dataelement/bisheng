@@ -209,7 +209,7 @@
   "tmpKnowledgeBaseNotSupportSingleNodeDebug": "临时知识库不支持单节点调试",
   "userInputContent": "用户输入内容",
   "userAuthVerification": "用户知识库权限校验",
-  "userAuthVerificationTips": "开启后，检索结果按当前使用者本人的知识空间文件查看权限过滤，每人只能检索到自己有权查看的文件；关闭时，按配置者的可见范围检索，所有使用者共享配置者能看到的文件（配置者无权查看的文件同样不会被检索）。文档知识库不受细粒度文件权限影响。",
+  "userAuthVerificationTips": "开启后，检索结果按当前使用者本人的知识库/知识空间权限过滤；关闭后不做权限校验，绑定的知识库与知识空间均可被所有使用者检索。",
   "retrieverWeightSettings": "检索器权重设置",
   "adjustWeightForVectorOrKeywordSearch": "通过调整权重，确定优先使用向量检索还是优先使用关键词检索。",
   "keyword": "关键词",
@@ -463,7 +463,7 @@
       },
       "user_auth": {
         "label": "用户知识库权限校验",
-        "help": "开启后，检索结果按当前使用者本人的知识空间文件查看权限过滤，每人只能检索到自己有权查看的文件；关闭时，按配置者的可见范围检索，所有使用者共享配置者能看到的文件（配置者无权查看的文件同样不会被检索）。文档知识库不受细粒度文件权限影响。"
+        "help": "开启后，检索结果按当前使用者本人的知识库/知识空间权限过滤；关闭后不做权限校验，绑定的知识库与知识空间均可被所有使用者检索。"
       },
       "sql_agent": {
         "label": "数据库配置"
@@ -634,5 +634,13 @@
   "valueType": "值类型",
   "selectDbType": "请选择数据库类型",
   "modelLoadFailed": "模型列表读取失败，请重试",
-  "retryModelLoad": "重试"
+  "retryModelLoad": "重试",
+  "referencePreflight": {
+    "changed": "画布已变化，请重新点击运行进行校验。",
+    "failed": "引用校验失败，请重试。本次未启动工作流。",
+    "issue": "{{node}}：{{label}}（ID：{{id}}）{{state}}，请移除或重新选择。",
+    "missing": "不存在",
+    "unavailable": "当前不可用或无权使用",
+    "reselect": "存在失效引用，请移除或重新选择标红项。"
+  }
 }

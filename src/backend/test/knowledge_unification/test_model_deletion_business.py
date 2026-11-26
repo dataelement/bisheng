@@ -11,7 +11,6 @@ import pytest
 from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.llm.domain.models import llm_server as model_module
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.llm.domain.services import llm as service_module
@@ -26,7 +25,7 @@ ready = actual.ready
 
 
 @pytest.mark.parametrize("server_id", [1, 5])
-async def test_original_public_delete_never_mutates_when_formal_coverage_is_unconfigured(ready, monkeypatch, server_id):
+async def test_original_public_delete_succeeds_without_formal_coverage(ready, monkeypatch, server_id):
     session, _, _ = ready
     await session.commit()
 
@@ -54,10 +53,12 @@ async def test_original_public_delete_never_mutates_when_formal_coverage_is_unco
     before_models = (await session.execute(select(LLMModel.id).order_by(LLMModel.id))).scalars().all()
     with actual.native.actor() as identity:
         actual.web(identity)
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await LLMService.delete_llm_server(None, identity, server_id)
-    assert (await session.execute(select(LLMServer.id).order_by(LLMServer.id))).scalars().all() == before_server
-    assert (await session.execute(select(LLMModel.id).order_by(LLMModel.id))).scalars().all() == before_models
+        assert await LLMService.delete_llm_server(None, identity, server_id)
+    assert (await session.execute(select(LLMServer.id).order_by(LLMServer.id))).scalars().all() == [
+        ident for ident in before_server if ident != server_id
+    ]
+    assert set((await session.execute(select(LLMModel.id))).scalars()) <= set(before_models)
+    assert not (await session.execute(select(LLMModel.id).where(LLMModel.server_id == server_id))).all()
 
 
 async def test_actual_core_still_inspects_an_empty_owned_provider_under_ready_native_coverage(ready):

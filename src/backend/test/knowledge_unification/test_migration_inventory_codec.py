@@ -19,9 +19,88 @@ DIGEST = "a" * 64
 DESCRIPTOR = {"object_key": "backup/original", "sha256": DIGEST}
 
 
+@pytest.mark.parametrize(
+    ("policy", "backup", "schema", "valid"),
+    [
+        (None, DESCRIPTOR, DESCRIPTOR, True),
+        (None, None, None, False),
+        ("not_required", None, None, True),
+        ("not_required", DESCRIPTOR, None, False),
+        ("not_required", None, DESCRIPTOR, False),
+        ("not_required", DESCRIPTOR, DESCRIPTOR, False),
+        ("unknown", None, None, False),
+    ],
+)
+def test_run_external_material_policy_preserves_strict_legacy_shape(codec, policy, backup, schema, valid):
+    data = {
+        "writer_contract_version": "f118-v1",
+        "environment": "test",
+        "tenant_count": 1,
+        "tenant_inventory_digest": DIGEST,
+        "backup_ref": backup,
+        "schema_ref": schema,
+        "catalog_digest": DIGEST,
+        "authorization_model_checksum": DIGEST,
+        "baseline_ref": None,
+    }
+    if policy is not None:
+        data["external_material_policy"] = policy
+    if not valid:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            codec.record_from_values("run", **data)
+        return
+    record = codec.record_from_values("run", **data)
+    content = codec.encode_inventory_page(
+        run_id=RUN,
+        section="manifest",
+        scope="global",
+        tenant_id=None,
+        page_index=0,
+        records=(record,),
+        kind="baseline",
+    )
+    page = codec.decode_inventory_page(
+        content,
+        run_id=RUN,
+        section="manifest",
+        scope="global",
+        tenant_id=None,
+        page_index=0,
+        kind="baseline",
+    )
+    assert page.records == (record,)
+
+
 @pytest.fixture
 def codec():
     return importlib.import_module("bisheng.knowledge.application.unification_inventory_codec")
+
+
+@pytest.mark.parametrize("omit", [None, "upgrade_flow_ref", "upgrade_history_after_ref", "upgrade_semantics_sha256"])
+def test_unified_flow_metadata_is_a_closed_complete_group(codec, omit):
+    data = {
+        "writer_contract_version": "f118-v1",
+        "environment": "test",
+        "tenant_count": 1,
+        "tenant_inventory_digest": DIGEST,
+        "backup_ref": None,
+        "schema_ref": None,
+        "catalog_digest": DIGEST,
+        "authorization_model_checksum": DIGEST,
+        "baseline_ref": None,
+        "external_material_policy": "not_required",
+        "upgrade_flow_policy": "unified_v1",
+        "upgrade_flow_ref": DESCRIPTOR,
+        "upgrade_history_sha256": DIGEST,
+        "upgrade_semantics_sha256": DIGEST,
+        "upgrade_history_after_ref": DESCRIPTOR,
+    }
+    if omit:
+        del data[omit]
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            codec.record_from_values("run", **data)
+    else:
+        assert codec.record_from_values("run", **data).data == data
 
 
 def encode(codec, records=(), **changes):
@@ -139,6 +218,8 @@ def object_fact(codec, **changes):
 
 
 def test_required_port_shapes_are_closed_private_and_preserve_original_physical_facts(codec):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        object_fact(codec, object_key="https://legacy.invalid/original")
     obj = object_fact(codec)
     index = codec.record_from_values(
         "physical_index",

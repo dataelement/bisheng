@@ -51,6 +51,7 @@ import { useSpaceCatalog } from "./useSpaceCatalog";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useSpaceFolderPath } from "../hooks/useSpaceFolderPath";
 import { useSpaceCopyTasks } from "../useSpaceCopyTasks";
+import { useSpaceDeletionActive } from "@/store/knowledgeSpaceDeletion";
 import type { SpaceCopyTask } from "@/controllers/API/knowledgeCopy";
 
 export interface KnowledgeSpaceSidebarProps {
@@ -87,6 +88,10 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
   const { t } = useTranslation("knowledge");
   const client = useQueryClient();
   const active = props.spaceId === item.id;
+  const deleting = useSpaceDeletionActive(props.scope, item.id);
+  useEffect(() => {
+    if (deleting) void client.cancelQueries({ queryKey: knowledgeQueryKeys.space(props.scope, item.id) });
+  }, [client, deleting, props.scope, item.id]);
   const initializing = item.copyTask
     ? item.copyTask.state !== 1
     : item.state === 2;
@@ -174,7 +179,7 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
         )
       }
     >
-      {expanded && !initializing && (
+      {expanded && !initializing && !deleting && (
         <KnowledgeFolderTree
           scope={props.scope}
           spaceId={item.id}

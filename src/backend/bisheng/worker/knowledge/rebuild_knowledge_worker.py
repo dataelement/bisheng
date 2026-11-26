@@ -17,6 +17,7 @@ from bisheng.common.errcode.knowledge import (
 )
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.context.background_execution import get_current_background_task
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.application.model_availability import probe_embedding as _probe_embedding
@@ -31,6 +32,7 @@ from bisheng.knowledge.domain.repositories.processing_fence_repository import (
 from bisheng.knowledge.domain.services.processing_write_guard import ProcessingWriteGuard, guarded_processing
 from bisheng.llm.domain import LLMService
 from bisheng.resource_reference.application.contracts import canonical_target_id
+from bisheng.resource_reference.application.source_sync import notify_reference_sync_sync
 from bisheng.worker.main import bisheng_celery
 
 
@@ -65,6 +67,7 @@ def rebuild_knowledge_celery(
                 )
                 KnowledgeModelReferenceApplication.apply_model_change(session, activation)
                 session.commit()
+                notify_reference_sync_sync(get_current_tenant_id(), "knowledge", str(knowledge_id))
             command["expected_model_config_revision"] += 1
         else:
             command["expected_model_config_revision"] = knowledge.model_config_revision
@@ -202,6 +205,7 @@ def _finalize_rebuild(knowledge_id, *, operation_id, expected_model_config_revis
         )
         KnowledgeModelReferenceApplication.apply_finalization(session, prepared)
         session.commit()
+        notify_reference_sync_sync(get_current_tenant_id(), "knowledge", str(knowledge_id))
 
 
 def _delete_rebuild_vectors(knowledge, invoke_user_id, **command):

@@ -148,7 +148,7 @@ async def test_actual_m2_graph_yields_only_frozen_bounded_leaves_without_new_inv
     assert not hasattr(pages[0], "__dict__")
 
 
-async def test_frozen_replay_delegates_the_same_reader_and_verifies_materials_once(
+async def test_frozen_replay_delegates_once_without_reading_external_dba_materials(
     module, complete, transport, frozen, monkeypatch
 ):
     used, gets = [], []
@@ -170,7 +170,9 @@ async def test_frozen_replay_delegates_the_same_reader_and_verifies_materials_on
         assert await reader(module, transport).arun(session, **transport.inputs) == frozen
     assert used == [1]
     for key in ("backup_ref", "schema_ref"):
-        assert gets.count(transport.inputs[key]["object_key"]) == 1
+        assert gets.count(transport.inputs[key]["object_key"]) == 0
+    assert gets.count(frozen.plan_ref["object_key"]) == 1
+    assert gets.count(frozen.baseline_ref["object_key"]) == 1
 
 
 @pytest.mark.parametrize("indices", [(1,), (0, 2), (1, 0), (0, 0)])
@@ -280,7 +282,7 @@ async def test_original_depth_boundary_does_not_confuse_manifest_level_indices(m
         assert await read(module, transport, result)
 
 
-async def test_late_corruption_and_material_corruption_are_errors_not_partial_success(module, transport, frozen):
+async def test_frozen_tail_corruption_blocks_but_external_dba_proof_is_not_a_gate(module, transport, frozen):
     # Retain the complete original Catalog/Member/permission closure so the
     # targeted trailing transport corruption is reached before semantic checks.
     entries = tuple(
@@ -302,8 +304,20 @@ async def test_late_corruption_and_material_corruption_are_errors_not_partial_su
     with pytest.raises(ReferenceCoverageNotReadyError):
         await read(module, transport, result)
     transport.objects[transport.inputs["schema_ref"]["object_key"]] = b"corrupt material"
-    with pytest.raises(ReferenceCoverageNotReadyError):
-        await read(module, transport, frozen)
+    assert await read(module, transport, frozen)
+
+
+async def test_baseline_and_plan_cannot_mix_external_material_policies(module, transport, frozen):
+    entries = tuple(row for row in root_records(transport, frozen, "baseline") if row.record_type == "manifest_entry")
+    result = await replace_baseline(
+        transport,
+        frozen,
+        entries,
+        metadata_changes={"external_material_policy": "not_required", "backup_ref": None, "schema_ref": None},
+    )
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await read(module, transport, result)
+    assert caught.value.kwargs["reason"] == "migration_inventory_frozen_material_policy_changed"
 
 
 async def test_original_transaction_callback_and_cancellation_are_not_swallowed(module, transport, frozen):

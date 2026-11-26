@@ -168,6 +168,7 @@ from bisheng.permission.application.initial_grant import (
 )
 from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.application.avatar import read_visible_user_avatar_urls
 from bisheng.user.domain.models.user import UserDao
@@ -1464,7 +1465,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return result
 
     async def _create_space_with_model(self, knowledge_space: Knowledge) -> Knowledge:
-        """Persist the actual SPACE, creator and outgoing references together."""
+        """Persist the actual space and creator before notifying reverse hints."""
         knowledge_space.index_name = generate_knowledge_index_name()
         knowledge_space.collection_name = knowledge_space.index_name
         knowledge_space.user_id = self.login_user.user_id
@@ -1481,6 +1482,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 session, knowledge_space, login_user=self.login_user, project_created=project_created
             )
             await session.commit()
+            await notify_reference_sync(get_current_tenant_id(), "knowledge", str(knowledge_space.id))
         await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, knowledge_space)
         return knowledge_space
 

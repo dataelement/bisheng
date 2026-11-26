@@ -30,9 +30,8 @@ class WorkCapabilitiesService:
         from bisheng.tool.domain.services.tool import ToolServices
 
         # Execution must use the same resource boundary as the Desktop catalog.
-        # A visible-only lookup would keep revoked ``use`` tools callable by a
-        # stale client that already knows the stable invocation name.
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        # A revoked tool must not remain callable through a cached invocation name.
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
 
         tools = [tool for group in groups for tool in group.children if not tool.is_delete]
@@ -113,6 +112,8 @@ class WorkCapabilitiesService:
         return names
 
     async def list_tools(self):
+        from bisheng_langchain.gpts.tools.image_generation.tool import IMAGE_TOOL_KEYS
+
         result = []
         tools = await self._tools()
         for name, ids in self._named_tools(tools).items():
@@ -129,11 +130,13 @@ class WorkCapabilitiesService:
                 logger.warning("Work tool setup pending id={} error={}", tool_id, type(exc).__name__)
                 continue
             version = hashlib.sha256(json.dumps(schema, sort_keys=True).encode()).hexdigest()
+            title = "图像生成" if getattr(tool, "is_preset", None) == 1 and name in IMAGE_TOOL_KEYS else tool.name
             result.append(
                 {
                     "name": name,
-                    "title": tool.name,
-                    "description": tool.desc or tool.name,
+                    # Normalize built-in image labels without changing persisted invocation identities.
+                    "title": title,
+                    "description": tool.desc or title,
                     "inputSchema": schema,
                     "_meta": {"bisheng.tool_id": tool_id, "bisheng.schema_hash": version},
                 }

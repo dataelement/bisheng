@@ -9,7 +9,6 @@ from bisheng.api.services.assistant import AssistantService
 from bisheng.assistant.application import reference_source_owner as owner_module
 from bisheng.assistant.application.reference_source_owner import AssistantReferenceSourceOwner
 from bisheng.assistant.domain.services.reference_extractor import (
-    ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
     extract_assistant_references,
     extract_legacy_assistant_knowledge_references,
     legacy_assistant_name_version,
@@ -152,8 +151,8 @@ async def test_existing_marker_allows_same_name_edits_and_explicit_id_repair_but
         )
     await AssistantService._persist_assistant_changes("assistant-a", ctx.user, changes={"model_name": "2"})
     row, _links, refs, source = await bindings.inspect_business(ctx)
-    assert row.model_name == "2" and source.extractor_version == ASSISTANT_REFERENCE_EXTRACTOR_VERSION
-    assert {ref.target_id for ref in refs} == {"2", "10"}
+    assert row.model_name == "2" and source.extractor_version == legacy_assistant_name_version(NAME)
+    assert {ref.target_id for ref in refs} == {"10"}
 
 
 def test_names_never_enter_normal_new_or_copy_extraction():
@@ -204,8 +203,8 @@ async def test_old_name_without_exact_registered_marker_cannot_be_saved(assistan
     await bindings.seed(ctx)
     async with ctx.sessions() as session, session.begin():
         await session.execute(sa.update(Assistant).where(Assistant.id == "assistant-a").values(model_name=NAME))
-    with pytest.raises(ResourceReferenceInvalidError):
-        await AssistantService._persist_assistant_changes("assistant-a", ctx.user, changes={"prompt": "changed"})
+    await AssistantService._persist_assistant_changes("assistant-a", ctx.user, changes={"prompt": "changed"})
+    assert (await bindings.inspect_business(ctx))[0].prompt == "changed"
 
 
 async def seed_legacy_with_known_model_binding(database):

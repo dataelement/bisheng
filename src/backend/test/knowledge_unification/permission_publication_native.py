@@ -12,8 +12,6 @@ import httpx
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
-from test.knowledge_unification import test_migration_inventory_application as m2
-from test.knowledge_unification.test_permission_floor_retirement_signing import legacy_catalog
 
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.permission.application import control_state, sql_runtime
@@ -49,6 +47,8 @@ from bisheng.permission.domain.services.model_policy import CustomModelSelection
 from bisheng.permission.domain.services.visibility_projection_service import VisibilityProjectionCompiler
 from bisheng.permission.migration import f048_runtime_storage
 from bisheng.permission.migration import f118_plan as plans
+from test.knowledge_unification import test_migration_inventory_application as m2
+from test.knowledge_unification.test_permission_floor_retirement_signing import legacy_catalog
 
 raw_resource_native = m2.resource_native
 native = m2.native
@@ -66,12 +66,15 @@ CATALOG = (
 
 @pytest.fixture
 async def resource_native(raw_resource_native):
+    from bisheng.knowledge.domain.models.knowledge_unification_executor_lock import KnowledgeUnificationExecutorLock
+
     metadata = sa.MetaData()
     for model in CATALOG:
         table = model.__table__.to_metadata(metadata)
         table.c.id.type = sa.Integer()
     async with raw_resource_native.engine.begin() as connection:
         await connection.run_sync(metadata.create_all)
+        await connection.run_sync(lambda c: KnowledgeUnificationExecutorLock.__table__.create(c, checkfirst=True))
     return raw_resource_native
 
 
@@ -112,12 +115,16 @@ class Store:
         self.tuples, self.requests, self.sessions = set(), [], sessions
         self.writes, self.scans = 0, 0
         self.enforce_closed = False
+        self.allow_read_transactions = False
         self.fail_write, self.after, self.cancel = None, False, False
         self.extra, self.drop, self.unknown = False, False, False
         self.on_request = None
 
     async def request(self, request):
-        if self.enforce_closed:
+        read = request.method == "GET" or request.url.path.endswith(
+            ("/read", "/check", "/batch-check", "/streamed-list-objects")
+        )
+        if self.enforce_closed and not (self.allow_read_transactions and read):
             self.sessions.assert_closed()
         self.requests.append(request)
         if self.on_request is not None:
@@ -446,6 +453,7 @@ async def published_input(complete, transport, monkeypatch, request):
         )
     if options.get("raw_edge"):
         store.tuples.add(tuple(options["raw_edge"]))
+    store.tuples.update(tuple(edge) for edge in options.get("raw_edges", ()))
     for edge in options.get("remove_raw_edges", ()):
         store.tuples.discard(tuple(edge))
     if getattr(request.node, "callspec", None) and request.node.callspec.params.get("corrupt") == "unknown_namespace":
@@ -488,6 +496,8 @@ async def published_input(complete, transport, monkeypatch, request):
 
     if options.get("reference_seed") is not None:
         await options["reference_seed"](complete)
+    if options.get("original_graph_seed") is not None:
+        await options["original_graph_seed"](complete, store)
     if options.get("existing_mode_graph_from_seed"):
         async with sessions() as session, session.begin():
             modes = await PermissionMigrationSnapshotRepository().alist_resource_modes(session)
@@ -513,8 +523,10 @@ async def published_input(complete, transport, monkeypatch, request):
                 return original_record(tag, **values)
 
             legacy.setattr(inventory_module, "record_from_values", legacy_record)
-        async with sessions() as session, session.begin():
-            frozen = await app.arun(session, **transport.inputs)
+        frozen = None
+        if options.get("freeze", True):
+            async with sessions() as session, session.begin():
+                frozen = await app.arun(session, **transport.inputs)
     store.enforce_closed = True
     store.requests.clear()
     store.scans = 0

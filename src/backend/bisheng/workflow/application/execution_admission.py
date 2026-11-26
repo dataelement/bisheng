@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.core.database import get_async_db_session
 from bisheng.resource_reference.application.contracts import SourceKey, SourceType
+from bisheng.resource_reference.application.error_details import snapshot_reference_errors
 from bisheng.resource_reference.application.source_access import get_reference_read_runtime
 from bisheng.resource_reference.application.source_contracts import (
     SourceReadRequest,
@@ -122,6 +123,32 @@ async def prepare_preview(
         return await _preview(session, await get_reference_read_runtime(), identity, workflow_id, graph)
 
 
+async def preflight_preview(identity, workflow_id, graph, *, reference_session=None):
+    """Inspect the unsaved graph under the same authority as actual preview execution."""
+    payload = {"graph": normalize_execution_graph(graph)}
+    async with _read_session(reference_session) as session:
+        runtime = await get_reference_read_runtime()
+        try:
+            scope = await runtime.verifier.aissue_transient_scope(
+                session, TransientTargetRequest("workflow", str(workflow_id), canonical_payload_json(payload)), identity
+            )
+            result = await runtime.ainspect_transient(session, scope, identity)
+        except ResourceReferenceInvalidError as error:
+            if error.kwargs.get("reason") != "reference_target_invalid" or not error.kwargs.get("reference_errors"):
+                raise
+            errors = error.kwargs["reference_errors"]
+        else:
+            errors = snapshot_reference_errors(
+                result.snapshot, result.target_states, limit=None, include_parameter=True
+            )
+            # Tenant-filtered absence also covers foreign targets. Do not expose
+            # global existence through an editor-supplied selection.
+            for error in errors:
+                if error["state"] == "invalid_missing":
+                    error["state"] = "unavailable"
+    return {"valid": not errors, "errors": errors}
+
+
 async def prepare_node_preview(
     identity, workflow_id, node_data, node_input, *, reference_session=None
 ) -> PreparedWorkflowExecution:
@@ -139,23 +166,31 @@ async def prepare_node_preview(
 
 
 async def prepare_initial(
-    identity, workflow_id, graph, *, execution_mode=None, version_hint=None, allow_preview=True
+    identity, workflow_id, graph, *, execution_mode=None, version_hint=None, allow_preview=True, published_only=False
 ) -> PreparedWorkflowExecution:
-    """Resolve legacy messages by full current graph without executing the candidate."""
+    """Resolve endpoint-bound saved execution or an authorized editor preview."""
     if execution_mode is not None and (
         not isinstance(execution_mode, str) or execution_mode not in ("saved", "preview")
     ):
         raise ResourceReferenceInvalidError(reason="workflow_execution_mode_invalid")
     version = _version(version_hint)
     if execution_mode == "preview":
-        if not allow_preview:
+        if published_only or not allow_preview:
             raise ResourceReferenceInvalidError(reason="public_workflow_preview_forbidden")
         return await prepare_preview(identity, workflow_id, graph, version_hint=version)
     async with _read_session(None) as session:
         runtime = await get_reference_read_runtime()
         scope = await runtime.verifier.aissue_scope(
-            session, SourceReadRequest(SourceType.WORKFLOW_VERSION, str(workflow_id), version), identity
+            session,
+            SourceReadRequest(SourceType.WORKFLOW_VERSION, str(workflow_id), None if published_only else version),
+            identity,
         )
+        if published_only:
+            # This policy is bound by the public WS endpoint, never by message
+            # fields. Public HTTP graphs are redacted views, not execution data.
+            if version is not None and version != scope.snapshot.source_key.source_version:
+                raise ResourceReferenceInvalidError(reason="public_workflow_current_version_required")
+            return await _saved(session, runtime, identity, workflow_id, None, None, None, scope=scope)
         candidate = json.loads(scope.snapshot.payload_json)["graph"]
         if graph is None or normalize_execution_graph(graph) == candidate:
             return await _saved(session, runtime, identity, workflow_id, version, graph, None, scope=scope)

@@ -128,16 +128,6 @@ export const ChatKnowledge = ({
     keyword: debouncedSpaceKeyword,
   });
 
-  // Comma-separated ids of admin-configured org KBs. Passed to the backend so
-  // those ids are floated to the top of the global sort — otherwise a
-  // configured KB sitting on page 2+ of the alpha list could never be promoted
-  // by client-side reshuffle alone.
-  const preferredIds = useMemo(() => {
-    const configured = (config as any)?.orgKbs || [];
-    if (!configured.length) return "";
-    return configured.map((k: any) => String(k.id)).join(",");
-  }, [config]);
-
   // Org KB data fetching (paginated via react-query)
   const {
     data: orgData,
@@ -148,25 +138,10 @@ export const ChatKnowledge = ({
     page_size: PAGE_SIZE,
     name: debouncedOrgKeyword,
     sort_by: "name",
-    preferred_ids: preferredIds,
     action: "visible",
   });
 
   const allOrgKbs = useMemo(() => orgData?.pages.flatMap((page) => page.data) ?? [], [orgData?.pages]);
-
-  // Sort: admin-configured org KBs (in sort_order) first, then any other KBs
-  // visible to the user. Visibility filtering is enforced server-side
-  // in useGetOrgToolPages — we only reshuffle display order here.
-  const sortedOrgKbs = useMemo(() => {
-    const configured = (config as any)?.orgKbs || [];
-    if (!configured.length) return allOrgKbs;
-    const ordered = [...configured].sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    const configuredIds = new Set(ordered.map((k: any) => String(k.id)));
-    const byId = new Map(allOrgKbs.map((k: any) => [String(k.id), k]));
-    const head = ordered.map((k: any) => byId.get(String(k.id))).filter(Boolean);
-    const tail = allOrgKbs.filter((k: any) => !configuredIds.has(String(k.id)));
-    return [...head, ...tail];
-  }, [allOrgKbs, config]);
 
   // checked data — compare with String() on both sides (API returns numeric
   // ids, but the atom type + default-seeding use strings).
@@ -501,7 +476,7 @@ export const ChatKnowledge = ({
                     placeholder={localize("com_tools_knowledge_base_search")}
                     keyword={orgKeyword}
                     setKeyword={setOrgKeyword}
-                    items={sortedOrgKbs}
+                    items={allOrgKbs}
                     selectedItems={selectedOrgKbs}
                     onToggle={(item) => handleToggle(item, "org")}
                     isFetching={orgFetching}
@@ -590,7 +565,7 @@ export const ChatKnowledge = ({
                     placeholder={localize("com_tools_knowledge_base_search")}
                     keyword={orgKeyword}
                     setKeyword={setOrgKeyword}
-                    items={sortedOrgKbs}
+                    items={allOrgKbs}
                     selectedItems={selectedOrgKbs}
                     onToggle={(item) => handleToggle(item, "org")}
                     isFetching={orgFetching}

@@ -451,7 +451,11 @@
     "tagEditor": {
         "addPlaceholder": "请输入要添加的标签，回车保存",
         "existingTags": "已有标签",
-        "emptyTags": "暂无标签"
+        "emptyTags": "暂无标签",
+        "checkingPermission": "正在检查空间标签管理权限…",
+        "permissionUnavailable": "暂时无法确认空间标签管理权限。仍可选择已有标签，请重试。",
+        "deleteTag": "删除空间标签：{{name}}",
+        "spacePermissionRequired": "当前账号没有空间编辑权限，可选用已有标签；如需新建或删除空间标签，请联系空间管理员。"
     },
     "f118": {
         "specialized_processing_rules": "此类型文件沿用专用解析与切分规则，无需设置文档或表格参数。",
@@ -616,7 +620,8 @@
         "processing_conflict_resplit": "相关文件正在重新切分，暂不能执行此操作。请在“处理任务”查看进度，结束后再试。",
         "processing_conflict_file_queue": "文件已进入处理队列，暂不能重复处理。请等待排队任务执行，或在“任务记录”查看进度。",
         "processing_conflict_file_state": "该文件当前状态不支持此操作。请返回文件列表刷新状态；解析失败的文件可从失败项入口重试。",
-        "processing_conflict_source_input": "移动或复制任务仍需要读取源空间的数据，暂不能删除或清理源空间。请查看任务记录，待输入转移完成；失败任务请先重试。",
+        "processing_conflict_source_file_input": "移动任务可能仍需要所选文件，暂不能执行此操作。请在“任务记录”中查看移动任务的状态。",
+        "processing_conflict_source_input": "移动或复制任务仍需要此空间的数据，暂不能执行此操作。请在“任务记录”中查看任务状态。",
         "processing_conflict_transfer_input": "空间中仍有未完成的移动或复制任务，暂不能执行此操作。请在任务记录查看进度并重试失败任务。",
         "processing_conflict_move_input": "移动任务尚未完成数据转移或源数据清理，暂不能执行此操作。请查看移动任务；失败时重试原任务。",
         "processing_conflict_copy_retry": "副本当前状态不允许重试复制。请刷新空间状态，若正在重建模型请等待重建结束。",
@@ -631,13 +636,13 @@
     },
     "deletion": {
         "source_tasks_block_delete": "此空间仍被未完成的移动或复制任务占用。失败任务也可能需要源文件继续处理，因此暂时无法删除。请到复制或移动的目标空间查看“处理任务”，处理完成后重新检查。若无法访问目标空间，请联系任务发起人或管理员。",
-        "references": "引用来源",
+        "references": "已记录的引用",
         "clear": "清空空间",
         "delete_space": "删除空间",
         "delete_items": "删除文件和文件夹",
         "checking": "正在检查…",
         "unavailable": "引用检查暂不可用，请恢复后重试。",
-        "changed": "文件、权限或引用已变化，请重新检查确认。",
+        "changed": "文件范围、权限或资源状态已变化，请重新检查确认。",
         "failed": "操作未完成。",
         "irreversible": "删除后无法恢复，请确认所有受影响的内容。",
         "item_count": "受影响的文件和文件夹：",
@@ -657,7 +662,7 @@
         "source_name": "来源名称",
         "source_version": "版本",
         "matched_slots": "匹配的引用位置数",
-        "no_sources": "暂无引用来源",
+        "no_sources": "暂未查到已记录引用",
         "more": "加载更多来源",
         "pending": "删除尚未完成，请保留本次确认，查询进度或重试同一操作。",
         "state": "状态：",
@@ -682,7 +687,7 @@
         "source_knowledge": "知识",
         "source_model_default": "默认模型",
         "source_other": "其他来源",
-        "workflow_unlink": "这些工作流仍保存了对本知识空间的引用，因此无法删除。请打开对应工作流，在引用位置移除本空间并保存。未上线的工作流同样会阻止删除。保存后重新检查。",
+        "workflow_unlink": "这些工作流仍引用本知识空间，未上线的工作流也包含在内。删除后，相关功能可能无法运行。可打开对应工作流，在下列位置移除本空间并保存，再重新检查。",
         "workflow_locations": "引用位置：",
         "location_separator": "、",
         "location_workflow_knowledge_retriever": "知识库检索节点的「检索范围」",
@@ -698,7 +703,9 @@
         "reason_other": "无法删除此内容",
         "select": "选择内容",
         "selected": "删除选中内容",
-        "success": "删除已完成"
+        "success": "删除已完成",
+        "hints_unavailable": "暂时无法确认引用影响范围，仍可继续删除。",
+        "hints_notice": "引用信息仅供评估影响范围，可能存在延迟。删除后，使用此资源的功能可能无法运行。"
     },
     "batch": {
         "download": "批量下载",
@@ -738,9 +745,10 @@
         "new_tag": "新标签名称",
         "add_tag": "添加标签草稿",
         "draft_notice": "新标签仅在最终确认后创建。",
-        "tags_load_failed": "空间标签列表暂不可用，原权限限制仍适用。",
+        "tags_load_failed": "空间标签加载失败，可继续选择已显示的标签，或重试加载其他标签。",
         "invalid_name": "标签名称请遵守原长度限制。",
-        "select_first": "请先选择文件或文件夹"
+        "select_first": "请先选择文件或文件夹",
+        "reason_space_tag_permission_required": "有文件标签修改权限，但新建标签需要空间编辑权限。请改用已有标签，或联系空间管理员。"
     },
     "move": {
         "checking": "正在检查移动条件…",
@@ -877,6 +885,11 @@
         "publish_hint": "开启后，该知识空间会展示在广场，他人可以搜索或查看"
     },
     "space_copy_ui": {
+        "partial_failed": "复制部分失败",
+        "failure_counts": "已复制 {{completed}} 项 · 失败 {{failed}} 项",
+        "view_details": "查看明细",
+        "failure_details": "处理失败明细",
+        "no_failure_details": "暂无可查看的失败明细",
         "phase_preparing": "正在准备复制",
         "in_progress": "复制中",
         "failed": "复制失败",

@@ -28,17 +28,13 @@ async def get_chat_message_public(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """API for audit module and mark QA."""
+    from bisheng.chat_session.domain.services.session_read_authorization import require_session_read
+
     session_info = await MessageSessionDao.async_get_one(chat_id)
-    if session_info is not None:
-        try:
-            await AuditLogService.assert_session_in_audit_scope(
-                login_user, chat_id, session_owner_id=session_info.user_id, app_id=session_info.flow_id
-            )
-        except UnAuthorizedError:
-            raise UnAuthorizedError.http_exception()
-    history = await ChatSessionService.get_chat_history(
-        chat_id, flow_id, id, page_size, include_audit_avatars=session_info is not None
-    )
+    await require_session_read(session_info, login_user)
+    if session_info.flow_id != flow_id:
+        raise UnAuthorizedError.http_exception()
+    history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size, include_audit_avatars=True)
     return resp_200(data=history)
 
 

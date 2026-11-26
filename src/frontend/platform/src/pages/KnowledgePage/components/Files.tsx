@@ -28,6 +28,8 @@ import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
 import { SpaceDirectoryView, type DirectorySortField, type DirectoryViewMode } from "./SpaceDirectoryView";
 import { useWorkspaceViewMode } from "./useWorkspaceViewMode";
+import { useDirectoryVersionHistory } from "./useDirectoryVersionHistory";
+import { useDirectorySimilarDocuments } from "./useDirectorySimilarDocuments";
 export { StatusIndicator } from "./KnowledgeFileStatus";
 export interface FilesProps {
   toolbarTarget?: HTMLDivElement | null;
@@ -140,19 +142,13 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   const [name, setName] = useState("");
   const [saving, setSaving] = useState<Edit | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [container, setContainer] = useState<{
-    epoch: Epoch;
-    actions: string[];
-  } | null>(null);
-  useEffect(
-    () => () => {
-      if (current.current === epoch) current.current = null;
-      if (menuToken.current?.epoch === epoch) menuToken.current = null;
-      if (editToken.current?.epoch === epoch) editToken.current = null;
-      if (previewToken.current?.epoch === epoch) previewToken.current = null;
-    },
-    [epoch],
-  );
+  const [container, setContainer] = useState<{ epoch: Epoch; actions: string[] } | null>(null);
+  useEffect(() => () => {
+    if (current.current === epoch) current.current = null;
+    if (menuToken.current?.epoch === epoch) menuToken.current = null;
+    if (editToken.current?.epoch === epoch) editToken.current = null;
+    if (previewToken.current?.epoch === epoch) previewToken.current = null;
+  }, [epoch]);
   const filters = statuses.length ? { file_status: statuses } : {};
   const sorting = presentation === "workspace" ? { order_field: sortField, order_sort: sortDirection } : {};
   const ordinary = useInfiniteQuery({
@@ -202,6 +198,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     ],
     [keyword, search.data, ordinary.data],
   );
+  const history = useDirectoryVersionHistory({ epoch, scope, spaceId, parentId, rows, rowsUpdatedAt: active.dataUpdatedAt });
   const downloadIds = useDirectoryDownloadPermissions({
     prefix: epoch.prefix,
     spaceId,
@@ -241,7 +238,6 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
           showApiError(error);
       });
   }, [epoch, parentId, spaceId]);
-
   const handleMenu = async (item: KnowledgeSpaceChild, open: boolean) => {
     if (!open) {
       menuToken.current = null;
@@ -371,7 +367,6 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     selectionError,
     handleSelection,
     remove,
-    references,
   } = useDirectoryDeletion({
     spaceId,
     epoch,
@@ -381,6 +376,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     onDeleted: () => client.invalidateQueries({ queryKey: base }),
   });
   const selectedActions = useDirectorySelectionActions({ prefix: epoch.prefix, rows: selectedRows });
+  const similar = useDirectorySimilarDocuments({ epoch, scope, spaceId, selectedRows });
   const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
   const [batchTagsOpen, setBatchTagsOpen] = useState(false);
   const [move, setMove] = useState<MoveSelection[] | null>(null);
@@ -432,14 +428,11 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
           if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
             void remove([item]);
         }}
-        onReferences={() => {
-          if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
-            references([item]);
-        }}
         onRename={() => handleEdit(item)}
         onMove={() => setMove([{ id: item.id, type: item.file_type === 0 ? "folder" : "file" }])}
         onRetry={() => { void runBatch("retry", undefined, undefined, [item]); }}
         onChanged={() => client.invalidateQueries({ queryKey: base })}
+        onOpenVersionHistory={() => history.open(item)}
         canDownload={downloadIds.has(item.id)}
         onDownload={() => {
           void handleDownload(item);
@@ -521,19 +514,15 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         onCreateFolder={() => handleEdit()}
         canUpload={containerActions.includes("upload_file")}
         onWebLink={() => setWebLinkOpen(true)}
-        onBatchDownload={selectedActions.canDownload ? () => {
-          void runBatch("download");
-        } : undefined}
-        onBatchRetry={selectedActions.canRetry ? () => {
-          void runBatch("retry");
-        } : undefined}
+        onProcessSimilar={similar.onProcessSimilar}
+        onBatchDownload={selectedActions.canDownload ? () => void runBatch("download") : undefined}
+        onBatchRetry={selectedActions.canRetry ? () => void runBatch("retry") : undefined}
         onBatchTag={selectedActions.canTag ? () => setBatchTagsOpen(true) : undefined}
         onMove={selectedActions.canMove ? () => setMove(selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" }))) : undefined}
         selectedCount={selectedRows.length}
         onDeleteSelected={selectedActions.canDelete ? () => {
           void remove(selectedRows);
         } : undefined}
-        onReferences={selectedActions.canDelete ? () => references(selectedRows) : undefined}
       />
       <SpaceDirectoryView
         workspace={workspace}
@@ -566,6 +555,8 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         footer={workspace ? directoryStatus : undefined}
       />
       {!workspace && directoryStatus}
+      {history.overlay}
+      {similar.overlay}
       <SpaceDirectoryOverlays
         instance={instance}
         editOpen={!!visibleEdit}
@@ -590,6 +581,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       <KnowledgeDeletionDialog operation={deletion} />
       <BatchOperationDialog operation={batch} />
       <BatchTagDraftDialog
+        scope={scope}
         spaceId={spaceId}
         availableTags={selectedRows.flatMap((item) => item.tags ?? [])}
         open={batchTagsOpen && selectedActions.canTag}

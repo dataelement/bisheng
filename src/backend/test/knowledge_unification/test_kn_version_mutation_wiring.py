@@ -33,6 +33,9 @@ def admitted_space_editor(monkeypatch):
 @pytest.fixture
 async def wired(database, monkeypatch):
     sessions = []
+    # HTTP mutations require a published business resource, unlike raw repository fixtures.
+    async with database.engine.begin() as connection:
+        await connection.execute(sa.update(Knowledge.__table__).where(Knowledge.id == 9700).values(state=1))
 
     @asynccontextmanager
     async def fresh():
@@ -49,16 +52,49 @@ async def wired(database, monkeypatch):
     monkeypatch.setattr(KnowledgeAuditTelemetryService, "audit_link_file_version", audit_link)
     monkeypatch.setattr(KnowledgeAuditTelemetryService, "audit_set_primary_version", audit_primary)
     user = UserPayload(user_id=7, tenant_id=101, user_role=[])
-    # Any use of the legacy request repositories would fail immediately.
+    # Preflight authorization uses real repository reads in a separate request
+    # session; the application still owns exactly one fresh mutation session.
+    from bisheng.knowledge.domain.models import knowledge as knowledge_model
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+        KnowledgeDocumentRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
+
+    @asynccontextmanager
+    async def read_session():
+        async with AsyncSession(database.engine) as session:
+            yield session
+
+    monkeypatch.setattr(knowledge_model, "get_async_db_session", read_session)
+    permission = AsyncMock()
+    monkeypatch.setattr(module, "require_business_action", permission)
+
+    class ReadPort:
+        def __init__(self, repository_type):
+            self.repository_type = repository_type
+
+        def __getattr__(self, name):
+            async def read(*args, **kwargs):
+                async with read_session() as session:
+                    return await getattr(self.repository_type(session), name)(*args, **kwargs)
+
+            return read
+
     service = await dependencies.get_knowledge_version_service(
         request=Request({"type": "http", "headers": []}),
         login_user=user,
-        doc_repo=object(),
-        version_repo=object(),
-        knowledge_file_repo=object(),
+        doc_repo=ReadPort(KnowledgeDocumentRepositoryImpl),
+        version_repo=ReadPort(KnowledgeDocumentVersionRepositoryImpl),
+        knowledge_file_repo=ReadPort(KnowledgeFileRepositoryImpl),
         read_service=object(),
     )
-    return SimpleNamespace(
+    yield SimpleNamespace(
+        permission=permission,
         database=database,
         service=service,
         user=user,
@@ -146,6 +182,24 @@ async def test_locked_real_rebuilding_space_keeps_entire_chain_and_audit_unchang
         await invoke(wired, operation)
     assert await native_tests.snapshot(wired.database) == before
     assert len(wired.sessions) == 2 and all(not session.in_transaction() for session in wired.sessions)
+    wired.audit_link.assert_not_called()
+    wired.audit_primary.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["link", "merge", "primary"])
+async def test_edit_denial_precedes_native_transaction_and_preserves_database(wired, operation):
+    from fastapi import HTTPException
+
+    before = await native_tests.snapshot(wired.database)
+    wired.permission.side_effect = HTTPException(status_code=403, detail="edit denied")
+    with pytest.raises(HTTPException) as error:
+        await invoke(wired, operation)
+    assert error.value.status_code == 403
+    assert not wired.sessions
+    assert await native_tests.snapshot(wired.database) == before
+    wired.permission.assert_awaited_once_with(
+        wired.user, resource_type="knowledge_file", resource_id=101 if operation == "link" else 201, action="edit"
+    )
     wired.audit_link.assert_not_called()
     wired.audit_primary.assert_not_called()
 

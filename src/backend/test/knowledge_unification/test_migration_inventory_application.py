@@ -407,20 +407,24 @@ async def test_uploaded_content_readback_corruption_blocks_freeze(module, comple
     assert await count_runs(complete.engine) == 0
 
 
-async def test_unreadable_material_manifest_blocks_before_formal_inventory(module, complete, transport):
+async def test_inventory_does_not_require_external_backup_manifest(module, complete, transport):
     del transport.objects[transport.inputs["backup_ref"]["object_key"]]
+    del transport.objects[transport.inputs["schema_ref"]["object_key"]]
+    inputs = {key: value for key, value in transport.inputs.items() if key not in {"backup_ref", "schema_ref"}}
     async with AsyncSession(complete.engine) as session, session.begin():
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await application(module, transport).arun(session, **transport.inputs)
-    assert await count_runs(complete.engine) == 0
+        result = await application(module, transport).arun(session, **inputs)
+    assert await count_runs(complete.engine) == 3
+    root = json.loads(transport.objects[result.plan_ref["object_key"]])
+    metadata = next(row for row in root["records"] if row["record_type"] == "run")
+    assert metadata["external_material_policy"] == "not_required"
+    assert metadata["backup_ref"] is None and metadata["schema_ref"] is None
 
 
-async def test_schema_material_cannot_be_used_as_backup_evidence(module, complete, transport):
+async def test_partial_legacy_descriptors_are_not_silently_mixed_with_new_policy(module, complete, transport):
     async with AsyncSession(complete.engine) as session, session.begin():
-        with pytest.raises(KnowledgeOperationPlanConflictError):
-            await application(module, transport).arun(
-                session, **(transport.inputs | {"backup_ref": transport.inputs["schema_ref"]})
-            )
+        with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+            await application(module, transport).arun(session, **(transport.inputs | {"schema_ref": None}))
+    assert caught.value.kwargs["reason"] == "migration_inventory_material_descriptor_pair_required"
     assert await count_runs(complete.engine) == 0
 
 
@@ -548,7 +552,7 @@ async def test_full_m2_keeps_original_default_sources_and_freezes_safe_after_com
     )
     complete.queries.clear()
     async with AsyncSession(complete.engine) as session, session.begin():
-        await application(module, transport).arun(session, **transport.inputs)
+        frozen = await application(module, transport).arun(session, **transport.inputs)
     pages = [json.loads(content) for content in transport.objects.values()]
     command = next(row for page in pages for row in page["records"] if row.get("record_type") == "default_conversion")
     assert command["selected_linsight_id"] == "11" and command["selected_chat_id"] == "11"
@@ -558,12 +562,13 @@ async def test_full_m2_keeps_original_default_sources_and_freezes_safe_after_com
         for row in page["records"]
     )
     assert all(b"never export" not in content for content in transport.objects.values())
-    # Each tenant: one original NameCatalog projection, one preflight own row
-    # projection and one original source projection; none is repeated per slot.
+    # The shared native projections now need two bounded default reads per
+    # tenant across preflight/source capture; none is repeated per source slot.
     defaults = [sql for sql, _ in complete.queries if "FROM tenant_system_model_config" in sql]
     registered_tenant = [sql for sql in defaults if "reference_registered_tenant" in sql]
     assert len(registered_tenant) == 1  # one global C3 integrity read, independent of source slots
-    assert len(defaults) - len(registered_tenant) == 9
+    assert frozen.tenant_ids == (1, 101, 202)
+    assert len(defaults) - len(registered_tenant) == 2 * len(frozen.tenant_ids)
     async with complete.engine.connect() as connection:
         assert (
             await connection.execute(

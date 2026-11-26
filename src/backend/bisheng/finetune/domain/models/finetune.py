@@ -1,13 +1,14 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import Field as PydanticField
 from sqlalchemy import Integer, Select
 from sqlmodel import Column, DateTime, Field, col, func, select, text, update
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.context.tenant import strict_tenant_filter
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.utils import generate_uuid
@@ -142,14 +143,25 @@ class FinetuneChangeModelName(BaseModel):
     model_name: str
 
 
+class FinetuneTrainingFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str | None = None
+    name: str
+    url: str
+    num: int = PydanticField(default=0, ge=0)
+
+
 class FinetuneExtraParams(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
     gpus: str = Field(..., description="Needs to be usedGPUCard #")
     val_ratio: float = Field(0.1, ge=0, le=1, description="Proportion of validation sets")
     per_device_train_batch_size: int = Field(1, description="Batch size")
     learning_rate: float = Field(0.00005, ge=0, le=1, description='Learning rate <g x=1 id="1364"/>')
     num_train_epochs: int = Field(3, gt=0, description="Iteration rounds")
     max_seq_len: int = Field(8192, gt=0, description="Maximum List Length")
-    cpu_load: str = Field("false", description="Y/NcpuLoad")
+    cpu_load: Literal["false", "true"] = "false"
 
     @field_validator("per_device_train_batch_size", mode="before")
     @classmethod
@@ -216,18 +228,26 @@ class FinetuneDao(FinetuneBase):
     async def find_job_by_model_name(cls, model_name: str) -> Finetune | None:
         async with get_async_db_session() as session:
             statement = select(Finetune).where(Finetune.model_name == model_name)
-            return (await session.exec(statement)).first()
+            with strict_tenant_filter():
+                return (await session.exec(statement)).first()
 
     @classmethod
     async def find_job_by_model_id(cls, model_id: int) -> Finetune | None:
         async with get_async_db_session() as session:
             statement = select(Finetune).where(Finetune.model_id == model_id)
-            return (await session.exec(statement)).first()
+            with strict_tenant_filter():
+                return (await session.exec(statement)).first()
 
     @classmethod
     async def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
         update_statement = (
-            update(Finetune).where(col(Finetune.id) == job_id, col(Finetune.status) == old_status).values(status=status)
+            update(Finetune)
+            .where(
+                Finetune.tenant_id == get_current_tenant_id(),
+                col(Finetune.id) == job_id,
+                col(Finetune.status) == old_status,
+            )
+            .values(status=status)
         )
         async with get_async_db_session() as session:
             update_ret = await session.exec(update_statement)

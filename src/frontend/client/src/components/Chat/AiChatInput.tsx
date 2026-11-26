@@ -25,7 +25,9 @@ import { getSelectableSkills } from '~/api/linsight';
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 
-import { ComposerEditor, insertComposerPrompt } from "./Input/ComposerEditor";
+import { ComposerEditor, insertComposerPrompt, readSentComposerReferences } from "./Input/ComposerEditor";
+import type { SentComposerReference } from "./Input/composerReferences";
+import { splitComposerKnowledge } from './Input/composerKnowledge';
 import { useComposerReferences } from "./Input/useComposerReferences";
 import { labelForGroup, type AvailableToolGroup } from "./Input/AgentToolSelector";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
@@ -83,23 +85,9 @@ interface AiChatInputProps {
     allowConfiguration?: boolean;
     features?: AiChatInputFeatures;
     disabled?: boolean;
-    /**
-     * F035: disable only the send button while keeping the textarea editable.
-     * Used by chat-embedded task mode: a running round must not accept a new
-     * submission, but the user may still type the next round's prompt ahead.
-     */
-    sendDisabled?: boolean;
     isStreaming?: boolean;
     /** True while backend ASR is processing attached media after send. */
     isParsingMedia?: boolean;
-    /**
-     * F035: a linsight task round is executing. The handoff SSE stream already
-     * closed (so ``isStreaming`` is false), but the task keeps running via the
-     * worker/WS — show the stop button (wired to terminate-execute) and keep the
-     * task-mode toggle highlighted. The textarea stays editable (unlike
-     * ``isStreaming``) so the user can compose the next round's prompt.
-     */
-    taskRunning?: boolean;
     modelOptions?: any[];
     modelValue?: any;
     hasMessages?: boolean;
@@ -114,7 +102,7 @@ interface AiChatInputProps {
     onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
-    onSend: (text: string, files?: any[] | null) => void | boolean | Promise<void | boolean>;
+    onSend: (text: string, files?: any[] | null, references?: SentComposerReference[]) => void | boolean | Promise<void | boolean>;
     onStop: () => void;
     onScrollToBottom: () => void;
     /** Optional controlled value — for filling in preset questions */
@@ -162,10 +150,8 @@ const AiChatInput = memo(
         allowConfiguration = true,
         features,
         disabled = false,
-        sendDisabled = false,
         isStreaming = false,
         isParsingMedia = false,
-        taskRunning = false,
         modelOptions,
         modelValue,
         placeholder = '',
@@ -210,14 +196,26 @@ const AiChatInput = memo(
         // so reading it from bsConfig would silently fall back to 50MB.
         const envConfig = useRecoilValue(bishengConfState);
 
+        // F004: on the conversation page a run in progress accepts messages
+        // (AC-12), so `isStreaming` does not block the composer. Only that page
+        // passes a composer identity; the other surfaces that reuse this input
+        // (subscription dock, /linsight) own a stream that takes one turn at a time.
+        const runComposer = !isLingsi && !!composerIdentity;
+        const blockedByRun = isStreaming && !runComposer;
+        // F004: a message sent while a run is in progress carries text only, and
+        // the run keeps its model. Uploading and the model selector wait for the
+        // run to end; typing and sending stay available.
+        const runLocked = runComposer && isStreaming;
+
         // Collapse toolbar labels to icons when the toolbar's own width (not the
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
         const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
-        // Keep selected task skills across sends, shared by the landing and conversation inputs.
+        // Selected skills stay across sends, shared by the landing and conversation inputs.
+        // Both daily chat and deep research mount them (F004 AC-45).
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
         const skillCatalog = useQuery({ queryKey: ['linsightSelectableSkills'], queryFn: getSelectableSkills,
-            enabled: taskMode && !isLingsi, refetchOnWindowFocus: true, staleTime: 0 });
+            enabled: !isLingsi, refetchOnWindowFocus: true, staleTime: 0 });
         useEffect(() => {
             if (!skillCatalog.data) return;
             const allowed = new Set(skillCatalog.data.map(skill => skill.name));
@@ -308,11 +306,10 @@ const AiChatInput = memo(
         ) ?? false;
         const supportsImageParsing = !!bsConfig?.enable_etl4lm;
 
-        // Ordinary chat clears task skills and keeps supported document attachments.
+        // Ordinary chat keeps the selected skills and the supported document attachments.
         // Fires only on a true→false transition, never on mount or re-entry.
         useEffect(() => {
             if (prevTaskModeRef.current && !taskMode) {
-                setDailySkills([]);
                 const dailyAccept = buildChatAccept({
                     enableMedia: !!envConfig?.enable_media_upload,
                     includeOfd: !isLingsi,
@@ -341,7 +338,7 @@ const AiChatInput = memo(
             // Environment configuration is read when the mode transition fires; leaving it
             // out keeps a config refetch from re-running the cleanup.
             // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [taskMode, setDailySkills]);
+        }, [taskMode]);
 
         // Voice input: check if ASR model is available
         const { data: modelData } = useGetWorkbenchModelsQuery();
@@ -358,24 +355,56 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
-        const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
-            && (taskMode || (taskModeEntry && !!onToggleTaskMode))
-            && showAddSkill;
+        // Skills work in daily chat and in deep research, so the picker does not
+        // depend on the task-mode entry.
+        const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange && showAddSkill;
         // Tools are sent with every request (see useAiChat), so an established
         // conversation keeps the picker: a tool removed from the composer can be
         // added back, and a later turn can use a tool the first one did not.
         const showToolPicker = tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
-        const filesDisabled = !!disabled;
+        const filesDisabled = !!disabled || runLocked;
+
+        // Resource IDs share the native editor document while execution metadata stays in state.
+        const mountedSkills = !isLingsi ? dailySkills : [];
+        const showMountedTools = !!tools && agentMode && !isLingsi && !!onSelectedOrgKbsChange;
+        const mountedTools = useMemo(
+            () => (showMountedTools ? selectedTools : []),
+            [showMountedTools, selectedTools],
+        );
+        // F005: configured knowledge bases the admin hid from the composer stay selected
+        // without a tag. The editor rebuilds the list from its tags, so add them back.
+        const { visible: composerKbs, hidden: hiddenKbs } = useMemo(
+            () => splitComposerKnowledge(isLingsi ? [] : selectedOrgKbs, bsConfig?.orgKbs),
+            [isLingsi, selectedOrgKbs, bsConfig?.orgKbs],
+        );
+        const handleComposerKbsChange = useMemo(
+            () => onSelectedOrgKbsChange && ((items: typeof selectedOrgKbs) => onSelectedOrgKbsChange([...items, ...hiddenKbs])),
+            [onSelectedOrgKbsChange, hiddenKbs],
+        );
+        const { references, onReferencesChange } = useComposerReferences(
+            mountedSkills, composerKbs, setDailySkills, handleComposerKbsChange,
+            mountedTools, setSelectedTools,
+            (tool) => labelForGroup(
+                (bsConfig?.tools as AvailableToolGroup[] | undefined)?.find(group => group.id === tool.id) ?? tool,
+                localize,
+            ),
+        );
 
         const navigate = useNavigate();
 
         // Drag & paste file support (only when not disabled by exclusion)
         const { isDragging, handlePaste } = useFileDropAndPaste({
-            enabled: showUpload && !disabled && !filesDisabled,
+            // Stays on while a run locks uploads: the drop or paste is taken and
+            // answered with the reason, instead of the browser opening the file.
+            enabled: showUpload && !disabled,
             // Task mode only: a dropped directory is expanded with its tree
             // preserved. Daily chat has no workspace to rebuild a tree in.
             allowFolders: taskMode,
             onFilesReceived: (files: FileList | File[]) => {
+                if (runLocked) {
+                    showToast?.({ message: localize('runComposer.uploadLocked'), status: 'warning' });
+                    return;
+                }
                 inputFilesRef.current?.upload(files);
             },
         });
@@ -404,7 +433,7 @@ const AiChatInput = memo(
         const handleSend = useCallback(async () => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
-            if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
+            if (!trimmed || disabled || blockedByRun || isParsingMedia || fileUploading || filesParsing) return;
             if (sendPendingRef.current?.identity === composerIdentity) return;
             if (!taskMode && !isLingsi && chatFiles?.some((file) => !canProcessChatImage(
                 file.name || file.file_name || file.filename || '', supportsVision, supportsImageParsing,
@@ -416,15 +445,15 @@ const AiChatInput = memo(
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
             // bubble goes back to `cover_filepath` once parsing produces it.
+            const files = chatFiles?.map((file) => file?.mediaCoverUrl?.startsWith('blob:')
+                ? { ...file, mediaCoverUrl: undefined }
+                : file) ?? chatFiles;
+            const sentReferences = textAreaRef.current ? readSentComposerReferences(textAreaRef.current, references) : [];
             const pending = { identity: composerIdentity };
             sendPendingRef.current = pending;
             let accepted: void | boolean;
             try {
-                accepted = await onSend(trimmed, chatFiles?.map((file) => (
-                    file?.mediaCoverUrl?.startsWith('blob:')
-                        ? { ...file, mediaCoverUrl: undefined }
-                        : file
-                )) ?? chatFiles);
+                accepted = await (sentReferences.length ? onSend(trimmed, files, sentReferences) : onSend(trimmed, files));
             } finally {
                 if (sendPendingRef.current === pending) sendPendingRef.current = null;
             }
@@ -445,7 +474,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity]);
+        }, [text, disabled, blockedByRun, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity, references]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -487,11 +516,11 @@ const AiChatInput = memo(
                     e.keyCode === 229;
                 if (e.key === "Enter" && !e.shiftKey && !composing) {
                     e.preventDefault();
-                    if (isStreaming) return;
+                    if (blockedByRun) return;
                     handleSend();
                 }
             },
-            [handleSend, isStreaming]
+            [handleSend, blockedByRun]
         );
 
         // Mirrors useTextarea's guard: true between compositionstart and
@@ -504,28 +533,7 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        // Resource IDs share the native editor document while execution metadata stays in state.
-        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
-        // Default-checked (auto) tools stay selected but out of the editor text;
-        // the "+" menu shows them. Editor edits only replace the visible part.
-        const showMountedTools = !!tools && agentMode && !isLingsi && !!onSelectedOrgKbsChange;
-        const mountedTools = useMemo(
-            () => (showMountedTools ? selectedTools.filter((tool) => !tool.auto) : []),
-            [showMountedTools, selectedTools],
-        );
-        const handleVisibleToolsChange = useCallback(
-            (items: typeof selectedTools) => setSelectedTools((prev) => [...prev.filter((tool) => tool.auto), ...items]),
-            [setSelectedTools],
-        );
-        const { references, onReferencesChange } = useComposerReferences(
-            mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
-            mountedTools, handleVisibleToolsChange,
-            (tool) => labelForGroup(
-                (bsConfig?.tools as AvailableToolGroup[] | undefined)?.find(group => group.id === tool.id) ?? tool,
-                localize,
-            ),
-        );
-        const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0 || mountedTools.length > 0);
+        const hasMountedKbs = composerKbs.length > 0 || mountedSkills.length > 0 || mountedTools.length > 0;
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
 
@@ -559,7 +567,7 @@ const AiChatInput = memo(
                     <p role="status" className="mb-2 text-body-sm text-text-3">{knowledgeAccessMessage}</p>
                 )}
                 {/* Drag-drop overlay */}
-                {isDragging && <DragDropOverlay />}
+                {isDragging && !runLocked && <DragDropOverlay />}
 
                 {/* Scroll to bottom button — above input */}
                 {hasMessages && <div className="absolute -top-10 w-full">
@@ -575,7 +583,7 @@ const AiChatInput = memo(
                 </div>}
 
                 <div
-                    onKeyDownCapture={(event) => handleComposerResourceKeyDown(event, !!disabled || !!isStreaming, isComposingRef.current)}
+                    onKeyDownCapture={(event) => handleComposerResourceKeyDown(event, !!disabled || blockedByRun, isComposingRef.current)}
                     className={cn(
                         // The composer owns its theme surface through dsh-composer-bg.
                         // z-[1] keeps it above the attached resource strip.
@@ -591,7 +599,7 @@ const AiChatInput = memo(
                         <AttachmentBar
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
-                            onRemoveFile={disabled || isStreaming ? undefined : (file) => {
+                            onRemoveFile={disabled || blockedByRun ? undefined : (file) => {
                                 // clientId, not name: a folder upload can carry the
                                 // same file name in several subdirectories.
                                 const id = String(file.clientId ?? file.id);
@@ -707,7 +715,7 @@ const AiChatInput = memo(
                             onCompositionEnd={() => { voice.compositionEnd(); handleCompositionEnd(); }}
                             onPaste={handlePaste}
                             onScroll={handleTextareaScroll}
-                            disabled={disabled || isStreaming}
+                            disabled={disabled || blockedByRun}
                             placeholder={placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
                             className={cn(size === 'mini' && 'min-h-0', removeFocusRings,
                                 isTextareaScrollable && isTextareaScrolling && 'scroll-on-scroll')}
@@ -747,6 +755,7 @@ const AiChatInput = memo(
                                     }}
                                     showFileUpload={showUpload}
                                     fileUploadDisabled={filesDisabled}
+                                    fileUploadDisabledReason={runLocked ? localize('runComposer.uploadLocked') : undefined}
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
                                     // Folder upload is task-mode only: daily chat has no agent
                                     // workspace to rebuild the directory tree in.
@@ -754,13 +763,10 @@ const AiChatInput = memo(
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                 >
-                                    {/* Selecting a skill activates task mode for this draft. */}
+                                    {/* Selecting a skill keeps the current mode. */}
                                     {showSkillPicker ? <ChatSkillSelector menu
                                             selected={dailySkills} disabled={!!disabled}
-                                            onChange={(skills) => {
-                                                setDailySkills(skills);
-                                                if (skills.length > 0 && !taskMode) onToggleTaskMode?.();
-                                            }} />
+                                            onChange={setDailySkills} />
                                         : null}
                                 </ChatResourceMenu>
                             )}
@@ -781,14 +787,15 @@ const AiChatInput = memo(
                             {/* Model select */}
                             {modelSelect && modelOptions && !isLingsi && (
                                 <AiModelSelect
-                                    disabled={!!disabled}
+                                    disabled={!!disabled || runLocked}
+                                    disabledReason={runLocked ? localize('runComposer.modelLocked') : undefined}
                                     value={modelValue}
                                     options={modelOptions}
                                     onChange={onModelChange!}
                                     onAutoChange={onModelAutoChange}
                                 />
                             )}
-                            {isStreaming || taskRunning ? (
+                            {isStreaming && (
                                 <button
                                     type="button"
                                     className="dsh-composer-submit btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100"
@@ -813,7 +820,9 @@ const AiChatInput = memo(
                                         />
                                     </svg>
                                 </button>
-                            ) : (
+                            )}
+                            {/* Conversation page: the send button stays next to the stop button. */}
+                            {(runComposer || !isStreaming) && (
                                 <div className="flex items-center gap-2">
                                 {showVoice && (
                                     <SpeechToTextComponent
@@ -829,7 +838,6 @@ const AiChatInput = memo(
                                     disabled={
                                         voice.busy || !text?.trim() ||
                                         disabled ||
-                                        sendDisabled ||
                                         isParsingMedia ||
                                         fileUploading ||
                                         filesParsing

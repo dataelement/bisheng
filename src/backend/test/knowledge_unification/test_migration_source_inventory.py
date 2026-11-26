@@ -438,8 +438,17 @@ async def test_unknown_or_malformed_original_facts_fail_without_ready_or_writes(
     async with AsyncSession(database) as session, session.begin(), sharing() as (reader, _):
         flushes = []
         event.listen(session.sync_session, "before_flush", lambda *args: flushes.append(True))
-        with pytest.raises((KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError)):
-            await collect(module, session, reader)
+        if bad == "graph":
+            from bisheng.knowledge.application.unification_workflow_retention import invalid_configuration
+
+            records = await collect(module, session, reader)
+            retained = [
+                row for row in records if isinstance(row, module.RetiredInventoryRecord) and invalid_configuration(row)
+            ]
+            assert len(retained) == 1 and retained[0].source_key.source_id == "wf"
+        else:
+            with pytest.raises((KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError)):
+                await collect(module, session, reader)
         assert not flushes
         assert not session.new and not session.dirty
 

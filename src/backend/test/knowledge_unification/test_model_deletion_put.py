@@ -61,7 +61,7 @@ async def test_original_public_put_removes_exact_difference_and_replays_generate
         serialized = json.dumps([row.model_execution_metadata for row in rows])
         assert actual.SECRET not in serialized and "api_key" not in serialized
         tombstones = (await session.execute(sa.select(ResourceReferenceTombstone))).scalars().all()
-        assert len(tombstones) == 4 and all(row.stage == "deleted" for row in tombstones)
+        assert tombstones == []
 
 
 @pytest.mark.parametrize("failure", [ValueError, asyncio.CancelledError])
@@ -91,7 +91,7 @@ async def test_projection_completed_but_late_business_failure_keeps_native_befor
             row = await session.get(KnowledgeOperationPlan, control["confirmation_id"])
             assert row.model_execution_state == "RESERVED"
             tombstones = (await session.execute(sa.select(ResourceReferenceTombstone))).scalars().all()
-            assert len(tombstones) == 1 and tombstones[0].stage == "deleting"
+            assert tombstones == []
         monkeypatch.setattr(app.writer, "aupdate_server", original)
         user.token_version = 4
         user._runtime_credential_reference = {**user._runtime_credential_reference, "token_version": 4}

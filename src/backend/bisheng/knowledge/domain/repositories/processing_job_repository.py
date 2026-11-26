@@ -1079,6 +1079,7 @@ class ProcessingJobRepository:
                             KnowledgeProcessingJob.request_hash,
                             KnowledgeProcessingJob.claim_generation,
                             KnowledgeProcessingJob.succeeded_count,
+                            KnowledgeProcessingJob.obsolete_reason,
                         ).where(KnowledgeProcessingJob.id == job_id)
                     )
                 ).one_or_none()
@@ -1105,7 +1106,19 @@ class ProcessingJobRepository:
 
     @staticmethod
     def _retry_eligibility(job, counts, expected_count, *, logical_pending=False) -> RetryEligibility:
-        terminal_failure = job.state in {"failed", "partial_failed"}
+        # A retry performed while the destination was initializing used to strand
+        # failed items. Only this specific, logically moved failure may request a
+        # fresh admission; the execution path still checks both frozen roots.
+        recoverable_move = (
+            job.kind == "move_index"
+            and job.state == "obsolete"
+            and job.error_code == KnowledgeProcessingObsoleteError.Code
+            and job.obsolete_reason == "move_destination_space_processing"
+            and not logical_pending
+            and counts.get("failed", 0) > 0
+            and set(counts) <= {"failed", "succeeded"}
+        )
+        terminal_failure = job.state in {"failed", "partial_failed"} or recoverable_move
         finalize_only = (
             terminal_failure
             and job.error_code is not None
@@ -1431,9 +1444,10 @@ class ProcessingJobRepository:
             ):
                 raise KnowledgeIdempotencyConflictError()
             return JobRequestResult(job, True)
-        if job.state == "obsolete":
+        recovering = job.state == "obsolete" and move_eligibility is not None and move_eligibility.retryable
+        if job.state == "obsolete" and not recovering:
             return JobRequestResult(job, False)
-        if job.revision != expected_job_revision or job.state not in {"failed", "partial_failed"}:
+        if job.revision != expected_job_revision or (not recovering and job.state not in {"failed", "partial_failed"}):
             raise KnowledgeProcessingJobNotRetryableError()
         if not self._check_configuration(job, configuration, move_current=current):
             await session.flush()
@@ -1476,6 +1490,8 @@ class ProcessingJobRepository:
         job.next_dispatch_at = job.update_time = self._now()
         job.error_code = None
         job.error_message = None
+        if recovering:
+            job.obsolete_reason = None
         job.revision += 1
         await session.flush()
         await self._refresh_counts(session, job)

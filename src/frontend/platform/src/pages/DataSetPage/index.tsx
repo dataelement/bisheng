@@ -26,7 +26,7 @@ export default function DataSetPage() {
         return () => window.removeEventListener("bisheng:management-scope-changed", reset);
     }, []);
     // Retire old rows, requests, pagination and dialogs before the new view loads.
-    return <DataSetContent key={`${user?.user_id}:${user?.tenant_id}:${viewRevision}`} />;
+    return <DataSetContent key={`${user?.user_id}:${user?.leaf_tenant_id ?? user?.tenant_id}:${viewRevision}`} />;
 }
 
 function DataSetContent() {

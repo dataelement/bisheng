@@ -451,7 +451,11 @@
     "tagEditor": {
         "addPlaceholder": "Enter a tag and press Enter to save",
         "existingTags": "Existing tags",
-        "emptyTags": "No tags"
+        "emptyTags": "No tags",
+        "checkingPermission": "Checking space tag management permission…",
+        "permissionUnavailable": "Space tag management permission could not be checked. You can still select existing tags. Please retry.",
+        "deleteTag": "Delete space tag: {{name}}",
+        "spacePermissionRequired": "You can select existing tags. Creating or deleting space tags requires space edit permission. Contact the space administrator."
     },
     "f118": {
         "specialized_processing_rules": "This file uses its dedicated parsing and splitting rules. No document or table settings are needed.",
@@ -616,7 +620,8 @@
         "processing_conflict_resplit": "The affected files are being split again. Check Processing tasks and try again when they finish.",
         "processing_conflict_file_queue": "The file is already queued for processing. Wait for the queued task or check its progress in Task records.",
         "processing_conflict_file_state": "The current file status does not support this operation. Refresh the file list; failed files can be retried from their failure actions.",
-        "processing_conflict_source_input": "A move or copy still needs data from this source space. Check Task records before deleting or clearing it; retry failed tasks first.",
+        "processing_conflict_source_file_input": "A move may still need the selected files, so this operation is blocked. Check the move status in Task records.",
+        "processing_conflict_source_input": "A move or copy still needs data from this space, so this operation is blocked. Check the task status in Task records.",
         "processing_conflict_transfer_input": "The space has unfinished move or copy tasks. Check their progress and retry failed tasks in Task records.",
         "processing_conflict_move_input": "A move has not finished transferring data or cleaning its source. Check Move tasks and retry the original task if it failed.",
         "processing_conflict_copy_retry": "The current copy state does not allow retry. Refresh the space status and wait for any model rebuild to finish.",
@@ -631,13 +636,13 @@
     },
     "deletion": {
         "source_tasks_block_delete": "Unfinished move or copy tasks still depend on this space. Failed tasks may also need its source files, so deletion is blocked. Open Processing tasks in the destination space, resolve the failure, then check deletion again. If you cannot access the destination, contact the task initiator or an administrator.",
-        "references": "References",
+        "references": "Recorded references",
         "clear": "Clear space",
         "delete_space": "Delete space",
         "delete_items": "Delete files and folders",
         "checking": "Checking…",
         "unavailable": "Reference checking is unavailable. Try again after it is restored.",
-        "changed": "The items, permissions or references changed. Review the operation again.",
+        "changed": "The file scope, permissions, or resource state changed. Review again.",
         "failed": "The operation could not be completed.",
         "irreversible": "Deletion is permanent. Review all affected items before continuing.",
         "item_count": "Affected files and folders:",
@@ -657,7 +662,7 @@
         "source_name": "Source name",
         "source_version": "Version",
         "matched_slots": "Matching slots",
-        "no_sources": "No referencing sources",
+        "no_sources": "No recorded references found",
         "more": "Show more sources",
         "pending": "Deletion is unfinished. Keep this confirmation to check progress or retry the same operation.",
         "state": "Status:",
@@ -682,7 +687,7 @@
         "source_knowledge": "Knowledge",
         "source_model_default": "Default model",
         "source_other": "Other source",
-        "workflow_unlink": "These workflows still reference this knowledge space, so it cannot be deleted. Open each workflow, remove this space from the listed place, and save. Offline workflows block deletion too. Check again after saving.",
+        "workflow_unlink": "These workflows still reference this knowledge space, including offline workflows. Deleting it may prevent the related features from working. You can open each workflow, remove this space from the listed settings, save, and check again.",
         "workflow_locations": "Referenced in: ",
         "location_separator": ", ",
         "location_workflow_knowledge_retriever": "Knowledge retrieval node, Search scope",
@@ -698,7 +703,9 @@
         "reason_other": "Cannot delete this item",
         "select": "Select item",
         "selected": "Delete selected",
-        "success": "Deletion completed"
+        "success": "Deletion completed",
+        "hints_unavailable": "Reference impact is unavailable. You can still continue deleting.",
+        "hints_notice": "References are an estimate and may be delayed. Features using this resource may fail after deletion."
     },
     "batch": {
         "download": "Batch download",
@@ -738,9 +745,10 @@
         "new_tag": "New tag name",
         "add_tag": "Add draft tag",
         "draft_notice": "New tags are created only after confirmation.",
-        "tags_load_failed": "The space tag list is unavailable. Existing permission restrictions still apply.",
+        "tags_load_failed": "Space tags could not be loaded. You can select the tags already shown, or retry to load more.",
         "invalid_name": "Use a tag name within the existing length limit.",
-        "select_first": "Select files or folders first"
+        "select_first": "Select files or folders first",
+        "reason_space_tag_permission_required": "You can edit this file’s tags, but creating a tag requires space edit permission. Choose an existing tag or contact the space administrator."
     },
     "move": {
         "checking": "Checking move conditions…",
@@ -877,6 +885,11 @@
         "publish_hint": "Show this space in the square so others can search for or view it"
     },
     "space_copy_ui": {
+        "partial_failed": "Copy partially failed",
+        "failure_counts": "{{completed}} copied · {{failed}} failed",
+        "view_details": "View details",
+        "failure_details": "Processing failure details",
+        "no_failure_details": "No failure details to display",
         "phase_preparing": "Preparing the copy",
         "in_progress": "Copying",
         "failed": "Copy failed",

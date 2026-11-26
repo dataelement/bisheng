@@ -36,6 +36,7 @@ interface PermissionListTabProps {
   refreshKey?: number
   pageSize?: number
   fixedSubjectType?: SubjectType
+  systemPreset?: boolean
   onRosterChange?: (assignees: PermissionGrantAssignee[]) => void
   onMutationSuccess?: (result: MutateResourceGrantsResult) => void
 }
@@ -169,6 +170,7 @@ export function PermissionListTab({
   refreshKey = 0,
   pageSize = 50,
   fixedSubjectType = "user",
+  systemPreset = false,
   onRosterChange,
   onMutationSuccess,
 }: PermissionListTabProps) {
@@ -288,9 +290,14 @@ export function PermissionListTab({
     fixedSubjectType,
   ])
 
+  const isSystemPresetTool = systemPreset && resourceType === "tool"
   const visibleAssignees = useMemo(() => assignees.filter(
-    assignee => assignee.subject.type === fixedSubjectType,
-  ), [assignees, fixedSubjectType])
+    assignee => assignee.subject.type === fixedSubjectType && !(
+      isSystemPresetTool
+      && assignee.subject.type === "user"
+      && ["", "none", "null", "undefined"].includes(assignee.subject.id.trim().toLowerCase())
+    ),
+  ), [assignees, fixedSubjectType, isSystemPresetTool])
 
   const mutateAssignee = async (
     assignee: PermissionGrantAssignee,

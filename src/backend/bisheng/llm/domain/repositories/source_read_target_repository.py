@@ -20,7 +20,6 @@ from bisheng.resource_reference.application.contracts import (
     is_preserved_foreign_model_reference,
 )
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
-from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +41,6 @@ class ModelReadPlan:
 class ModelSourceReadTargetRepository:
     def __init__(self, verifier):
         self.verifier = verifier
-        self.sources = SourceReadRepository(verifier)
 
     @staticmethod
     async def _rows(session, statement, *, lock=False):
@@ -127,7 +125,7 @@ class ModelSourceReadTargetRepository:
         else:
             await self.verifier.aget_source_snapshot(session, scope, identity)
             tenant_id = _resolve_tenant_id()
-            originals = (await self.sources.aread_source(session, scope, identity)).references
+            originals = ()
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
         originals_by_key = self._originals_by_key(originals, keys)
         originals = tuple(row for bucket in originals_by_key.values() for row in bucket)
@@ -237,7 +235,7 @@ class ModelSourceReadTargetRepository:
         )
         self.verifier.get_source_snapshot(session, scope, identity)
         tenant_id = _resolve_tenant_id()
-        originals = self.sources.read_source(session, scope, identity).references
+        originals = ()
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
         originals_by_key = self._originals_by_key(originals, keys)
         originals = tuple(row for bucket in originals_by_key.values() for row in bucket)

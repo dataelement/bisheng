@@ -29,6 +29,7 @@ credential_store=$FIXTURE
 credential_sealed_migration_session=$FIXTURE
 ENV_FILE=$FIXTURE/.env
 KEY_FILE=$FIXTURE/key
+secret_gid=1000
 COMPOSE=(compose_boundary)
 die() { echo stopped >> "$FIXTURE/events"; exit 2; }
 env_get() { echo owned-project; }
@@ -39,6 +40,12 @@ credential_es_tool() {
   case "$1" in
     es-export) echo '{}' ;;
     es-freeze) echo frozen >> "$FIXTURE/events" ;;
+    es-capture)
+      [[ $* = *'--secret-gid 1000'* ]]
+      [[ $(cat) = fixture-inspection ]]
+      echo captured >> "$FIXTURE/events"
+      touch "$FIXTURE/es-runtime-fixture.sealed"
+      ;;
     es-observe) echo "$OBSERVATION" ;;
     es-intent) echo intent >> "$FIXTURE/events"; echo PASSWORD_INTENT > "$FIXTURE/phase" ;;
     es-persist) [[ $(cat "$FIXTURE/phase") = PASSWORD_INTENT ]]; echo persisted >> "$FIXTURE/events"; echo PASSWORD_SET > "$FIXTURE/phase" ;;
@@ -50,6 +57,7 @@ credential_es_tool() {
 compose_boundary() { echo compose >> "$FIXTURE/events"; }
 compose() { echo owned-es-container; }
 docker() {
+  if [[ $1 = inspect ]]; then echo fixture-inspection; return; fi
   if [[ $* = *'/proc/1/comm'* ]]; then echo java; return; fi
   [[ $(cat "$FIXTURE/phase") = PASSWORD_INTENT ]]
   echo reset >> "$FIXTURE/events"
@@ -85,6 +93,7 @@ credential_es_run
         completed = subprocess.run(["bash", str(script)], env=environment, capture_output=True, timeout=10)
         code, errors = completed.returncode, completed.stderr
     events = (tmp_path / "events").read_text().splitlines()
+    assert events.index("frozen") < events.index("captured") < events.index("compose")
     if reset_ok:
         assert code == 0, errors.decode()
         assert events[-1] == "verified"

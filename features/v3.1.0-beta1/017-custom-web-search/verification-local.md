@@ -38,3 +38,15 @@ config=/tmp/custom-web-search-test.yaml .venv/bin/python -m pytest -q \
 - 115 原有 1 条凭据已迁移为 platform 加密密文并解密通过；backend/worker 已重建，实际容器和 env_file 均移除两个变量，worker 也验证原凭据可解密。
 - 115 使用原已保存配置直接调用 search_preview 成功，返回 38 条结果。此为服务器 Service 调用验证，不等同于已登录界面操作或完整 Desktop 会话验收。
 - 部署只替换搜索密钥加载部分，保留线上已有的 OpenAPI v2 实现；服务器窄补丁不代表整个 PR 已部署。
+# 2026-11-24：beta2 移除操作 proof
+
+本节仅覆盖本次定向修改；起点 `origin/feat/3.1.0-beta2` / `3168b8724b`。不代表整个 F017 或生产环境完成验收。
+
+- 修改前：`test_custom_web_search.py` + `test_openapi_search.py`，34 passed。
+- 修改后：上述两文件，加 `test_parse_preset_extra.py`、`test_tool_executor_permissions.py`、`test_tool_executor_availability.py`，55 passed，9 subtests passed。
+- API 链路：通过真实 FastAPI 路由进行导入 → 保存 → GET 重读 → 携带旧 proof 的测试调用；使用 SQLite 隔离持久化，身份依赖替身及固定上游响应。另有回环 HTTP 服务覆盖导入 → 保存 → ToolExecutor → 隔离请求执行。未执行远端部署 E2E。
+- 复制兼容：目标租户的缺失、过期和畸形旧 proof 均不影响读取、预览、保存和工具构造；返回值及 custom 保存结果不含 proof，运行初始化不修改 ORM 配置。其他租户访问仍 404。
+- 前端：`CustomWebSearch.test.tsx` + `SharedToolSettings.test.tsx`，2 文件 / 16 passed，覆盖导入无 proof、直接保存已有配置及原设置交互。
+- 前端全量 `pnpm lint`、`pnpm typecheck`、`pnpm check-i18n` 通过。lint 有既有 `BatchTagDraftDialog.tsx` 未使用 eslint-disable 的 warning；没有 error。测试使用现有安装依赖，并将 workspace 包指向当前 beta2 源码，未改锁文件。
+- 四个修改 Python 文件的 ruff format/check 通过，`git diff --check` 通过。架构守卫没有 VIOLATION；`test_openapi_search.py` 的原有合成 Bearer 凭据触发 RULE-7 warning，不是真实凭据。
+- 未部署生产，未执行 MySQL/DM8、真实搜索凭据或完整生产 PPT 任务。部署后的人工验证见 e2e-checklist.md 的 beta2 回归部分。

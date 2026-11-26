@@ -1,5 +1,6 @@
 import { Outlined } from 'bisheng-icons';
-import { useState } from 'react';
+import copy from 'copy-to-clipboard';
+import { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { Button } from '~/components/ui/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/Collapsible';
@@ -26,7 +27,7 @@ export function FailureInfoDetails({ failureInfo, referenceId, detail }: Failure
     const info = parseFailureInfo(failureInfo);
     if (!info) {
         if (!referenceId || !/^[A-Za-z0-9_-]{1,128}$/.test(referenceId)) return null;
-        return <p className="mt-1 break-all text-caption text-text-3">{localize('api_errors.failure_id', { 0: referenceId })}</p>;
+        return <FailureReference referenceId={referenceId} />;
     }
     const serviceNameKey = info.service_name?.toLowerCase();
     const serviceName = serviceNameKey && SERVICES.has(serviceNameKey)
@@ -52,6 +53,36 @@ export function FailureInfoDetails({ failureInfo, referenceId, detail }: Failure
                 {detail && <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-100 p-2.5 text-xs leading-relaxed text-gray-500">{detail}</pre>}
             </CollapsibleContent>
         </Collapsible>
+    );
+}
+
+/** The support reference of a failure without dependency provenance: the id
+    (the log trace id of the request or run), a copy button, and one line that
+    says what it is for. */
+function FailureReference({ referenceId }: { referenceId: string }) {
+    const localize = useLocalize();
+    const [copied, setCopied] = useState(false);
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => {
+        if (timer.current) clearTimeout(timer.current);
+    }, []);
+    const onCopy = () => {
+        copy(referenceId, { format: 'text/plain' });
+        setCopied(true);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setCopied(false), 3000);
+    };
+    return (
+        <div className="mt-1 text-caption text-text-3">
+            <div className="flex flex-wrap items-center gap-x-1">
+                <span className="break-all">{localize('api_errors.failure_id', { 0: referenceId })}</span>
+                <Button type="button" color="default" variant="text" size="small" className="text-caption text-text-3" onClick={onCopy}>
+                    {copied ? <Outlined.Check aria-hidden="true" /> : <Outlined.Copy aria-hidden="true" />}
+                    {localize(copied ? 'com_ui_copied' : 'com_ui_copy')}
+                </Button>
+            </div>
+            <p className="break-words">{localize('api_errors.failure_id_hint')}</p>
+        </div>
     );
 }
 

@@ -33,6 +33,7 @@ interface PermissionDialogProps {
   resourceId: string;
   resourceName: string;
   allowAllMembers?: boolean;
+  systemPreset?: boolean;
 }
 
 const SUBJECT_TABS: Array<{ value: SubjectType; labelKey: string }> = [
@@ -48,6 +49,7 @@ export function PermissionDialog({
   resourceId,
   resourceName,
   allowAllMembers = false,
+  systemPreset = false,
 }: PermissionDialogProps) {
   const { t } = useTranslation("permission");
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -195,6 +197,7 @@ export function PermissionDialog({
                     context={context}
                     refreshKey={refreshKey}
                     fixedSubjectType={subjectType}
+                    systemPreset={systemPreset}
                     onRosterChange={setAssignees}
                     onMutationSuccess={handleGrantSuccess}
                   />

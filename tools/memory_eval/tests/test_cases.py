@@ -8,6 +8,7 @@ CASES = Path(__file__).resolve().parents[1] / "cases"
 REQUIRED_ACS = [
     "AC-13", "AC-15", "AC-17", "AC-18", "AC-19", "AC-20", "AC-29", "AC-30", "AC-31", "AC-32", "AC-33",
     "AC-34", "AC-35", "AC-36", "AC-46", "AC-47", "AC-48", "AC-49", "AC-63", "AC-64", "AC-65", "AC-50", "AC-95",
+    "AC-108",
 ]  # fmt: skip
 
 

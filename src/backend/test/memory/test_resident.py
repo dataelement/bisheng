@@ -11,7 +11,9 @@ from bisheng.memory.domain.models.memory_item import STATUS_ACTIVE, MemoryItem
 from bisheng.memory.domain.models.memory_resident_snapshot import MemoryResidentSnapshot
 from bisheng.memory.domain.repositories import _db
 from bisheng.memory.domain.services import metrics as m
-from bisheng.memory.domain.services.resident import RESIDENT_HEADER, ResidentService
+from bisheng.common.errcode.memory import MemorySearchUnavailableError
+from bisheng.memory.domain.services.resident import RELATED_HEADER, RESIDENT_HEADER, ResidentService
+from bisheng.memory.domain.services.search import SearchService
 from test.memory.conftest import counter
 
 
@@ -73,22 +75,52 @@ async def test_ac54_experience_not_in_chat_resident(service, resident, make_ctx)
     assert "表格" in text and "周报" not in text
 
 
-async def test_ac55_experience_injection_has_own_limit_and_order(service, resident, make_ctx, monkeypatch):
+def _search(index, details, kv):
+    return SearchService(index=index, details=details, metrics=m.MemoryMetrics(kv))
+
+
+async def test_ac55_related_follows_search_order_and_skips_resident(
+    service, resident, make_ctx, index, details, kv, monkeypatch
+):
+    """AC-55 / decision 23: one search with the task question, all types, resident items left out."""
     ctx = make_ctx()
-    ids = []
+    pinned = await service.write(ctx, "remember", content="用户做向量数据库选型时偏好表格", type="preference")
+    exp = await service.write(ctx, "remember", content="向量数据库选型先列评估维度再查资料", type="experience")
+    other = await service.write(ctx, "remember", content="用户周五下午不开会", type="fact")
+    _limits(monkeypatch, experience_max_items=5, experience_max_chars=2000)
+    res = await resident.resident(ctx, "linsight")
+    assert pinned.item_id in res.item_ids
+
+    block = await resident.related(ctx, "调研向量数据库选型", res.item_ids, search=_search(index, details, kv))
+
+    assert exp.item_id in block.item_ids  # experience found by relevance
+    assert pinned.item_id not in block.item_ids  # already resident
+    assert other.item_id not in block.item_ids  # unrelated
+    assert block.text.startswith(RELATED_HEADER)
+
+
+async def test_ac55_related_respects_its_own_limits(service, resident, make_ctx, index, details, kv, monkeypatch):
+    ctx = make_ctx()
     for i in range(4):
-        ids.append(
-            (await service.write(ctx, "remember", content=f"经验{i}：先确认数据口径", type="experience")).item_id
-        )
-    async with _db.async_session() as s:
-        item = await s.get(MemoryItem, ids[0])
-        item.last_read_at = datetime.now()
-        s.add(item)
-        await s.commit()
+        await service.write(ctx, "remember", content=f"报告数据口径第{i}条：先确认统计口径", type="experience")
     _limits(monkeypatch, experience_max_items=2, experience_max_chars=2000)
-    block = await resident.experience(ctx)
-    assert block.item_ids[0] == ids[0]  # most recently read first
+    block = await resident.related(ctx, "报告数据口径", [], search=_search(index, details, kv))
     assert len(block.item_ids) == 2
+
+
+async def test_ac55_no_question_no_related_block(service, resident, make_ctx, index, details, kv):
+    ctx = make_ctx()
+    await service.write(ctx, "remember", content="做调研先列评估维度", type="experience")
+    block = await resident.related(ctx, "  ", [], search=_search(index, details, kv))
+    assert block.text == "" and block.item_ids == []
+
+
+async def test_ac55_search_unavailable_propagates(service, resident, make_ctx, index, details, kv):
+    """The caller leaves the block out; the search counts the failure itself."""
+    ctx = make_ctx()
+    index.keyword_down = index.vector_down = True
+    with pytest.raises(MemorySearchUnavailableError):
+        await resident.related(ctx, "调研", [], search=_search(index, details, kv))
 
 
 async def test_ac56_detail_not_injected(service, resident, make_ctx):

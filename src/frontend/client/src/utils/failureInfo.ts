@@ -1,3 +1,5 @@
+import { referenceErrorMessage } from '@bisheng/api-client';
+
 export type FailureCategory = 'database' | 'network' | 'model_service' | 'sso' | 'object_storage';
 
 export interface FailureInfo {
@@ -77,10 +79,16 @@ export interface DailyFailureMetadata {
     say which side failed, not what to do, so the card keeps its per-type copy. */
 const UMBRELLA_FAILURE_CODES = new Set([11090, 11091]);
 
+export function isUmbrellaFailureCode(code: unknown): boolean {
+    return typeof code === 'number' && UMBRELLA_FAILURE_CODES.has(code);
+}
+
 /** Only a registered numeric translation can supply business failure copy. */
 export function localizedBusinessFailure(code: number | undefined, localize: (key: string, values?: Record<string, unknown>) => string, data?: unknown): string | undefined {
     if (!Number.isInteger(code) || code === undefined || code < 10000 || code > 99999 || code === 18106) return undefined;
     if (UMBRELLA_FAILURE_CODES.has(code)) return undefined;
+    const referenceMessage = referenceErrorMessage({ status_code: code, data }, (key, values) => localize(`api_errors.${key}`, values));
+    if (referenceMessage) return referenceMessage;
     const key = `api_errors.${code}`;
     const variables: Record<string, string | number> = {};
     for (const [name, value] of Object.entries(record(data) ?? {})) {

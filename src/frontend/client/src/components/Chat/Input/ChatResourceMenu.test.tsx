@@ -276,6 +276,31 @@ test.each(['dalle_image_generator', 'image_generation'])('image tool %s uses the
     availableTools={imageTools} showTools /></RecoilRoot>);
   await openMenu();
   await openTools();
-  expect(screen.getByRole('menuitemcheckbox', { name: 'tool:tools.dalle_image_generator.name' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitemcheckbox', { name: 'tool:tools.image_generation.name' })).toBeInTheDocument();
   expect(screen.queryByText('Dalle3 drawing')).toBeNull();
+});
+
+// F004 design §7 item 7: uploading is off while a run is in progress.
+test('disabled upload rows say why, and only while they are disabled', async () => {
+  const upload = jest.fn(); const folder = jest.fn();
+  const props = { value: [], onChange: jest.fn(), showFileUpload: true, onFileUploadClick: upload, onFolderUploadClick: folder };
+  const view = render(<RecoilRoot><ChatResourceMenu {...props} fileUploadDisabled fileUploadDisabledReason="wait for the answer" /></RecoilRoot>);
+  await openMenu();
+  const files = screen.getByRole('menuitem', { name: 'com_ui_upload_files' });
+  expect(files).toHaveAttribute('aria-disabled', 'true');
+  expect(files).toHaveTextContent('wait for the answer');
+  expect(files).not.toHaveTextContent('dshChat.uploadDescription');
+  const folders = screen.getByText('com_ui_upload_folder').closest('[role="menuitem"]')!;
+  expect(folders).toHaveAttribute('aria-disabled', 'true');
+  expect(folders).toHaveTextContent('wait for the answer');
+  fireEvent.click(files);
+  fireEvent.click(folders);
+  expect(upload).not.toHaveBeenCalled();
+  expect(folder).not.toHaveBeenCalled();
+  // The reason is tied to the disabled state: enabled rows keep their own description.
+  view.rerender(<RecoilRoot><ChatResourceMenu {...props} fileUploadDisabledReason="wait for the answer" /></RecoilRoot>);
+  const enabled = screen.getByRole('menuitem', { name: 'com_ui_upload_files' });
+  expect(enabled).not.toHaveAttribute('aria-disabled');
+  expect(enabled).toHaveTextContent('dshChat.uploadDescription');
+  expect(screen.queryByText('wait for the answer')).toBeNull();
 });

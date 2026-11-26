@@ -337,3 +337,18 @@ def test_business_error_needs_no_reference():
 
     payload = FailureContextAdapter.public_payload({}, exc=DepartmentDailyChatConcurrentLimitError())
     assert "reference_id" not in payload
+
+
+def test_public_text_hides_file_paths_and_sql_statements():
+    text = FailureContextAdapter.public_text(
+        "OperationalError: (pymysql.err.OperationalError) (1040, 'Too many connections') "
+        "[SQL: SELECT user.password FROM user WHERE id = %s] [parameters: (7,)] "
+        "<- FileNotFoundError: [Errno 2] No such file or directory: '/opt/bisheng/data/tmp/a.txt'"
+    )
+    assert text == (
+        "OperationalError: (pymysql.err.OperationalError) (1040, 'Too many connections') "
+        "<sql> <- FileNotFoundError: [Errno 2] No such file or directory: '<path>'"
+    )
+    # Ordinary slashes are not paths.
+    plain = "ValueError: expected application/json, got a/b on 2026/11/18"
+    assert FailureContextAdapter.public_text(plain) == plain

@@ -20,15 +20,17 @@ import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  delete: vi.fn(),
   put: vi.fn(),
   children: vi.fn(),
   history: vi.fn(),
+  pending: vi.fn(),
   permissions: vi.fn(),
   error: vi.fn(),
   legacy: vi.fn(),
 }));
 vi.mock("@/controllers/request", () => ({
-  default: { get: mocks.get, post: mocks.post, put: mocks.put },
+  default: { get: mocks.get, post: mocks.post, delete: mocks.delete, put: mocks.put },
   showApiError: mocks.error,
 }));
 vi.mock("@/controllers/API/permission", () => ({
@@ -111,6 +113,8 @@ function Environment({
   );
 }
 const clients: QueryClient[] = [];
+const historyMenuLabel = "knowledge.version.history.title";
+const processSimilarLabel = "knowledge.version.header_process_similar_label";
 interface Options {
   enabled?: unknown;
   props?: Partial<FilesProps>;
@@ -151,12 +155,27 @@ async function openHistory() {
   const opened = await menu();
   fireEvent.click(
     await within(opened).findByRole("menuitem", {
-      name: "f118.version_history",
+      name: historyMenuLabel,
     }),
   );
-  return screen.findByRole("dialog");
+  return screen.findByRole("dialog", { name: "history.title" });
+}
+function mountWorkspaceToolbar(enabled = true) {
+  const { container: toolbarTarget } = render(<div />);
+  if (!(toolbarTarget instanceof HTMLDivElement)) {
+    throw new Error("Expected a div toolbar container");
+  }
+  mount({ enabled, props: { presentation: "workspace", toolbarTarget } });
+}
+async function selectAndOpenBatch(...fileNames: string[]) {
+  for (const name of fileNames) {
+    fireEvent.click(await screen.findByRole("checkbox", { name: `deletion.select ${name}` }));
+  }
+  fireEvent.keyDown(await screen.findByRole("button", { name: "detail.batch" }), { key: "Enter" });
+  return screen.findByRole("menu");
 }
 let actions: string[];
+let spaceActions: string[];
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.post.mockImplementation(async () => ({
@@ -168,10 +187,12 @@ beforeEach(() => {
     impact: {},
   }));
   actions = ["visible"];
+  spaceActions = [];
   mocks.children.mockResolvedValue(page([row()]));
   mocks.history.mockResolvedValue(history());
+  mocks.pending.mockResolvedValue([]);
   mocks.permissions.mockImplementation(async (type: string) => ({
-    actions: type === "knowledge_file" ? actions : [],
+    actions: type === "knowledge_file" ? actions : type === "knowledge_space" ? spaceActions : [],
     mode: "INHERIT",
     sources: [],
     roster_complete: true,
@@ -180,6 +201,8 @@ beforeEach(() => {
     (url: string, options?: { signal?: AbortSignal }) => {
       if (url.endsWith("/children")) return mocks.children();
       if (url.endsWith("/versions")) return mocks.history(url, options?.signal);
+      if (url.endsWith("/similar-pending")) return mocks.pending(url, options?.signal);
+      if (url.endsWith("/similar")) return Promise.resolve([]);
       throw new Error(`Unexpected API read: ${url}`);
     },
   );
@@ -187,6 +210,63 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   clients.splice(0).forEach((client) => client.clear());
+});
+
+it("opens the shared pending dialog for the selected similar files from the workspace batch menu", async () => {
+  spaceActions = ["manage_permission"];
+  const similar = { has_similar: true, is_multi_version: false, status: 2 };
+  mocks.children.mockResolvedValue(page([
+    row({ ...similar, file_name: "selected-a.md" }),
+    row({ ...similar, id: 12, file_name: "unflagged.md", has_similar: false }),
+    row({ ...similar, id: 13, file_name: "selected folder", file_type: 0 }),
+    row({ ...similar, id: 14, file_name: "unselected.md" }),
+    row({ ...similar, id: 15, file_name: "selected-b.md" }),
+  ]));
+  mocks.pending.mockResolvedValue([
+    { knowledge_file_id: 11, file_name: "selected-a.md", candidate_count: 1 },
+    { knowledge_file_id: 13, file_name: "file with the same id as the folder.md", candidate_count: 1 },
+    { knowledge_file_id: 14, file_name: "unselected.md", candidate_count: 1 },
+    { knowledge_file_id: 15, file_name: "selected-b.md", candidate_count: 1 },
+  ]);
+  mountWorkspaceToolbar();
+
+  const opened = await selectAndOpenBatch("selected-a.md", "unflagged.md", "selected folder", "selected-b.md");
+  fireEvent.click(within(opened).getByRole("menuitem", { name: processSimilarLabel }));
+  const pending = within(await screen.findByRole("dialog", { name: "similar_dialog_title" }));
+
+  expect(await pending.findByRole("button", { name: /selected-a\.md/ })).toBeVisible();
+  expect(pending.getByRole("button", { name: /selected-b\.md/ })).toBeVisible();
+  expect(pending.queryByText("unflagged.md")).not.toBeInTheDocument();
+  expect(pending.queryByText("file with the same id as the folder.md")).not.toBeInTheDocument();
+  expect(pending.queryByText("unselected.md")).not.toBeInTheDocument();
+  expect(mocks.pending).toHaveBeenCalledWith("/api/v1/knowledge/space/7/similar-pending", expect.any(AbortSignal));
+});
+
+it.each([
+  { reason: "the version feature is disabled", enabled: false, mayManage: true, eligible: true },
+  { reason: "space management permission is absent", enabled: true, mayManage: false, eligible: true },
+  { reason: "no selected file is eligible", enabled: true, mayManage: true, eligible: false },
+])("hides the batch similar-documents action when $reason", async ({ enabled, mayManage, eligible }) => {
+  actions = ["visible", "delete"];
+  spaceActions = mayManage ? ["manage_permission"] : [];
+  const similar = { has_similar: true, is_multi_version: false, status: 2 };
+  const selected = eligible ? [row(similar)] : [
+    row({ ...similar, id: 11, file_name: "unflagged.md", has_similar: false }),
+    row({ ...similar, id: 12, file_name: "already-versioned.md", is_multi_version: true }),
+    row({ ...similar, id: 13, file_name: "failed.md", status: 3 }),
+    row({ ...similar, id: 14, file_name: "selected folder", file_type: 0 }),
+  ];
+  mocks.children.mockResolvedValue(page([
+    ...selected,
+    row({ ...similar, id: 15, file_name: "unselected.md" }),
+  ]));
+  mountWorkspaceToolbar(enabled);
+
+  const opened = within(await selectAndOpenBatch(...selected.map(file => file.file_name)));
+
+  expect(opened.getByRole("menuitem", { name: "deletion.selected" })).toBeVisible();
+  expect(opened.queryByRole("menuitem", { name: processSimilarLabel })).not.toBeInTheDocument();
+  expect(mocks.pending).not.toHaveBeenCalled();
 });
 
 it.each([false, "true", null])(
@@ -198,7 +278,7 @@ it.each([false, "true", null])(
       expect(mocks.permissions).toHaveBeenCalledWith("knowledge_file", "11"),
     );
     expect(
-      within(opened).queryByRole("menuitem", { name: "f118.version_history" }),
+      within(opened).queryByRole("menuitem", { name: historyMenuLabel }),
     ).not.toBeInTheDocument();
     expect(mocks.history).not.toHaveBeenCalled();
   },
@@ -212,7 +292,7 @@ it.each([{ is_multi_version: false }, { file_type: 0 }])(
     const opened = await menu();
     await waitFor(() => expect(mocks.permissions).toHaveBeenCalledTimes(2));
     expect(
-      within(opened).queryByRole("menuitem", { name: "f118.version_history" }),
+      within(opened).queryByRole("menuitem", { name: historyMenuLabel }),
     ).not.toBeInTheDocument();
     expect(mocks.history).not.toHaveBeenCalled();
   },
@@ -236,11 +316,17 @@ it("reads history from an actual file row with only child visible, without root/
     "/api/v1/knowledge/space/7/files/batch/download/inspect",
     { items: [{ id: 11, type: "file" }] },
   );
+  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/files/batch/download/inspect",
+    { items: [{ id: 11, type: "file" }] },
+    { signal: expect.any(AbortSignal) },
+  ));
   expect(mocks.put).not.toHaveBeenCalled();
   expect(mocks.legacy).not.toHaveBeenCalled();
-  expect(
-    within(opened).queryByText("f118.primary_version"),
-  ).not.toBeInTheDocument();
+  expect(within(opened).queryByText("primary_badge")).not.toBeInTheDocument();
+  expect(within(opened).getByText("current_primary").nextElementSibling).toHaveTextContent("—");
+  expect(within(opened).getByRole("button", { name: "history.actions.preview" })).toBeVisible();
+  expect(within(opened).queryByRole("button", { name: "history.actions.download" })).not.toBeInTheDocument();
 });
 
 it("offers history after a successful file permission read when visible is absent from the catalog actions", async () => {
@@ -254,7 +340,7 @@ it("offers history after a successful file permission read when visible is absen
     screen.getByRole("button", { name: "downloadOriginal", hidden: true }),
   ).toBeInTheDocument();
   expect(
-    within(opened).getByRole("menuitem", { name: "f118.version_history" }),
+    within(opened).getByRole("menuitem", { name: historyMenuLabel }),
   ).toBeVisible();
   expect(mocks.history).not.toHaveBeenCalled();
 });
@@ -274,7 +360,7 @@ it("waits for the actual lazy permissions response before offering history", asy
   mount();
   const opened = await menu();
   expect(
-    within(opened).queryByRole("menuitem", { name: "f118.version_history" }),
+    within(opened).queryByRole("menuitem", { name: historyMenuLabel }),
   ).not.toBeInTheDocument();
   await act(async () =>
     permission.resolve({
@@ -286,7 +372,7 @@ it("waits for the actual lazy permissions response before offering history", asy
   );
   expect(
     await within(opened).findByRole("menuitem", {
-      name: "f118.version_history",
+      name: historyMenuLabel,
     }),
   ).toBeVisible();
   expect(mocks.history).not.toHaveBeenCalled();
@@ -389,4 +475,45 @@ it("retires history if a refreshed file stops being multiversion", async () => {
     }),
   );
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("keeps history open after promoting and deleting versions that replace its source row", async () => {
+  const original = { ...history().versions[0], is_primary: true, version_no: 1, status: 2 };
+  const replacement = { ...original, version_id: 52, knowledge_file_id: 12, version_no: 2, is_primary: false, original_file_name: "promoted.md" };
+  const promoted = { ...replacement, is_primary: true };
+  mocks.children.mockResolvedValue(page([row({ status: 2, version_no: 1 })]));
+  mocks.history.mockResolvedValue({ ...history(), current_primary_version_no: 1, versions: [original, replacement] });
+  mocks.permissions.mockResolvedValue({ actions: ["visible", "edit", "delete"] });
+  mocks.post.mockImplementation(async (url: string) => {
+    if (url.endsWith("/version/52/set-primary")) {
+      mocks.children.mockResolvedValue(page([row({ id: 12, file_name: "promoted.md", version_no: 2, status: 2 })]));
+      mocks.history.mockResolvedValue({ ...history("Promoted document"), current_primary_version_no: 2, versions: [{ ...original, is_primary: false }, promoted] });
+      return { document_id: 41, new_primary_version_no: 2 };
+    }
+    return { check_complete: true, valid_items: [] };
+  });
+  mocks.delete.mockImplementation(async (url: string) => {
+    expect(url).toBe("/api/v1/knowledge/space/version/51");
+    mocks.children.mockResolvedValue(page([row({ id: 12, file_name: "promoted.md", version_no: 2, status: 2, is_multi_version: false })]));
+    mocks.history.mockResolvedValue({ ...history("Promoted document"), current_primary_version_no: 2, versions: [promoted] });
+    return { document_id: 41, deleted_version_no: 1 };
+  });
+  const view = mount();
+  const dialog = await openHistory();
+  const confirm = async (name: string) => {
+    fireEvent.click(await within(dialog).findByRole("button", { name }));
+    const confirmation = await screen.findByRole("alertdialog");
+    await act(async () => { fireEvent.click(within(confirmation).getByRole("button", { name: "confirm" })); });
+  };
+  await confirm("history.actions.primary");
+  expect(await within(dialog).findByText("Promoted document")).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "history.title" })).toBe(dialog);
+  expect(mocks.history).toHaveBeenCalledWith("/api/v1/knowledge/space/file/12/versions", expect.any(AbortSignal));
+  await confirm("history.actions.delete");
+  await waitFor(() => expect(within(dialog).queryByText("visible-original.md")).not.toBeInTheDocument());
+  expect(screen.getByRole("dialog", { name: "history.title" })).toBe(dialog);
+  expect(within(dialog).getByText("promoted.md")).toBeVisible();
+  mocks.children.mockResolvedValue(page([]));
+  await act(() => view.client.invalidateQueries({ predicate: query => query.queryKey.includes("children") }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 });

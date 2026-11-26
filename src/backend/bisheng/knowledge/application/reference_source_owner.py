@@ -11,7 +11,7 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.services.model_reference_extractor import (
     KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
-    extract_knowledge_model_references,
+    knowledge_model_source_configuration,
 )
 from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import (
@@ -171,18 +171,23 @@ class KnowledgeReferenceSourceOwner:
         # in the upstream consumer, including knowledge_auth=False semantics.
 
     @staticmethod
-    def _snapshot(row):
+    def _snapshot(row, *, retained_legacy=False):
         if row is None:
             raise KnowledgeNotExistError()
-        references = extract_knowledge_model_references(model=row["model"], model_transition=row["model_transition"])
+        extractor, references = knowledge_model_source_configuration(
+            model=row["model"], model_transition=row["model_transition"], retain_legacy=retained_legacy
+        )
         try:
             payload = canonical_payload_json({"knowledge": row})
             return AuthorizedSourceSnapshot(
                 SourceKey(row["tenant_id"], SourceType.KNOWLEDGE, str(row["id"]), "current"),
                 references,
-                KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+                extractor,
                 payload_digest(payload),
                 payload,
+                invalid_reason="knowledge_legacy_model_name_unresolved"
+                if extractor != KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION
+                else None,
             )
         except (TypeError, ValueError) as error:
             raise ResourceReferenceInvalidError(reason="knowledge_model_source_configuration") from error
@@ -196,7 +201,7 @@ class KnowledgeReferenceSourceOwner:
             run_async_safe(self._authorize(identity, row, actor))
         elif row["tenant_id"] != identity.tenant_id:
             raise ResourceReferenceInvalidError(reason="knowledge_model_internal_source_not_owned")
-        return self._snapshot(row)
+        return self._snapshot(row, retained_legacy=True)
 
     async def aresolve_source(self, session, request, identity):
         knowledge_id, actor = self._actor(session, request, identity)
@@ -204,21 +209,21 @@ class KnowledgeReferenceSourceOwner:
         if row is None:
             raise KnowledgeNotExistError()
         await self._authorize(identity, row, actor)
-        return self._snapshot(row)
+        return self._snapshot(row, retained_legacy=True)
 
     def revalidate_source(self, session, request, identity, expected):
         knowledge_id, actor = self._actor(session, request, identity)
         row = self.repository.load_source(session, knowledge_id, for_update=True)
-        return self._revalidate(identity, row, actor, expected)
+        return self._revalidate(identity, row, actor, expected, session=session)
 
-    def _revalidate(self, identity, row, actor, expected):
+    def _revalidate(self, identity, row, actor, expected, *, session=None):
         if row is None:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
         if isinstance(identity, UserPayload):
             run_async_safe(self._authorize(identity, row, actor))
         elif row["tenant_id"] != identity.tenant_id:
             raise ResourceReferenceInvalidError(reason="knowledge_model_internal_source_not_owned")
-        current = self._snapshot(row)
+        current = self._snapshot(row, retained_legacy=True)
         if not isinstance(expected, AuthorizedSourceSnapshot) or current != expected:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
         return current
@@ -229,7 +234,7 @@ class KnowledgeReferenceSourceOwner:
         if row is None:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
         await self._authorize(identity, row, actor)
-        current = self._snapshot(row)
+        current = self._snapshot(row, retained_legacy=True)
         if not isinstance(expected, AuthorizedSourceSnapshot) or current != expected:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_source_changed")
         return current

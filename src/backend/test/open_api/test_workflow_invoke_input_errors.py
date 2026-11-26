@@ -41,7 +41,11 @@ class _Callback:
     def __call__(self, unique_id, workflow_id, chat_id, user_id, source):
         real = RedisCallback.__new__(RedisCallback)
         real.chat_id = chat_id
-        real.redis_client = SimpleNamespace(aset=AsyncMock())
+        pending_message = json.loads(self.message_db.message) if self.message_db else FORM_MESSAGE
+        real.redis_client = SimpleNamespace(
+            aset=AsyncMock(), aget=AsyncMock(return_value={"message": pending_message, "message_id": 5})
+        )
+        real.workflow_pending_key = "pending"
         real.workflow_input_key = "input"
         real.workflow_expire_time = 60
         real.save_chat_message = MagicMock()
@@ -108,6 +112,19 @@ async def _invoke(body: dict):
         (
             _message("output_with_input_msg", CHOOSE_MESSAGE),
             {"input": {"output_1": {"wrong_key": "a"}}, "message_id": 5},
+        ),
+        # A valid waiting node never authorizes another node or extra fields.
+        (
+            _message("input", FORM_MESSAGE),
+            {"input": {"input_1": {"city": "Paris"}, "tool_1": {"url": "changed"}}, "message_id": 5},
+        ),
+        (
+            _message("input", DIALOG_MESSAGE),
+            {"input": {"input_1": {"user_input": "hi", "code": "changed"}}, "message_id": 5},
+        ),
+        (
+            _message("output_with_choose_msg", CHOOSE_MESSAGE),
+            {"input": {"output_1": {"output_result": "yes", "url": "changed"}}, "message_id": 5},
         ),
         # node input that is not an object
         (_message("input", FORM_MESSAGE), {"input": {"input_1": "Paris"}, "message_id": 5}),

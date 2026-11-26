@@ -1,7 +1,7 @@
-import { Breadcrumb, Button, toast } from "@bisheng/ui";
+import { Breadcrumb, Button } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isErrorEnvelope } from "@bisheng/api-client";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -22,6 +22,7 @@ import { SpaceFileDetail } from "./components/SpaceFileDetail";
 import { SpaceProcessingPanel } from "./components/SpaceProcessingDialog";
 import { useSpaceCopyTasks } from "./useSpaceCopyTasks";
 import { SpaceCopyStatus } from "./components/SpaceCopyStatus";
+import { useSpaceDeletionActive } from "@/store/knowledgeSpaceDeletion";
 import { useSpaceFolderPath } from "./hooks/useSpaceFolderPath";
 
 export const parseKnowledgeId = (
@@ -70,7 +71,10 @@ export function SpaceDetail({
   const instance = useId();
   const copyTasks = useSpaceCopyTasks(scope);
   const copyTask = copyTasks.data?.find((task) => task.id === spaceId);
-  const watchedCopy = useRef<number | null>(null);
+  const deleting = useSpaceDeletionActive(scope, spaceId);
+  useEffect(() => {
+    if (deleting) void client.cancelQueries({ queryKey: knowledgeQueryKeys.space(scope, spaceId) });
+  }, [client, deleting, scope, spaceId]);
   const spaceInfo = useQuery({
     queryKey: [
       ...knowledgeQueryKeys.info(scope, spaceId),
@@ -80,6 +84,7 @@ export function SpaceDetail({
     queryFn: () =>
       knowledgeSpaceApi.getSpaceInfo(spaceId, { showError: false }),
     enabled:
+      !deleting &&
       parentId === null &&
       fileParams.length === 0 &&
       processingParams.length === 0 &&
@@ -97,29 +102,15 @@ export function SpaceDetail({
     isErrorEnvelope(spaceInfo.error) &&
     spaceInfo.error.status_code === 18000;
   useEffect(() => {
-    if (spaceMissing) onDeleted?.(spaceId);
-  }, [spaceMissing, onDeleted, spaceId]);
+    if (spaceMissing && !deleting) onDeleted?.(spaceId);
+  }, [spaceMissing, deleting, onDeleted, spaceId]);
   useEffect(() => {
-    if (error && !spaceMissing) showApiError(error);
-  }, [error, spaceMissing]);
+    if (error && !spaceMissing && !deleting) showApiError(error);
+  }, [error, spaceMissing, deleting]);
   useEffect(() => {
     setOpenedFile(undefined);
   }, [parentId]);
   const info = spaceInfo.isError ? undefined : spaceInfo.data;
-  useEffect(() => {
-    if (copyTask) watchedCopy.current = spaceId;
-    else if (
-      copyTasks.isSuccess &&
-      info?.state === 1 &&
-      watchedCopy.current === spaceId
-    ) {
-      watchedCopy.current = null;
-      toast.show({
-        type: "success",
-        message: t("space_copy_ui.created", { name: info.name }),
-      });
-    }
-  }, [copyTask, copyTasks.isSuccess, info, spaceId, t]);
   const parents = folderPath.data ?? [];
   const showCopyRecovery =
     parentId === null &&
@@ -131,7 +122,9 @@ export function SpaceDetail({
       ? (info?.name ?? "")
       : String(parents[parents.length - 1]?.file_name ?? "");
 
-  const directory = (toolbarTarget?: HTMLDivElement | null) => (
+  const directory = (toolbarTarget?: HTMLDivElement | null) => deleting ? (
+    <LoadingState size="page" label={t("deletion.pending")} />
+  ) : (
     <>
       {copyTask?.state === 1 && (
         <SpaceCopyStatus
@@ -215,7 +208,7 @@ export function SpaceDetail({
       />
     </>
   );
-  if (copyTask && copyTask.state !== 1)
+  if (!deleting && copyTask && copyTask.state !== 1)
     return (
       <SpaceCopyStatus
         key={copyTask.job_id}
@@ -232,7 +225,7 @@ export function SpaceDetail({
     return <LoadingState size="page" className="h-full" label={t("f118.loading_directory")} />;
   if ((fileParams.length > 0 && fileId === null) || (processingParams.length > 0 && processingFileId === null))
     return <KnowledgeScopeUnavailable />;
-  if (processingFileId !== null)
+  if (!deleting && processingFileId !== null)
     return (
       <div className="h-full overflow-auto px-4">
         <SpaceProcessingPanel
@@ -254,7 +247,7 @@ export function SpaceDetail({
         />
       </div>
     );
-  if (presentation === "workspace" && fileId !== null)
+  if (!deleting && presentation === "workspace" && fileId !== null)
     return (
       <div className="h-full min-h-0 px-4">
         <SpaceFileDetail
@@ -280,7 +273,7 @@ export function SpaceDetail({
         />
       </div>
     );
-  if (spaceMissing)
+  if (spaceMissing && !deleting)
     return (
       <LoadingState size="page" className="h-full" label={t("sidebar.loading")} />
     );

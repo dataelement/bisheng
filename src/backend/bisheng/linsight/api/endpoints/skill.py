@@ -17,6 +17,7 @@ from bisheng.common.errcode.linsight import SkillFileTooLargeError, SkillValidat
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.linsight.domain.schemas.skill_schema import (
+    SkillAutoEnabledUpdate,
     SkillCreateForm,
     SkillDefaultCheckedUpdate,
     SkillGiteeImportRequest,
@@ -222,6 +223,16 @@ async def set_skill_default_checked(
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
 ) -> UnifiedResponseModel:
     await SkillService().set_default_checked(name, payload.default_checked)
+    return resp_200({"ok": True})
+
+
+@router.patch("/{name}/auto-enabled", summary="Auto-enable a skill: hidden from end-user pickers, always available")
+async def set_skill_auto_enabled(
+    name: str,
+    payload: SkillAutoEnabledUpdate,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
+    await SkillService().set_auto_enabled(name, payload.auto_enabled)
     return resp_200({"ok": True})
 
 

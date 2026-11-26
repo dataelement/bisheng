@@ -8,6 +8,7 @@ import {
 type Attachment = Parameters<typeof resolveChatAttachmentUrl>[0] & Parameters<typeof getChatAttachmentFileName>[0] & {
   file_id?: string;
   object_name?: string;
+  workspace_file_id?: string;
 };
 
 export function toChatArtifact(file: Attachment, conversationId?: string): ArtifactFile | null {
@@ -20,6 +21,7 @@ export function toChatArtifact(file: Attachment, conversationId?: string): Artif
     file_url: url,
     directUrl: url,
     ...(attachment ? { attachment } : {}),
+    ...(file.workspace_file_id ? { workspaceFileId: file.workspace_file_id } : {}),
   };
 }
 

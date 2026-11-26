@@ -74,8 +74,11 @@ class LinsightArtifactPreviewService:
     def owned_file_key(version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
         """Normalise ``file_url`` to an object key and require it to belong to this version.
 
-        Task files live under ``linsight/final_result/{svid}/``, intermediate files
-        under ``linsight/session_files/{svid}/`` and uploads under ``linsight/{session_id}/``.
+        Task files live under ``linsight/final_result/{svid}/`` and intermediate
+        files under ``linsight/session_files/{svid}/``. Uploads are ingested with
+        the version id as their chat id (``_process_submitted_files``), so their
+        formal objects, originals included, sit under ``linsight/{svid}/``;
+        ``linsight/{session_id}/`` stays allowed for entries written before that.
         """
         key = file_url.lstrip("/")
         if key.startswith(bucket + "/"):
@@ -83,6 +86,7 @@ class LinsightArtifactPreviewService:
         prefixes = (
             f"linsight/final_result/{version.id}/",
             f"linsight/session_files/{version.id}/",
+            f"linsight/{version.id}/",
             f"linsight/{version.session_id}/",
         )
         parts = key.split("/")
@@ -95,7 +99,7 @@ class LinsightArtifactPreviewService:
     def _owned_slide_key(cls, version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
         """Like ``owned_file_key`` but only a slide deck in this version's results."""
         key = cls.owned_file_key(version, file_url, bucket)
-        if not key.startswith(f"linsight/final_result/{version.id}/") or not key.lower().endswith(SLIDE_EXTS):
+        if not key.startswith(f"linsight/final_result/{version.id}/") or not is_slide_key(key):
             raise UnAuthorizedError()
         return key
 
@@ -105,68 +109,83 @@ class LinsightArtifactPreviewService:
         minio = await get_minio_storage()
         key = cls._owned_slide_key(version, file_url, minio.bucket)
         file_id = os.path.splitext(posixpath.basename(key))[0]
-        preview_key = f"linsight/preview/{version.id}/{file_id}.pdf"
+        return await preview_slides_as_pdf(
+            key,
+            preview_key=f"linsight/preview/{version.id}/{file_id}.pdf",
+            lock_id=f"{version.id}:{file_id}",
+            log_tag=f"svid={version.id} file_id={file_id}",
+        )
 
-        if await minio.object_exists(object_name=preview_key):
-            return {"status": "ready", "file_path": await minio.get_share_link(preview_key)}
 
-        redis = await get_redis_client()
-        lock_key = f"linsight:pptx_preview:{version.id}:{file_id}"
-        failed_key = f"linsight:pptx_preview_failed:{version.id}:{file_id}"
-        await redis.acluster_nodes(lock_key)
-        conn = redis.async_connection
-        if await conn.get(failed_key):
-            raise LinsightArtifactPreviewError()
+def is_slide_key(key: str) -> bool:
+    return key.lower().endswith(SLIDE_EXTS)
 
-        # Take a conversion slot before the lock, so the lock TTL only has to
-        # cover the conversion itself and never a wait for a slot.
-        async with _CONVERT_SLOTS:
-            token = uuid.uuid4().hex
-            if not await conn.set(lock_key, token, nx=True, ex=LOCK_TTL_SECONDS):
-                return {"status": "converting"}
-            try:
-                # Another request may have finished while this one waited for a slot.
-                if not await minio.object_exists(object_name=preview_key):
-                    try:
-                        pdf_bytes = await cls._convert(minio, key, version.id, file_id)
-                    except LinsightArtifactPreviewError:
-                        await conn.set(failed_key, b"1", ex=FAILURE_TTL_SECONDS)
-                        raise
-                    await minio.put_object(object_name=preview_key, file=pdf_bytes, content_type="application/pdf")
-            finally:
-                await conn.eval(_RELEASE_LOCK_LUA, 1, lock_key, token)
+
+async def preview_slides_as_pdf(source_key: str, *, preview_key: str, lock_id: str, log_tag: str) -> dict:
+    """Convert the deck at ``source_key`` (default bucket) to PDF once and cache it at ``preview_key``.
+
+    Return ``{"status": "ready", "file_path"}`` or ``{"status": "converting"}``.
+    The caller has already decided that the requester may read ``source_key``.
+    """
+    minio = await get_minio_storage()
+    if await minio.object_exists(object_name=preview_key):
         return {"status": "ready", "file_path": await minio.get_share_link(preview_key)}
 
-    @staticmethod
-    async def _convert(minio, key: str, svid: str, file_id: str) -> bytes:
-        source = await minio.get_object(object_name=key)
-        if not source:
-            logger.warning(f"pptx preview: source object missing svid={svid} file_id={file_id}")
-            raise LinsightArtifactPreviewError()
-        # File IO, LibreOffice and the page count all block: keep them off the event loop.
-        return await asyncio.to_thread(_render_pdf, source, os.path.splitext(key)[1].lower(), svid, file_id)
+    redis = await get_redis_client()
+    lock_key = f"linsight:pptx_preview:{lock_id}"
+    failed_key = f"linsight:pptx_preview_failed:{lock_id}"
+    await redis.acluster_nodes(lock_key)
+    conn = redis.async_connection
+    if await conn.get(failed_key):
+        raise LinsightArtifactPreviewError()
+
+    # Take a conversion slot before the lock, so the lock TTL only has to
+    # cover the conversion itself and never a wait for a slot.
+    async with _CONVERT_SLOTS:
+        token = uuid.uuid4().hex
+        if not await conn.set(lock_key, token, nx=True, ex=LOCK_TTL_SECONDS):
+            return {"status": "converting"}
+        try:
+            # Another request may have finished while this one waited for a slot.
+            if not await minio.object_exists(object_name=preview_key):
+                try:
+                    pdf_bytes = await _convert(minio, source_key, log_tag)
+                except LinsightArtifactPreviewError:
+                    await conn.set(failed_key, b"1", ex=FAILURE_TTL_SECONDS)
+                    raise
+                await minio.put_object(object_name=preview_key, file=pdf_bytes, content_type="application/pdf")
+        finally:
+            await conn.eval(_RELEASE_LOCK_LUA, 1, lock_key, token)
+    return {"status": "ready", "file_path": await minio.get_share_link(preview_key)}
 
 
-def _render_pdf(source: bytes, ext: str, svid: str, file_id: str) -> bytes:
+async def _convert(minio, key: str, log_tag: str) -> bytes:
+    source = await minio.get_object(object_name=key)
+    if not source:
+        logger.warning(f"pptx preview: source object missing {log_tag}")
+        raise LinsightArtifactPreviewError()
+    # File IO, LibreOffice and the page count all block: keep them off the event loop.
+    return await asyncio.to_thread(_render_pdf, source, os.path.splitext(key)[1].lower(), log_tag)
+
+
+def _render_pdf(source: bytes, ext: str, log_tag: str) -> bytes:
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="pptx_preview_") as tmp:
-        input_path = os.path.join(tmp, f"{file_id}{ext}")
+        input_path = os.path.join(tmp, f"deck{ext}")
         with open(input_path, "wb") as fh:
             fh.write(source)
         # convert_ppt_to_pdf returns None/False on failure and only logs at debug level.
         output = convert_ppt_to_pdf(input_path, os.path.join(tmp, "out"), timeout=CONVERT_TIMEOUT_SECONDS)
         if not output or not os.path.exists(output):
-            logger.warning(f"pptx preview: conversion failed svid={svid} file_id={file_id}")
+            logger.warning(f"pptx preview: conversion failed {log_tag}")
             raise LinsightArtifactPreviewError()
         pages = _page_count(output)
         if pages <= 0:
-            logger.warning(f"pptx preview: conversion produced no pages svid={svid} file_id={file_id}")
+            logger.warning(f"pptx preview: conversion produced no pages {log_tag}")
             raise LinsightArtifactPreviewError()
         with open(output, "rb") as fh:
             data = fh.read()
-    logger.info(
-        f"pptx preview: converted svid={svid} file_id={file_id} pages={pages} seconds={time.monotonic() - started:.1f}"
-    )
+    logger.info(f"pptx preview: converted {log_tag} pages={pages} seconds={time.monotonic() - started:.1f}")
     return data
 
 

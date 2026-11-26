@@ -22,6 +22,17 @@ def legacy_assistant_name_version(model_name):
     return None
 
 
+def unresolved_assistant_model_name(model_name):
+    """Old non-ID values stay editable; their model cannot execute until repaired."""
+    if not isinstance(model_name, str) or not model_name:
+        return False
+    try:
+        TargetKey(TargetType.MODEL, model_name)
+    except ValueError:
+        return True
+    return False
+
+
 def extract_legacy_assistant_knowledge_references(*, model_name, knowledge_ids):
     if legacy_assistant_name_version(model_name) is None:
         raise ValueError("an original unresolved assistant model name is required")

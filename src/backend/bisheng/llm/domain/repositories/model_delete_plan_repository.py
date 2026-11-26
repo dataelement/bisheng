@@ -194,17 +194,18 @@ class ModelDeletePlanRepository:
                 or row.target_manifest != manifest
                 or row.actor_user_id != actor["actor_user_id"]
                 or set(row.parameters) != {"command_digest"}
-                or set(row.impact) != {"inbound_digest", "coverage_epoch", "inventory_hash"}
-                or type(row.impact["coverage_epoch"]) is not int
-                or row.impact["coverage_epoch"] <= 0
+                or (row.impact != {} and set(row.impact) != {"inbound_digest", "coverage_epoch", "inventory_hash"})
                 or row.request_hash != _hash(self._payload(row))
                 or row.plan_digest != self._plan_digest(row)
                 or (row.operation_id is None) != (row.consumed_at is None)
             ):
                 raise ValueError("model plan payload changed")
             _digest(row.parameters["command_digest"])
-            _digest(row.impact["inbound_digest"])
-            _digest(row.impact["inventory_hash"])
+            if row.impact:
+                if type(row.impact["coverage_epoch"]) is not int or row.impact["coverage_epoch"] <= 0:
+                    raise ValueError("legacy model plan payload changed")
+                _digest(row.impact["inbound_digest"])
+                _digest(row.impact["inventory_hash"])
         except (TypeError, ValueError, KeyError) as error:
             raise KnowledgeOperationPlanChangedError() from error
         if expiry and row.operation_id is None and _utc(row.expires_at) <= _utc(self.clock()):
@@ -219,15 +220,15 @@ class ModelDeletePlanRepository:
         command_digest,
         targets,
         target_revisions,
-        inbound_digest,
-        coverage_epoch,
-        inventory_hash,
         expires_at: datetime,
+        inbound_digest=None,
+        coverage_epoch=None,
+        inventory_hash=None,
     ) -> ModelDeleteConfirmation:
         tenant = self._tenant(session)
         actor = self._actor(actor_reference, tenant)
         manifest = self._manifest(targets)
-        if type(coverage_epoch) is not int or coverage_epoch <= 0 or _utc(expires_at) <= _utc(self.clock()):
+        if _utc(expires_at) <= _utc(self.clock()):
             raise ValueError("complete coverage and a future confirmation expiry are required")
         now = _utc(self.clock())
         row = KnowledgeOperationPlan(
@@ -240,11 +241,7 @@ class ModelDeletePlanRepository:
             target_revisions=self._revisions(target_revisions, manifest),
             source_revisions={},
             parameters={"command_digest": _digest(command_digest)},
-            impact={
-                "inbound_digest": _digest(inbound_digest),
-                "coverage_epoch": coverage_epoch,
-                "inventory_hash": _digest(inventory_hash),
-            },
+            impact={},
             request_hash="",
             plan_digest="",
             expires_at=_utc(expires_at),

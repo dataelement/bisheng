@@ -230,8 +230,10 @@ async def test_actual_absent_user_creator_fact_cannot_compile_an_insert(inventor
     header, rows, creator = await facts(inventoried)
     assert creator == CreatorFact(7, False, None)
     before_sql = len(inventoried.statements)
-    with pytest.raises(KnowledgeOperationPlanConflictError):
-        api()[1](header, rows, creator, planned_at=NOW)
+    result = api()[1](header, rows, creator, planned_at=NOW)
+    assert result.membership_action == "retain_missing"
+    assert result.creator_user_id == 7 and result.existing_creator_member_id is None
+    assert result.creator_template_digest == digest(None)
     assert len(inventoried.statements) == before_sql
 
 
@@ -250,7 +252,6 @@ async def test_existing_space_returns_no_plan_even_with_historical_conflicting_m
     "creator",
     [
         None,
-        CreatorFact(7, False, None),
         CreatorFact(8, True, 0),
         CreatorFact(True, True, 0),
         CreatorFact(7, 1, 0),

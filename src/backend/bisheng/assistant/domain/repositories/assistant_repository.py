@@ -66,7 +66,16 @@ class AssistantRepository:
         if {row.id for row in rows} != set(ids) or any(
             row.tenant_id != tenant_id or row.type not in supported for row in rows
         ):
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+            raise ResourceReferenceInvalidError(
+                reason="knowledge_reference_target_unavailable",
+                reference_errors=[
+                    {"resource_type": "knowledge_space", "target_id": str(target_id), "state": "unavailable"}
+                    for target_id in ids
+                    if not any(
+                        row.id == target_id and row.tenant_id == tenant_id and row.type in supported for row in rows
+                    )
+                ][:5],
+            )
         return {row.id: row.type for row in rows}
 
     async def ainsert(self, session: AsyncSession, assistant: Assistant) -> Assistant:

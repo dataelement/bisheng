@@ -7,8 +7,7 @@ export interface WebSearchSettings {
     providers: Record<string, unknown>; custom_secret_configured: boolean;
 }
 export interface SearchParameter { name: string; location: string; type: string; required: boolean; schema?: Record<string, unknown> }
-export interface SearchProof { key_id: string; ciphertext: string }
-export interface SearchOperation { version?: number; declaration?: Record<string, unknown>; media_type?: string; request?: Record<string, unknown>; server: string; method: string; path: string; parameters: SearchParameter[]; proof: SearchProof; security: { location: 'query' | 'header' | 'cookie'; name: string } | null }
+export interface SearchOperation { version?: number; declaration?: Record<string, unknown>; media_type?: string; request?: Record<string, unknown>; server: string; method: string; path: string; parameters: SearchParameter[]; security: { location: 'query' | 'header' | 'cookie'; name: string } | null }
 const base = (id: string) => `/api/v1/tool/${encodeURIComponent(id)}/web-search`;
 export const getWebSearchSettings = async (id: string): Promise<WebSearchSettings> => request.get(`${base(id)}/settings`);
 export const putWebSearchSettings = async (id: string, data: Omit<WebSearchSettings, 'custom_secret_configured'> & { custom_secret: WebSearchSecret }): Promise<WebSearchSettings> => request.put(`${base(id)}/settings`, data);

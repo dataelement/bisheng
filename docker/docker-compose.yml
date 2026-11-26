@@ -111,7 +111,7 @@ services:
     entrypoint: ["bash", "/credential-entrypoint.sh"]
     command: ["mysqld"]
     ports:
-      - "3306:3306"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql.password
       MYSQL_DATABASE: bisheng
@@ -185,9 +185,9 @@ services:
       OPENFGA_RESOLVE_NODE_LIMIT: ${OPENFGA_RESOLVE_NODE_LIMIT:-25}
       OPENFGA_LIST_OBJECTS_MAX_RESULTS: 1000
     ports:
-      - "8080:8080"
-      - "8081:8081"
-      - "2112:2112"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:8080:8080"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:8081:8081"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:2112:2112"
     volumes:
     - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.yaml:/etc/openfga/config.yaml:ro
     depends_on:
@@ -204,7 +204,7 @@ services:
     image: ${REDIS_IMAGE:?set REDIS_IMAGE in docker/.env (see .env.example)}
     entrypoint: ["sh", "/credential-entrypoint.sh"]
     ports:
-      - "6379:6379"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:6379:6379"
     environment:
       TZ: Asia/Shanghai
     volumes:
@@ -236,8 +236,16 @@ services:
       BS_CREDENTIAL_REVISION: ${BISHENG_CREDENTIAL_REVISION:?set checked revision}
       BISHENG_PRO: ${BISHENG_PRO:-false}
       BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
+      # Topology !env left in the prepared config.yaml (compose --env-file does not
+      # inject host .env into the container unless listed here).
+      BS_MILVUS_IS_PARTITION: ${BS_MILVUS_IS_PARTITION:-true}
+      BS_MILVUS_PARTITION_SUFFIX: ${BS_MILVUS_PARTITION_SUFFIX:-1}
+      BS_MINIO_SCHEMA: ${BS_MINIO_SCHEMA:-false}
+      BS_MINIO_CERT_CHECK: ${BS_MINIO_CERT_CHECK:-false}
+      BS_MINIO_ENDPOINT: ${BS_MINIO_ENDPOINT:-minio:9000}
+      BS_MINIO_SHAREPOINT: ${BS_MINIO_SHAREPOINT:-minio:9000}
       # Shared with code-runner-*; editor "run once" executes in this process.
-      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       # One URL per replica. Adding code-runner-3 means appending its URL here.
       BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
@@ -285,8 +293,15 @@ services:
       BS_CREDENTIAL_REVISION: ${BISHENG_CREDENTIAL_REVISION:?set checked revision}
       BISHENG_PRO: ${BISHENG_PRO:-false}
       BISHENG_GATEWAY_HMAC_SECRET: ${BISHENG_GATEWAY_HMAC_SECRET:-}
+      # Same topology !env injection as backend (prepared config.yaml keeps these live).
+      BS_MILVUS_IS_PARTITION: ${BS_MILVUS_IS_PARTITION:-true}
+      BS_MILVUS_PARTITION_SUFFIX: ${BS_MILVUS_PARTITION_SUFFIX:-1}
+      BS_MINIO_SCHEMA: ${BS_MINIO_SCHEMA:-false}
+      BS_MINIO_CERT_CHECK: ${BS_MINIO_CERT_CHECK:-false}
+      BS_MINIO_ENDPOINT: ${BS_MINIO_ENDPOINT:-minio:9000}
+      BS_MINIO_SHAREPOINT: ${BS_MINIO_SHAREPOINT:-minio:9000}
       # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
-      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       # One URL per replica. Adding code-runner-3 means appending its URL here.
       BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
@@ -305,6 +320,9 @@ services:
       - default
       - sandbox_net
     depends_on:
+      # API startup creates/migrates the schema before worker permission initialization.
+      backend:
+        condition: service_healthy
       # Application context initialization connects to object storage.
       minio:
         condition: service_healthy
@@ -337,8 +355,8 @@ services:
     container_name: bisheng-es
     image: ${ELASTICSEARCH_IMAGE:?set ELASTICSEARCH_IMAGE in docker/.env (see .env.example)}
     ports:
-      - "9200:9200"
-      - "9300:9300"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9200:9200"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9300:9300"
     environment:
       TZ: Asia/Shanghai
       ELASTICSEARCH_ENABLE_SECURITY: ${BISHENG_ES_SECURITY_ENABLED:-true}
@@ -384,7 +402,7 @@ services:
       MINIO_ROOT_USER_FILE: /run/secrets/minio.user
       MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio.password
     ports:
-      - "9100:9000"
+      - "${BISHENG_MINIO_BIND_IP:-127.0.0.1}:9100:9000"
     volumes:
     - /etc/localtime:/etc/localtime:ro
     - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
@@ -422,8 +440,8 @@ services:
       timeout: 20s
       retries: 3
     ports:
-      - "19530:19530"
-      - "9091:9091"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:19530:19530"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9091:9091"
     depends_on:
       - etcd
       - minio
@@ -626,20 +644,27 @@ services:
       - "find /sessions -mindepth 1 -delete || echo 'sandbox: stale session cleanup failed' >&2; exec python serve.py"
     environment:
       TZ: Asia/Shanghai
-      SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      SANDBOX_TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       SANDBOX_SESSIONS_ROOT: /sessions
       SANDBOX_MAX_SESSIONS: "50"
       # Total bytes copied into one session (512 MiB); files past it are skipped and reported.
       SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
       SANDBOX_ENABLE_UID_ISOLATION: "true"
       SANDBOX_LEASE_TTL_S: "900"
+    # Product alignment: unrestricted runner egress (intranet allowed). Host
+    # helper still provisions the dedicated bridge; firewall is accept-all.
     networks:
-      - sandbox_net
+      sandbox_net:
+        ipv4_address: 172.30.166.11
+    # Process crash self-heal only. Host reboot does not auto-start runners.
     restart: on-failure
 
   code-runner-2:
     <<: *code_runner
     container_name: bisheng-code-runner-2
+    networks:
+      sandbox_net:
+        ipv4_address: 172.30.166.12
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/sandbox/code-runner-2:/sessions
 
@@ -682,12 +707,8 @@ networks:
     name: bisheng-build
     driver: bridge
     internal: true
-  # User code shares the runner network namespace. Not internal, so the
-  # sandbox can reach the public internet. Runners still do not join the
-  # middleware network and do not publish host ports. Docker applies
-  # `internal` only when the network is created; an existing internal
-  # sandbox_net stays closed until it is recreated.
+  # Provisioned ONLY by root host policy helper, never silently by Compose.
+  # See runner-egress.md; runner egress is unrestricted (intranet allowed).
   sandbox_net:
-    name: bisheng-sandbox
-    driver: bridge
-    internal: false
+    name: bisheng-runner
+    external: true

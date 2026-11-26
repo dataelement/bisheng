@@ -45,6 +45,7 @@ class ReferenceState(StrEnum):
     INVALID_DELETED = "invalid_deleted"
     INVALID_LEGACY = "invalid_legacy"
     INVALID_SCOPE = "invalid_scope"
+    INVALID_MISSING = "invalid_missing"
 
 
 class ReferenceSetKind(StrEnum):

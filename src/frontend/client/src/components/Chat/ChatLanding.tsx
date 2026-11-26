@@ -14,7 +14,7 @@ export function ChatLanding({ model, composerConfigNotice }: ChatLandingProps) {
   const {
     t, isNew, shareToken, landingHasSelection, setLandingHasSelection,
     composerIdentity, inviteQuotaBar, historyError, isLoading, isClearing,
-    bsConfig, taskRunning, isStreaming, isParsingMedia, canUseTaskMode, taskMode,
+    bsConfig, isStreaming, isParsingMedia, canUseTaskMode, taskMode,
     handleToggleTaskMode, chatModel, handleModelChange, handleModelAutoChange,
     handleSend, stopGenerating, inputText, setInputText, selectedOrgKbs,
     knowledgeAccessMessage, setSelectedOrgKbs, searchType, setSearchType,
@@ -39,7 +39,6 @@ export function ChatLanding({ model, composerConfigNotice }: ChatLandingProps) {
                 composerIdentity={composerIdentity}
                 elevated
                 disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length}
-                sendDisabled={taskRunning}
                 isStreaming={isStreaming}
                 isParsingMedia={isParsingMedia}
                 features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}

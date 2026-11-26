@@ -231,14 +231,14 @@ async def test_lock_held_elsewhere_reports_converting(env):
 
 
 async def test_lock_is_not_deleted_once_it_belongs_to_someone_else(env, monkeypatch):
-    real_convert = svc_mod.LinsightArtifactPreviewService._convert
+    real_convert = svc_mod._convert
 
-    async def convert_then_lose_lock(minio, key, svid, file_id):
-        data = await real_convert(minio, key, svid, file_id)
+    async def convert_then_lose_lock(minio, key, log_tag):
+        data = await real_convert(minio, key, log_tag)
         env.redis.async_connection.values[LOCK] = "next-owner"  # our TTL expired, another node took it
         return data
 
-    monkeypatch.setattr(svc_mod.LinsightArtifactPreviewService, "_convert", staticmethod(convert_then_lose_lock))
+    monkeypatch.setattr(svc_mod, "_convert", convert_then_lose_lock)
     await LinsightArtifactPreviewService.get_pptx_preview(env.version, FILE_KEY)
     assert env.redis.async_connection.values[LOCK] == "next-owner"
 
@@ -305,7 +305,12 @@ async def test_download_endpoint_still_signs_the_requested_key(env, monkeypatch)
         await endpoint.linsight_file_download(
             file_url=FILE_KEY, session_version_id=SVID, login_user=_user(99), share_link=None
         )
-    for own in (f"linsight/session_files/{SVID}/x.md", "linsight/sess-1/upload.pdf"):
+    for own in (
+        f"linsight/session_files/{SVID}/x.md",
+        # uploads are ingested under the version id; their originals preview in place
+        f"linsight/{SVID}/f1_original.png",
+        "linsight/sess-1/upload.pdf",
+    ):
         resp = await endpoint.linsight_file_download(
             file_url=own, session_version_id=SVID, login_user=_user(), share_link=None
         )

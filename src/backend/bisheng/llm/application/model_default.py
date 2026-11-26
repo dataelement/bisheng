@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
-    ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
 from bisheng.common.errcode.llm import WorkbenchChatDefaultModelError, WorkbenchEmbeddingError
@@ -17,24 +16,19 @@ from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.tenant import is_tenant_filter_bypassed
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.llm.application.model_default_validation import require_callable_default_models
+from bisheng.llm.application.model_selection import require_new_models
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.services.default_reference_extractor import (
-    MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
     MODEL_DEFAULT_SCHEMAS,
     extract_model_default_references,
-    model_default_models_are_callable,
 )
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import PermissionActor, resolve_permission_actor
 from bisheng.public_endpoints.application.access_context import get_current_public_api_principal
-from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.contracts import (
-    ReferenceSpec,
-    SourceKey,
-    TargetKey,
     canonical_target_id,
-    reference_set_digest,
 )
 from bisheng.resource_reference.application.source_contracts import canonical_payload_json
 
@@ -118,34 +112,6 @@ class ModelDefaultApplication:
         return config
 
     @staticmethod
-    async def _old_source(session, runtime, key, own):
-        current = await runtime.repository.aget_source_set(session, key)
-        rows = await runtime.repository.alist_source_references(session, key)
-        if current is None:
-            if own is not None or rows:
-                raise ReferenceCoverageNotReadyError(reason="source_not_indexed")
-            return True
-        try:
-            raw = tuple(ReferenceSpec(row.slot_key, TargetKey(row.target_type, row.target_id)) for row in rows)
-            old = (
-                extract_model_default_references(key.source_id, json.loads(own.payload_json)) if own is not None else ()
-            )
-            valid = (
-                current.ready
-                and current.record_kind == "source"
-                and current.source_revision > 0
-                and current.extractor_version == MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION
-                and current.digest == reference_set_digest(raw) == reference_set_digest(old)
-                and all(row.source_revision == current.source_revision for row in rows)
-                and current.effective == bool(own is not None and own.value)
-            )
-        except (TypeError, ValueError, ResourceReferenceInvalidError) as error:
-            raise ReferenceCoverageNotReadyError(reason="source_configuration_drift") from error
-        if not valid:
-            raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
-        return False
-
-    @staticmethod
     def _embedding_id(config):
         return canonical_target_id(config.embedding_model.id) if config.embedding_model is not None else None
 
@@ -163,9 +129,6 @@ class ModelDefaultApplication:
             references = extract_model_default_references(key, config)
         except (TypeError, ValueError) as error:
             raise ResourceReferenceInvalidError(reason="model_default_configuration_invalid") from error
-        source = SourceKey(tenant, "model_default", key, "current")
-        runtime = await get_reference_binding_runtime()
-        new_source = await cls._old_source(session, runtime, source, own)
         embedding_changed = False
         if effective is not None:
             original = MODEL_DEFAULT_SCHEMAS[key].model_validate_json(effective.payload_json)
@@ -182,25 +145,17 @@ class ModelDefaultApplication:
 
         # A default is copied into a space only when that space is created.
         # Saving it never reads or rewrites existing Knowledge roots or R2 slots.
-        prepared = await runtime.aprepare_source_bindings(
-            session,
-            source,
-            references,
-            extractor_version=MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
-            lock_source_root=lock_root,
-            new_source=new_source,
-        )
+        await lock_root(session)
+        old_references = extract_model_default_references(key, json.loads(own.payload_json)) if own is not None else ()
+        await require_new_models(session, references, old_references)
         states = await repository.aread_slot_models(
             session, tuple(int(reference.target.target_id) for reference in references)
         )
-        # Missing original references retain F118's exact-source repair rule;
-        # binding receipts already reject a newly introduced missing identity.
+        # Unchanged missing selections remain editable; new IDs were checked above.
         existing = tuple(reference for reference in references if int(reference.target.target_id) in states)
-        if not model_default_models_are_callable(key, existing, states):
-            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+        require_callable_default_models(key, existing, states)
         await cls._authorize(login_user, tenant)
         await repository.aput(session, key, canonical_payload_json(config.model_dump(mode="json")))
-        await runtime.aapply_source_bindings(session, prepared)
         return ModelDefaultSaveResult(config, embedding_changed)
 
     @classmethod
@@ -215,10 +170,7 @@ class ModelDefaultApplication:
         await cls._authorize(login_user, tenant)
         repository = ModelDefaultRepository()
         own = await repository.aget_own(session, key)
-        source = SourceKey(tenant, "model_default", key, "current")
-        runtime = await get_reference_binding_runtime()
-        new_source = await cls._old_source(session, runtime, source, own)
-        if own is None and new_source:
+        if own is None:
             # A consumer that only inherits Root never acquires its own index.
             return await repository.aresolve(session, key)
 
@@ -228,14 +180,6 @@ class ModelDefaultApplication:
             if current != own:
                 raise KnowledgeOperationPlanConflictError(reason="model_default_changed")
 
-        prepared = await runtime.aprepare_source_bindings(
-            session,
-            source,
-            (),
-            extractor_version=MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
-            lock_source_root=lock_root,
-            effective=False,
-        )
+        await lock_root(session)
         await repository.adelete_override(session, key)
-        await runtime.aapply_source_bindings(session, prepared)
         return await repository.aresolve(session, key)

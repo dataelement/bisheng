@@ -6,6 +6,7 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
 source "${SCRIPT_DIR}/lib/install-env.sh"
+source "${SCRIPT_DIR}/lib/sandbox-security.sh"
 source "${SCRIPT_DIR}/lib/credential-install.sh"
 source "${SCRIPT_DIR}/lib/credential-migrate.sh"
 source "${SCRIPT_DIR}/lib/credential-rotate.sh"
@@ -57,9 +58,28 @@ if [[ $PREPARE_ONLY != true ]]; then
   docker_mode=$(docker info --format '{{range .SecurityOptions}}{{if eq . "name=rootless"}}rootless{{end}}{{end}}') || die '无法核实Docker权限模式，未准备新凭据'
   [[ $docker_mode != rootless ]] || die '当前rootless Docker的密钥映射尚未通过验收；未准备新凭据或修改账号，请使用已验证的标准Docker环境'
 fi
+# Host-owned runner egress is recommended. Missing policy must not block install;
+# create the dedicated network so compose can attach runners without isolation.
+if [[ $PREPARE_ONLY != true ]]; then
+  if ! RUNNER_INTERNAL_CIDRS="${RUNNER_INTERNAL_CIDRS:-none}" \
+      bash "${SCRIPT_DIR}/lib/runner-egress.sh" verify; then
+    printf '%s\n' \
+      '警告：沙箱 runner 宿主机出口策略未通过校验，安装继续；代码执行内网隔离可能未生效。' \
+      '生产环境请由 root 审阅后执行：' \
+      "  RUNNER_INTERNAL_CIDRS='none或已审阅CIDR' bash docker/lib/runner-egress.sh apply" \
+      '  bash docker/lib/runner-egress.sh verify' \
+      >&2
+    if ! docker network inspect bisheng-runner >/dev/null 2>&1; then
+      docker network create --driver bridge --subnet 172.30.166.0/24 \
+        --opt com.docker.network.bridge.name=br-bsrunner bisheng-runner >/dev/null \
+        || die '无法创建沙箱专用网络 bisheng-runner；未启动服务'
+    fi
+  fi
+fi
 # An existing .env is never replaced or merged automatically.
 [[ -f "$ENV_FILE" ]] || cp "${SCRIPT_DIR}/.env.example" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+sandbox_initialize_token
 compose() { "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "${SCRIPT_DIR}/docker-compose.yml" "$@"; }
 credential_initialize_store
 profiles="$(env_get "$ENV_FILE" COMPOSE_PROFILES)"
@@ -102,9 +122,24 @@ case ",$(env_get "$ENV_FILE" COMPOSE_PROFILES)," in
 esac
 # Credential preparation requires every !env binding of the shipped config to
 # exist in .env. An .env from an older release can lack newer keys; add those
-# empty, the same as .env.example (values above are kept).
+# empty, the same as .env.example (values above are kept). Topology keys that
+# must be objects/URLs get compose defaults — empty BS_ELASTICSEARCH_SSL_VERIFY
+# becomes "" and prepare fails with "elasticsearch.ssl_verify: invalid object".
 while IFS= read -r key; do
-  grep -qE "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=" "$ENV_FILE" || env_set "$ENV_FILE" "$key" ""
+  if grep -qE "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=" "$ENV_FILE"; then
+    continue
+  fi
+  case "$key" in
+    BS_ELASTICSEARCH_URL) value=http://elasticsearch:9200 ;;
+    BS_ELASTICSEARCH_SSL_VERIFY) value='{}' ;;
+    BS_MILVUS_CONNECTION_ARGS) value='{"host":"milvus","port":"19530","user":"","password":"","secure":false}' ;;
+    BS_MILVUS_IS_PARTITION) value=true ;;
+    BS_MILVUS_PARTITION_SUFFIX) value=1 ;;
+    BS_MINIO_SCHEMA|BS_MINIO_CERT_CHECK) value=false ;;
+    BS_MINIO_ENDPOINT|BS_MINIO_SHAREPOINT) value=minio:9000 ;;
+    *) value='' ;;
+  esac
+  env_set "$ENV_FILE" "$key" "$value"
 done < <(grep -vE '^[[:space:]]*#' "${SCRIPT_DIR}/bisheng/config/config.yaml" \
   | grep -oE '!env \$\{[A-Za-z_][A-Za-z0-9_]*\}' | sed -E 's/^!env \$\{(.*)\}$/\1/' | sort -u)
 # Existing advanced path options stay compatible; normal deployment needs none.

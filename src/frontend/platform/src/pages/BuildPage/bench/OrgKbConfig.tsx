@@ -21,7 +21,8 @@ export interface OrgKbConfig {
     id: number;
     name: string;
     type?: number;
-    default_checked: boolean;
+    /** Every configured knowledge base starts selected; this only decides its composer tag (F005). */
+    show_in_composer: boolean;
     sort_order: number;
 }
 
@@ -86,15 +87,15 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                     id: kb.id,
                     name: kb.name,
                     type: kb.type,
-                    default_checked: false,
+                    show_in_composer: true,
                     sort_order: orgKbs.length,
                 },
             ]),
         );
     };
 
-    const handleDefaultCheckedChange = (kbId: number, defaultChecked: boolean) => {
-        onChange(orgKbs.map((k) => (k.id === kbId ? { ...k, default_checked: defaultChecked } : k)));
+    const handleShowInComposerChange = (kbId: number, show: boolean) => {
+        onChange(orgKbs.map((k) => (k.id === kbId ? { ...k, show_in_composer: show } : k)));
     };
 
     const handleRemove = (kbId: number) => {
@@ -112,16 +113,18 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
 
     return (
         <div className="mt-2 min-w-0 max-w-full">
-            <p className="text-sm text-muted-foreground mb-2">{t("bench.configureOrgKbs")}</p>
+            <p className="text-sm text-muted-foreground">{t("bench.configureOrgKbs")}</p>
+            <p className="text-xs text-text-3 mb-2">{t("bench.showInComposerHint")}</p>
             {orgKbs.some(item => !currentList.some(candidate => candidate.id === item.id)) && <p className="text-xs text-text-3">{t('references.unconfirmed')}</p>}
             <div className="flex min-w-0 w-full max-w-full gap-4">
                 {/* Selected panel */}
                 <div className="flex w-1/2 min-w-0 max-w-[50%] border rounded-lg bg-white" style={{ minHeight: 280 }}>
                     <div className="flex-1 p-4 flex flex-col min-w-0">
                         {orgKbs.length > 0 && (
-                            <div className="flex items-center justify-between pb-2 text-xs text-muted-foreground">
-                                <span>{t("bench.knowledgeBaseCol")}</span>
-                                <span>{t("bench.defaultChecked")}</span>
+                            <div className="flex items-center gap-2 border border-transparent px-3 pb-2 text-xs text-muted-foreground">
+                                <span className="min-w-0 flex-1">{t("bench.knowledgeBaseCol")}</span>
+                                <span className="w-28 shrink-0 text-center">{t("bench.showInComposer")}</span>
+                                <span className="w-8 shrink-0" aria-hidden />
                             </div>
                         )}
                         {orgKbs.length === 0 ? (
@@ -176,16 +179,20 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                                                     </span>
                                                                 </Tooltip>
                                                             </TooltipProvider>
-                                                            <Checkbox
-                                                                className="shrink-0"
-                                                                checked={kb.default_checked}
-                                                                onCheckedChange={(v) =>
-                                                                    handleDefaultCheckedChange(kb.id, !!v)
-                                                                }
-                                                            />
-                                                            <Button type="button" variant="text" onClick={() => handleRemove(kb.id)} className="shrink-0" title={t("bench.remove")} color="default">
-                                                                <Outlined.Delete className="w-4 h-4" />
-                                                            </Button>
+                                                            <div className="flex w-28 shrink-0 justify-center">
+                                                                <Checkbox
+                                                                    checked={kb.show_in_composer !== false}
+                                                                    aria-label={`${t("bench.showInComposer")}: ${kb.name}`}
+                                                                    onCheckedChange={(v) =>
+                                                                        handleShowInComposerChange(kb.id, !!v)
+                                                                    }
+                                                                />
+                                                            </div>
+                                                            <div className="flex w-8 shrink-0 justify-center">
+                                                                <Button type="button" variant="text" onClick={() => handleRemove(kb.id)} title={t("bench.remove")} color="default">
+                                                                    <Outlined.Delete className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </Draggable>

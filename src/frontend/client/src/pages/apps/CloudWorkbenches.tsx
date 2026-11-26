@@ -43,7 +43,7 @@ export function CloudWorkbenches() {
   const open = (item: CloudWorkbench) => {
     const url = new URL(item.entry_url, window.location.origin);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return;
-    // The platform proxy rechecks the current visitor's use permission at entry.
+    // The platform proxy rechecks the current visitor's visibility permission at entry.
     window.location.assign(url.href);
   };
   return <div className="flex h-full min-h-0 flex-col">

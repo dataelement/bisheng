@@ -4,7 +4,6 @@ The caller supplies a clean, short native transaction. Selected-resource
 qualification belongs before it; source disclosure belongs after SQL closes.
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -12,24 +11,18 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
     ReferenceCoverageNotReadyError,
-    ResourceReferenceInvalidError,
 )
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
 from bisheng.knowledge.domain.repositories.knowledge_space_delete_repository import KnowledgeSpaceDeleteRepository
 from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteScope, DeleteSelection
 from bisheng.resource_reference.application.contracts import (
-    DeletionEvidence,
-    ReferenceState,
     SourceKey,
     SourceType,
     TargetKey,
     TargetType,
     TransactionIdentity,
 )
-from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
-from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
-from bisheng.resource_reference.domain.repositories.coverage_repository import CoverageRepository
-from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
+from bisheng.resource_reference.domain.repositories.reference_hint_repository import ReferenceHintRepository
 
 Counts = tuple[tuple[str, int], ...]
 
@@ -70,24 +63,7 @@ def _source_counts(sources) -> Counts:
 
 
 class DirectDeleteReferenceQuery:
-    def __init__(
-        self,
-        *,
-        runtime: ReferenceBindingRuntime,
-        coverage_factory: Callable[[AsyncSession], CoverageRepository],
-        scope_repository: KnowledgeSpaceDeleteRepository | None = None,
-    ):
-        if (
-            not isinstance(runtime, ReferenceBindingRuntime)
-            or not isinstance(runtime.repository, ReferenceRepository)
-            or not isinstance(runtime.verifier, ReferenceTargetVerifier)
-            or runtime.repository.verifier is not runtime.verifier
-            or not callable(coverage_factory)
-        ):
-            raise TypeError("direct deletion facts require an actual same-issuer runtime and coverage factory")
-        if scope_repository is not None and not isinstance(scope_repository, KnowledgeSpaceDeleteRepository):
-            raise TypeError("direct deletion facts require the actual physical scope repository")
-        self.runtime, self.coverage_factory = runtime, coverage_factory
+    def __init__(self, *, runtime=None, coverage_factory=None, scope_repository=None):
         self.scope = scope_repository if scope_repository is not None else KnowledgeSpaceDeleteRepository()
 
     @staticmethod
@@ -111,25 +87,6 @@ class DirectDeleteReferenceQuery:
         return tenant, TransactionIdentity.capture(session)
 
     @staticmethod
-    def _current(session, transaction, tenant):
-        try:
-            transaction.assert_current(session)
-        except (TypeError, ValueError) as error:
-            raise ResourceReferenceInvalidError(reason="delete_reference_context_changed") from error
-        current = get_current_tenant_id()
-        if type(current) is not int or current != tenant or is_tenant_filter_bypassed():
-            raise ResourceReferenceInvalidError(reason="delete_reference_context_changed")
-
-    @staticmethod
-    def _available(target, operation_id=None):
-        return target.state == ReferenceState.VALID or (
-            operation_id is not None
-            and target.state == ReferenceState.DELETING
-            and isinstance(target.evidence, DeletionEvidence)
-            and target.evidence.operation_id == operation_id
-        )
-
-    @staticmethod
     def _targets(scope):
         units = {}
         for index, unit in enumerate(scope.units):
@@ -141,97 +98,45 @@ class DirectDeleteReferenceQuery:
         keys = {raw: TargetKey(*raw) for raw in units}
         return units, keys, tuple(sorted(keys.values(), key=lambda key: key.lock_order_key))
 
-    @staticmethod
-    def _slot(row, units, targets, sources, seen, *, tenant_id, space_id):
-        raw = row.target_type, row.target_id
-        legacy = row.legacy_invalid_reason == "target_missing" and all(
-            type(value) is str and value for value in (row.legacy_run_id, row.legacy_evidence_key)
-        )
-        legacy_fields = (row.legacy_invalid_reason, row.legacy_run_id, row.legacy_evidence_key)
-        if (
-            raw not in units
-            or (not legacy and any(value is not None for value in legacy_fields))
-            or (not legacy and (row.target_tenant_id != tenant_id or row.target_space_id != str(space_id)))
-            or type(row.id) is not int
-            or row.id <= 0
-            or row.id in seen
-            or type(row.source_revision) is not int
-            or row.source_revision < 0
-            or not isinstance(row.slot_key, str)
-            or not 0 < len(row.slot_key) <= 192
-        ):
-            raise ReferenceCoverageNotReadyError(reason="delete_reference_inbound_invalid")
-        try:
-            key = SourceKey(row.tenant_id, row.source_type, row.source_id, row.source_version)
-        except (TypeError, ValueError) as error:
-            raise ReferenceCoverageNotReadyError(reason="delete_reference_inbound_invalid") from error
-        source = sources.setdefault(key, key)
-        seen.add(row.id)
-        return DeleteReferenceSlotFact(row.id, units[raw], source, row.slot_key, targets[raw], row.source_revision)
+    async def acollect(self, session, *, space_id, selections, operation_id=None):
+        self._context(session, space_id, selections)
+        scope = await self.scope.aread_delete_scope(session, space_id=space_id, selections=selections, for_update=False)
+        units, _targets, keys = self._targets(scope)
+        rows = await ReferenceHintRepository().aread(session, keys)
+        return self.facts(scope, rows, units)
 
-    async def acollect(
-        self, session: AsyncSession, *, space_id: int, selections: tuple[DeleteSelection, ...], operation_id=None
-    ) -> DeleteReferenceFacts:
-        tenant, transaction = self._context(session, space_id, selections)
-        with session.no_autoflush:
-            coverage = self.coverage_factory(session)
-            if not isinstance(coverage, CoverageRepository):
-                raise ReferenceCoverageNotReadyError(reason="delete_reference_coverage_unconfigured")
-            before = await coverage.arequire_global_ready()
-            await coverage.arequire_ready(tenant_id=tenant)
-            self._current(session, transaction, tenant)
-            scope = await self.scope.aread_delete_scope(
-                session, space_id=space_id, selections=selections, for_update=False
-            )
-            self._current(session, transaction, tenant)
-            units, target_by_raw, targets = self._targets(scope)
-            references, sources, seen = [], {}, set()
-            unit_sources = [set() for _ in scope.units]
-            unit_slots = [dict.fromkeys(SourceType, 0) for _ in scope.units]
-            total_slots = dict.fromkeys(SourceType, 0)
-            if targets:
-                receipts = await self.runtime.verifier.averify_owner_targets(session, targets)
-                if (
-                    len(receipts) != len(targets)
-                    or {receipt.target.key for receipt in receipts} != set(targets)
-                    or any(
-                        not self._available(receipt.target, operation_id)
-                        or receipt.target.target_tenant_id != tenant
-                        or receipt.target.target_space_id != str(space_id)
-                        for receipt in receipts
-                    )
-                ):
-                    raise ResourceReferenceInvalidError(reason="delete_reference_target_unavailable")
-                owner_scope = self.runtime.repository.target_owner_scope(session, receipts)
-                async for page in self.runtime.repository.aiter_inbound_for_owner_pages(session, owner_scope):
-                    for row in page:
-                        fact = self._slot(row, units, target_by_raw, sources, seen, tenant_id=tenant, space_id=space_id)
-                        references.append(fact)
-                        unit_sources[fact.unit_index].add(fact.source)
-                        unit_slots[fact.unit_index][fact.source.source_type] += 1
-                        total_slots[fact.source.source_type] += 1
-            observed = tuple(sorted({key.tenant_id for key in sources}))
-            await coverage.arequire_global_ready(
-                observed_source_tenant_ids=observed,
-                expected_epoch=before.coverage_epoch,
-                expected_inventory_hash=before.tenant_inventory_hash,
-            )
-            await coverage.arequire_ready(tenant_id=tenant)
-            self._current(session, transaction, tenant)
-            ordered_sources = tuple(
+    @staticmethod
+    def facts(scope, rows, units):
+        references, sources = [], set()
+        unit_sources = [set() for _ in scope.units]
+        unit_slots = [dict.fromkeys(SourceType, 0) for _ in scope.units]
+        slots = dict.fromkeys(SourceType, 0)
+        for row in rows:
+            try:
+                source = SourceKey(row.tenant_id, row.source_type, row.source_id, row.source_version)
+                target = TargetKey(row.target_type, row.target_id)
+            except (TypeError, ValueError) as error:
+                raise ReferenceCoverageNotReadyError(reason="malformed_reference_hint") from error
+            index = units.get((row.target_type, row.target_id), 0)
+            references.append(DeleteReferenceSlotFact(row.id, index, source, row.slot_key, target, row.source_revision))
+            sources.add(source)
+            slots[source.source_type] += 1
+            if unit_sources:
+                unit_sources[index].add(source)
+                unit_slots[index][source.source_type] += 1
+        return DeleteReferenceFacts(
+            scope,
+            tuple(references),
+            tuple(
                 sorted(
                     sources, key=lambda key: (key.tenant_id, key.source_type.value, key.source_id, key.source_version)
                 )
-            )
-            return DeleteReferenceFacts(
-                scope,
-                tuple(references),
-                ordered_sources,
-                _source_counts(ordered_sources),
-                _counts(total_slots),
-                tuple(_source_counts(values) for values in unit_sources),
-                tuple(_counts(values) for values in unit_slots),
-                observed,
-                before.coverage_epoch,
-                before.tenant_inventory_hash,
-            )
+            ),
+            _source_counts(sources),
+            _counts(slots),
+            tuple(_source_counts(values) for values in unit_sources),
+            tuple(_counts(values) for values in unit_slots),
+            tuple(sorted({key.tenant_id for key in sources})),
+            0,
+            "",
+        )

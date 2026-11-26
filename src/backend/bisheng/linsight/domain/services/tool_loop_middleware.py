@@ -177,34 +177,54 @@ def _tool_calls_of(message: object) -> list[dict]:
 
 
 def _trailing_tool_failure_run(messages: list) -> tuple[str | None, int]:
-    """(tool_name, count) of the trailing run of consecutive same-tool error
-    ``ToolMessage``s.
+    """(tool_name, count) of the trailing run of consecutive failed TURNS of one tool.
 
-    AIMessages (the tool-call producers, interleaved between each failure) are
-    transparent; a non-error ToolMessage (a success), a different tool, or a
-    human turn ends the run. Returns ``(None, 0)`` when the most recent tool
-    result was not an error.
+    A turn is the batch of ``ToolMessage``s answering one AIMessage. It counts as
+    one failure of a tool when every result in it is an error and that tool is
+    among them; a turn with any non-error result, a turn that does not involve the
+    tool, or a human turn ends the run. Returns ``(None, 0)`` when the most recent
+    turn was not a pure failure.
+
+    Counted per turn, not per ToolMessage, for the reason ``_identical_turn_run``
+    gives: parallel calls in one AIMessage are one unit of model intent. Counting
+    messages aborted a run that was making progress (114, 2026-11-18, run
+    edcbf900): the model sent nine ``edit_file`` calls for one file in a single
+    turn, deepagents let the first through and refused the other eight
+    ("parallel file mutations to the same path are not allowed"), and those eight
+    refusals alone reached the hard limit.
     """
     target: str | None = None
     count = 0
+    batch: list[tuple[str | None, str | None]] = []  # (name, status), newest first
+
+    def _close_batch() -> bool:
+        """Fold the collected turn into the run; False when it ends the run."""
+        nonlocal target, count
+        if not batch:
+            return True
+        if any(status != "error" for _, status in batch):
+            return False  # the turn got something done
+        names = [name for name, _ in batch]
+        if target is None:
+            target = names[0]  # the newest result names the tool, as before
+        elif target not in names:
+            return False  # a different tool's failure ends the same-tool run
+        count += 1
+        return True
+
     for m in reversed(messages):
         role, name, status, _ = _msg_fields(m)
-        if role in ("human", "user"):
-            break
-        if role in ("ai", "assistant"):
-            continue  # tool-call producer — transparent to the run
         if role == "tool":
-            if status != "error":
-                break  # a success (or non-error) result ends the failure run
-            if target is None:
-                target, count = name, 1
-            elif name == target:
-                count += 1
-            else:
-                break  # a different tool's failure ends the same-tool run
+            batch.append((name, status))
             continue
-        # Any other message kind (system, etc.): be conservative and stop.
-        break
+        if role in ("ai", "assistant"):
+            if not _close_batch():
+                return target, count
+            batch = []
+            continue
+        # A human turn, or any other message kind (system, etc.): stop. Results
+        # with no producing AIMessage before the boundary are not a turn.
+        return target, count
     return target, count
 
 

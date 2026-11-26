@@ -158,14 +158,22 @@ async def test_workflow_callback_refuses_and_stores_nothing(monkeypatch, storage
 
 
 async def test_workflow_callback_stores_the_downloaded_document(monkeypatch, storage, editor_session):
+    from types import SimpleNamespace
+
+    import jwt
+
     from bisheng.api.v1 import workflow
+
+    secret = "test-only-office-callback-key-at-least32bytes"
+    monkeypatch.setattr(workflow, "bisheng_settings", SimpleNamespace(get_from_db=lambda key: secret))
 
     monkeypatch.setattr(workflow, "afetch_office_document", AsyncMock(return_value=b"saved-docx"))
     monkeypatch.setattr(workflow, "get_minio_storage", AsyncMock(return_value=storage))
 
+    data = {"status": 2, "url": f"{OFFICE}/cache/files/x.docx", "key": "abc_1700000000000"}
     result = await workflow.upload_report_file(
-        MagicMock(),
-        {"status": 2, "url": f"{OFFICE}/cache/files/x.docx", "key": "abc_1700000000000"},
+        SimpleNamespace(headers={}),
+        {**data, "token": jwt.encode(data, secret, algorithm="HS256")},
     )
 
     assert result == {"error": 0}
