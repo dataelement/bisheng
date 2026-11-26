@@ -42,6 +42,25 @@ async def config(settings: DshSettings = Depends(get_settings)):
     }
 
 
+@router.get("/dsh/authorizations/{auth_id}")
+async def get_authorization_info(
+    auth_id: str,
+    user=Depends(browser_user),
+    runtime: DshRuntime = Depends(get_runtime),
+):
+    _ = user
+    binding = await runtime.authorizations.resolve(auth_id)
+    return resp_200(
+        data={
+            "auth_id": auth_id,
+            "client_id": binding["client_id"],
+            "client_name": binding.get("client_name") or "BiSheng Desktop (DSH)",
+            "require_consent": bool(binding.get("require_consent", True)),
+            "expires_in": binding["expires_in"],
+        }
+    )
+
+
 @router.post("/dsh/authorize")
 async def authorize(
     body: AuthorizeRequest, request: Request, user=Depends(browser_user), runtime: DshRuntime = Depends(get_runtime)

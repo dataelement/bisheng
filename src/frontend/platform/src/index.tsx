@@ -1,6 +1,6 @@
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { rememberDesktopLoginReturnTo } from "./utils/loginReturnTo";
+import { rememberDesktopLoginReturnTo, rememberOAuthConsentLoginReturnTo } from "./utils/loginReturnTo";
 import ContextWrapper from "./contexts";
 import reportWebVitals from "./reportWebVitals";
 import './i18n';
@@ -47,6 +47,7 @@ if (import.meta.hot) import.meta.hot.dispose(stopThemeBridge);
 
 // Preserve consent before UserContext or SSO can redirect an expired session.
 rememberDesktopLoginReturnTo();
+rememberOAuthConsentLoginReturnTo();
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement

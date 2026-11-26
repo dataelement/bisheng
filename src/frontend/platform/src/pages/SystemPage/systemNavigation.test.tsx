@@ -14,6 +14,7 @@ vi.mock('./components/OrgSync', () => ({ default: () => <div>Sync content</div> 
 vi.mock('./components/PersonalToken', () => ({ PersonalToken: () => <div>Tokens content</div> }))
 vi.mock('./components/ServiceAccount', () => ({ ServiceAccount: () => <div>Accounts content</div> }))
 vi.mock('./components/Config', () => ({ default: () => <div>Configuration content</div> }))
+vi.mock('./components/OAuthClients', () => ({ OAuthClients: () => <div>OAuth Clients content</div> }))
 vi.mock('./theme', () => ({ default: () => <div>Theme content</div> }))
 
 interface FixtureProps {
@@ -32,7 +33,8 @@ afterEach(cleanup)
 
 it('keeps administrator navigation and switches real shared tabs', async () => {
     render(<Fixture user={{ role: 'admin' }} apiEnabled><SystemPage /></Fixture>)
-    expect(screen.getAllByRole('tab')).toHaveLength(9)
+    expect(screen.getAllByRole('tab')).toHaveLength(10)
+    expect(screen.getByRole('tab', { name: 'oauth2.admin.tab' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'system.inviteCode.tab' })).toBeInTheDocument()
     expect(screen.getByText('Organization content')).toBeVisible()
     await userEvent.click(screen.getByRole('tab', { name: 'openApiManagement.serviceAccount.title' }))

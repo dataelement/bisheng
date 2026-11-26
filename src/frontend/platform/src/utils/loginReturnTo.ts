@@ -69,6 +69,39 @@ export function consumeLoginReturnTo(): string | null {
     }
 }
 
+/** Match only the consent route under the configured platform base path. */
+export function isOAuthConsentPath(pathname: string = location.pathname): boolean {
+    const base = import.meta.env.BASE_URL.replace(/\/+$/, '');
+    return pathname === `${base}/oauth-consent`;
+}
+
+/** Preserve OAuth consent before the first user-info request or explicit login hop. */
+export function rememberOAuthConsentLoginReturnTo(): void {
+    if (!isOAuthConsentPath()) return;
+    try {
+        localStorage.setItem(LOGIN_PATHNAME_KEY, location.href);
+        localStorage.setItem(LOGIN_PATHNAME_AT_KEY, String(Date.now()));
+    } catch {
+        /* Storage may be disabled; leave the existing login behavior available. */
+    }
+}
+
+/** Let SSO landings finish the consent return before checking admin-console access. */
+export function hasOAuthConsentLoginReturnTo(): boolean {
+    const base = import.meta.env.BASE_URL.replace(/\/+$/, '');
+    if (![base || '/', base + '/', base + '/admin-login'].includes(location.pathname)) return false;
+    try {
+        const raw = localStorage.getItem(LOGIN_PATHNAME_KEY);
+        const stamp = Number(localStorage.getItem(LOGIN_PATHNAME_AT_KEY));
+        if (!raw || !Number.isFinite(stamp) || stamp <= 0
+            || Date.now() - stamp > MAX_AGE_MS || stamp > Date.now()) return false;
+        const target = new URL(raw, location.origin);
+        return target.origin === location.origin && isOAuthConsentPath(target.pathname);
+    } catch {
+        return false;
+    }
+}
+
 /** Capture desktop navigation before the first user-info request can redirect on 401. */
 export function rememberDesktopLoginReturnTo(): void {
     if (location.pathname !== '/desktop-login') return

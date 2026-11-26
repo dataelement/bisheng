@@ -68,6 +68,14 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # properties of the build, not of any tenant); anything per-tenant belongs
     # behind a credential on a different path.
     "/api/v1/dev-toolkit",
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/openid-configuration",
+    "/api/v1/oauth2/openid-metadata",
+    "/api/v1/oauth2/jwks",
+    "/api/v1/oauth2/authorize",
+    "/api/v1/oauth2/token",
+    "/api/v1/oauth2/userinfo",
+    "/api/v1/oauth2/revoke",
     "/health",
     "/docs",
     "/openapi.json",
