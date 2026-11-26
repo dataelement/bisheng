@@ -198,14 +198,15 @@ export default () => (
 
 ## 状态 state
 
-disabled / loading 全类型统一；focus 环仅键盘（`focus-visible`）出现。
+加载态使用统一反馈。聚焦环仅在键盘操作（`focus-visible`）时出现。
 
 ### disabled
 
-灰底、不可点，全类型一个样。
+按钮禁用时默认使用浅灰底和灰色内容。危险色纯图标文字按钮保持透明底，图标显示为禁用灰色。
 
 ```tsx
-import { Button } from '@bisheng/ui';
+import { Outlined } from 'bisheng-icons';
+import { Button, Tooltip } from '@bisheng/ui';
 
 export default () => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -214,6 +215,11 @@ export default () => (
     <Button color="default" disabled>默认</Button>
     <Button color="default" variant="text" disabled>文字</Button>
     <Button color="danger" disabled>删除</Button>
+    <Tooltip content="解除关联后可删除">
+      <Button color="danger" variant="text" iconOnly disabled aria-label="删除">
+        <Outlined.Delete aria-hidden="true" />
+      </Button>
+    </Tooltip>
   </div>
 );
 ```
