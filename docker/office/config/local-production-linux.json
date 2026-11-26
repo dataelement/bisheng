@@ -1,0 +1,11 @@
+{
+  "services": {
+    "CoAuthoring": {
+      "token": {
+        "outbox": {
+          "urlExclusionRegex": "^(?![^?#]*/api/v1/(?:report/callback|workflow/report/callback)(?:\\?[^#]*)?$)"
+        }
+      }
+    }
+  }
+}
