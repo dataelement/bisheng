@@ -13,7 +13,7 @@ import { downloadFile } from '@/util/utils';
 import { checkSassUrl } from '@/components/bs-comp/FileView';
 import { DatasetImportDialog } from '@/pages/ModelPage/components/DatasetImportDialog';
 import { SavedDatasetPreview } from '@/pages/ModelPage/components/SavedDatasetPreview';
-import CreateDataSet, { CreateDataSetHandle } from './CreateDataSet';
+import type { TrainingDataType } from '@/controllers/API/finetuneV2';
 
 const categories: DatasetCategory[] = ['legacy', 'text', 'image_text', 'video_text'];
 export default function DataSetPage() {
@@ -36,7 +36,7 @@ function DataSetContent() {
     const [page, setPage] = useState(1);
     const [keyword, setKeyword] = useState('');
     const [category, setCategory] = useState<DatasetCategory | 'all'>('all');
-    const [importType, setImportType] = useState<DatasetCategory>('text');
+    const [importType, setImportType] = useState<TrainingDataType>('text');
     const [importOpen, setImportOpen] = useState(false);
     const [preview, setPreview] = useState<CatalogDataset>();
     const [loading, setLoading] = useState(false);
@@ -44,7 +44,6 @@ function DataSetContent() {
     const [failed, setFailed] = useState(false);
     const [revision, setRevision] = useState(0);
     const active = useRef(true);
-    const createRef = useRef<CreateDataSetHandle>(null);
     useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
     const reload = useCallback(() => setRevision(value => value + 1), []);
     useEffect(() => {
@@ -82,7 +81,6 @@ function DataSetContent() {
                 <SearchInput placeholder={t('bs:dataset.name')} onChange={event => { setKeyword(event.target.value); setPage(1); }} className="w-56" />
                 <Select {...selectLabels} value={category} aria-label={t('finetune.datasetCategory')} className="w-40" onChange={value => { setCategory(value as DatasetCategory | 'all'); setPage(1); }} options={[{ value: 'all', label: t('finetune.allDatasetCategories') }, ...categories.map(value => ({ value, label: t(`finetune.type_${value}`) }))]} />
                 <Button disabled={busy} onClick={() => setImportOpen(true)}>{t('finetune.datasetImport')}</Button>
-                <Button variant="outlined" onClick={() => createRef.current?.open()}>{t('finetune.addTextDataset')}</Button>
             </div>
             {loading && <p role="status">{t('finetune.datasetLoading')}</p>}
             {failed && <div role="alert"><span>{t('finetune.datasetListFailed')}</span><Button variant="link" onClick={reload}>{t('finetune.datasetRefresh')}</Button></div>}
@@ -103,7 +101,6 @@ function DataSetContent() {
             {!loading && !failed && !rows.length && <p>{t('finetune.datasetEmpty')}</p>}
         </div>
         <div className="bisheng-table-footer px-6 bg-background-login"><div className="ml-auto"><Pagination locale={paginationLocale} current={page} pageSize={20} total={total} onChange={setPage} /></div></div>
-        <CreateDataSet ref={createRef} onChange={reload} />
         {importOpen && <DatasetImportDialog dataType={importType} onDataTypeChange={setImportType} onClose={() => setImportOpen(false)} onImported={() => { reload(); }} />}
         <Dialog open={Boolean(preview)} onOpenChange={value => { if (!value) setPreview(undefined); }}><DialogContent className="max-w-[720px] max-h-[80vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{preview?.name}</DialogTitle></DialogHeader>

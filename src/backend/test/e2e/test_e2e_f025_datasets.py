@@ -40,13 +40,23 @@ async def test_catalog_conversion_preserves_original_and_deleted_data_stays_dele
         "/api/v1/finetune/job/file", files={"files": ("text.json", json.dumps(TEXT).encode())}
     )
     assert task_denied.status_code == 403
-    saved = assert_resp_200(
-        await web.client.post(
-            "/api/v1/finetune/dataset-catalog/files",
-            data={"name": PREFIX + "legacy", "data_type": "legacy"},
-            files={"files": ("old.json", raw)},
+    # Existing legacy data is seeded as historical state; new imports must reject this format.
+    from bisheng.finetune.domain.repositories.dataset_catalog import DatasetCatalogRepository
+
+    key = "dataset/60/e2e-f025-dataset-historical.json"
+    web.objects.data[web.objects.bucket, key] = raw
+    with tenant_execution_scope(60):
+        record = await DatasetCatalogRepository.save(
+            PresetTrain(
+                id=PREFIX + "historical",
+                name=PREFIX + "legacy",
+                url=key,
+                data_type="legacy",
+                tenant_id=60,
+                user_id=str(web.user.user_id),
+            )
         )
-    )
+    saved = record.model_dump()
     assert saved["data_type"] == "legacy" and saved["version_id"] is None
     original = web.objects.data[web.objects.bucket, saved["url"]]
     converted = assert_resp_200(await web.client.post(f"/api/v1/finetune/dataset-catalog/{saved['id']}/convert"))

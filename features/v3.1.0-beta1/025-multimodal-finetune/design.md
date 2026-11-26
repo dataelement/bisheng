@@ -135,7 +135,7 @@
 ### 决策 11：旧格式显式转换，分类依据实际内容
 
 - **备选**：A. 把历史 `report.data_type=text` 全部当作新版文本；B. 按实际清单识别格式，旧格式只在用户点击转换时规范化；C. 升级时批量覆盖旧文件。
-- **选定**：B。`instruction/input/output` 属于旧格式，`messages` 属于新版文本；图文、视频仍按现有媒体规则校验。远程纯文本 ZIP 由平台有界读取（200 MiB 清单上限加 1 MiB 压缩包开销）；图文/视频继续沿用 FT 直读来源计划。选择新版文本导入时不静默接受旧格式，提示使用旧格式分类并转换。
+- **选定**：B。`instruction/input/output` 属于旧格式，`messages` 属于新版文本；图文、视频仍按现有媒体规则校验。远程纯文本 ZIP 由平台有界读取（200 MiB 清单上限加 1 MiB 压缩包开销）；图文/视频继续沿用 FT 直读来源计划。新版文本导入拒绝旧格式，不再提供旧格式新导入；已有历史旧格式仍保留并支持显式转换。
 - **原因**：现有 `validate_records()` 同时接受两种文本，报告中的 `text` 不足以证明已转换；用户明确要求保留旧格式，覆盖文件会破坏原数据和历史引用。
 - **转换**：纯函数输出 `messages`：可选 `system` 放第一条，合法 `history` 问答对顺序保留；`instruction` 与非空 `input` 用两个换行连接成当前 user，`output` 为 assistant。无输入不追加空文本。非字符串、无法识别的会话字段或损坏 history 报样本位置，不猜测或丢弃。转换结果重新校验后保存新目录、新版本，`source_dataset_id` 与源内容哈希用于追溯，原记录不更新。
 - **何时重新考虑**：用户确认新增旧格式方言时，增加有样例与测试的适配器；不能在通用校验中扩大隐式猜测。
@@ -278,8 +278,8 @@
 
 ```mermaid
 flowchart LR
-  A[数据集页：本地/FTP/SFTP/S3] --> B[类型识别与校验]
-  Q[原加入入口/QA 知识库] --> N[规范化新版文本]
+  A[统一导入：本地/FTP/SFTP/S3] --> B[类型识别与校验]
+  Q[统一导入中的 QA 知识库] --> N[规范化新版文本]
   N --> B
   B --> C[统一目录 PresetTrain]
   B --> V[不可变版本 FinetuneDataset]
@@ -312,7 +312,7 @@ flowchart LR
 | 接口 | 用途 | 权限/兼容 |
 |---|---|---|
 | `GET /finetune/dataset-catalog` | 四类管理列表，keyword/data_type/source_type/page/limit；返回 data/total | `get_dataset_user`；SQL 分页，列表与数量同条件 |
-| `POST /finetune/dataset-catalog/files` | 本地持久导入，显式 name/data_type | 数据集权限；检测后保存目录及必要版本 |
+| `POST /finetune/dataset-catalog/files` | 本地持久导入，显式 name/data_type，仅 text/image_text/video_text | 数据集权限；检测后保存目录及必要版本 |
 | `POST /finetune/dataset-catalog/import` | 现有 FTP/FTPS/SFTP/S3 持久导入 | 数据集权限；复用连接器及凭据脱敏，不能借任务权限写目录 |
 | `POST /finetune/dataset-catalog/{id}/convert` | 旧格式转新文本 | 数据集权限与严格租户范围；返回新目录项，原记录不变 |
 | `DELETE /finetune/dataset-catalog/{id}` | 将目录标为已删除 | 数据集权限；新列表与新任务不可用，保留版本和历史引用，不扩大为物理文件清理 |
@@ -320,7 +320,7 @@ flowchart LR
 | `GET /finetune/datasets` | 任务候选，只含活动目录关联的已校验新版版本 | `get_finetune_user`；按任务三类筛选；返回值保留 TrainingFile 兼容字段并增加 catalog_id |
 | `POST /finetune/job/file` | 改为任务临时本地上传 | 任务权限；返回 `{id: upload_id, upload_id, name, url, dataset_report, expires_at, temporary:true}`，不写任何数据集表 |
 | `GET /finetune/task-uploads/{upload_id}/preview`、`/media` | 临时文件预览 | 任务权限 + tenant/user/TTL 校验；媒体路径继续限制为校验过的清单引用 |
-| 原 `POST /finetune/job/file/preset` | 保留原本地加入/QA 导入契约 | 数据集权限；旧格式输入规范化新版文本并保存，QA 原权限检查保留 |
+| 原 `POST /finetune/job/file/preset` | 保留原本地保存/QA API；旧格式输入拒绝 | 数据集权限；本地只接受新版 messages 文本；QA 直接生成 messages，原权限检查保留 |
 | 原 preset 列表/删除/下载与版本预览 | 兼容现有调用 | 通过统一目录 Repository 读取未删除项；历史对象仍按原归属鉴权 |
 
 URL 前缀为 `/api/v1`。新增接口不得出现 config 路径。管理页下载/预览使用专属目录路由和数据集权限，内部复用版本解析；浏览器下载链接使用现有 MinIO `clear_host=True`，返回 `/object/{bucket}/{key}` 并保留完整签名查询串，不能把 FT 所用直链当浏览器路径。任务已有版本预览须有任务权限与可用目录，临时预览须为本人。凭据字段继续使用 `SecretStr`，验证错误不回显原输入。临时上传无效/过期使用新增 10134，已用于不同配置的任务使用新增 10135；已核对基线无占用。定义放 finetune 错误模块，三语文案只维护在 packages/locales 并生成客户端产物。归属不匹配不透露目标文件或任务；旧格式/分类错误复用 InvalidDatasetPackageError，附样本位置。
@@ -334,14 +334,14 @@ URL 前缀为 `/api/v1`。新增接口不得出现 config 路径。管理页下�
 | 新 `domain/repositories/dataset_catalog.py` | 目录分页/过滤、版本关联、原子保存、历史登记与旧接口适配 | 不访问 FTP/MinIO、不在 Service 写 ORM |
 | `datasets.py` + 新 `legacy_dataset.py` | 管理目录编排、旧格式识别与纯转换；复用现有校验/预览 | 不执行训练、不覆盖旧文件 |
 | 新 `task_uploads.py` | 临时上传、服务端凭证、预览和任务引用解析 | 不调用目录/版本 save，不保存为可复用数据 |
-| `finetune_file.py` | 复用对象存储、文件大小和哈希检查；原加入及 QA 输出走新版文本保存 | 不再让所有任务上传隐式保存版本 |
+| `finetune_file.py` | 复用对象存储、文件大小和哈希检查；原本地入口只接受新版文本，QA 直接生成新版文本 | 不再让所有任务上传隐式保存版本 |
 | `multimodal.py` / `finetune.py` | 保存数据/临时数据两种解析、提交前复检和快照；唯一上传 ID 的重试处理 | 不从浏览器恢复“已验证”状态 |
-| `DataSetPage` / `CreateDataSet` | 四类标签、分类筛选；本地/远程/QA 入口；旧格式转换、下载、删除和预览 | 不另建一套管理页面 |
+| `DataSetPage` / `DatasetImportDialog` | 四类标签、分类筛选；单一导入按钮承载本地/远程/QA，导入仅三类新格式；历史旧格式仍可转换/下载/预览 | 不另建一套管理页面 |
 | `DatasetImportDialog` | 抽出可复用持久导入表单供数据集页使用，回调处理保存结果 | 不在任务页展示“保存为可复用版本” |
 | `CreateTaskList` / `SavedDatasetPreview` | 下拉统一目录候选；独立本地临时上传及预览；切换类型清空不兼容选择 | 不将临时数据加入 datasets 下拉数组或刷新后长期显示 |
 | `finetuneV2.ts` / `finetuneDatasets.ts` / 三语文案 | 明确 saved/temporary 选择类型、API 与提示 | store 不发 HTTP、不保存连接密码 |
 
-“加入数据集”当前可核实的写入口是 `createDatasetApi → POST /job/file/preset`，及其本地/QA 两个分支。本轮保留这个契约并统一规范化新版文本，不能删除它后只保留新的远程导入。尚未在当前代码或针对该入口的历史搜索中找到独立同名按钮；不据此新增对话采集页面，也不宣称一个未找到的页面已验收。最终验收需验证实际已有调用者或提供对应入口。
+历史本地保存与 QA 使用 `POST /job/file/preset`。当前页面已合并至 DatasetImportDialog，前端 `importQADataset` 仅发送 name/qa_list，服务端沿用 QA 可见权限检查；原本地保存 API 只接受新版 messages 文本，不接受旧格式。独立 CreateDataSet 和旧 createDatasetApi helper 已删除。
 
 ### 4.8 升级、失败与部署边界（本地实现）
 
@@ -472,7 +472,7 @@ curl -s http://127.0.0.1:8000/v2.1/sft/capabilities
 - 单元测试覆盖旧/新文本识别、input/system/history 不丢失、逐样本错误、四类校验、临时凭证归属/TTL、目录与版本事务及唯一约束；前端测试覆盖四类列表、转换回显、任务类型切换和临时/已保存两条请求。
 - 集成测试验证本地/FTP/SFTP/S3 的持久导入、来源失败不入目录、旧数据兼容登记可重跑且不复活已删除项；MySQL/DM8 验证唯一可空版本关联、分页和计数一致，未跑中央 DM8 不得宣称双库已实测。
 - API E2E 与页面核对使用数据集菜单用户、模型菜单用户、兼具菜单用户和另一租户用户；重点断言临时上传、取消、创建失败与成功后，presettrain 与 finetunedataset 均没有新增临时记录；任务成功写入自身引用和快照。
-- 手动路径：在 `/dataset` 导入四类样例、转换旧格式并下载核对；在 `/model/finetune` 切换三类类型核对候选；临时上传后取消/重试/提交，再回到数据集页确认未新增。QA 导入须使用有权与无权知识库分别验证。实际加入入口或兼容调用者列入验收记录，不以新远程入口代替。
+- 手动路径：在 `/dataset` 导入三类新版样例，验证旧格式导入被拒绝；对已存在的历史旧数据执行转换并下载核对；在 `/model/finetune` 切换三类类型核对候选；临时上传后取消/重试/提交，再回到数据集页确认未新增。QA 导入须使用有权与无权知识库分别验证。实际加入入口或兼容调用者列入验收记录，不以新远程入口代替。
 - 拟执行命令：从 `src/backend/` 运行 `uv run pytest test/finetune/ -q`；从 `src/frontend/` 运行 `pnpm --filter bisheng exec vitest run` 的相关数据集/任务测试及 lint、typecheck、check-i18n；按仓库 `/e2e-test` 流程补 API 闭环。设计确认后生成正式八列 QA 用例，再拆实施任务。
 - 日志仅记录操作、目录/版本/上传 ID、类型、结果与耗时；转换异常定位样本索引，不记录整段训练样本或任何连接凭据。临时记录存续与实际训练是不同验收项，不用模拟任务冒充 GPU 训练。
 
@@ -527,3 +527,14 @@ curl -s http://127.0.0.1:8000/v2.1/sft/capabilities
 恢复现有 F009 浏览器契约：目录下载、原目录下载和个人训练文件下载返回 `/object` 路径，沿用原授权与文件归属检查。暂存上传和 FT 拉取仍用直链。部署 Nginx 的 object location 必须显式设置签名 sharepoint 对应的 Host；不能用浏览器 Host 或默认 minio:9000 代替。
 
 本修复没有新增表、格式转换或登记操作。原有 `presettrain` 是统一目录，原有 `finetunedataset` 是不可变版本；上次只为已有文本版本补目录关联，没有搬表、删除版本或改写原文件。
+
+
+## 2026-11-26 统一导入当前实现
+
+按用户本次指令，早先的独立加入入口和旧格式导入方案已被替代：
+
+- DataSetPage 仅有“导入数据集”。DatasetImportDialog 复用现有控件与 QA 候选选择器，来源包含本地、FTP/FTPS、SFTP、S3/MinIO、QA；QA 输出固定为 text。旧 CreateDataSet 组件、转发组件和已无调用的前端 helper 删除。
+- 分类筛选仍保留 legacy，用于已有历史数据；导入分类仅 text/image_text/video_text。表单、远程 DTO 和 Service 都拒绝旧格式新导入；原 preset 本地保存入口也拒绝旧格式，不能作为绕过入口。显式转换服务仍读旧文件、另存新版文本。
+- QA 仍通过原 POST /job/file/preset，权限和 tenant 规则不变，直接生成 messages，不再先构造旧格式再转换。
+- FinetuneDataset 是一次导入的不可变文件引用与校验/预览快照，没有多版本历史、版本切换或回滚 UI。每个目录项只关联一份导入记录，任务冻结其引用，避免后续文件变化影响已有任务。页面称“数据集”，不展示内部版本 ID 冒充版本管理。
+- 此次没有新增表、删表或数据迁移；部署不再运行兼容登记。FT、模型与训练结果挂载目录及已修复的 object 下载链路保持现有契约。

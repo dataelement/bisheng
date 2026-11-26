@@ -44,7 +44,7 @@ export function CreateTaskList({ dataType, files, onChange, onBusyChange }: Prop
     return <div className="space-y-3">
         <p className="text-sm text-muted-foreground">{t('finetune.datasetSelectHint')}</p>
         <div className="flex items-center gap-3 flex-wrap">
-            <Select {...selectLabels} value={files[0]?.temporary || files[0]?.upload_id ? null : files[0]?.id || null} disabled={loading && !options.length} onChange={id => { const selected = options.find(file => file.id === String(id)); if (selected) onChange([selected]); }} className="max-w-[500px]" aria-label={t("finetune.datasetExistingVersion")} placeholder={t("finetune.datasetChooseVersion")} options={options.map(file => ({value: file.id, label: `${file.name} · ${(file.version_id || file.id).slice(0, 8)}`}))} />
+            <Select {...selectLabels} value={files[0]?.temporary || files[0]?.upload_id ? null : files[0]?.id || null} disabled={loading && !options.length} onChange={id => { const selected = options.find(file => file.id === String(id)); if (selected) onChange([selected]); }} className="max-w-[500px]" aria-label={t("finetune.datasetExistingVersion")} placeholder={t("finetune.datasetChooseVersion")} options={options.map(file => ({value: file.id, label: file.name}))} />
             <Button type="button" variant="outlined" disabled={loading} onClick={() => void loadDatasets(1)}>{t('finetune.datasetRefresh')}</Button>
             <Button type="button" variant="outlined" onClick={() => setImportOpen(true)}>{t('finetune.temporaryUpload')}</Button>
             <a href={`${import.meta.env.BASE_URL}finetune-samples/bisheng-${sampleType}-smoke.zip`} download className="text-sm underline whitespace-nowrap">{t('finetune.downloadSampleFile')}</a>
@@ -56,7 +56,7 @@ export function CreateTaskList({ dataType, files, onChange, onBusyChange }: Prop
         {files.map(file => <div key={file.id} className="border rounded-md p-3 space-y-1">
             <div className="flex justify-between items-center gap-3"><span>{file.name}</span><Button type="button" size="small" variant="outlined" onClick={() => onChange([])}>{t('finetune.datasetUnselect')}</Button></div>
             <DatasetFacts file={file} />
-            <p className="text-xs text-muted-foreground break-all">{file.temporary || file.upload_id ? t('finetune.temporaryDataset') : `${t('finetune.datasetVersion')}: ${file.version_id || file.id}`}</p>
+            {(file.temporary || file.upload_id) && <p className="text-xs text-muted-foreground">{t('finetune.temporaryDataset')}</p>}
             {file.create_time && <p className="text-xs text-muted-foreground">{t('finetune.datasetCreatedAt')}: {file.create_time.replace('T', ' ')}</p>}
             <p className="text-xs text-muted-foreground break-all">SHA-256: {file.dataset_report.sha256}</p>
             {dataType === 'video_text' && <p className="text-xs text-muted-foreground">{t('finetune.videoDecodeHint')}</p>}

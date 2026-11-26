@@ -13,7 +13,7 @@ import type { TrainingCapability, TrainingFile, TrainingTask } from '@/controlle
 import { discoverTrainingModels, listTrainingServices, preflightTraining, submitTraining, runTrainingInference, uploadTrainingFile, uploadValidationMedia } from '@/controllers/API/finetuneV2';
 
 vi.mock('@/controllers/API/finetuneV2', () => ({ listTrainingServices: vi.fn(), discoverTrainingModels: vi.fn(), preflightTraining: vi.fn(), submitTraining: vi.fn(), runTrainingInference: vi.fn(), uploadValidationMedia: vi.fn(), uploadTrainingFile: vi.fn() }));
-vi.mock('@/controllers/API/finetuneDatasets', () => ({ listTrainingDatasets: vi.fn(), importTrainingDataset: vi.fn(), getTrainingDatasetPreview: vi.fn(), getTrainingDatasetMedia: vi.fn(), uploadCatalogDataset: vi.fn(), getDatasetPreview: vi.fn(), getDatasetPreviewMedia: vi.fn() }));
+vi.mock('@/controllers/API/finetuneDatasets', () => ({ listTrainingDatasets: vi.fn(), importTrainingDataset: vi.fn(), getTrainingDatasetPreview: vi.fn(), getTrainingDatasetMedia: vi.fn(), uploadCatalogDataset: vi.fn(), getDatasetPreview: vi.fn(), getDatasetPreviewMedia: vi.fn(), importQADataset: vi.fn() }));
 vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (promise: Promise<unknown>) => promise.catch(() => undefined) }));
 const report = { data_type: 'video_text' as const, samples: 6, media: 6, sha256: 'abc', validated: true };
 const dataset: TrainingFile = { id: 'data1', url: 'object/key', name: 'video.zip', num: 6, dataset_report: report };
@@ -89,7 +89,7 @@ describe('formal single-page task submission', () => {
         const model: TrainingCapability = { capability_id: 'qwen3', model_name: 'Qwen3-0.6B', input_types: ['text'], training_methods: ['lora'], base_model_id: 3, registered: true, validation_status: 'gpu_smoke_passed' };
         vi.mocked(listTrainingServices).mockResolvedValue([{ id: 7, server: 'Customer training' }]);
         vi.mocked(discoverTrainingModels).mockResolvedValue({ models: [model] });
-        const textData: TrainingFile = { ...dataset, name: 'text.zip', num: 8, dataset_report: { ...report, data_type: 'text', samples: 8, media: 0 } };
+        const textData: TrainingFile = { ...dataset, upload_id: dataset.id, temporary: true, name: 'text.zip', num: 8, dataset_report: { ...report, data_type: 'text', samples: 8, media: 0 } };
         vi.mocked(uploadTrainingFile).mockResolvedValue(textData);
         vi.mocked(preflightTraining).mockResolvedValue({ passed: true, checks: [] });
         vi.mocked(submitTraining).mockResolvedValue({ ...task, id: 'new-task' });
@@ -151,7 +151,7 @@ describe('reusable datasets and remote imports', () => {
         const user = userEvent.setup();
         await waitFor(() => expect(listTrainingDatasets).toHaveBeenCalledWith('video_text', 1));
         await user.click(screen.getByRole('combobox', { name: 'finetune.datasetExistingVersion' }));
-        await user.click(await screen.findByRole('option', { name: 'video.zip · version1' }));
+        await user.click(await screen.findByRole('option', { name: 'video.zip' }));
         expect(changed).toHaveBeenCalledWith([saved]);
         view.rerender(<CreateTaskList dataType="video_text" files={[saved]} onChange={changed} />);
         await screen.findByText('Stored sample');
@@ -278,7 +278,7 @@ describe('remote sources and large local packages', () => {
         await user.click(await screen.findByRole('option', { name: 'Qwen2.5-VL-3B' }));
         fireEvent.change(screen.getByLabelText('finetune.finetuneModelName'), { target: { value: 'receipts-v1' } });
         await user.click(screen.getByRole('combobox', { name: 'finetune.datasetExistingVersion' }));
-        await user.click(await screen.findByRole('option', { name: 'receipts · remote1' }));
+        await user.click(await screen.findByRole('option', { name: 'receipts' }));
         expect(screen.getByText('finetune.datasetRemoteChecked')).toBeInTheDocument();
         await user.click(screen.getByRole('button', { name: 'finetune.checkAndCreate' }));
         expect(screen.getByRole('alert')).toHaveTextContent('finetune.datasetSourcePasswordRequired');

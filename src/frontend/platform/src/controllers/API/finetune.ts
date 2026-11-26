@@ -264,11 +264,6 @@ export const getAssistantModelList = async (): Promise<any> => {
     return await axios.get(`/api/v1/llm/assistant/llm_list`)
 }
 
-// 创建数据集
-export const createDatasetApi = async (data: { name: string, files: string, qa_list: string[] }): Promise<any> => {
-    return await axios.post(`/api/v1/finetune/job/file/preset`, data);
-}
-
 // 删除数据集
 export const deleteDatasetApi = async (id) => {
     return await axios.delete(`/api/v1/finetune/job/file/preset?file_id=${id}`);

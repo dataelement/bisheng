@@ -134,7 +134,7 @@ async def create_local(web):
     uploaded = result(
         await web.client.post(
             "/api/v1/finetune/job/file/preset/upload",
-            files={"file": ("sample.json", b'[{"instruction":"test","output":"ok"}]')},
+            files={"file": ("sample.json", b'[{"messages":[{"role":"user","content":"test"},{"role":"assistant","content":"ok"}]}]')},
         )
     )
     return result(

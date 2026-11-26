@@ -8,7 +8,7 @@ export interface DatasetConnection {
 export type RemoteDatasetSource = 'ftp' | 'sftp' | 's3';
 export type DatasetCategory = 'legacy' | TrainingDataType;
 export interface DatasetImportRequest {
-    name: string; data_type: DatasetCategory; source: RemoteDatasetSource; connection: DatasetConnection;
+    name: string; data_type: TrainingDataType; source: RemoteDatasetSource; connection: DatasetConnection;
     manifest_path?: string; manifest_text?: string; manifest_filename?: string; media_root: string;
 }
 export interface DatasetSample {
@@ -43,7 +43,7 @@ export interface CatalogDataset {
 export function listDatasetCatalog(params: { data_type?: DatasetCategory; keyword?: string; page?: number; limit?: number }) {
     return request.get<unknown, { data: CatalogDataset[]; total: number }>('/api/v1/finetune/dataset-catalog', { params });
 }
-export function uploadCatalogDataset(file: File, data_type: DatasetCategory, name: string, onProgress?: (percent: number) => void) {
+export function uploadCatalogDataset(file: File, data_type: TrainingDataType, name: string, onProgress?: (percent: number) => void) {
     const body = new FormData(); body.append('files', file); body.append('data_type', data_type); body.append('name', name);
     return request.post<unknown, TrainingFile>('/api/v1/finetune/dataset-catalog/files', body, { timeout: 0, showError: false,
         onUploadProgress: event => onProgress?.(Math.round((event.loaded / (event.total || file.size)) * 100)) });
@@ -60,4 +60,10 @@ export const getDatasetPreview = (id: string, kind: 'version' | 'catalog' | 'tem
 export function getDatasetPreviewMedia(id: string, kind: 'version' | 'catalog' | 'temporary', url: string) {
     if (!url.startsWith(`${datasetPreviewPath(id, kind)}/media?`)) return Promise.reject(new Error('Invalid dataset media URL'));
     return request.get<unknown, Blob>(url, { responseType: 'blob' });
+}
+
+export async function importQADataset(name: string, qa_list: number[]) {
+    const file = await request.post<unknown, TrainingFile>('/api/v1/finetune/job/file/preset', { name, qa_list }, { timeout: 600000, showError: false });
+    if (!file?.dataset_report?.validated || file.dataset_report.data_type !== 'text') throw new Error('QA dataset validation did not complete');
+    return { ...file, num: file.dataset_report.samples };
 }

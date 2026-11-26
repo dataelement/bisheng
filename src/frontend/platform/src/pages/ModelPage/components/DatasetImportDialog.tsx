@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isApiError } from '@bisheng/api-client';
-import { Button, Select } from '@bisheng/ui';
+import { Button, Select, type SelectOption } from '@bisheng/ui';
+import { QaKnowledgeSelect } from '@/components/bs-comp/selectComponent/QaKnowledgeSelect';
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import { Checkbox } from '@bisheng/ui';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog';
 import { Input } from '@bisheng/ui';
 import { Label } from '@/components/bs-ui/label';
 import { RadioGroup, Radio as RadioGroupItem } from '@bisheng/ui';
-import { DatasetCategory, DatasetConnection, DatasetImportRequest, importTrainingDataset, RemoteDatasetSource, uploadCatalogDataset } from '@/controllers/API/finetuneDatasets';
-import { TrainingFile } from '@/controllers/API/finetuneV2';
+import { DatasetConnection, DatasetImportRequest, importQADataset, importTrainingDataset, RemoteDatasetSource, uploadCatalogDataset } from '@/controllers/API/finetuneDatasets';
+import { TrainingDataType, TrainingFile } from '@/controllers/API/finetuneV2';
 
 interface Props {
-    dataType: DatasetCategory; onDataTypeChange?: (value: DatasetCategory) => void; onClose: () => void;
+    dataType: TrainingDataType; onDataTypeChange?: (value: TrainingDataType) => void; onClose: () => void;
     onImported: (file: TrainingFile) => void; onBusyChange?: (busy: boolean) => void;
 }
-type Source = 'local' | RemoteDatasetSource;
+type Source = 'local' | 'qa' | RemoteDatasetSource;
 const connectionFields: Record<RemoteDatasetSource, (keyof DatasetConnection)[]> = {
     ftp: ['username', 'password'], sftp: ['username', 'password', 'host_fingerprint'],
     s3: ['bucket', 'access_key', 'secret_key', 'session_token', 'region'],
@@ -54,6 +55,8 @@ export function DatasetImportDialog({ dataType, onDataTypeChange, onClose, onImp
     const selectLabels = useSelectLabels();
     const [source, setSource] = useState<Source>('local');
     const [name, setName] = useState('');
+    const [qaLibraries, setQaLibraries] = useState<SelectOption[]>([]);
+    const importType: TrainingDataType = source === 'qa' ? 'text' : dataType;
     const [connection, setConnection] = useState<DatasetConnection>({ endpoint: '' });
     const [manifestSource, setManifestSource] = useState('remote');
     const [manifestPath, setManifestPath] = useState('');
@@ -65,14 +68,15 @@ export function DatasetImportDialog({ dataType, onDataTypeChange, onClose, onImp
     const active = useRef(true);
     useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
     const handleSourceChange = (value: Source) => {
-        setSource(value); setConnection({ endpoint: '' }); setManifestPath(''); setMediaRoot(''); setFile(undefined); setError('');
+        setSource(value); setConnection({ endpoint: '' }); setManifestPath(''); setMediaRoot(''); setFile(undefined); setQaLibraries([]); setError('');
     };
     const handleImport = async () => {
         setError('');
         if (source === 'local' && !file) { setError(t('finetune.datasetChooseFile')); return; }
         if (source === 'local' && file && file.size > uploadLimit(file)) { setError(t('finetune.datasetUploadSizeLimit')); return; }
-        if (source !== 'local' && file && file.size > inlineManifestLimit) { setError(t('finetune.datasetManifestSizeLimit')); return; }
-        if (source !== 'local') {
+        if (source !== 'local' && source !== 'qa' && file && file.size > inlineManifestLimit) { setError(t('finetune.datasetManifestSizeLimit')); return; }
+        if (source === 'qa' && (!name.trim() || !qaLibraries.length)) { setError(t('finetune.datasetQaRequired')); return; }
+        if (source !== 'local' && source !== 'qa') {
             if (!name.trim() || !validDatasetEndpoint(connection.endpoint, source) || (source === 's3' && !connection.bucket?.trim())
                 || (source === 'sftp' && (!connection.username?.trim() || !connection.password))) {
                 setError(t('finetune.datasetConnectionRequired')); return;
@@ -84,15 +88,16 @@ export function DatasetImportDialog({ dataType, onDataTypeChange, onClose, onImp
         setBusy(true); onBusyChange?.(true);
         try {
             let imported: TrainingFile;
-            if (source === 'local' && file) imported = await uploadCatalogDataset(file, dataType, name.trim() || file.name, percent => { if (active.current) setProgress(percent); });
+            if (source === 'qa') imported = await importQADataset(name.trim(), qaLibraries.map(option => Number(option.value)));
+            else if (source === 'local' && file) imported = await uploadCatalogDataset(file, importType, name.trim() || file.name, percent => { if (active.current) setProgress(percent); });
             else {
-                const request: DatasetImportRequest = { name: name.trim(), data_type: dataType, source: source as RemoteDatasetSource, connection, media_root: mediaRoot.trim(),
+                const request: DatasetImportRequest = { name: name.trim(), data_type: importType, source: source as RemoteDatasetSource, connection, media_root: mediaRoot.trim(),
                     ...(manifestSource === 'local' && file ? { manifest_text: await file.text(), manifest_filename: file.name }
                         : { manifest_path: manifestPath.trim() }) };
                 imported = await importTrainingDataset(request);
             }
             if (!active.current) return;
-            if (imported.dataset_report.data_type !== dataType) { setError(t('finetune.datasetTypeMismatch')); return; }
+            if (imported.dataset_report.data_type !== importType) { setError(t('finetune.datasetTypeMismatch')); return; }
             if (!imported.dataset_report.validated) { setError(t('finetune.uploadFailed')); return; }
             onImported(imported);
             setConnection({ endpoint: '' }); onClose();
@@ -106,16 +111,20 @@ export function DatasetImportDialog({ dataType, onDataTypeChange, onClose, onImp
             <DialogHeader><DialogTitle>{t('finetune.datasetImport')}</DialogTitle><DialogDescription>{t('finetune.datasetImportHint')}</DialogDescription></DialogHeader>
             <form onSubmit={event => { event.preventDefault(); void handleImport(); }} className="flex flex-col min-h-0 gap-4">
                 <fieldset disabled={busy} className="space-y-4 overflow-y-auto px-1">
-                    {onDataTypeChange && <div className="space-y-1"><Label>{t('finetune.datasetCategory')}</Label><Select {...selectLabels} value={dataType} onChange={value => onDataTypeChange(value as DatasetCategory)} aria-label={t('finetune.datasetCategory')} options={(['legacy', 'text', 'image_text', 'video_text'] as DatasetCategory[]).map(value => ({ value, label: t(`finetune.type_${value}`) }))} /></div>}
+                    {onDataTypeChange && <div className="space-y-1"><Label>{t('finetune.datasetCategory')}</Label><Select {...selectLabels} value={importType} disabled={source === 'qa'} onChange={value => onDataTypeChange(value as TrainingDataType)} aria-label={t('finetune.datasetCategory')} options={(['text', 'image_text', 'video_text'] as TrainingDataType[]).map(value => ({ value, label: t(`finetune.type_${value}`) }))} /></div>}
                     <div className="space-y-1"><Label htmlFor="dataset-name">{t('finetune.datasetImportName')}</Label><Input id="dataset-name" value={name} onChange={event => setName(event.target.value)} placeholder="support-examples" maxLength={100} /></div>
-                    <RadioGroup value={source} onValueChange={handleSourceChange} className="flex gap-5">
-                        {(['local', 'ftp', 'sftp', 's3'] as Source[]).map(value => <div className="flex items-center gap-2" key={value}><RadioGroupItem value={value} id={`dataset-source-${value}`} /><Label htmlFor={`dataset-source-${value}`}>{t(`finetune.datasetSource_${value}`)}</Label></div>)}
+                    <RadioGroup value={source} onValueChange={handleSourceChange} className="flex flex-wrap gap-x-5 gap-y-3">
+                        {(['local', 'ftp', 'sftp', 's3', 'qa'] as Source[]).map(value => <div className="flex items-center gap-2" key={value}><RadioGroupItem value={value} id={`dataset-source-${value}`} /><Label htmlFor={`dataset-source-${value}`}>{t(`finetune.datasetSource_${value}`)}</Label></div>)}
                     </RadioGroup>
                     {source === 'local' ? <div key="local-file" className="space-y-2">
                         <Label htmlFor="dataset-upload">{t('finetune.uploadDataset')}</Label>
-                        <Input id="dataset-upload" type="file" accept={(dataType === 'text' || dataType === 'legacy') ? '.json,.jsonl,.zip' : '.zip'} onChange={event => setFile(event.target.files?.[0])} />
-                        <p className="text-sm text-muted-foreground">{t(`finetune.${dataType === 'legacy' ? 'legacyPackageHint' : dataType === 'text' ? 'textPackageHint' : dataType === 'image_text' ? 'imagePackageHint' : 'videoPackageHint'}`)}</p>
+                        <Input id="dataset-upload" type="file" accept={importType === 'text' ? '.json,.jsonl,.zip' : '.zip'} onChange={event => setFile(event.target.files?.[0])} />
+                        <p className="text-sm text-muted-foreground">{t(`finetune.${importType === 'text' ? 'textPackageHint' : importType === 'image_text' ? 'imagePackageHint' : 'videoPackageHint'}`)}</p>
                         <p className="text-xs text-muted-foreground">{t('finetune.datasetUploadLimitHint')}</p>
+                    </div> : source === 'qa' ? <div className="space-y-2">
+                        <Label htmlFor="knowledgeLib">{t('finetune.datasetQaKnowledge')}</Label>
+                        <QaKnowledgeSelect label={t('finetune.datasetQaKnowledge')} value={qaLibraries} onChange={setQaLibraries} />
+                        <p className="text-sm text-muted-foreground">{t('finetune.datasetQaHint')}</p>
                     </div> : <>
                         <div className="space-y-1"><Label htmlFor="dataset-endpoint">{t('finetune.datasetEndpoint')}</Label><Input id="dataset-endpoint" value={connection.endpoint} autoComplete="off" onChange={event => setConnection(old => ({ ...old, endpoint: event.target.value }))} placeholder={endpointPlaceholders[source]} /><p className="text-xs text-muted-foreground">{t('finetune.datasetEndpointHint')}</p></div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{connectionFields[source].map(key => <div className="space-y-1" key={key}>

@@ -8,7 +8,6 @@ vi.mock('@/controllers/API/finetuneDatasets', () => ({ listDatasetCatalog: mocks
 vi.mock('@/pages/ModelPage/components/DatasetImportDialog', () => ({ DatasetImportDialog: () => null }));
 vi.mock('@/pages/ModelPage/components/SavedDatasetPreview', () => ({ SavedDatasetPreview: () => null }));
 vi.mock('@/components/bs-comp/FileView', () => ({ checkSassUrl: (url: string) => url }));
-vi.mock('./CreateDataSet', () => ({ default: () => null }));
 vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({ bsConfirm: mocks.confirm }));
 vi.mock('@/util/utils', () => ({ downloadFile: mocks.download }));
 
@@ -97,4 +96,12 @@ it('filters task-independent catalog categories and keeps the legacy row after e
   await waitFor(() => expect(mocks.list).toHaveBeenLastCalledWith({ page: 1, limit: 20, keyword: '', data_type: 'text' }));
   await waitFor(() => expect(screen.queryByText('legacy-record')).not.toBeInTheDocument());
   expect(screen.getByText('converted-record')).toBeVisible();
+});
+
+
+it('offers only the unified dataset import entry', async () => {
+  render(<DataSetPage />);
+  await screen.findByText('dataset-1');
+  expect(screen.getAllByRole('button', { name: 'finetune.datasetImport' })).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: 'finetune.addTextDataset' })).not.toBeInTheDocument();
 });

@@ -332,7 +332,7 @@ async def list_dataset_catalog(
 async def import_catalog_files(
     files: list[UploadFile] = File(...),
     name: str = Form(..., min_length=1, max_length=100),
-    data_type: Literal["legacy", "text", "image_text", "video_text"] = Form(...),
+    data_type: Literal["text", "image_text", "video_text"] = Form(...),
     login_user: UserPayload = Depends(get_dataset_user),
 ):
     try:

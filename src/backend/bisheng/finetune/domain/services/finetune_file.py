@@ -42,7 +42,7 @@ from .dataset_validation import (
     parse_manifest,
     validate_records,
 )
-from .legacy_dataset import classify_records, convert_legacy_records
+from .legacy_dataset import classify_records
 
 
 class FinetuneFileService(BaseModel):
@@ -67,10 +67,12 @@ class FinetuneFileService(BaseModel):
         inspections = []
         if not is_preset:
             inspections = [await cls.inspect_training_upload(file) for file in files]
-            if expected_type and any(report["data_type"] != expected_type for report, _ in inspections):
+            if any(report["data_type"] == "legacy" for report, _ in inspections):
                 raise InvalidDatasetPackageError(
-                    msg="Dataset content does not match the selected category; convert legacy data before using it as text"
+                    msg="Legacy-format imports are no longer supported; use messages-format text"
                 )
+            if expected_type and any(report["data_type"] != expected_type for report, _ in inspections):
+                raise InvalidDatasetPackageError(msg="Dataset content does not match the selected category")
         file_root = cls.get_upload_file_root(is_preset)
         file_list = await cls.upload_file_to_minio(files, file_root, user)
         # Store preset data in database
@@ -97,9 +99,9 @@ class FinetuneFileService(BaseModel):
                 data_type=report["data_type"],
                 source_type=source_type,
                 source_dataset_id=source_dataset_id,
-                version_id=version.id if report["data_type"] != "legacy" else None,
+                version_id=version.id,
             )
-            await DatasetCatalogRepository.save(catalog, version if catalog.version_id else None)
+            await DatasetCatalogRepository.save(catalog, version)
             result.append(
                 {
                     **catalog.model_dump(),
@@ -262,7 +264,12 @@ class FinetuneFileService(BaseModel):
             with strict_tenant_filter():
                 qa_rows = await QAKnoweldgeDao.aget_qa_knowledge_by_knowledge_ids(ids)
             samples = [
-                {"instruction": question, "input": "", "output": json.loads(qa.answers)[0]}
+                {
+                    "messages": [
+                        {"role": "user", "content": question},
+                        {"role": "assistant", "content": json.loads(qa.answers)[0]},
+                    ]
+                }
                 for qa in qa_rows
                 for question in qa.questions
             ]
@@ -277,10 +284,8 @@ class FinetuneFileService(BaseModel):
         try:
             records = parse_manifest(payload, "train.json")
             kind = classify_records(records)
-            if kind == "legacy":
-                records = convert_legacy_records(records)
-            elif kind != "text":
-                raise ValueError("The existing dataset entry accepts text samples only")
+            if kind != "text":
+                raise ValueError("Legacy-format imports are no longer supported; use messages-format text")
         except (ValueError, UnicodeDecodeError) as exc:
             raise InvalidDatasetPackageError(msg=str(exc)) from None
         return await DatasetService.save_text(

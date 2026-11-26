@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from '../request';
-import { getTrainingDatasetMedia, getTrainingDatasetPreview, importTrainingDataset, listTrainingDatasets } from './finetuneDatasets';
+import { getTrainingDatasetMedia, getTrainingDatasetPreview, importTrainingDataset, importQADataset, listTrainingDatasets } from './finetuneDatasets';
 
 vi.mock('../request', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 const file = { id: 'dataset1', version_id: 'version1', name: 'examples', num: 999, url: 'object/key', dataset_report: { validated: true, data_type: 'text', samples: 8, media: 0, sha256: 'abc' } };
@@ -31,4 +31,12 @@ describe('dataset API contract', () => {
         }
         expect(request.get).not.toHaveBeenCalled();
     });
+});
+
+
+it('imports QA through the retained endpoint and verifies text output', async () => {
+    vi.mocked(request.post).mockResolvedValueOnce(file).mockResolvedValueOnce({ ...file, dataset_report: { ...file.dataset_report, data_type: 'image_text' } });
+    expect(await importQADataset('QA dataset', [101, 102])).toEqual({ ...file, num: 8 });
+    expect(request.post).toHaveBeenCalledWith('/api/v1/finetune/job/file/preset', { name: 'QA dataset', qa_list: [101, 102] }, { timeout: 600000, showError: false });
+    await expect(importQADataset('QA dataset', [101])).rejects.toThrow('QA dataset validation did not complete');
 });

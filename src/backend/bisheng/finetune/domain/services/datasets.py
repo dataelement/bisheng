@@ -56,17 +56,18 @@ class DatasetService:
 
     @classmethod
     async def import_version(cls, request, user):
-        remote_request = request.model_copy(update={"data_type": "text"}) if request.data_type == "legacy" else request
+        if request.data_type not in {"text", "image_text", "video_text"}:
+            raise InvalidDatasetPackageError(msg="Legacy-format imports are no longer supported")
         try:
-            plan, records, preview, facts = await asyncio.to_thread(plan_remote_dataset, remote_request)
+            plan, records, preview, facts = await asyncio.to_thread(plan_remote_dataset, request)
         except RemoteDatasetError as exc:
             raise InvalidDatasetPackageError(msg=str(exc)) from None
         name = request.name.strip().replace("/", "_").replace("\\", "_")
-        if plan is not None and request.data_type in {"legacy", "text"}:
+        if plan is not None and request.data_type == "text":
             from .dataset_validation import TEXT_MAX_BYTES
 
             def read_text_zip():
-                with remote_reader(remote_request) as session:
+                with remote_reader(request) as session:
                     return session.read(plan["zip"]["path"], TEXT_MAX_BYTES + 1024 * 1024)
 
             try:
