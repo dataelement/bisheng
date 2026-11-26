@@ -52,7 +52,8 @@ describe('DSH deployment and business settings', () => {
     it('keeps settings accessible while business is disabled and avoids license/seat calls', async () => {
         renderManagement()
         await screen.findByRole('textbox', { name: /dsh.launchAddress/ })
-        expect(screen.queryByRole('switch')).toBeNull()
+        expect(screen.getByRole('switch')).not.toBeChecked()
+        expect(screen.getByRole('switch')).toBeDisabled()
         expect(screen.queryByText('credit-content')).toBeNull()
     })
     it('does not render management when deployment is disabled', async () => {
@@ -76,7 +77,7 @@ describe('DSH deployment and business settings', () => {
         expect(screen.queryByText('dsh.settingsSaved')).toBeNull()
         expect(screen.getByRole('button', { name: 'dsh.editSettings' })).toBeEnabled()
         expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeDisabled()
-        expect(saveDshManagementSettings).toHaveBeenCalledWith({ enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop-test://login' })
+        expect(saveDshManagementSettings).toHaveBeenCalledWith({ enabled: false, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop-test://login', platform_public_url: null })
     })
     it('retains the draft and shows a failure without claiming success', async () => {
         vi.mocked(saveDshManagementSettings).mockRejectedValue(new Error('Invalid URL'))
@@ -94,9 +95,24 @@ describe('DSH deployment and business settings', () => {
     })
     it('prevents tenant administrators from editing global settings', () => {
         render(<SettingsPanel settings={{ enabled: false, download_url: null, launch_url: 'dsh-desktop://login' }} canEdit={false} />)
-        expect(screen.queryByRole('switch')).toBeNull()
+        expect(screen.getByRole('switch')).toBeDisabled()
         expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeDisabled()
         expect(screen.queryByText('dsh.saveSettings')).toBeNull()
+    })
+    it('submits the business access switch with the addresses', async () => {
+        vi.mocked(saveDshManagementSettings).mockResolvedValue({ enabled: false, download_url: null, launch_url: 'dsh-desktop://login', platform_public_url: null })
+        render(<SettingsPanel settings={{ enabled: true, download_url: null, launch_url: 'dsh-desktop://login', platform_public_url: null }} canEdit />)
+        const toggle = screen.getByRole('switch')
+        expect(toggle).toBeChecked()
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.editSettings' }))
+        fireEvent.click(toggle)
+        fireEvent.click(screen.getByText('dsh.saveSettings'))
+        await waitFor(() => expect(saveDshManagementSettings).toHaveBeenCalledWith({
+            enabled: false,
+            download_url: null,
+            launch_url: 'dsh-desktop://login',
+            platform_public_url: null,
+        }))
     })
     it('removes active management content on a fresh disabled response', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValueOnce({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })

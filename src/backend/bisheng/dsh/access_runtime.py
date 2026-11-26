@@ -39,14 +39,20 @@ class DshRuntime:
 
 
 async def get_logout_runtime(request: Request, config: DshSettings = Depends(get_settings)) -> DshRuntime:
+    # The administrator-managed origin (DSH settings page) wins over the deployment
+    # value; rebuild the cached runtime when it changes so OAuth redirects and the
+    # Origin checks follow immediately, without a restart.
+    effective = await DshSettingsService().platform_public_url(config.platform_public_url)
+    if effective != config.platform_public_url:
+        config = config.model_copy(update={"platform_public_url": effective})
     runtime = getattr(request.app.state, "dsh_runtime", None)
-    if runtime is not None:
+    if runtime is not None and runtime.settings.platform_public_url == effective:
         return runtime
     if not hasattr(request.app.state, "dsh_init_lock"):
         request.app.state.dsh_init_lock = asyncio.Lock()
     async with request.app.state.dsh_init_lock:
         runtime = getattr(request.app.state, "dsh_runtime", None)
-        if runtime is not None:
+        if runtime is not None and runtime.settings.platform_public_url == effective:
             return runtime
         runtime = await build_runtime(config)
         request.app.state.dsh_runtime = runtime

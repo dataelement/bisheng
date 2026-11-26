@@ -5,12 +5,18 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from bisheng.core.config.dsh import normalize_dsh_origin
+
 
 class DshManagementSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     enabled: bool = Field(
-        default=True, description="Compatibility field; deployed DSH business access is always enabled."
+        default=True,
+        description=(
+            "Business access switch for Desktop login, Chat and Work tools; the deployment "
+            "switch (BS_DSH_ENABLED) still gates the module."
+        ),
     )
     download_url: str | None = Field(
         default="https://www.dshdesktop.com/zh/enterprise/",
@@ -22,6 +28,15 @@ class DshManagementSettings(BaseModel):
         default="bisheng://login",
         max_length=2048,
         description="Desktop native protocol base URL; the browser appends the current platform server parameter.",
+    )
+
+    platform_public_url: str | None = Field(
+        default=None,
+        max_length=2048,
+        description=(
+            "Public HTTP(S) origin shared by Desktop login, Chat and Work tools; null keeps the "
+            "deployment value (BS_DSH_PLATFORM_PUBLIC_URL)."
+        ),
     )
 
     @field_validator("launch_url")
@@ -63,3 +78,11 @@ class DshManagementSettings(BaseModel):
             raise ValueError("Download URL must be a credential-free HTTP(S) address")
         _ = parsed.port
         return value
+
+    @field_validator("platform_public_url")
+    @classmethod
+    def validate_platform_public_url(cls, value: str | None) -> str | None:
+        """A bare HTTP(S) origin (no path/credentials), or null for the deployment value."""
+        if value is None or not value.strip():
+            return None
+        return normalize_dsh_origin(value.strip())

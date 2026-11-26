@@ -42,18 +42,21 @@ async def settings_app(tmp_path, monkeypatch):
     app.dependency_overrides[settings_api.settings_admin] = lambda: SimpleNamespace(user_id=1)
     app.dependency_overrides[identity.browser_user] = lambda: SimpleNamespace(user_id=1, tenant_id=1)
     # Existing runtime resources are reused within the deployment boundary.
-    app.state.dsh_runtime = SimpleNamespace(access=SimpleNamespace(authenticate=AsyncMock()))
+    app.state.dsh_runtime = SimpleNamespace(
+        settings=SimpleNamespace(platform_public_url="http://test"),
+        access=SimpleNamespace(authenticate=AsyncMock()),
+    )
     try:
         yield app, deployment, sessions
     finally:
         await engine.dispose()
 
 
-async def test_always_enabled_settings_preserve_addresses_and_other_configuration(settings_app):
+async def test_settings_preserve_addresses_and_other_configuration(settings_app):
     app, deployment, sessions = settings_app
     async with sessions() as session:
         session.add(Config(key="other_config", value="keep"))
-        session.add(Config(key="dsh_management", value='{"enabled":false,"download_url":null}'))
+        session.add(Config(key="dsh_management", value='{"enabled":true,"download_url":null}'))
         await session.commit()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/api/v1/dsh/config")).json()["enabled"] is True
@@ -62,11 +65,11 @@ async def test_always_enabled_settings_preserve_addresses_and_other_configuratio
         assert browser.headers["cache-control"] == "no-store"
         url = "/api/v1/dsh/admin/settings"
         value = {
-            "enabled": False,
+            "enabled": True,
             "download_url": "http://downloads.test/desktop/latest",
             "launch_url": "dsh-desktop-test://login",
         }
-        expected = {**value, "enabled": True}
+        expected = {**value, "platform_public_url": None}
         assert (await client.put(url, json=value)).json()["data"] == expected
         assert (await client.get(url)).json()["data"] == expected
         request = Request({"type": "http", "app": app})
@@ -118,6 +121,7 @@ async def test_deployment_gate_wins_without_reading_database(settings_app, monke
             "enabled": False,
             "download_url": "https://www.dshdesktop.com/zh/enterprise/",
             "launch_url": "bisheng://login",
+            "platform_public_url": None,
         }
         assert (await client.get("/api/v1/dsh/config")).json() == {"enabled": False}
         assert (await client.put("/api/v1/dsh/admin/settings", json={"enabled": True})).status_code == 403
@@ -215,3 +219,60 @@ async def test_fresh_settings_use_client_addresses_and_preserve_explicit_downloa
         data = (await client.get("/api/v1/dsh/browser-config")).json()["data"]
         assert data["download_url"] is None
         assert data["launch_url"] == "custom-client://login"
+
+
+@pytest.mark.parametrize("value", ["https://ai.example.com/", "https://ai.example.com", "http://ai.example.com:8080"])
+def test_platform_public_url_normalizes_to_a_bare_origin(value):
+    assert DshManagementSettings(platform_public_url=value).platform_public_url == value.rstrip("/")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https://ai.example.com/path",
+        "https://user:secret@ai.example.com",
+        "ftp://ai.example.com",
+        "ai.example.com",
+    ],
+)
+def test_platform_public_url_rejects_non_origins(value):
+    with pytest.raises(ValidationError):
+        DshManagementSettings(platform_public_url=value)
+
+
+async def test_saved_platform_public_url_overrides_the_deployment_value(settings_app):
+    app, deployment, _ = settings_app
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        url = "/api/v1/dsh/admin/settings"
+        saved = (await client.put(url, json={"platform_public_url": "https://ai.example.com/"})).json()["data"]
+        assert saved["platform_public_url"] == "https://ai.example.com"
+        assert (await client.get(url)).json()["data"]["platform_public_url"] == "https://ai.example.com"
+    assert await DshSettingsService().platform_public_url(deployment.platform_public_url) == "https://ai.example.com"
+    assert app.state.dsh_runtime is None, "the next request rebuilds the runtime with the new origin"
+
+
+async def test_clearing_the_platform_public_url_falls_back_to_the_deployment_value(settings_app):
+    _, deployment, _ = settings_app
+    await DshSettingsService().save(DshManagementSettings(platform_public_url="https://ai.example.com"))
+    assert await DshSettingsService().platform_public_url(deployment.platform_public_url) == "https://ai.example.com"
+    await DshSettingsService().save(DshManagementSettings(platform_public_url=None))
+    assert (
+        await DshSettingsService().platform_public_url(deployment.platform_public_url) == deployment.platform_public_url
+    )
+
+
+async def test_business_switch_can_be_turned_off_and_on_from_the_settings_page(settings_app):
+    from bisheng.common.errcode.dsh import DshDshDisabledError
+
+    app, deployment, sessions = settings_app
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        url = "/api/v1/dsh/admin/settings"
+        assert (await client.put(url, json={"enabled": False})).json()["data"]["enabled"] is False
+        assert (await client.get("/api/v1/dsh/browser-config")).json()["data"]["enabled"] is False
+        with pytest.raises(DshDshDisabledError):
+            await dependencies.get_runtime(Request({"type": "http", "app": app}), deployment)
+        assert (await client.put(url, json={"enabled": True})).json()["data"]["enabled"] is True
+    async with sessions() as session:
+        rows = (await session.exec(select(Config))).all()
+        stored = next(row.value for row in rows if row.key == "dsh_management")
+        assert DshManagementSettings.model_validate_json(stored).enabled is True
