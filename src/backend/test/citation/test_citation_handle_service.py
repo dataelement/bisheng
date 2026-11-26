@@ -227,6 +227,10 @@ H = {"S3": "knowledgesearch_aaaa1111:3", "S7": "websearch_bbbb2222:1"}
         ("表格|[S3]|", f"表格|{S}knowledgesearch_aaaa1111:3{E}|", 1),
         ("紧贴中文词[S3]也要转", f"紧贴中文词{S}knowledgesearch_aaaa1111:3{E}也要转", 1),
         ("ascii_ident[S3] stays", "ascii_ident[S3] stays", 0),
+        # A model sometimes writes the handle lower-case (109, gpt-6.1, 11-26).
+        ("引文。\n\n[s3]\n", f"引文。\n\n{S}knowledgesearch_aaaa1111:3{E}\n", 1),
+        ("结论。[s3][S7]", f"结论。{S}knowledgesearch_aaaa1111:3{SEP}websearch_bbbb2222:1{E}", 1),
+        ("结论。[s3, s3]", f"结论。{S}knowledgesearch_aaaa1111:3{E}", 1),
     ],
 )
 def test_convert_grammar(text, expected, converted):
@@ -273,6 +277,14 @@ def test_strip_and_count_handles():
 
     assert strip_citation_handles(text) == "A。 B。 `[S3]` [S3](u)\n[S3]: def"
     assert count_handle_runs(text) == 2
+
+
+def test_lower_case_unknown_handle_is_reported_upper_case():
+    result = convert_handles_to_markers("A。[s99]", H)
+
+    assert result.text == "A。[s99]"
+    assert result.unknown == ["S99"]
+    assert strip_citation_handles("A。[s3] B。") == "A。 B。"
 
 
 # --------------------------------------------------------------------------

@@ -1049,7 +1049,7 @@ class WorkspaceBackend(FilesystemBackend):
         """
         if not text or "[" not in text:
             return text
-        from bisheng.citation.domain.services.citation_handle_service import _HANDLE_RE, _RUN_RE
+        from bisheng.citation.domain.services.citation_handle_service import _RUN_RE, run_handles
 
         if HTML_REFERENCES_ATTR in text:
             text = _HTML_BAKED_SUP_RE.sub(lambda m: "".join(f"[{h}]" for h in m.group(1).split(",") if h), text)
@@ -1063,10 +1063,7 @@ class WorkspaceBackend(FilesystemBackend):
 
         def _replace(match: re.Match[str]) -> str:
             nonlocal numbered_runs
-            seen: list[str] = []
-            for handle in _HANDLE_RE.findall(match.group(0)):
-                if handle not in seen:
-                    seen.append(handle)
+            seen = run_handles(match.group(0))
             known = [h for h in seen if h in handles]
             missing = [h for h in seen if h not in handles]
             for h in missing:

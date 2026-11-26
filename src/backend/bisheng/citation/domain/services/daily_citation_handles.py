@@ -47,7 +47,7 @@ STREAM_LEGACY_HOLD_LIMIT = 256
 
 # A (possibly unfinished) sequence of handle groups at the end of the text:
 # "[", "[S", "[S1", "[S12, S", "[S3] ", "[S3][S7". Fullmatch only.
-_OPEN_RUN_TAIL_RE = re.compile(r"(?:\[\s*(?:S\d{0,4}(?:\s*[,，、]\s*(?:S\d{0,4})?)*)?\s*\]?\s*)+")  # noqa: RUF001 - full-width comma is part of the grammar
+_OPEN_RUN_TAIL_RE = re.compile(r"(?:\[\s*(?:[Ss]\d{0,4}(?:\s*[,，、]\s*(?:[Ss]\d{0,4})?)*)?\s*\]?\s*)+")  # noqa: RUF001 - full-width comma is part of the grammar
 # The beginning of an escaped marker ("" written as six characters).
 _ESCAPE_TAIL_RE = re.compile(r"\\{1,4}(?:u(?:e(?:2(?:0)?)?)?)?$", re.IGNORECASE)
 _FENCE_RE = re.compile(r"^[ \t]*(```|~~~)", re.M)
