@@ -533,6 +533,12 @@ ASGI 接口及 mutation 调用链测试覆盖挂载根、独立根、部门空�
 `POST /check` 接收 `resource_type`、`resource_id`、具体 action。endpoint
 通过业务 registry 解析目标，不能信任请求中的租户或状态字段。
 
+使用准入统一检查 `visible`。线上请求、列表查询、内部授权和异步任务均不再
+接受 `use` / `use_kb` 等退役动作，且在身份短路前校验动作；决策接口返回
+`25001`，只读列表接口按参数定义拒绝非法动作。超管的 HTTP `visible`
+预检沿用既有特权策略，个人 `visible` 关系本身不因此扩张。历史迁移仍识别
+旧动作以移除其定义并保留原可见范围，不用于在线授权。
+
 ---
 
 ## 9. 数据库模型
@@ -645,8 +651,8 @@ bash scripts/upgrade_f048_authorization_model.sh verify
 
 - **跑完必须重启全部进程**（API / celery×3 / beat / linsight worker）。心跳 15s 复核、TTL 45s，
   没重启的旧进程不是"还能用"，而是会自行 fail-closed。
-- **先发代码、后往 `config.yaml` 加新键**。`load_settings_from_yaml` 遇未知顶层键直接 `KeyError`
-  拒绝启动，顺序反了的现象是后端起不来，而不是功能不可用。
+- **先发代码、后往 `config.yaml` 加新键**。旧镜像遇未知顶层键可能直接 `KeyError`
+  拒绝启动；包含未知字段兼容修复的新镜像会警告并忽略，但对应功能仍不会生效。
 - **存量环境先 `plan` 再 `apply`**。
 
 **回滚语义**（别被"事务"两字误导）：`rollback` 子命令把 ACTIVE 指针指回 M1 行、撤掉新类型的

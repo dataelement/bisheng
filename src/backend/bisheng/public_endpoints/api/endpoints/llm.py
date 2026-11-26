@@ -15,7 +15,7 @@ router = APIRouter(prefix="/llm", tags=["PublicAPI", "Speech"])
 async def get_workbench_voice_config(flow_id: UUID = Query(...)):
     """Expose only the model references needed to enable speech controls."""
     async with public_application_execution(flow_id.hex):
-        config = await LLMService.get_workbench_llm()
+        config = await LLMService.get_workbench_llm_candidates()
         return resp_200(
             data={
                 "asr_model": {"id": config.asr_model.id if config.asr_model else None},

@@ -15,6 +15,9 @@ class ShareLinkService:
     ) -> ShareLink:
         """Generate sharable link"""
 
+        from bisheng.share_link.domain.services.share_target_authorization import authorize_share_target
+
+        tenant_id = await authorize_share_target(generate_share_link, login_user)
         share_token = common_util.generate_short_high_entropy_string()
 
         share_link = ShareLink(
@@ -25,6 +28,7 @@ class ShareLinkService:
             expire_time=generate_share_link.expire_time,
             meta_data=generate_share_link.meta_data,
             create_user_id=login_user.user_id,
+            tenant_id=tenant_id,
         )
 
         return await self.share_link_repository.save(share_link)

@@ -36,12 +36,41 @@ class DshSettings(BaseModel):
         default=300, ge=60, le=600, description="Lifetime in seconds of a native DSH access token."
     )
     session_ttl_seconds: int = Field(
-        default=2592000, ge=600, le=2592000, description="Absolute lifetime in seconds of a native desktop session."
+        default=2592000,
+        ge=600,
+        le=2592000,
+        description="Legacy absolute-session lifetime; new sessions use the separate idle lifetime.",
+    )
+    session_idle_ttl_seconds: int = Field(
+        default=1209600,
+        ge=600,
+        le=2592000,
+        description="Business inactivity lifetime for new desktop sessions; refresh and polling do not renew it.",
+    )
+    session_idle_migrate_existing: bool = Field(
+        default=False,
+        description="Convert valid absolute sessions on their next admitted business activity. Never revives expired sessions.",
+    )
+    refresh_reuse_grace_seconds: int = Field(
+        default=86400,
+        ge=0,
+        le=604800,
+        description=(
+            "Seconds a consumed refresh token may be presented again while its successor "
+            "is still unused. Covers a lost response and a laptop sleeping overnight. "
+            "Zero keeps strict replay revocation."
+        ),
+    )
+    mobile_session_ttl_seconds: int = Field(
+        default=2592000,
+        ge=600,
+        le=2592000,
+        description="Absolute lifetime in seconds of a phone refresh session. Rotation does not extend it.",
     )
 
     enabled: bool = Field(
-        default=False,
-        description="Expose the DSH management module; disabled by default. Business access is enabled separately in its management page.",
+        default=True,
+        description="Expose the desktop management module; enabled by default.",
     )
     client_id: Literal["dsh-desktop"] = Field(
         default="dsh-desktop", description="Desktop OAuth client identifier fixed by the DSH contract."
@@ -51,7 +80,11 @@ class DshSettings(BaseModel):
     )
     platform_public_url: str | None = Field(
         default=None,
-        description="Single public HTTP(S) origin shared by Desktop login, Chat and Work tools; include the public port and omit paths.",
+        description="Optional public HTTP(S) origin override. Empty uses the current request for Desktop and Work.",
+    )
+    trusted_proxy_hosts: list[str] = Field(
+        default_factory=lambda: ["127.0.0.1", "::1"],
+        description="Deployment-owned proxy IPs, CIDRs or DNS names allowed to supply the public HTTP scheme.",
     )
     web_session_cookie_name: str = Field(
         default="access_token_cookie",
@@ -152,7 +185,7 @@ class DshSettings(BaseModel):
     @field_validator("platform_public_url", "gateway_internal_url")
     @classmethod
     def validate_origin(cls, value: str | None) -> str | None:
-        if value is None:
+        if value is None or not value.strip():
             return None
         return normalize_dsh_origin(value)
 
@@ -166,14 +199,11 @@ class DshSettings(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_enabled_trust(self):
+    def validate_enabled_capacity(self):
         if self.quota_memory_headroom_bytes >= self.quota_memory_budget_bytes:
             raise ValueError("Quota capacity requires positive settlement headroom below its finite memory budget")
         if not self.enabled:
             return self
-        names = ("platform_public_url",)
-        if any(not getattr(self, name) for name in names):
-            raise ValueError("Enabled DSH requires endpoint addresses")
         if self.backlog_stop_seconds <= self.projection_target_seconds:
             raise ValueError("Backlog threshold must exceed the projection target")
         return self

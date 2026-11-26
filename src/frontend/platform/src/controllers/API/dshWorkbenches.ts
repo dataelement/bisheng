@@ -1,4 +1,5 @@
 import request from "@/controllers/request";
+import type { MarketPage } from "./dshMarket";
 
 export interface WorkbenchVersionSummary {
     id: string;
@@ -7,6 +8,7 @@ export interface WorkbenchVersionSummary {
 
 export interface MarketWorkbench {
     id: string;
+    revision: number;
     identity_kind: "repository" | "legacy";
     workbench_key: string | null;
     legacy_id: string | null;
@@ -17,6 +19,12 @@ export interface MarketWorkbench {
     verification_level: "static";
     updated_at: string;
 }
+
+export type MarketWorkbenchRow = MarketWorkbench | (
+    Pick<MarketWorkbench, "id" | "display_name" | "description" | "workbench_key" | "legacy_id" | "updated_at"> & {
+        current_version: Pick<WorkbenchVersionSummary, "version">;
+    }
+);
 
 export interface MarketWorkbenchDetail extends Omit<MarketWorkbench, "current_version"> {
     current_version: WorkbenchVersionSummary & {
@@ -47,6 +55,7 @@ export interface WorkbenchPreview {
     suggested_display_name: string;
     allowed: boolean;
     duplicate: boolean;
+    overwrite?: boolean;
     reason: string;
     warnings: string[];
 }
@@ -64,8 +73,13 @@ const base = "/api/v1/dsh/market/admin/workbenches";
 const tenantHeaders = (tenant: number) => ({ "x-dsh-market-tenant": String(tenant) });
 
 export const listMarketWorkbenches = (tenant: number, page: number, signal?: AbortSignal) =>
-    request.get<unknown, { data: MarketWorkbench[]; total: number }>(base, {
+    request.get<unknown, MarketPage<MarketWorkbenchRow>>(base, {
         params: { page, size: 20 }, signal, headers: tenantHeaders(tenant),
+    });
+
+export const deleteMarketWorkbench = (id: string, revision: number, tenant: number, signal?: AbortSignal) =>
+    request.delete<unknown, { id: string; deleted: true }>(`${base}/${id}`, {
+        params: { revision }, signal, headers: tenantHeaders(tenant),
     });
 
 export const listWorkbenchImports = (tenant: number) =>

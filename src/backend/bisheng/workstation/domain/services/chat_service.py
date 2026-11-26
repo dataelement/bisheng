@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 import json
-import threading
+import mimetypes
 import time
-from datetime import datetime
 from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.responses import StreamingResponse
 from json_repair import json_repair
-from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import ArgsSchema, BaseTool, StructuredTool
 from loguru import logger
 from pydantic import BaseModel as PydanticBaseModel
@@ -21,6 +18,7 @@ from pydantic import field_validator as PydanticFieldValidator
 
 from bisheng.api.services import knowledge_imp
 from bisheng.chat_session.domain.chat import ChatSessionService
+from bisheng.chat_session.domain.schemas.user_message import serialize_user_question
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_handle_service import drop_web_citation_keys
@@ -37,221 +35,64 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     exclude_known_registry_items,
     is_web_citation_tool,
     is_web_fetch_tool,
-    save_message_citations,
-    save_message_citations_sync,
-)
-from bisheng.citation.domain.services.daily_citation_handles import (
-    HandleStreamConverter,
-    replace_legacy_citation_rules,
+    save_message_citations,  # noqa: F401  (re-exported for run_projector_direct)
 )
 from bisheng.citation.domain.services.daily_citation_scope import DailyCitationScope
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import ServerError
-from bisheng.common.errcode.knowledge import (
-    KnowledgeMediaNoRecognizableAudioError,
-    KnowledgeMediaTranscriptionError,
-)
-from bisheng.common.errcode.server import NoAsrModelConfigError
 from bisheng.common.errcode.workstation import (
-    ChatFileParseError,
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,
-    LLMRateLimitError,
 )
 from bisheng.common.image_view import (
-    ImageIdLineConverter,
     ImageRegistry,
-    VisionToolBindWrapper,
     annotate,
 )
-from bisheng.common.image_view.annotate import has_markdown_image
-from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
     NewMessageSessionEventData,
 )
 from bisheng.common.services import telemetry_service
-from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
-from bisheng.common.utils.message_content import extract_message_reasoning, extract_message_text
-from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
-from bisheng.core.cache.utils import async_file_download
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
+from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain import LLMService
-from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
+from bisheng.memory.domain.services.activity import MemoryActivity
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 from bisheng.workstation.domain.services.kb_image_stage import KbImageStage
 
-from .chat_helpers import (
-    # insert a placeholder entry in the sidebar conversation list
-    # the moment a new chat is created (title updated later via
-    # gen_title). Must be emitted *before* any category event.
-    _sse_resp,  # v2.5 Agent-mode SSE builder
-    gen_title,
-    read_image_as_data_url,
-    user_message,  # legacy `{created: true}` envelope — tells the client to
-)
-from .constants import VISUAL_MODEL_FILE_TYPES
-from .content_safety import (
+from .content_safety import (  # noqa: F401  (blocked_answer_* re-exported for run_projector_direct)
     blocked_answer_extra,
     blocked_answer_payload,
     build_blocked_answer_row,
     iter_blocked_sse,
+    mark_session_content_violation,
     workbench_tenant_id,
 )
 from .daily_citation import (
     handles_for_chunks,
     handles_for_web_results,
-    log_citation_audit,
-    select_cited_items,
-    select_cited_items_sync,
+    select_cited_items,  # noqa: F401  (re-exported for run_projector_direct)
     strip_ids_for_sync_path,
 )
+from .daily_memory import (
+    MemoryRegister,
+    register_session,
+)
 from .workstation_service import WorkStationService
-
-# Handed to the model in place of a transcript when an audio/video attachment
-# carries no recognizable speech. English on purpose, like the [file name] /
-# [file content] markers around it — the model answers in the user's language.
-NO_SPEECH_PLACEHOLDER = "(No recognizable speech was detected in this audio/video file.)"
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
-
-
-async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int, *, image_storage=None):
-    """Extract uploaded file content for prompt building."""
-    from bisheng.api.v1.schemas import FileProcessBase
-    from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
-
-    file_rule = FileProcessBase(
-        knowledge_id=0,
-        separator=["\n\n", "\n"],
-        separator_rule=["after", "after"],
-        chunk_size=1000,
-        chunk_overlap=0,
-    )
-    pipeline = TempFilePipeline(
-        invoke_user_id=invoke_user_id,
-        local_file_path=filepath_local,
-        file_name=file_name,
-        file_rule=file_rule,
-        image_storage=image_storage,
-    )
-    try:
-        result = await pipeline.arun()
-        raw_texts = [doc.page_content for doc in result.documents]
-    except KnowledgeMediaNoRecognizableAudioError:
-        # A clip with no speech in it is not a failure — the user attached a
-        # file, not a transcription request. Failing the turn would throw away
-        # the question they wrote alongside it; dropping it silently would have
-        # the model answer as if nothing were attached. Say so instead, and let
-        # the turn continue. The genuine faults below (no ASR model configured,
-        # transcription service down) still raise: those need fixing, not
-        # narrating.
-        logger.info("[get_file_content] no recognizable speech in {}; telling the model it is empty", file_name)
-        raw_texts = [NO_SPEECH_PLACEHOLDER]
-    except (
-        NoAsrModelConfigError,
-        KnowledgeMediaTranscriptionError,
-    ):
-        raise
-    return knowledge_imp.KnowledgeUtils.chunk2promt("".join(raw_texts), {"source": file_name})
-
-
-async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
-    """Initialize chat session, message, and llm."""
-    ws_config = await WorkStationService.aget_config()
-    from bisheng.common.services.config_service import settings as enterprise_settings
-    from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
-
-    if enterprise_settings.dsh.enabled:
-        ws_config.models = await authorized_workbench_models(login_user.user_id)
-    model_info = next((model for model in ws_config.models if model.id == data.model), None)
-    if not model_info:
-        raise ValueError(f"Model with id '{data.model}' not found.")
-
-    conversation_id = data.conversationId
-    is_new_conversation = False
-    if not conversation_id:
-        is_new_conversation = True
-        conversation_id = uuid4().hex
-        await MessageSessionDao.async_insert_one(
-            MessageSession(
-                chat_id=conversation_id,
-                name="New Chat",
-                flow_type=FlowType.WORKSTATION.value,
-                user_id=login_user.user_id,
-            )
-        )
-        await telemetry_service.log_event(
-            user_id=login_user.user_id,
-            event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
-            trace_id=trace_id_var.get(),
-            event_data=NewMessageSessionEventData(
-                session_id=conversation_id,
-                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                source="platform",
-                app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-                app_type=ApplicationTypeEnum.DAILY_CHAT,
-            ),
-        )
-
-    conversation = await MessageSessionDao.async_get_one(conversation_id)
-    if conversation is None:
-        raise ConversationNotFoundError()
-
-    if not is_new_conversation:
-        await MessageSessionDao.touch_session(conversation_id)
-        conversation = await MessageSessionDao.async_get_one(conversation_id)
-
-    # Uploads land in the temp bucket, which clears itself every 3 days. Sending
-    # is the point where the file becomes part of the conversation, so that's
-    # where it gets copied somewhere permanent.
-    await promote_chat_attachments(data.files, login_user.user_id)
-
-    if data.overrideParentMessageId:
-        message = await ChatMessageDao.aget_message_by_id(int(data.overrideParentMessageId))
-    else:
-        message = await ChatMessageDao.ainsert_one(
-            ChatMessage(
-                user_id=login_user.user_id,
-                chat_id=conversation_id,
-                flow_id="",
-                type="human",
-                is_bot=False,
-                sender="User",
-                files=json.dumps(data.files) if data.files else None,
-                extra=json.dumps({"parentMessageId": data.parentMessageId}),
-                message=data.text,
-                category="question",
-                source=0,
-            )
-        )
-
-    bisheng_llm = await LLMService.get_bisheng_llm(
-        model_id=data.model,
-        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-        app_type=ApplicationTypeEnum.DAILY_CHAT,
-        user_id=login_user.user_id,
-    )
-    return ws_config, conversation, message, bisheng_llm, model_info, is_new_conversation
-
 
 # --------------------------------------------------------------------------- #
 # v2.5 Agent Mode Helper Functions
 #
-# These are the low-level building blocks for the LangGraph ReAct agent rewrite (P2-5):
-#   - _get_agent_max_iterations: Reads the configurable recursion_limit from the database.
-#   - _build_user_content: Concatenates the user prompt based on three scenarios: {Plain Text / +Files / +Knowledge Base}.
+# Building blocks of daily-chat tools; the direct run of the unified runtime
+# assembles its tools from them (F004):
 #   - _parse_tool_results: Normalizes BaseTool output to facilitate SSE (Server-Sent Events) and database storage.
 #   - _build_tool_meta: Extracts tool display_name and tool_type for frontend display.
 #   - _build_web_search_tool: Directly reuses the BaseTool from ToolExecutor.init_by_tool_id.
@@ -259,8 +100,6 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
 #   - _resolve_user_kb_selection: Resolves UseKnowledgeBaseParam into a list of KB metadata.
 #   - _prepare_tools: Entry point function; integrates tool_payloads + knowledge_bases_info -> List[BaseTool].
 # --------------------------------------------------------------------------- #
-
-DEFAULT_AGENT_MAX_ITERATIONS = 50
 
 
 class DailyChatCitationToolWrapper(BaseTool):
@@ -431,31 +270,6 @@ def _annotate_retrieved_chunk(
     return annotate(chunk, image_registry)
 
 
-def _close_quietly(executor: Any) -> None:
-    try:
-        executor.close()
-    except Exception:
-        logger.exception("Agent chat: failed to stop the code executor of an interrupted turn")
-
-
-def _stop_code_executors(tools: list[BaseTool]) -> None:
-    """Stop sandbox runs of a torn-down turn without blocking the event loop.
-
-    A cancelled turn leaves its code-interpreter thread blocked on the runner's
-    exec call. ``ContainerExecutor.close`` deletes the session, and the runner
-    then kills the running process group, so the code does not run on to its
-    own timeout. Each close runs on its own daemon thread: the cancel path must
-    not wait for an HTTP round trip.
-    """
-    from bisheng_langchain.gpts.tools.code_interpreter.container_executor import ContainerExecutor
-
-    for tool in tools:
-        inner = getattr(tool, "tool_instance", tool)
-        executor = getattr(inner, "executor", None)
-        if isinstance(executor, ContainerExecutor):
-            threading.Thread(target=_close_quietly, args=(executor,), name="code-executor-stop", daemon=True).start()
-
-
 def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
     """Give a code-interpreter tool access to this request's retrieved knowledge images."""
     inner = getattr(tool, "tool_instance", tool)
@@ -471,6 +285,117 @@ def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
     inner.description = description
     if inner is not tool:
         tool.description = description
+
+
+GENERATED_FILES_LIMIT = 50
+GENERATED_FILE_SOURCE = "code_interpreter"
+_DELIVERABLE_HINT = (
+    "Files you save under output/ are attached to your reply automatically and shown to the user as "
+    "download cards. Do not write download links, URLs or output/ paths in your reply; mention a file "
+    "by its file name only."
+)
+
+
+def _code_executor_of(tool: BaseTool):
+    return getattr(getattr(tool, "tool_instance", tool), "executor", None)
+
+
+def _enable_deliverable_collection(tool: BaseTool) -> None:
+    """Have a code-interpreter tool record its output/ files so the answer can carry them."""
+    inner = getattr(tool, "tool_instance", tool)
+    executor = getattr(inner, "executor", None)
+    if executor is None or not hasattr(executor, "collect_deliverables"):
+        return
+    executor.collect_deliverables = True
+    if hasattr(executor, "keep_sandbox"):
+        # One E2B sandbox per turn, so a later call can read what an earlier one wrote;
+        # _release_code_sandboxes closes it when the turn ends.
+        executor.keep_sandbox = True
+    description = f"{inner.description}\n\n{_DELIVERABLE_HINT}"
+    inner.description = description
+    if inner is not tool:
+        tool.description = description
+
+
+def _collect_generated_files(tools: list[BaseTool]) -> list[dict]:
+    """Attachment items for the files this turn's code runs left under output/.
+
+    A path written twice keeps its last version; only the last
+    GENERATED_FILES_LIMIT files are kept.
+    """
+    latest: dict[str, dict] = {}
+    for tool in tools or []:
+        entries = getattr(_code_executor_of(tool), "published_deliverables", None)
+        if not isinstance(entries, list):
+            continue
+        for entry in list(entries):
+            latest.pop(entry["path"], None)
+            latest[entry["path"]] = entry
+    return [
+        {
+            "file_id": uuid4().hex,
+            "file_name": entry["name"],
+            "path": entry["path"],
+            "type": mimetypes.guess_type(entry["name"])[0] or "",
+            "size": entry["size"],
+            "source": GENERATED_FILE_SOURCE,
+            "filepath": entry["url"],
+        }
+        for entry in list(latest.values())[-GENERATED_FILES_LIMIT:]
+    ]
+
+
+async def _promote_generated_files(
+    tools: list[BaseTool], chat_id: str, user_id: int, storage_partition: str | None
+) -> list[dict]:
+    files = _collect_generated_files(tools)
+    if files:
+        await promote_chat_attachments(files, user_id, storage_partition=storage_partition)
+        _log_generated_files(chat_id, files)
+    return files
+
+
+def _log_generated_files(chat_id: str, files: list[dict]) -> None:
+    logger.info(
+        "daily chat generated files chat_id={} count={} promoted={}",
+        chat_id,
+        len(files),
+        sum(1 for f in files if f.get("object_name")),
+    )
+
+
+def build_daily_answer_row(
+    *,
+    user_id: int,
+    chat_id: str,
+    sender: str,
+    db_content: dict,
+    files: list[dict] | None = None,
+    error: dict | None = None,
+) -> ChatMessage:
+    """The answer row of one daily-chat turn.
+
+    One builder for the SSE path and the F004 run projector, so both write the
+    same row. ``error`` holds ``error_msg`` plus the public failure metadata of a
+    turn that failed or was interrupted; None for a clean turn.
+    """
+    return ChatMessage(
+        files=json.dumps(files, ensure_ascii=False) if files else None,
+        user_id=user_id,
+        chat_id=chat_id,
+        flow_id="",
+        type="end",
+        is_bot=True,
+        # `default` is a last-resort net: tool results are already
+        # sanitised by _parse_tool_results, but a serialisation crash
+        # here would abort the stream and lose the whole turn, so never
+        # let an unexpected object type get that far.
+        message=json.dumps(db_content, ensure_ascii=False, default=str),
+        category="agent_answer",
+        sender=sender,
+        extra=json.dumps({"error": True, **error}) if error is not None else "{}",
+        source=0,
+    )
 
 
 def _wrap_daily_chat_citation_tool(
@@ -489,48 +414,6 @@ def _wrap_daily_chat_citation_tool(
             kb_image_stage=kb_image_stage,
         )
     return tool
-
-
-async def _get_agent_max_iterations() -> int:
-    """Return the DB-configured max recursion depth for the ReAct agent loop.
-
-    Reads `daily_chat.agent_max_iterations` from the DB config (via
-    ConfigService.aget_daily_chat_conf). Any failure path returns 50.
-    The DailyChatConf field validator already normalises missing/invalid/
-    <=0 values to 50, so this just a defensive wrapper over the async fetch.
-    """
-    try:
-        from bisheng.common.services.config_service import settings as bisheng_settings
-
-        conf = await bisheng_settings.aget_daily_chat_conf()
-        n = int(conf.agent_max_iterations)
-        return n if n > 0 else DEFAULT_AGENT_MAX_ITERATIONS
-    except Exception as exc:
-        logger.warning(f"Failed to read agent_max_iterations, falling back to 50: {exc}")
-        return DEFAULT_AGENT_MAX_ITERATIONS
-
-
-DEFAULT_HISTORY_MAX_TOKENS = 8000
-
-
-async def _get_history_max_tokens() -> int:
-    """Return the DB-configured token budget for chat history injected into
-    the LLM prompt.
-
-    Reads `daily_chat.history_max_tokens` from the DB config (via
-    ConfigService.aget_daily_chat_conf). Any failure path returns
-    DEFAULT_HISTORY_MAX_TOKENS. Schema validator normalises
-    missing/invalid/<=0 values upstream, so this is a defensive wrapper.
-    """
-    try:
-        from bisheng.common.services.config_service import settings as bisheng_settings
-
-        conf = await bisheng_settings.aget_daily_chat_conf()
-        n = int(conf.history_max_tokens)
-        return n if n > 0 else DEFAULT_HISTORY_MAX_TOKENS
-    except Exception as exc:
-        logger.warning(f"Failed to read history_max_tokens, falling back to {DEFAULT_HISTORY_MAX_TOKENS}: {exc}")
-        return DEFAULT_HISTORY_MAX_TOKENS
 
 
 # Lazily-cached tiktoken encoder — `cl100k_base` is the tokenizer for
@@ -565,58 +448,6 @@ def _count_tokens(text: str) -> int:
         return len(_HISTORY_TOKENIZER.encode(text))
     except Exception:
         return max(1, len(text) // 2)
-
-
-def _build_user_content(
-    question: str,
-    file_context: str = "",
-    knowledge_bases_info: list[dict] | None = None,
-) -> str:
-    """Compose the user message content for the LLM.
-
-    3 scenarios:
-      (1) plain text question
-      (2) question + uploaded file content
-      (3) question + file content + selected knowledge bases (told to the model
-          via <selected_knowledge_bases>, which hints it to call search_knowledge_bases).
-    """
-    has_kb = bool(knowledge_bases_info)
-    has_file = bool(file_context)
-
-    if not has_kb and not has_file:
-        logger.info(f"[build_user_content] scenario=plain question_len={len(question)} preview={question[:120]!r}")
-        return question
-
-    parts: list[str] = []
-    if has_kb:
-        kb_brief = [
-            {
-                "id": kb.get("id"),
-                "name": kb.get("name", ""),
-                "description": kb.get("description", "") or "",
-                "tags": kb.get("tags") or [],
-            }
-            for kb in knowledge_bases_info
-        ]
-        parts.append(
-            f"<selected_knowledge_bases>\n{json.dumps(kb_brief, ensure_ascii=False)}\n</selected_knowledge_bases>"
-        )
-    if has_file:
-        parts.append(f"<uploaded_file_content>\n{file_context}\n</uploaded_file_content>")
-    parts.append(f"<user_question>\n{question}\n</user_question>")
-    final_content = "\n\n".join(parts)
-
-    # Debug trace for QA: mirrors the exact prompt fed to the LLM.
-    scenario = "kb+file" if (has_kb and has_file) else ("kb" if has_kb else "file")
-    logger.info(
-        f"[build_user_content] scenario={scenario}"
-        f" kb_count={len(knowledge_bases_info or [])}"
-        f" file_context_len={len(file_context or '')}"
-        f" question_len={len(question)}"
-        f" final_len={len(final_content)}"
-    )
-    logger.info(f"[build_user_content] final_content=\n{final_content}")
-    return final_content
 
 
 def _json_safe(obj):
@@ -685,9 +516,17 @@ def _extract_tool_error(raw_output) -> str | None:
     tool-call block can be rendered as failed, while the model still receives
     the message as a normal observation.
     """
+    content = getattr(raw_output, "content", raw_output)
+    try:
+        payload = json.loads(content) if isinstance(content, str) else content
+    except (ValueError, TypeError):
+        payload = None
+    items = payload if isinstance(payload, list) else [payload]
+    for item in items:
+        if isinstance(item, dict) and (item.get("error") or item.get("状态") == "失败"):
+            return "Tool execution failed."
     if getattr(raw_output, "status", None) == "error":
-        content = getattr(raw_output, "content", None)
-        return str(content) if content is not None else "tool execution failed"
+        return "Tool execution failed."
     return None
 
 
@@ -704,7 +543,10 @@ def _handle_agent_tool_error(e: Exception) -> str:
     observation.
     """
     logger.warning(f"[agent_chat] tool execution error fed back to model: {e!r}")
-    return f"工具执行失败: {e}"
+    payload = {"error": "Tool execution failed."}
+    if info := FailureContextAdapter.from_error(e):
+        payload["failure_info"] = info
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _build_tool_meta(tool: BaseTool) -> dict:
@@ -727,18 +569,6 @@ def _build_tool_meta(tool: BaseTool) -> dict:
         "display_name": name,
         "tool_type": tool_type,
     }
-
-
-def _is_nested_tool_event(ev: dict, visible_tool_run_ids: set[str]) -> bool:
-    """Return True when a tool callback belongs to a visible parent tool.
-
-    DailyChatCitationToolWrapper is itself a BaseTool and invokes the wrapped
-    tool internally. LangChain emits callbacks for both layers with the same
-    name/input and different run_ids; only the outer tool call is part of the
-    user-facing ReAct step.
-    """
-    parent_ids = ev.get("parent_ids") or []
-    return any(str(parent_id) in visible_tool_run_ids for parent_id in parent_ids)
 
 
 async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tuple[BaseTool | None, str | None]:
@@ -767,6 +597,8 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
         # Typical symptom for fresh installs: admin hasn't picked a provider.
         if "requires some parameters" in err and "config" in err:
             err = '联网搜索未配置: 请在平台管理的"内置工具 → 联网搜索"设置服务商 (Bing/Tavily/…) 及 API Key'
+        else:
+            err = _handle_agent_tool_error(exc)
         logger.warning(f"Failed to initialise web_search tool: {err}")
         return None, err
 
@@ -1098,7 +930,7 @@ async def _build_knowledge_search_tool(
             )
         except Exception as exc:
             logger.exception(f"[search_kb] queryChunksFromDB failed: {exc}")
-            return json.dumps([], ensure_ascii=False)
+            return _handle_agent_tool_error(exc)
 
         docs = list(finally_docs or [])
         if file_filter:
@@ -1147,6 +979,8 @@ async def _build_knowledge_search_tool(
                 f"<retrieval_error>{err_text}</retrieval_error>"
                 "}"
             )
+            if info := FailureContextAdapter.validate(f.get("failure_info")):
+                results.append({"error": "Knowledge retrieval failed.", "failure_info": info})
 
         logger.info(
             f"[search_kb] returning {len(results)} chunks"
@@ -1283,77 +1117,20 @@ async def _prepare_tools(
     handled exclusively through the `search_knowledge_bases` tool built
     from `knowledge_bases_info`.
     """
-    tools: list[BaseTool] = []
-    # Failures surfaced to caller so the agent can emit synthetic tool_call
-    # events and let the user see why a tool they selected didn't run.
-    failures: list[dict] = []
+    # Shared with the unified runtime (F004 T022). Imported here because the
+    # linsight package imports this module.
+    from bisheng.linsight.domain.services.tool_assembly import assemble_daily_tools
 
-    for tp in tool_payloads or []:
-        tool_type = (tp.get("type") if isinstance(tp, dict) else getattr(tp, "type", None)) or "tool"
-        if tool_type != "tool":
-            continue
-        tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
-        tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
-        # Retired builtin row. Saved selections may still name it; loading it
-        # as a LangChain tool fails.
-        if tool_key == IMAGE_VIEW_TOOL_KEY:
-            continue
-
-        t = None
-        err: str | None = None
-        if tool_key == "web_search":
-            t, err = await _build_web_search_tool(login_user.user_id, int(tool_id) if tool_id else None)
-        elif tool_id:
-            try:
-                t = await ToolExecutor.init_by_tool_id(
-                    tool_id=int(tool_id),
-                    app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                    app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-                    app_type=ApplicationTypeEnum.DAILY_CHAT,
-                    user_id=login_user.user_id,
-                )
-            except Exception as exc:
-                err = str(exc)
-                logger.warning(f"Failed to initialise tool id={tool_id} key={tool_key}: {err}")
-
-        if t is not None:
-            if kb_image_stage is not None:
-                _attach_kb_image_stage(t, kb_image_stage)
-            tools.append(
-                _wrap_daily_chat_citation_tool(
-                    t,
-                    citation_collector,
-                    image_registry=image_registry,
-                    citation_scope=citation_scope,
-                    kb_image_stage=kb_image_stage,
-                )
-            )
-        elif err:
-            failures.append(
-                {
-                    "tool_key": tool_key or str(tool_id or ""),
-                    "tool_type": "web" if tool_key in _WEB_SEARCH_TOOL_NAMES else "tool",
-                    # display_name is resolved on the frontend via i18n — just
-                    # advertise the raw tool_key so the client can map it.
-                    "display_name": tool_key or "",
-                    "error": err,
-                }
-            )
-
-    if knowledge_bases_info:
-        kb_tool = await _build_knowledge_search_tool(
-            knowledge_bases_info=knowledge_bases_info,
-            login_user=login_user,
-            max_token=getattr(ws_config, "maxTokens", 15000) or 15000,
-            citation_collector=citation_collector,
-            image_registry=image_registry,
-            citation_scope=citation_scope,
-            kb_image_stage=kb_image_stage,
-        )
-        if kb_tool is not None:
-            tools.append(kb_tool)
-
-    return tools, failures
+    return await assemble_daily_tools(
+        tool_payloads,
+        login_user,
+        ws_config,
+        citation_collector,
+        knowledge_bases_info=knowledge_bases_info,
+        image_registry=image_registry,
+        citation_scope=citation_scope,
+        kb_image_stage=kb_image_stage,
+    )
 
 
 async def log_telemetry_events(user_id: str, conversation_id: str, start_time: float):
@@ -1393,9 +1170,10 @@ async def _agent_initialize_chat(
     session_subject: SessionSubject | None = None,
     *,
     skip_llm: bool = False,
+    memory_register: MemoryRegister | None = None,
 ):
     """Agent-mode init: creates/fetches the conversation and inserts the user's
-    question row in the NEW JSON format (`{"query": str, "files": [...]}`)
+    question row with its query, attachments and optional composer references
     under category='question', type='over'.
 
     Differences vs legacy initialize_chat:
@@ -1405,11 +1183,9 @@ async def _agent_initialize_chat(
       - `overrideParentMessageId` is ignored (regenerate UI removed)
     """
     ws_config = await WorkStationService.aget_config()
-    from bisheng.common.services.config_service import settings as enterprise_settings
-    from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+    from bisheng.dsh.domain.services.model_catalog import user_workbench_models
 
-    if enterprise_settings.dsh.enabled:
-        ws_config.models = await authorized_workbench_models(login_user.user_id)
+    ws_config.models = await user_workbench_models(login_user.user_id)
     model_info = next((m for m in ws_config.models if m.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
@@ -1427,7 +1203,14 @@ async def _agent_initialize_chat(
         )
         if session_subject is not None:
             new_session = session_subject.stamp(new_session)
-        await MessageSessionDao.async_insert_one(new_session)
+        if data.project_id is not None:
+            if session_subject is not None:
+                from bisheng.common.errcode.chat import ProjectInputError
+
+                raise ProjectInputError()
+            await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
+        else:
+            await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
             user_id=login_user.user_id,
             event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
@@ -1452,6 +1235,11 @@ async def _agent_initialize_chat(
         await MessageSessionDao.touch_session(conversation_id)
         conversation = await MessageSessionDao.async_get_one(conversation_id)
 
+    # F132: login-state endpoints register the conversation for long-term memory
+    # (decision 6). It runs before this turn's question row so the watermark set
+    # at first registration excludes only earlier history (AC-40).
+    await register_session(memory_register, conversation_id)
+
     # Same as the legacy flow: the attachment becomes permanent at send time,
     # not at upload time (see promote_chat_attachments).
     await promote_chat_attachments(
@@ -1471,16 +1259,14 @@ async def _agent_initialize_chat(
             sender="User",
             files=json.dumps(data.files) if data.files else None,
             extra="{}",
-            message=json.dumps(
-                {"query": data.text or "", "files": data.files or []},
-                ensure_ascii=False,
-            ),
+            message=serialize_user_question(data.text, data.files, data.composer_references),
             category="question",
             source=0,
+            sensitive_status=SensitiveStatus.VIOLATIONS.value if skip_llm else SensitiveStatus.PASS.value,
         )
     )
-
     if skip_llm:
+        mark_session_content_violation(conversation_id)
         return ws_config, conversation, message, None, model_info, is_new_conversation
     bisheng_llm = await LLMService.get_bisheng_llm(
         model_id=data.model,
@@ -1492,211 +1278,34 @@ async def _agent_initialize_chat(
     return ws_config, conversation, message, bisheng_llm, model_info, is_new_conversation
 
 
-# Parser failures that recover on their own (the OCR service is throttled or
-# briefly unreachable) read as "busy, try again"; everything else is a hard
-# parse failure. Mirrors the task-mode failure card's transient/terminal split.
-_TRANSIENT_PARSE_ERRORS = frozenset({ErrorType.RATE_LIMIT, ErrorType.NETWORK_TIMEOUT, ErrorType.SERVICE_UNAVAILABLE})
+async def persist_blocked_workbench_answer(conversation, model_info, auto_reply: str) -> ChatMessage:
+    """Record the auto-reply of a blocked input and mark the conversation.
 
-# Extracted document text is hard-cut at ``maxTokens`` CHARACTERS. Silently
-# handing the model a prefix makes it read the fragment as the whole document:
-# a 1072-page tender truncated to 15k chars still "answers" questions about
-# tables that live on page 400, complete with fabricated page citations. Naming
-# the cut is what lets the model say "I only have the first N characters".
-_TRUNCATION_NOTICE = (
-    "\n\n[TRUNCATED] Only the first {shown} of {total} characters of the uploaded file(s) appear above; "
-    "the remainder was NOT provided to you. Do not state or infer anything about the omitted part, and do "
-    "not cite page, section or table numbers that are not visible in the text above. If answering needs "
-    "the full document, say so plainly instead of guessing."
-)
-
-
-async def _extract_doc_text(
-    filepath: str,
-    filename: str,
-    invoke_user_id: int,
-    *,
-    chat_id: str | None = None,
-    source_url: str = "",
-    tenant_id: int = 0,
-) -> str:
-    """Extract one attachment's text, turning a parser failure into a domain error.
-
-    Without this the raw ``EtlException`` reached the generic handler and the user
-    got an opaque 500. Re-raising as ``ChatFileParseError`` carries the offending
-    filename plus the parser's own message to the chat bubble, and lets a throttled
-    OCR service be told apart from a genuinely unparseable file.
+    Shared by the SSE answer below and the F004 run-protocol answer
+    (``run_send._blocked_response``), so both store the same rows.
     """
-    # This helper is the OCR path; vision-capable images bypass it entirely.
-    if filename.rsplit(".", 1)[-1].lower() in {*VISUAL_MODEL_FILE_TYPES, "bmp"}:
-        from bisheng.common.services.config_service import settings
-
-        knowledge_config = await settings.async_get_knowledge()
-        if not knowledge_config.image_parser_enabled:
-            raise ChatFileParseError(
-                error_type="file_parse_failed",
-                detail=f"{filename}: image parsing is not configured; select a vision-capable model or configure an image parser",
-                filename=filename,
-            )
+    row = build_blocked_answer_row(
+        user_id=conversation.user_id,
+        conversation_id=conversation.chat_id,
+        sender=getattr(model_info, "displayName", "") or "",
+        auto_reply=auto_reply,
+    )
+    resp = await ChatMessageDao.ainsert_one(row)
+    mark_session_content_violation(conversation.chat_id)
+    # F132: a blocked turn is never consolidated into long-term memory; move the
+    # watermark past it (no-op for chats not registered for memory).
     try:
-        image_storage = None
-        if chat_id:
-            from bisheng.chat_session.domain.services.workflow_file_service import WorkflowFileService
-
-            # The existing attachment store also accepts daily sessions (empty flow_id).
-            # Its manifests retain images, refresh signed links and own deletion cleanup.
-            image_storage = await asyncio.to_thread(
-                WorkflowFileService.image_storage,
-                chat_id=chat_id,
-                user_id=invoke_user_id,
-                tenant_id=tenant_id,
-                workflow_id="",
-                run_id=uuid4().hex,
-                node_id="daily-attachment",
-                source_url=source_url,
-                file_name=filename,
-            )
-        return await get_file_content(
-            filepath_local=filepath,
-            file_name=filename,
-            invoke_user_id=invoke_user_id,
-            image_storage=image_storage,
-        )
-    except Exception as exc:
-        logger.exception(f"[process_agent_files] parse failed for {filename}")
-        transient = label_error(unwrap(exc)) in _TRANSIENT_PARSE_ERRORS
-        raise ChatFileParseError(
-            error_type="file_parse_busy" if transient else "file_parse_failed",
-            detail=f"{filename}: {exc}",
-            filename=filename,
-        ) from exc
-
-
-async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config, *, conversation_id=None):
-    """Split uploaded files into visual (image base64 data URLs) and doc
-    (extracted text chunks concatenated up to maxTokens).
-
-    Video covers are extracted during parse so history rows can render a poster
-    thumbnail once ASR/content extraction finishes.
-    """
-    if not data.files:
-        return "", [], data.files or []
-    # Skip entries without a filepath (upload in flight / failed uploads still
-    # sometimes reach us). Prevents `NoneType.split` inside async_file_download.
-    valid_files = [f for f in data.files if f and f.get("filepath")]
-    if not valid_files:
-        logger.info(f"[process_agent_files] no files with filepath (received={len(data.files)})")
-        return "", [], data.files
-    download_tasks = [async_file_download(f.get("filepath")) for f in valid_files]
-    downloaded_files = await asyncio.gather(*download_tasks)
-
-    visual_tasks, doc_tasks = [], []
-    for file_item, (filepath, filename) in zip(valid_files, downloaded_files, strict=True):
-        ext = filename.split(".")[-1].lower()
-        if model_info.visual and ext in VISUAL_MODEL_FILE_TYPES:
-            visual_tasks.append(read_image_as_data_url(filepath=filepath, filename=filename))
-        else:
-            image_context = (
-                {
-                    "chat_id": conversation_id,
-                    "source_url": file_item["filepath"],
-                    "tenant_id": workbench_tenant_id(login_user),
-                }
-                if conversation_id
-                else {}
-            )
-            doc_tasks.append(_extract_doc_text(filepath, filename, login_user.user_id, **image_context))
-    visual_results, doc_results = await asyncio.gather(
-        asyncio.gather(*visual_tasks),
-        asyncio.gather(*doc_tasks),
-    )
-    annotated_valid = await _annotate_agent_files_with_video_covers(valid_files, downloaded_files)
-    merged_files = _merge_agent_file_covers(data.files, valid_files, annotated_valid)
-    max_token = getattr(ws_config, "maxTokens", 15000) or 15000
-    joined_docs = "\n".join(doc_results)
-    file_context = joined_docs[:max_token]
-    if len(joined_docs) > max_token:
-        file_context += _TRUNCATION_NOTICE.format(shown=len(file_context), total=len(joined_docs))
-    logger.info(
-        f"[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}"
-        f" file_context_len={len(file_context)} max_token={max_token}"
-        f" video_covers={sum(1 for f in merged_files if f.get('cover_filepath'))}"
-    )
-    return file_context, list(visual_results), merged_files
-
-
-async def _annotate_agent_files_with_video_covers(
-    valid_files: list[dict],
-    downloaded_files: list[tuple[str, str]],
-) -> list[dict]:
-    """Extract a poster frame for each downloaded video attachment."""
-    from bisheng.core.storage.minio.minio_manager import get_minio_storage
-    from bisheng.workstation.domain.services.media_cover_service import WorkstationMediaCoverService
-
-    minio_client = await get_minio_storage()
-    annotated: list[dict] = []
-    for file_item, (local_path, filename) in zip(valid_files, downloaded_files, strict=False):
-        item = dict(file_item)
-        if WorkstationMediaCoverService.is_video_filename(filename):
-            try:
-                cover_filepath = await WorkstationMediaCoverService.upload_video_cover(local_path, minio_client)
-                if cover_filepath:
-                    item["cover_filepath"] = cover_filepath
-            except Exception as exc:
-                logger.warning(
-                    "video cover extraction during daily chat parse failed: file={} error={}",
-                    filename,
-                    exc,
-                )
-        annotated.append(item)
-    return annotated
-
-
-def _merge_agent_file_covers(
-    original_files: list[dict] | None,
-    valid_files: list[dict],
-    annotated_valid: list[dict],
-) -> list[dict]:
-    """Stamp cover_filepath from the parsed subset back onto the full files list."""
-    if not original_files:
-        return []
-    cover_by_key: dict[str, str] = {}
-    for source, annotated in zip(valid_files, annotated_valid, strict=False):
-        cover = annotated.get("cover_filepath")
-        if not cover:
-            continue
-        key = str(source.get("file_id") or source.get("filepath") or "")
-        if key:
-            cover_by_key[key] = cover
-    merged: list[dict] = []
-    for file_item in original_files:
-        item = dict(file_item)
-        key = str(file_item.get("file_id") or file_item.get("filepath") or "")
-        cover = cover_by_key.get(key)
-        if cover:
-            item["cover_filepath"] = cover
-        merged.append(item)
-    return merged
-
-
-async def _persist_question_file_attachments(message: ChatMessage, query: str, files: list[dict]) -> None:
-    """Update the persisted user question row with post-parse attachment metadata."""
-    payload = {"query": query or "", "files": files or []}
-    message.message = json.dumps(payload, ensure_ascii=False)
-    message.files = json.dumps(files) if files else None
-    await ChatMessageDao.aupdate_message_model(message)
+        await MemoryActivity.end_turn(conversation.chat_id, resp.id, False)
+    except Exception:
+        logger.exception("memory: ending a blocked turn failed chat_id={}", conversation.chat_id)
+    return resp
 
 
 def _respond_blocked_workbench(conversation, message, model_info, data: APIChatCompletion, auto_reply: str):
     """Short SSE: user row already persisted; write auto-reply and close the turn."""
 
     async def event_stream():
-        row = build_blocked_answer_row(
-            user_id=conversation.user_id,
-            conversation_id=conversation.chat_id,
-            sender=getattr(model_info, "displayName", "") or "",
-            auto_reply=auto_reply,
-        )
-        resp = await ChatMessageDao.ainsert_one(row)
+        resp = await persist_blocked_workbench_answer(conversation, model_info, auto_reply)
         for chunk in iter_blocked_sse(
             conversation_id=conversation.chat_id,
             user_message_id=message.id,
@@ -1710,925 +1319,12 @@ def _respond_blocked_workbench(conversation, message, model_info, data: APIChatC
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-async def _agent_stream_chat_completion(
-    request: Request,
-    data: APIChatCompletion,
-    login_user: UserPayload,
-    session_subject: SessionSubject | None = None,
-):
-    """v2.5 LangGraph ReAct Agent chat completion.
-
-    Flow:
-      1. init conversation + insert question row (JSON format)
-      2. resolve selected knowledge bases → KB metadata list
-      3. prepare LangChain tools (user-selected + search_knowledge_bases)
-      4. process uploaded files (images → data URLs; docs → text context)
-      5. compose user prompt (3 scenarios via _build_user_content)
-      6. If tools non-empty → create_react_agent + astream_events v2
-         Else → direct bisheng_llm.astream (still in new SSE format)
-      7. Stream events mapped to SSE ChatResponse categories:
-           on_chat_model_stream → agent_thinking/stream + agent_answer/stream
-           on_tool_start        → agent_tool_call/start
-           on_tool_end          → agent_tool_call/end
-      8. Persist agent_answer row as {msg, events[]} where events is a single
-         ordered log of {type: thinking|tool_call, ...} entries in arrival
-         order. Frontend renders this array directly.
-    """
-    start_time = time.time()
-    tenant_id = workbench_tenant_id(login_user)
-    blocked = SensitiveWordPolicyService.evaluate_workbench_user_text(tenant_id, data.text or "")
-    try:
-        ws_config, conversation, message, bisheng_llm, model_info, is_new_conv = await _agent_initialize_chat(
-            data, login_user, session_subject, skip_llm=bool(blocked)
-        )
-        conversation_id = conversation.chat_id
-    except (BaseErrorCode, ValueError) as exc:
-        error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
-        return StreamingResponse(
-            iter([error_response.to_sse_event_instance_str()]),
-            media_type="text/event-stream",
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception(f"Error in agent chat completions setup: {exc}")
-        return StreamingResponse(
-            iter([ServerError(exception=exc).to_sse_event_instance_str()]),
-            media_type="text/event-stream",
-        )
-    if blocked:
-        logger.warning(
-            "workbench content safety hit tenant_id={} mode=input chat_id={}",
-            tenant_id,
-            conversation.chat_id,
-        )
-        return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
-
-    async def _agent_event_stream_impl():
-        # Single ordered event log — one entry per thinking segment or tool
-        # call, in arrival order. The frontend renders this array directly;
-        # parallel arrays + `segment_idx`/`after_segment` cross-references
-        # are gone.
-        #
-        # Event shapes:
-        #   {'type': 'thinking', 'content': str, 'duration_ms'?: int}
-        #   {'type': 'tool_call', 'tool_call_id': str, 'tool_name': str,
-        #    'display_name': str, 'tool_type': str, 'args': dict,
-        #    'results'?: Any, 'error'?: str | None}
-        events: list[dict] = []
-        final_msg = ""
-        # Pointer to the currently-open thinking event (None when the model is
-        # emitting answer text or running a tool). Used to stream deltas and
-        # finalise `duration_ms` without scanning `events`.
-        current_thinking_idx: int | None = None
-        current_thinking_start: float | None = None
-        # Maps tool_call_id → its index in `events`, so on_tool_end can update
-        # in O(1).
-        inflight_tool_idx: dict[str, int] = {}
-        error_flag = False
-        error_msg = ""
-        citation_collector = CitationRegistryCollector()
-        # F075: the model cites with [Sn] handles from the session table shared
-        # with the task mode; answer text is converted before it is stored or sent.
-        citation_scope = DailyCitationScope(conversation_id)
-        image_registry = ImageRegistry()
-        # A line holding only img#N is the model choosing to show that picture.
-        stream_converter = ImageIdLineConverter(image_registry, HandleStreamConverter(citation_scope.handles))
-        inline_thinking_filter = ThinkBlockStreamFilter()
-
-        def feed_answer(text: str) -> str:
-            return stream_converter.feed(inline_thinking_filter.feed(text))
-
-        def flush_answer() -> str:
-            inline_thinking_filter.flush()
-            return stream_converter.flush()
-
-        from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-        from bisheng.common.image_view.loop import image_view_configured, resolve_image_view_llm
-
-        visual_enabled = await image_view_configured(tenant_id)
-        vision_llm = None
-        if visual_enabled:
-            vision_llm = await resolve_image_view_llm(
-                tenant_id=tenant_id,
-                user_id=login_user.user_id,
-                app_type=ApplicationTypeEnum.DAILY_CHAT,
-            )
-            if vision_llm is None:
-                visual_enabled = False
-
-        def close_thinking() -> int | None:
-            """Finalise the open thinking event (if any). Returns its duration
-            in ms, or None when no segment was open. Caller yields the SSE.
-
-            Uses a single time snapshot so that
-            `events[idx]['started_at'] + duration_ms == events[idx]['ended_at']`
-            holds (modulo the rare case where started_at was missing)."""
-            nonlocal current_thinking_idx, current_thinking_start
-            if current_thinking_idx is None:
-                return None
-            now = time.time()
-            ended_ms = int(now * 1000)
-            ev = events[current_thinking_idx]
-            started_ms = ev.get("started_at")
-            if started_ms is not None:
-                duration_ms = max(0, ended_ms - started_ms)
-            else:
-                duration_ms = max(0, int((now - (current_thinking_start or now)) * 1000))
-            ev["duration_ms"] = duration_ms
-            ev["ended_at"] = ended_ms
-            current_thinking_idx = None
-            current_thinking_start = None
-            return duration_ms
-
-        # True once the answer row has been written, so the interrupt path can't
-        # double-insert a turn the normal path already saved.
-        persisted = False
-        scanner = None
-        if SensitiveWordPolicyService.is_workbench_content_safety_active(tenant_id):
-            from bisheng.sensitive_word.domain.services.stream_scanner import StreamContentSafetyScanner
-
-            scanner = StreamContentSafetyScanner(tenant_id)
-
-        def finalise_dangling_events() -> None:
-            """Close the open thinking segment and force-close tool calls that
-            never received on_tool_end (e.g. the langgraph stream raised or was
-            cancelled mid-tool). Without this the persisted row would carry
-            tool_call entries with only `started_at` — they'd render as
-            perpetually in-flight on history reload."""
-            close_thinking()
-            if not inflight_tool_idx:
-                return
-            now_ms = int(time.time() * 1000)
-            for _tc_id, idx in inflight_tool_idx.items():
-                if 0 <= idx < len(events):
-                    ev = events[idx]
-                    if ev.get("ended_at") is None:
-                        ev["ended_at"] = now_ms
-                        if ev.get("error") is None:
-                            ev["error"] = error_msg or "tool did not complete"
-                        if "results" not in ev:
-                            ev["results"] = []
-                        if ev.get("started_at") is not None:
-                            ev["duration_ms"] = max(0, now_ms - ev["started_at"])
-            inflight_tool_idx.clear()
-
-        def log_picture_outcome() -> None:
-            """Record whether the model showed a picture; nothing is filled in for it."""
-            if stream_converter.rendered_ids:
-                logger.info("image_view rendered id lines ids={}", stream_converter.rendered_ids)
-            elif image_registry.viewed_ids() and not has_markdown_image(final_msg):
-                logger.info("image_view answer has no picture viewed_ids={}", image_registry.viewed_ids())
-
-        def record_answer_text(text: str) -> str:
-            """Append converted answer text to the message and return its SSE delta."""
-            nonlocal final_msg
-            final_msg += text
-            if events and events[-1].get("type") == "text":
-                events[-1]["content"] = events[-1].get("content", "") + text
-            else:
-                events.append({"type": "text", "content": text})
-            return _sse_resp("agent_answer", "stream", {"msg": text}, conversation_id)
-
-        def build_answer_row(db_content: dict) -> ChatMessage:
-            return ChatMessage(
-                user_id=conversation.user_id,
-                chat_id=conversation_id,
-                flow_id="",
-                type="end",
-                is_bot=True,
-                # `default` is a last-resort net: tool results are already
-                # sanitised by _parse_tool_results, but a serialisation crash
-                # here would abort the stream and lose the whole turn, so never
-                # let an unexpected object type get that far.
-                message=json.dumps(db_content, ensure_ascii=False, default=str),
-                category="agent_answer",
-                sender=model_info.displayName,
-                extra=json.dumps({"error": True, "error_msg": error_msg}) if error_flag else "{}",
-                source=0,
-            )
-
-        async def persist_safety_replacement(auto_reply: str):
-            """Drop thinking/tool events, persist only the auto-reply, end the turn."""
-            nonlocal final_msg, events, persisted
-            close_thinking()
-            inflight_tool_idx.clear()
-            final_msg = auto_reply
-            events.clear()
-            events.append({"type": "text", "content": auto_reply})
-            persisted = True
-            db_content = blocked_answer_payload(auto_reply)
-            row = build_answer_row(db_content)
-            row.extra = blocked_answer_extra()
-            resp_msg = await ChatMessageDao.ainsert_one(row)
-            yield _sse_resp(
-                "agent_answer",
-                "end",
-                db_content,
-                conversation_id,
-                message_id=resp_msg.id,
-            )
-            yield _sse_resp("processing", "close", "", conversation_id)
-            final_payload = {
-                "final": True,
-                "conversation": {"conversationId": conversation_id},
-                "responseMessage": {
-                    "messageId": resp_msg.id,
-                    "conversationId": conversation_id,
-                },
-            }
-            yield f"data: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
-
-        def persist_interrupted_turn(reason: str) -> None:
-            """Save whatever the model produced when the stream is torn down.
-
-            Runs on the CancelledError / GeneratorExit path, where the task is
-            already being cancelled — hence the *synchronous* DAO calls: an
-            `await` here would be cancelled before reaching the DB and the whole
-            turn (question + every token already streamed to the user) would be
-            lost, leaving a reload showing only the question.
-            """
-            nonlocal persisted, error_flag, error_msg
-            if persisted:
-                return
-            persisted = True
-            error_flag = True
-            error_msg = error_msg or reason
-            pending = flush_answer()
-            if pending:
-                record_answer_text(pending)
-            finalise_dangling_events()
-            log_picture_outcome()
-            try:
-                citation_items = select_cited_items_sync(citation_collector.list_items(), final_msg)
-                log_citation_audit(
-                    chat_id=conversation_id,
-                    model=data.model,
-                    scope=citation_scope,
-                    stats=stream_converter.stats,
-                    cited=citation_items,
-                )
-                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
-                save_message_citations_sync(
-                    message_id=resp.id,
-                    items=citation_items,
-                    chat_id=conversation_id,
-                    flow_id="",
-                )
-            except Exception:
-                # The stream is already being torn down and there is no channel
-                # left to report on; log with the traceback and let the original
-                # cancellation propagate.
-                logger.exception("Agent chat: failed to persist interrupted turn")
-
-        # Emit first so the client can add the sidebar placeholder before any
-        # streaming content arrives. onCreated hook in useAiChat keys on this.
-        yield user_message(message.id, conversation_id, "User", data.text or "")
-        yield _sse_resp("processing", "begin", "", conversation_id)
-        yield _sse_resp(
-            "question",
-            "over",
-            {"query": data.text or "", "files": data.files or []},
-            conversation_id,
-            message_id=message.id,
-            is_bot=False,
-        )
-
-        langchain_tools: list[BaseTool] = []
-        try:
-            # ---- Step 1: resolve user-selected KBs ----
-            knowledge_bases_info = await _resolve_user_kb_selection(data)
-
-            # ---- Step 2: assemble LangChain tools ----
-            # Hydrate the handle table first: history replay and cross-turn
-            # citations both need the numbers earlier turns handed out.
-            await citation_scope.load()
-            tool_payloads = [t.model_dump() for t in (data.tools or [])]
-            # Knowledge images only need to reach the sandbox when the code interpreter is on.
-            kb_image_stage = (
-                KbImageStage.from_settings()
-                if any(p.get("tool_key") == CODE_INTERPRETER_TOOL_KEY for p in tool_payloads)
-                else None
-            )
-            langchain_tools, tool_failures = await _prepare_tools(
-                tool_payloads=tool_payloads,
-                login_user=login_user,
-                ws_config=ws_config,
-                citation_collector=citation_collector,
-                knowledge_bases_info=knowledge_bases_info,
-                image_registry=image_registry if visual_enabled else None,
-                citation_scope=citation_scope,
-                kb_image_stage=kb_image_stage,
-            )
-
-            # Surface init failures as synthetic tool_call events so the user
-            # sees *something* (e.g. "联网搜索 失败: 未配置服务商") rather than
-            # the model silently hallucinating a citation.
-            for f in tool_failures:
-                tc_id = f"init_fail_{uuid4().hex[:10]}"
-                start_payload = {
-                    "tool_call_id": tc_id,
-                    "tool_name": f["tool_key"],
-                    "display_name": f["display_name"],
-                    "tool_type": f["tool_type"],
-                    "args": {},
-                }
-                yield _sse_resp("agent_tool_call", "start", start_payload, conversation_id)
-                now_ms = int(time.time() * 1000)
-                end_payload = {
-                    **start_payload,
-                    "results": [],
-                    "error": f["error"],
-                    "started_at": now_ms,
-                    "ended_at": now_ms,
-                    "duration_ms": 0,
-                }
-                events.append({"type": "tool_call", **end_payload})
-                yield _sse_resp("agent_tool_call", "end", end_payload, conversation_id)
-
-            # ---- Step 3: process uploaded files ----
-            file_context, image_bases64, merged_files = await _process_agent_files(
-                data,
-                model_info,
-                login_user,
-                ws_config,
-                conversation_id=conversation_id,
-            )
-            if merged_files and any(
-                merged.get("cover_filepath") and not (orig or {}).get("cover_filepath")
-                for orig, merged in zip(data.files or [], merged_files, strict=False)
-            ):
-                data.files = merged_files
-                await _persist_question_file_attachments(message, data.text or "", merged_files)
-                yield _sse_resp(
-                    "question",
-                    "update",
-                    {"query": data.text or "", "files": merged_files},
-                    conversation_id,
-                    message_id=message.id,
-                    is_bot=False,
-                )
-
-            # ---- Step 4: compose user content + history ----
-            user_text = _build_user_content(
-                question=data.text or "",
-                file_context=file_context,
-                knowledge_bases_info=knowledge_bases_info,
-            )
-
-            # Row-count ceiling just limits DB work; the real trimming
-            # happens inside get_chat_history via the token cap
-            # (daily_chat.history_max_tokens in config.yaml).
-            history_max_tokens = await _get_history_max_tokens()
-            history = (
-                await WorkStationService.get_chat_history(
-                    conversation_id,
-                    size=10,
-                    max_tokens=history_max_tokens,
-                    citation_key_to_handle=citation_scope.key_to_handle,
-                )
-            )[:-1]
-
-            if image_bases64:
-                content_payload = [{"type": "text", "text": user_text}]
-                for img in image_bases64:
-                    content_payload.append({"type": "image_url", "image_url": {"url": img}})
-            else:
-                content_payload = user_text
-
-            sys_prompt = None
-            if ws_config.systemPrompt:
-                # Use plain `replace` instead of `str.format` — admin prompts can
-                # legitimately contain `{...}` JSON snippets (e.g. a tool-call
-                # schema example) that would otherwise trip KeyError.
-                sys_prompt = ws_config.systemPrompt.replace(
-                    "{cur_date}",
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                )
-            # F075: the saved prompt may still teach the verbatim-id format
-            # (tenants saved the old default); swap that section for the handle
-            # rules at run time, or append them when the prompt has none.
-            sys_prompt = replace_legacy_citation_rules(sys_prompt)
-            llm_messages = [*history, HumanMessage(content=content_payload)]
-
-            logger.info(
-                f"[agent_chat] prepared messages user={login_user.user_id}"
-                f" model={data.model} visual_enabled={visual_enabled}"
-                f" history_len={len(history)} has_sys_prompt={bool(sys_prompt)}"
-                f" tool_count={len(langchain_tools)}"
-                f" tool_names={[t.name for t in langchain_tools]}"
-                f" visual_count={len(image_bases64)}"
-                f" kb_count={len(knowledge_bases_info or [])}"
-            )
-
-            # [debug] Dump the exact, UNTRUNCATED payload sent to the LLM to
-            # /tmp/bisheng_agent_dumps/<trace>.json so the full system prompt
-            # and message history can be inspected verbatim.
-            #
-            # Gated behind BISHENG_AGENT_DUMP env var — OFF by default so
-            # there's no I/O overhead in production. To enable for debugging:
-            #   export BISHENG_AGENT_DUMP=1   # then restart the backend
-            # Accepted truthy values: 1, true, yes, on (case-insensitive).
-            import os as _os
-
-            if _os.environ.get("BISHENG_AGENT_DUMP", "").lower() in ("1", "true", "yes", "on"):
-                try:
-                    from bisheng.core.logger import trace_id_var
-
-                    trace_id = trace_id_var.get() or "notrace"
-                except Exception:
-                    trace_id = "notrace"
-
-                def _serialize_message(m):
-                    content = getattr(m, "content", "")
-                    if isinstance(content, list):
-                        parts = []
-                        for p in content:
-                            if isinstance(p, dict) and p.get("type") == "image_url":
-                                parts.append({"type": "image_url", "image_url": "<base64 omitted>"})
-                            else:
-                                parts.append(p)
-                        content_out = parts
-                    else:
-                        content_out = content
-                    return {"role": type(m).__name__, "content": content_out}
-
-                dump_payload = {
-                    "trace_id": trace_id,
-                    "user_id": login_user.user_id,
-                    "conversation_id": conversation_id,
-                    "tool_count": len(langchain_tools),
-                    "tool_names": [t.name for t in langchain_tools],
-                    "visual_enabled": visual_enabled,
-                    "kb_count": len(knowledge_bases_info or []),
-                    "system_prompt": sys_prompt,
-                    "messages": [_serialize_message(m) for m in llm_messages],
-                }
-                try:
-                    _os.makedirs("/tmp/bisheng_agent_dumps", exist_ok=True)
-                    dump_path = f"/tmp/bisheng_agent_dumps/{trace_id}.json"
-                    with open(dump_path, "w", encoding="utf-8") as fp:
-                        json.dump(dump_payload, fp, ensure_ascii=False, indent=2, default=str)
-                    logger.info(f"[agent_chat][dump] wrote full payload -> {dump_path}")
-                except Exception as dump_exc:
-                    logger.warning(f"[agent_chat][dump] failed: {dump_exc}")
-
-            # ---- Step 5: execute ----
-            if langchain_tools:
-                from langchain_core.runnables import RunnableConfig
-                from langgraph.prebuilt import ToolNode, create_react_agent
-
-                # Wrap tools in a ToolNode whose error handler feeds tool
-                # failures back to the model as observations, so a single tool
-                # error never aborts the whole agent stream
-                # (see _handle_agent_tool_error).
-                agent_tools = list(langchain_tools)
-                tool_node = ToolNode(
-                    agent_tools,
-                    handle_tool_errors=_handle_agent_tool_error,
-                )
-
-                agent = create_react_agent(
-                    VisionToolBindWrapper(
-                        bisheng_llm,
-                        image_registry,
-                        langchain_tools,
-                        retrieve_tool_name="search_knowledge_bases"
-                        if visual_enabled and knowledge_bases_info
-                        else None,
-                        vision_llm=vision_llm,
-                    ),
-                    tool_node,
-                    prompt=sys_prompt,  # may be None
-                )
-
-                tool_meta_map = {t.name: _build_tool_meta(t) for t in agent_tools}
-                visible_tool_run_ids: set[str] = set()
-                ignored_tool_run_ids: set[str] = set()
-                max_iter = await _get_agent_max_iterations()
-
-                async for ev in agent.astream_events(
-                    {"messages": llm_messages},
-                    version="v2",
-                    config=RunnableConfig(recursion_limit=max_iter),
-                ):
-                    et = ev.get("event", "")
-                    name = ev.get("name", "") or ""
-
-                    if et == "on_chat_model_stream":
-                        chunk = (ev.get("data") or {}).get("chunk")
-                        if chunk is None:
-                            continue
-                        text = extract_message_text(chunk)
-                        reasoning = extract_message_reasoning(chunk)
-                        if reasoning:
-                            if current_thinking_idx is None:
-                                start_ms = int(time.time() * 1000)
-                                events.append(
-                                    {
-                                        "type": "thinking",
-                                        "content": "",
-                                        "started_at": start_ms,
-                                    }
-                                )
-                                current_thinking_idx = len(events) - 1
-                                current_thinking_start = time.time()
-                            events[current_thinking_idx]["content"] += reasoning
-                            yield _sse_resp(
-                                "agent_thinking",
-                                "stream",
-                                {"content": reasoning},
-                                conversation_id,
-                            )
-                        if text:
-                            d = close_thinking()
-                            if d is not None:
-                                yield _sse_resp(
-                                    "agent_thinking",
-                                    "end",
-                                    {"duration_ms": d},
-                                    conversation_id,
-                                )
-                            text = feed_answer(text)
-                            if not text:
-                                continue
-                            yield record_answer_text(text)
-                            if scanner:
-                                hit = scanner.feed(text)
-                                if hit:
-                                    logger.warning(
-                                        "workbench content safety hit tenant_id={} mode=output chat_id={}",
-                                        tenant_id,
-                                        conversation_id,
-                                    )
-                                    async for chunk in persist_safety_replacement(hit.auto_reply or ""):
-                                        yield chunk
-                                    return
-
-                    elif et == "on_tool_start":
-                        tc_id = str(ev.get("run_id") or f"call_{uuid4().hex[:12]}")
-                        if _is_nested_tool_event(ev, visible_tool_run_ids):
-                            ignored_tool_run_ids.add(tc_id)
-                            continue
-
-                        # A text run ends here: release whatever the handle
-                        # converter was still holding back.
-                        pending = flush_answer()
-                        if pending:
-                            yield record_answer_text(pending)
-                            if scanner:
-                                hit = scanner.feed(pending)
-                                if hit:
-                                    logger.warning(
-                                        "workbench content safety hit tenant_id={} mode=output chat_id={}",
-                                        tenant_id,
-                                        conversation_id,
-                                    )
-                                    async for chunk in persist_safety_replacement(hit.auto_reply or ""):
-                                        yield chunk
-                                    return
-
-                        # Close any in-flight thinking before the tool call
-                        # so each ReAct round gets its own collapsible block.
-                        d = close_thinking()
-                        if d is not None:
-                            yield _sse_resp(
-                                "agent_thinking",
-                                "end",
-                                {"duration_ms": d},
-                                conversation_id,
-                            )
-
-                        tool_name = name
-                        meta = tool_meta_map.get(
-                            tool_name,
-                            {
-                                "display_name": tool_name,
-                                "tool_type": "tool",
-                            },
-                        )
-                        tool_event = {
-                            "type": "tool_call",
-                            "tool_call_id": tc_id,
-                            "tool_name": tool_name,
-                            "display_name": meta["display_name"],
-                            "tool_type": meta["tool_type"],
-                            "args": (ev.get("data") or {}).get("input", {}),
-                            "started_at": int(time.time() * 1000),
-                        }
-                        events.append(tool_event)
-                        inflight_tool_idx[tc_id] = len(events) - 1
-                        visible_tool_run_ids.add(tc_id)
-                        # SSE payload uses the bare tool_call shape (no type:).
-                        yield _sse_resp(
-                            "agent_tool_call",
-                            "start",
-                            {k: v for k, v in tool_event.items() if k != "type"},
-                            conversation_id,
-                        )
-
-                    elif et == "on_tool_end":
-                        tc_id = str(ev.get("run_id") or "")
-                        if tc_id in ignored_tool_run_ids:
-                            ignored_tool_run_ids.discard(tc_id)
-                            continue
-                        if _is_nested_tool_event(ev, visible_tool_run_ids) and tc_id not in inflight_tool_idx:
-                            continue
-                        idx = inflight_tool_idx.pop(tc_id, None)
-                        visible_tool_run_ids.discard(tc_id)
-                        raw_output = (ev.get("data") or {}).get("output")
-                        ended_ms = int(time.time() * 1000)
-                        if idx is not None:
-                            tool_event = events[idx]
-                            results = _parse_tool_results(raw_output, tool_event.get("tool_name"))
-                            tool_event["results"] = results
-                            tool_event["error"] = _extract_tool_error(raw_output)
-                            tool_event["ended_at"] = ended_ms
-                            if tool_event.get("started_at") is not None:
-                                tool_event["duration_ms"] = max(0, ended_ms - tool_event["started_at"])
-                            payload = {k: v for k, v in tool_event.items() if k != "type"}
-                        else:
-                            # Edge case: tool_end without a matching start. Synthesise one.
-                            results = _parse_tool_results(raw_output, name)
-                            tool_event = {
-                                "type": "tool_call",
-                                "tool_call_id": tc_id,
-                                "tool_name": name,
-                                "display_name": name,
-                                "tool_type": "tool",
-                                "args": {},
-                                "results": results,
-                                "error": _extract_tool_error(raw_output),
-                                "started_at": ended_ms,
-                                "ended_at": ended_ms,
-                                "duration_ms": 0,
-                            }
-                            events.append(tool_event)
-                            payload = {k: v for k, v in tool_event.items() if k != "type"}
-                        yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
-                    elif et == "on_tool_error":
-                        tc_id = str(ev.get("run_id") or "")
-                        if tc_id in ignored_tool_run_ids:
-                            ignored_tool_run_ids.discard(tc_id)
-                            continue
-                        if _is_nested_tool_event(ev, visible_tool_run_ids) and tc_id not in inflight_tool_idx:
-                            continue
-                        idx = inflight_tool_idx.pop(tc_id, None)
-                        visible_tool_run_ids.discard(tc_id)
-                        ended_ms = int(time.time() * 1000)
-                        err = (ev.get("data") or {}).get("error")
-                        err_msg = str(err) if err is not None else "tool execution failed"
-                        if idx is not None:
-                            tool_event = events[idx]
-                            tool_event["results"] = []
-                            tool_event["error"] = err_msg
-                            tool_event["ended_at"] = ended_ms
-                            if tool_event.get("started_at") is not None:
-                                tool_event["duration_ms"] = max(0, ended_ms - tool_event["started_at"])
-                            payload = {k: v for k, v in tool_event.items() if k != "type"}
-                        else:
-                            tool_event = {
-                                "type": "tool_call",
-                                "tool_call_id": tc_id,
-                                "tool_name": name,
-                                "display_name": name,
-                                "tool_type": "tool",
-                                "args": (ev.get("data") or {}).get("input", {}),
-                                "results": [],
-                                "error": err_msg,
-                                "started_at": ended_ms,
-                                "ended_at": ended_ms,
-                                "duration_ms": 0,
-                            }
-                            events.append(tool_event)
-                            payload = {k: v for k, v in tool_event.items() if k != "type"}
-                        yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
-                    # other events (on_chain_start/on_chain_end/etc.) ignored
-            else:
-                # No tools → direct streaming still in new SSE format
-                if sys_prompt:
-                    llm_messages.insert(0, SystemMessage(content=sys_prompt))
-                async for chunk in bisheng_llm.astream(llm_messages):
-                    text = extract_message_text(chunk)
-                    reasoning = extract_message_reasoning(chunk)
-                    if reasoning:
-                        if current_thinking_idx is None:
-                            start_ms = int(time.time() * 1000)
-                            events.append(
-                                {
-                                    "type": "thinking",
-                                    "content": "",
-                                    "started_at": start_ms,
-                                }
-                            )
-                            current_thinking_idx = len(events) - 1
-                            current_thinking_start = time.time()
-                        events[current_thinking_idx]["content"] += reasoning
-                        yield _sse_resp(
-                            "agent_thinking",
-                            "stream",
-                            {"content": reasoning},
-                            conversation_id,
-                        )
-                    if text:
-                        d = close_thinking()
-                        if d is not None:
-                            yield _sse_resp(
-                                "agent_thinking",
-                                "end",
-                                {"duration_ms": d},
-                                conversation_id,
-                            )
-                        text = feed_answer(text)
-                        if not text:
-                            continue
-                        yield record_answer_text(text)
-                        if scanner:
-                            hit = scanner.feed(text)
-                            if hit:
-                                logger.warning(
-                                    "workbench content safety hit tenant_id={} mode=output chat_id={}",
-                                    tenant_id,
-                                    conversation_id,
-                                )
-                                async for chunk in persist_safety_replacement(hit.auto_reply or ""):
-                                    yield chunk
-                                return
-            # Release whatever the handle converter was still holding back.
-            # Inside the try: a client hang-up on this yield must still reach
-            # the interruption branch that persists the turn.
-            pending = flush_answer()
-            if pending:
-                yield record_answer_text(pending)
-                if scanner:
-                    hit = scanner.feed(pending)
-                    if hit:
-                        logger.warning(
-                            "workbench content safety hit tenant_id={} mode=output chat_id={}",
-                            tenant_id,
-                            conversation_id,
-                        )
-                        async for chunk in persist_safety_replacement(hit.auto_reply or ""):
-                            yield chunk
-                        return
-        except BaseErrorCode as exc:
-            error_flag = True
-            error_msg = str(exc)
-            logger.exception("Agent chat BaseErrorCode")
-            # Out of platform credits: tag the type so the bubble renders the
-            # credit card (who to ask, when it resets) rather than the bare line.
-            if label_error(exc) == ErrorType.CREDIT_EXHAUSTED:
-                yield exc.to_sse_event_instance_str(
-                    data={"exception": str(exc), "error_type": ErrorType.CREDIT_EXHAUSTED.value, "detail": str(exc)}
-                )
-            else:
-                yield exc.to_sse_event_instance_str()
-        except Exception as exc:
-            error_flag = True
-            error_msg = str(exc)
-            logger.exception("Agent chat execution error")
-            # The classified type + the raw provider text ride along in `data`
-            # so the bubble can render the same title/explanation/"view details"
-            # card task mode uses, instead of a bare "服务器错误".
-            error_type = label_error(unwrap(exc))
-            # `unknown` is deliberately renamed for this surface: the shared card's
-            # generic copy talks about a "task", which reads wrong on a chat turn.
-            classified = {
-                "error_type": "chat_unknown" if error_type == ErrorType.UNKNOWN else error_type.value,
-                "detail": str(exc),
-            }
-            # Upstream LLM throttling (RPM/TPM/burst) → friendly "service busy"
-            # copy instead of dumping the raw provider 500 on the user.
-            if error_type == ErrorType.RATE_LIMIT:
-                yield LLMRateLimitError(**classified).to_sse_event_instance_str()
-            else:
-                yield ServerError(exception=exc, **classified).to_sse_event_instance_str()
-        except (asyncio.CancelledError, GeneratorExit):
-            # The stream was torn down mid-flight — client navigated away, gateway
-            # read timeout, worker restart. Neither is an `Exception`, so without
-            # this branch the code below never runs and the whole turn is lost:
-            # the conversation reloads showing only the question, even though the
-            # user watched a full answer stream in.
-            logger.warning("Agent chat stream interrupted; persisting partial answer")
-            _stop_code_executors(langchain_tools)
-            persist_interrupted_turn("stream interrupted")
-            raise
-
-        # Error paths skip the in-try flush above; keep the held-back tail in
-        # the stored answer (nothing is yielded out here — a client hang-up on
-        # a yield outside the try would lose the whole turn).
-        pending = flush_answer()
-        if pending:
-            record_answer_text(pending)
-
-        # Finalise any dangling thinking / tool events (e.g. stream interrupted
-        # mid-reasoning or mid-tool).
-        finalise_dangling_events()
-
-        log_picture_outcome()
-
-        if scanner:
-            hit = scanner.finish()
-            if hit:
-                logger.warning(
-                    "workbench content safety hit tenant_id={} mode=output chat_id={}",
-                    tenant_id,
-                    conversation_id,
-                )
-                async for chunk in persist_safety_replacement(hit.auto_reply or ""):
-                    yield chunk
-                return
-
-        # Persist agent_answer — new unified shape is `{msg, events}`.
-        # F075: every marker in the text was produced by the handle converter
-        # from the session table (model-written ids were dropped while
-        # streaming), so none is invented. Bind exactly the sources the answer
-        # cites, earlier turns included; none when it cites none. A cited
-        # source whose runtime entry has expired keeps its badge and resolves
-        # from its earlier binding or reads as expired (spec AC-12).
-        citation_items = await select_cited_items(citation_collector.list_items(), final_msg)
-        log_citation_audit(
-            chat_id=conversation_id,
-            model=data.model,
-            scope=citation_scope,
-            stats=stream_converter.stats,
-            cited=citation_items,
-        )
-        db_content: dict = {"msg": final_msg, "events": events}
-
-        persisted = True
-        resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
-        await save_message_citations(
-            message_id=resp_msg.id,
-            items=citation_items,
-            chat_id=conversation_id,
-            flow_id="",
-        )
-
-        yield _sse_resp(
-            "agent_answer",
-            "end",
-            db_content,
-            conversation_id,
-            message_id=resp_msg.id,
-            citations=citation_items,
-        )
-        yield _sse_resp("processing", "close", "", conversation_id)
-
-        # Schedule BEFORE final: the client closes the stream on that event.
-        # Retain the task so disconnecting cannot cancel conversation naming.
-        if is_new_conv or (conversation.name in (None, "", "New Chat")):
-            title_task = asyncio.create_task(
-                gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
-            )
-            _BACKGROUND_TASKS.add(title_task)
-            title_task.add_done_callback(_BACKGROUND_TASKS.discard)
-
-        # Terminal `final` sentinel so the frontend SSE hook's onEnd() fires
-        # reliably (it listens for `data.final != null`). Without this the send
-        # button stays stuck in "stop" state until the TCP stream closes.
-        final_payload = {
-            "final": True,
-            "conversation": {"conversationId": conversation_id},
-            "responseMessage": {
-                "messageId": resp_msg.id,
-                "conversationId": conversation_id,
-            },
-        }
-        yield f"data: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
-
-        await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
-
-    async def event_stream():
-        dept_flow_slot: int | None = None
-        flow_lim, flow_dept = await DepartmentFlowService.resolve_limit_and_dept(login_user)
-        if flow_lim > 0 and flow_dept is not None:
-            acquired = await DepartmentFlowService.try_acquire_daily_chat_slot(
-                flow_dept,
-                login_user.user_id,
-                flow_lim,
-            )
-            if not acquired:
-                yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()
-                return
-            dept_flow_slot = flow_dept
-        # Held explicitly so the inner generator can be closed deterministically:
-        # when this outer one is torn down, `impl` would otherwise be finalised
-        # whenever the GC and the loop's asyncgen hooks get to it — too late (or
-        # never, on a worker restart) for its interrupt branch to save the turn.
-        impl = _agent_event_stream_impl()
-        try:
-            async for chunk in impl:
-                yield chunk
-        finally:
-            await impl.aclose()
-            if dept_flow_slot is not None:
-                await DepartmentFlowService.release_daily_chat_slot(
-                    dept_flow_slot,
-                    login_user.user_id,
-                )
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+def _department_limit_stream_response() -> StreamingResponse:
+    """SSE error for a rejected execution lease at a submit entry."""
+    return StreamingResponse(
+        iter([DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()]),
+        media_type="text/event-stream",
+    )
 
 
 async def stream_chat_completion(
@@ -2637,104 +1333,27 @@ async def stream_chat_completion(
     login_user: UserPayload,
     *,
     session_subject: SessionSubject | None = None,
+    memory_register: MemoryRegister | None = None,
 ):
-    """v2.5 unified entry — every workstation chat request goes through the
-    LangGraph ReAct Agent flow. When `data.tools` is empty/None the agent
-    falls back to a plain `bisheng_llm.astream` branch (same new SSE format),
-    so callers don't need to opt in explicitly.
+    """The one entry of every workstation chat request; both callers use the unified runtime (F004).
 
-    F035 Track J: a single entry now serves both modes. ``data.task_mode`` routes
-    this turn to the linsight task kernel (the turn still belongs to the same
-    conversation/chat_id); otherwise the daily agent flow runs unchanged.
+    The login-state endpoint (no ``session_subject``) gets daily chat and deep
+    research (``data.task_mode``) alike, under either response protocol.
+
+    The Open API entry passes ``session_subject``. Its contract is unchanged
+    (AC-39): ``run_send`` answers it with today's SSE stream and the answer of
+    this message (see the ``run_send`` module docstring). It always sends
+    ``task_mode=False`` (``OpenDailyChatCompletionReq.to_internal``; an Open API
+    task is submitted through ``OpenTaskModeService.submit``), mounts no skills
+    and passes no ``memory_register``, so its turns never use long-term memory
+    (F132 AC-10).
     """
-    if data.task_mode:
-        return await _task_mode_stream_completion(request, data, login_user)
-    daily_data = data.model_copy(update={"skills": []})
-    return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
+    from . import run_send
 
-
-async def _task_mode_stream_completion(request: Request, data: APIChatCompletion, login_user: UserPayload):
-    """F035 Track J: task-mode entry — create the linsight session inside the
-    current conversation and hand off to the existing task stream.
-
-    Per-path streaming is reused: this endpoint only creates the session_version
-    (under the conversation's chat_id) and returns a handoff event carrying its
-    id over SSE; the frontend then drives start-execute + connects to the
-    existing ``task-message-stream`` WS. Keeps the linsight execution/streaming
-    infra untouched — only the submit ENTRY is unified.
-    """
-    tenant_id = workbench_tenant_id(login_user)
-    blocked = SensitiveWordPolicyService.evaluate_workbench_user_text(tenant_id, data.text or "")
-    if blocked:
-        logger.warning(
-            "workbench content safety hit tenant_id={} mode=input chat_id={}",
-            tenant_id,
-            data.conversationId or "",
-        )
-        try:
-            _ws_config, conversation, message, _llm, model_info, _is_new = await _agent_initialize_chat(
-                data, login_user, skip_llm=True
-            )
-        except (BaseErrorCode, ValueError) as exc:
-            error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
-            return StreamingResponse(
-                iter([error_response.to_sse_event_instance_str()]),
-                media_type="text/event-stream",
-            )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.exception(f"Error in task-mode content-safety setup: {exc}")
-            return StreamingResponse(
-                iter([ServerError(exception=exc).to_sse_event_instance_str()]),
-                media_type="text/event-stream",
-            )
-        return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
-
-    # F073: session + version + task-turn row + enqueue live in the shared
-    # submit core so the Open API entry cannot drift from this one. Enqueue
-    # failures stay best-effort here: the client's start-execute is the fallback.
-    from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
-
-    _session, session_version = await submit_task_turn(data, login_user)
-
-    # Generate the conversation title straight from the user's question (task
-    # mode has no "round complete" moment to hang it on). Reuse the daily-mode
-    # title helper with the daily chat model (data.model) rather than the
-    # linsight default model — task-mode title generation must not depend on the
-    # linsight model being configured.
-    logger.info(
-        f"[TASK_TITLE] entry chat_id={session_version.session_id} model={data.model!r} "
-        f"question={(data.text or '')[:40]!r}"
-    )
-    title_llm = await LLMService.get_bisheng_llm(
-        model_id=data.model,
-        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-        app_type=ApplicationTypeEnum.DAILY_CHAT,
-        user_id=login_user.user_id,
-    )
-
-    # Naming must outlive the short handoff connection. Keep a strong reference
-    # just as in daily mode; the shared generator bounds the model call.
-    if _session.name in (None, "", "New Chat"):
-        title_task = asyncio.create_task(
-            gen_title(data.text or "", title_llm, session_version.session_id, login_user, request)
-        )
-        _BACKGROUND_TASKS.add(title_task)
-        title_task.add_done_callback(_BACKGROUND_TASKS.discard)
-
-    async def _handoff_event():
-        payload = {
-            "event": "linsight_task_handoff",
-            "data": {
-                "session_version_id": session_version.id,
-                "chat_id": session_version.session_id,
-            },
-        }
-        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(_handoff_event(), media_type="text/event-stream")
+    if session_subject is None:
+        return await run_send.unified_send(request, data, login_user, memory_register=memory_register)
+    daily_data = data.model_copy(update={"skills": [], "task_mode": False})
+    return await run_send.unified_send(request, daily_data, login_user, session_subject=session_subject)
 
 
 def _to_linsight_submit(data: APIChatCompletion):

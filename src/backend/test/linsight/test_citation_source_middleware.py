@@ -20,6 +20,7 @@ from bisheng.linsight.domain.services.citation_source_middleware import (
     NUDGE_LOG_PREFIX,
     SOURCE_TABLE_HEADER,
     SOURCE_TABLE_OVERFLOW_LINE,
+    SYSTEM_NOTE_PREFIX,
     LinsightCitationSourceMiddleware,
 )
 
@@ -142,6 +143,27 @@ def _human_tail(req: _FakeReq, original_len: int) -> list[str]:
     return [m.content for m in tail]
 
 
+def _nudges(req: _FakeReq, original_len: int) -> list[str]:
+    """Nudge texts appended after the original messages (the table is not one of them)."""
+    return [c for c in _human_tail(req, original_len) if not c.startswith(SYSTEM_NOTE_PREFIX)]
+
+
+def _table_lines(req: _FakeReq) -> list[str]:
+    """The source table's lines (header first), wherever the middleware put it.
+
+    It is either the content of a trailing HumanMessage that starts with the
+    system-note label, or the labelled block at the end of the last ToolMessage.
+    """
+    for message in reversed(req.messages):
+        content = message.content if isinstance(message.content, str) else ""
+        if SYSTEM_NOTE_PREFIX in content:
+            block = content[content.index(SYSTEM_NOTE_PREFIX) :]
+            lines = block.split("\n")
+            assert lines[0] == SYSTEM_NOTE_PREFIX
+            return lines[1:]
+    raise AssertionError("no labelled source table in the request")
+
+
 # --------------------------------------------------------------------------
 # source table
 # --------------------------------------------------------------------------
@@ -152,10 +174,13 @@ async def test_source_table_is_appended_as_last_message_and_state_untouched(fake
 
     seen = await _run(LinsightCitationSourceMiddleware(scope), req)
 
+    # First call: the request ends in the user's task, so the table falls back to
+    # a HumanMessage — labelled as a system note so it is not read as a new request.
     assert len(seen.messages) == 2
     table = seen.messages[-1]
     assert isinstance(table, HumanMessage)
-    lines = table.content.split("\n")
+    assert table.content.startswith(SYSTEM_NOTE_PREFIX)
+    lines = _table_lines(seen)
     assert lines[0] == SOURCE_TABLE_HEADER
     assert lines[1] == "S1 知识库·知识文档1（第1页）"
     assert lines[2] == "S2 网页·网页标题2"
@@ -173,7 +198,7 @@ async def test_source_table_truncates_title_to_40_chars(fake_redis):
 
     seen = await _run(LinsightCitationSourceMiddleware(scope), _req())
 
-    assert seen.messages[-1].content.split("\n")[1] == "S1 知识库·" + "甲" * 40
+    assert _table_lines(seen)[1] == "S1 知识库·" + "甲" * 40
 
 
 @pytest.mark.parametrize("scope", [None, _scope(3, enabled=False), _scope(0)])
@@ -190,7 +215,7 @@ async def test_row_cap_keeps_latest_handles_and_adds_tail_line(fake_redis):
 
     seen = await _run(LinsightCitationSourceMiddleware(scope), _req())
 
-    lines = seen.messages[-1].content.split("\n")
+    lines = _table_lines(seen)
     assert lines[0] == SOURCE_TABLE_HEADER
     assert lines[-1] == SOURCE_TABLE_OVERFLOW_LINE
     rows = lines[1:-1]
@@ -203,9 +228,51 @@ async def test_row_cap_keeps_latest_handles_and_adds_tail_line(fake_redis):
 async def test_custom_max_rows(fake_redis):
     seen = await _run(LinsightCitationSourceMiddleware(_scope(5), max_rows=2), _req())
 
-    lines = seen.messages[-1].content.split("\n")
+    lines = _table_lines(seen)
     assert lines[1:-1] == ["S4 网页·网页标题4", "S5 知识库·知识文档5（第5页）"]
     assert lines[-1] == SOURCE_TABLE_OVERFLOW_LINE
+
+
+async def test_table_rides_on_trailing_tool_result_not_a_new_user_turn(fake_redis):
+    """Regression (120, qwen-max, 2026-11-17): a trailing HumanMessage holding the
+    table on the final call made the model answer the table ("请告知任务目标")
+    instead of finishing. When the request ends in a tool result, the table is
+    appended to a request-only copy of it and no user-looking message is added."""
+    messages = [
+        HumanMessage(content="task"),
+        AIMessage(content="", tool_calls=[{"name": "ls", "args": {"path": "."}, "id": "call-ls", "type": "tool_call"}]),
+        ToolMessage(content="output/x.md", tool_call_id="call-ls", name="ls"),
+    ]
+    original_tool = messages[-1]
+    req = _req(messages)
+
+    seen = await _run(LinsightCitationSourceMiddleware(_scope(2)), req)
+
+    assert len(seen.messages) == len(messages)
+    last = seen.messages[-1]
+    assert isinstance(last, ToolMessage)
+    assert last.tool_call_id == "call-ls" and last.name == "ls"
+    assert last.content.startswith("output/x.md\n\n" + SYSTEM_NOTE_PREFIX)
+    assert _table_lines(seen)[:2] == [SOURCE_TABLE_HEADER, "S1 知识库·知识文档1（第1页）"]
+    # the original message object, the request and graph state are untouched
+    assert original_tool.content == "output/x.md"
+    assert req.messages[-1] is original_tool
+    assert seen.state["messages"][-1] is original_tool
+
+
+async def test_tool_result_with_list_content_falls_back_to_labelled_human_message(fake_redis):
+    messages = [
+        HumanMessage(content="task"),
+        AIMessage(content="", tool_calls=[{"name": "read_file", "args": {}, "id": "call-r", "type": "tool_call"}]),
+        ToolMessage(content=[{"type": "text", "text": "page 1"}], tool_call_id="call-r", name="read_file"),
+    ]
+
+    seen = await _run(LinsightCitationSourceMiddleware(_scope(2)), _req(messages))
+
+    assert seen.messages[-2] is messages[-1]
+    assert isinstance(seen.messages[-1], HumanMessage)
+    assert seen.messages[-1].content.startswith(SYSTEM_NOTE_PREFIX)
+    assert _table_lines(seen)[0] == SOURCE_TABLE_HEADER
 
 
 # --------------------------------------------------------------------------
@@ -218,11 +285,16 @@ async def test_nudge_emitted_for_uncited_output_md_and_logged(fake_redis, nudge_
 
     seen = await _run(LinsightCitationSourceMiddleware(scope), req)
 
+    # The write turn ends in a ToolMessage: the table rides on it, the nudge is
+    # the only appended message, and both are labelled as system text.
+    assert _table_lines(seen)[0] == SOURCE_TABLE_HEADER
+    assert isinstance(seen.messages[len(messages) - 1], ToolMessage)
     tail = _human_tail(seen, len(messages))
-    assert len(tail) == 2
-    assert tail[0].startswith(SOURCE_TABLE_HEADER)
-    assert tail[1].startswith("output/x.md 已写入成功，但正文没有来源编号。")
-    assert "edit_file" in tail[1] and "[Sn]" in tail[1]
+    assert len(tail) == 1
+    assert tail[0].startswith("【系统提醒，不是用户的新消息】output/x.md 已写入成功，但正文没有来源编号。")
+    # F004 §5 #18: a literal [Sn] is echoed to the user; the nudge gives a real example.
+    assert "edit_file" in tail[0] and "[S3]" in tail[0] and "[Sn]" not in tail[0]
+    assert "按用户最初的任务正常收尾" in tail[0]
     # state untouched
     assert seen.state["messages"] == messages
     # dedupe recorded on the session handle table with the table's TTL
@@ -252,8 +324,8 @@ async def test_nudge_accepts_leading_slash_and_uses_basename(fake_redis, nudge_l
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(2)), _req(messages))
 
-    tail = _human_tail(seen, len(messages))
-    assert tail[1].startswith("output/Final.MD 已写入成功")
+    tail = _nudges(seen, len(messages))
+    assert tail[0].startswith("【系统提醒，不是用户的新消息】output/Final.MD 已写入成功")
     assert ("INFO", f"{NUDGE_LOG_PREFIX} session={SVID} file=output/sub/Final.MD") in nudge_log
 
 
@@ -262,7 +334,7 @@ async def test_nudge_for_edit_file_uses_new_string(fake_redis):
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(2)), _req(messages))
 
-    assert len(_human_tail(seen, len(messages))) == 2
+    assert len(_nudges(seen, len(messages))) == 1
 
 
 async def test_no_nudge_when_file_has_handles(fake_redis, nudge_log):
@@ -270,8 +342,8 @@ async def test_no_nudge_when_file_has_handles(fake_redis, nudge_log):
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3)), _req(messages))
 
-    tail = _human_tail(seen, len(messages))
-    assert len(tail) == 1 and tail[0].startswith(SOURCE_TABLE_HEADER)
+    assert _nudges(seen, len(messages)) == []
+    assert _table_lines(seen)[0] == SOURCE_TABLE_HEADER
     assert fake_redis.set_calls == []
     assert not any(NUDGE_LOG_PREFIX in msg for _, msg in nudge_log)
 
@@ -283,8 +355,8 @@ async def test_no_nudge_twice_for_same_file_in_process(fake_redis, nudge_log):
     first = await _run(mw, _req(messages))
     second = await _run(mw, _req(messages))
 
-    assert len(_human_tail(first, len(messages))) == 2
-    assert len(_human_tail(second, len(messages))) == 1
+    assert len(_nudges(first, len(messages))) == 1
+    assert _nudges(second, len(messages)) == []
     assert len(fake_redis.set_calls) == 1
     assert sum(1 for _, msg in nudge_log if NUDGE_LOG_PREFIX in msg and "file=" in msg) == 1
 
@@ -296,7 +368,7 @@ async def test_no_nudge_when_redis_says_already_nudged(fake_redis):
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3)), _req(messages))
 
-    assert len(_human_tail(seen, len(messages))) == 1
+    assert _nudges(seen, len(messages)) == []
     assert fake_redis.set_calls == []
 
 
@@ -306,7 +378,7 @@ async def test_no_nudge_during_soft_landing(fake_redis):
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3), budget_sink=sink), _req(messages))
 
-    assert len(_human_tail(seen, len(messages))) == 1
+    assert _nudges(seen, len(messages)) == []
     assert fake_redis.set_calls == []
 
 
@@ -315,8 +387,8 @@ async def test_no_nudge_for_subagent_instance(fake_redis):
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3), is_subagent=True), _req(messages))
 
-    tail = _human_tail(seen, len(messages))
-    assert len(tail) == 1 and tail[0].startswith(SOURCE_TABLE_HEADER)
+    assert _nudges(seen, len(messages)) == []
+    assert _table_lines(seen)[0] == SOURCE_TABLE_HEADER
     assert fake_redis.set_calls == []
 
 
@@ -329,7 +401,7 @@ async def test_no_nudge_when_tool_result_is_error(fake_redis, status, result):
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3)), _req(messages))
 
-    assert len(_human_tail(seen, len(messages))) == 1
+    assert _nudges(seen, len(messages)) == []
 
 
 @pytest.mark.parametrize(
@@ -340,7 +412,7 @@ async def test_no_nudge_for_non_deliverable_paths(fake_redis, path):
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3)), _req(messages))
 
-    assert len(_human_tail(seen, len(messages))) == 1
+    assert _nudges(seen, len(messages)) == []
 
 
 async def test_no_nudge_without_write_in_last_batch(fake_redis):
@@ -352,7 +424,7 @@ async def test_no_nudge_without_write_in_last_batch(fake_redis):
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3)), _req(messages))
 
-    assert len(_human_tail(seen, len(messages))) == 1
+    assert _nudges(seen, len(messages)) == []
 
 
 async def test_redis_failure_still_yields_table_and_nudge(monkeypatch, nudge_log):
@@ -361,9 +433,10 @@ async def test_redis_failure_still_yields_table_and_nudge(monkeypatch, nudge_log
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3)), _req(messages))
 
-    tail = _human_tail(seen, len(messages))
-    assert len(tail) == 2
-    assert tail[1].startswith("output/x.md 已写入成功")
+    assert _table_lines(seen)[0] == SOURCE_TABLE_HEADER
+    tail = _nudges(seen, len(messages))
+    assert len(tail) == 1
+    assert "output/x.md 已写入成功" in tail[0]
     assert ("INFO", f"{NUDGE_LOG_PREFIX} session={SVID} file=output/x.md") in nudge_log
 
 
@@ -373,7 +446,8 @@ async def test_redis_client_unavailable_still_yields_table_and_nudge(monkeypatch
 
     seen = await _run(LinsightCitationSourceMiddleware(_scope(3)), _req(messages))
 
-    assert len(_human_tail(seen, len(messages))) == 2
+    assert _table_lines(seen)[0] == SOURCE_TABLE_HEADER
+    assert len(_nudges(seen, len(messages))) == 1
 
 
 async def test_preparation_error_passes_request_through(fake_redis):
@@ -418,10 +492,11 @@ def test_sync_hook_appends_table_and_nudge_without_redis(monkeypatch, nudge_log)
         return "RESP"
 
     assert mw.wrap_model_call(_req(messages), handler) == "RESP"
-    assert len(_human_tail(captured["req"], len(messages))) == 2
+    assert _table_lines(captured["req"])[0] == SOURCE_TABLE_HEADER
+    assert len(_nudges(captured["req"], len(messages))) == 1
     # in-process dedupe still applies on the sync path
     assert mw.wrap_model_call(_req(messages), handler) == "RESP"
-    assert len(_human_tail(captured["req"], len(messages))) == 1
+    assert _nudges(captured["req"], len(messages)) == []
 
 
 def test_registers_no_tools_and_has_distinct_names():

@@ -3,6 +3,7 @@
  * renderable node trees (flow nodes / timeline nodes). Split out of stepUtils.ts —
  * see execTypes.ts for the frame contract this consumes.
  */
+import { failureMetadataEqual } from '~/utils/failureInfo';
 import type {
     DeepStepGroup,
     ExecStepEventData,
@@ -139,7 +140,7 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
  * so the comparators must work on values, not identity — yet two reference checks
  * are sound: `params` traces back to the stable raw history frame (same object for
  * an unchanged step), and streaming `output` only ever grows so its length is a
- * reliable change signal. `extraInfo` is intentionally NOT compared — mergeStepFrames
+ * reliable change signal. Only rendered failure metadata inside `extraInfo` is compared — mergeStepFrames
  * spreads a new object each rebuild (always unequal) and nothing in the render path
  * reads it.
  */
@@ -151,7 +152,8 @@ export function mergedStepRenderEqual(a: MergedStep, b: MergedStep): boolean {
         a.stepType === b.stepType &&
         a.output.length === b.output.length &&
         a.params === b.params &&
-        a.callReason === b.callReason
+        a.callReason === b.callReason &&
+        failureMetadataEqual(a.extraInfo?.failure_info, b.extraInfo?.failure_info)
     );
 }
 

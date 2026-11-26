@@ -28,7 +28,12 @@ export function useCitationPreview(preview: CitationDocumentPreviewState | null,
   const chunks=useMemo(()=>preview?.locateChunk && detail ? (preview.itemIds?.length ? preview.itemIds : [preview.itemId]).map(id=>getCitationItem(detail,id)).map(item=>item?.content||item?.snippet||'').filter(Boolean) : [],[preview?.locateChunk,preview?.itemIds,preview?.itemId,detail,getCitationItem]);
   const download=async()=>{
     if(!current.current.mounted || current.current.key!==key || !resource?.originalUrl)return;
-    await services.download(resource.originalUrl,fileName);
+    const url=detail && services.resolveDownloadUrl
+      ? await services.resolveDownloadUrl(detail)
+      : resource.originalUrl;
+    if(!current.current.mounted || current.current.key!==key)return;
+    if(!url)throw new Error('Download unavailable');
+    await services.download(url,fileName);
   };
   return {...state,fileName,fileType,fileUrl,transcriptUrl:isMedia ? resource?.previewUrl || '' : '',originalUrl:resource?.originalUrl || '',bboxes,targetBBox:bboxes[0]??null,chunks,download};
 }

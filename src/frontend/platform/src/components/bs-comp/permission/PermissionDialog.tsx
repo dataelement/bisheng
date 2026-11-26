@@ -1,4 +1,5 @@
 import { Alert, Button } from "@bisheng/ui";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 
 import { Checkbox } from "@bisheng/ui";
 import {
@@ -16,7 +17,6 @@ import {
   type PermissionGrantAssignee,
   type ResourcePermissionContext,
 } from "@/controllers/API/permission";
-import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { permissionDialogClassName, PermissionSubjectTabs } from "./PermissionSubjectLayout";
@@ -33,6 +33,7 @@ interface PermissionDialogProps {
   resourceId: string;
   resourceName: string;
   allowAllMembers?: boolean;
+  systemPreset?: boolean;
 }
 
 const SUBJECT_TABS: Array<{ value: SubjectType; labelKey: string }> = [
@@ -48,6 +49,7 @@ export function PermissionDialog({
   resourceId,
   resourceName,
   allowAllMembers = false,
+  systemPreset = false,
 }: PermissionDialogProps) {
   const { t } = useTranslation("permission");
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -136,13 +138,7 @@ export function PermissionDialog({
           </DialogHeader>
 
           {loading && (
-            <div
-              className="flex min-h-56 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground"
-              role="status"
-            >
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-              {t("dialog.loading")}
-            </div>
+            <LoadingState className="min-h-56 flex-1" label={t("dialog.loading")} />
           )}
 
           {failed && !loading && (
@@ -201,6 +197,7 @@ export function PermissionDialog({
                     context={context}
                     refreshKey={refreshKey}
                     fixedSubjectType={subjectType}
+                    systemPreset={systemPreset}
                     onRosterChange={setAssignees}
                     onMutationSuccess={handleGrantSuccess}
                   />

@@ -29,6 +29,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 
+import httpx
 import openai
 from langchain_core.exceptions import ContextOverflowError
 from langgraph.errors import GraphRecursionError
@@ -38,6 +39,7 @@ from bisheng.common.errcode.linsight import (
     LinsightBishengLLMError,
     LinsightContextCompressFailedError,
     LinsightContextOverflowError,
+    LinsightTaskExecutionError,
 )
 
 
@@ -167,6 +169,7 @@ _RATE_LIMIT_SIGNATURES: tuple[str, ...] = (
 _TRANSIENT_TRANSPORT_SIGNATURES: tuple[str, ...] = (
     "connection reset",
     "connection refused",
+    "connectionrefusederror",
     "broken pipe",
     "i/o timeout",
     "unexpected eof",
@@ -352,15 +355,30 @@ def unwrap(error: BaseException) -> BaseException:
     """Follow the ``__cause__`` chain to the original provider exception.
 
     ``task_exec`` wraps the real cause in ``TaskExecutionError(...) from e``;
-    classification should run on the root cause, not the wrapper. The walk stops
-    early at a recognised context overflow or compression failure: those are
-    already the provider error in its classified form, and the SDK error they
-    chain to would read as a plain 400.
+    classification should skip that wrapper. Stop at recognised SDK or transport
+    exceptions before their lower-level causes lose the useful error type.
+    Context overflow and compression failures also keep their classified form
+    rather than the plain SDK 400 they may chain to.
     """
     current = error
     depth = 0
     while getattr(current, "__cause__", None) is not None and depth < 10:
-        if _is_context_overflow(current) or _is_context_compress_failed(current):
+        # SDK/status errors retain semantics which their low-level cause may lose.
+        if (
+            _is_context_overflow(current)
+            or _is_context_compress_failed(current)
+            or isinstance(
+                current,
+                (
+                    openai.APIError,
+                    httpx.NetworkError,
+                    httpx.TimeoutException,
+                    httpx.RemoteProtocolError,
+                    ConnectionError,
+                    TimeoutError,
+                ),
+            )
+        ):
             return current
         current = current.__cause__  # type: ignore[assignment]
         depth += 1
@@ -397,7 +415,16 @@ def classify_behavior(exc: BaseException) -> Behavior:
         return Behavior.FAIL_FAST
 
     # 2) RETRYABLE — transient network / server / non-quota rate-limit.
-    if isinstance(exc, (openai.APITimeoutError, openai.APIConnectionError)):
+    if isinstance(
+        exc,
+        (
+            openai.APITimeoutError,
+            openai.APIConnectionError,
+            httpx.NetworkError,
+            httpx.TimeoutException,
+            httpx.RemoteProtocolError,
+        ),
+    ):
         return Behavior.RETRYABLE
     if isinstance(exc, openai.RateLimitError):  # 429, non-quota (quota handled above)
         return Behavior.RETRYABLE
@@ -436,7 +463,33 @@ def label_text(text: str) -> ErrorType:
         return ErrorType.QUOTA_EXHAUSTED
     if any(sig in lowered for sig in _RATE_LIMIT_SIGNATURES):
         return ErrorType.RATE_LIMIT
+    if not any(
+        marker in lowered
+        for marker in (
+            "authenticationerror",
+            "permissiondeniederror",
+            "unauthorized",
+            "forbidden",
+            "invalid api key",
+            "invalid_api_key",
+        )
+    ) and any(sig in lowered for sig in _TRANSIENT_TRANSPORT_SIGNATURES):
+        return ErrorType.SERVICE_UNAVAILABLE
     return ErrorType.UNKNOWN
+
+
+def recover_model_transport_failure(payload: dict) -> dict:
+    """Repair only unknown model failures with explicit persisted transport evidence.
+
+    This is a read-time projection; original database results stay unchanged.
+    Explicit terminal labels and non-model/platform error codes are preserved.
+    """
+    if payload.get("error_type") not in (None, "unknown") or payload.get("error_code") != LinsightBishengLLMError.Code:
+        return payload
+    detail = payload.get("detail")
+    if isinstance(detail, str) and label_text(detail) is ErrorType.SERVICE_UNAVAILABLE:
+        return {**payload, "error_type": ErrorType.SERVICE_UNAVAILABLE.value}
+    return payload
 
 
 def label_error(exc: BaseException) -> ErrorType:
@@ -466,8 +519,10 @@ def label_error(exc: BaseException) -> ErrorType:
         return ErrorType.AUTH_ERROR
     if isinstance(exc, openai.RateLimitError) or _is_rate_limit(exc):
         return ErrorType.RATE_LIMIT
-    if isinstance(exc, (openai.APITimeoutError, openai.APIConnectionError, TimeoutError, ConnectionError)):
+    if isinstance(exc, (openai.APITimeoutError, httpx.TimeoutException, TimeoutError)):
         return ErrorType.NETWORK_TIMEOUT
+    if isinstance(exc, (openai.APIConnectionError, httpx.NetworkError, httpx.RemoteProtocolError, ConnectionError)):
+        return ErrorType.SERVICE_UNAVAILABLE
     status = _status_code(exc)
     if isinstance(exc, openai.InternalServerError) or (status is not None and 500 <= status < 600):
         return ErrorType.SERVICE_UNAVAILABLE
@@ -503,11 +558,41 @@ def classify_for_event(error: BaseException | str) -> ClassifiedError:
             detail=error,
         )
     error_type = label_error(unwrap(error))
+    umbrella = LinsightBishengLLMError.Code
+    if error_type is ErrorType.UNKNOWN and not _from_model_service(error):
+        umbrella = LinsightTaskExecutionError.Code
     return ClassifiedError(
         error_type=error_type.value,
-        error_code=_ERROR_CODES.get(error_type, LinsightBishengLLMError.Code),
+        error_code=_ERROR_CODES.get(error_type, umbrella),
         detail=str(error),
     )
+
+
+_MODEL_SDK_MODULES = ("openai", "anthropic", "langchain", "dashscope", "google.genai", "httpx", "httpcore")
+
+
+def _from_model_service(error: BaseException) -> bool:
+    """Does any exception in the cause chain come from a model SDK or a model call?
+
+    An unrecognised failure keeps the umbrella LLM code 11090 only when it does;
+    otherwise it is a platform failure (e.g. an AttributeError in quota code) and
+    gets 11091.
+    """
+    from bisheng.common.services.failure_context import FailureContextAdapter
+
+    seen: set[int] = set()
+    pending = [error]
+    while pending and len(seen) < 64:
+        current = pending.pop()
+        if not isinstance(current, BaseException) or id(current) in seen:
+            continue
+        seen.add(id(current))
+        module = type(current).__module__ or ""
+        if module.startswith(_MODEL_SDK_MODULES) or isinstance(current, LinsightBishengLLMError):
+            return True
+        pending.extend(getattr(current, key, None) for key in ("__cause__", "__context__"))
+    info = FailureContextAdapter.from_error(error)
+    return bool(info and info.get("category") == "model_service")
 
 
 _ERROR_CODES: dict[ErrorType, int] = {

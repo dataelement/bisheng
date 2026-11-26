@@ -340,8 +340,13 @@ async def forward(
         # The raw byte pairs are exactly what arrived, so they are exactly what
         # leaves. ``raw_headers`` is assigned after construction because
         # ``StreamingResponse(headers=...)`` only accepts a Mapping.
+        stream = response.aiter_raw()
+        if response.headers.get("content-type", "").split(";", 1)[0].strip() == "text/event-stream":
+            from app_proxy.sse import authorized_events
+
+            stream = authorized_events(response, request, verdict, slug=slug, request_id=request_id)
         proxied = StreamingResponse(
-            response.aiter_raw(),
+            stream,
             status_code=response.status_code,
             background=BackgroundTask(response.aclose),
         )

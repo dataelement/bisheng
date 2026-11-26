@@ -1,6 +1,6 @@
 """Shared task-mode submit core (F073).
 
-Both the workbench SSE entry (``chat_service._task_mode_stream_completion``) and
+Both the workbench send entry (``run_send``) and
 the Open API JSON entry create a task turn the same way: session + version →
 task-turn row → enqueue. Keeping one implementation stops the two from drifting
 (the "persist before enqueue" race fix below was learned the hard way).
@@ -12,11 +12,16 @@ turn, the Open API writes nothing) and generate titles differently.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from loguru import logger
 
+from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.linsight import LinsightStartTaskError, LinsightUseUpError
 from bisheng.common.errcode.open_api import OpenApiTaskQueueUnavailableError
+from bisheng.common.services.config_service import settings
 from bisheng.database.models.session import MessageSession
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
@@ -37,33 +42,75 @@ async def submit_task_turn(
     telemetry_source: str = "platform",
     session_name: str = "New Chat",
     strict_enqueue: bool = False,
+    on_session_created: Callable[[MessageSession, LinsightSessionVersion], Awaitable[None]] | None = None,
+    run_id: str | None = None,
+    persist_user_turn: bool = True,
 ) -> tuple[MessageSession, LinsightSessionVersion]:
     """Create the task turn and hand it to the linsight queue.
 
-    ``strict_enqueue=False`` (workbench): an enqueue failure is logged and the
-    browser's later start-execute is the fallback. ``strict_enqueue=True``
-    (Open API, no browser to fall back on): an enqueue failure marks the version
-    failed and raises 26068 (HTTP 503), so the caller never receives an id for a
-    task that will not run.
+    An enqueue failure marks the version failed and raises, so the caller never
+    receives an id for a task that will not run: 26068 (HTTP 503) with
+    ``strict_enqueue=True`` (Open API), 11130 otherwise (the unified send entry,
+    which then gives the conversation back).
+
+    ``on_session_created`` (F132): awaited once the conversation exists and
+    before the run is queued. Only the logged-in daily task-mode entry passes
+    it (long-term memory registration); the Open API never does.
+
+    ``run_id`` (F004): the run id the unified send entry reserved the
+    conversation with; it travels in the queue item so the worker claims the
+    conversation under the same id, and it is stored on the run record
+    (``api_meta["run_id"]``) so the record of a run that is still in the queue
+    is found by its run id. None for the Open API.
+
+    ``persist_user_turn=False`` (F004 relay run): the question rows of the
+    messages already exist (they were written when the messages joined the
+    inbox), so no second question row is written.
     """
     # Local imports avoid a module-level workstation->linsight cycle.
     from bisheng.linsight.domain import utils as linsight_execute_utils
     from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
     from bisheng.workstation.domain.services.chat_service import _to_linsight_submit
 
+    project_intent = None
+    if data.project_id is not None:
+        if session_subject is not None or api_meta is not None or telemetry_source != "platform" or strict_enqueue:
+            from bisheng.common.errcode.chat import ProjectInputError
+
+            raise ProjectInputError()
+        project_intent = {"project_id": data.project_id}
+    consumed = await _consume_task_invite(login_user.user_id)
     submit_obj = _to_linsight_submit(data)
     # Pass the original daily-shape files (filepath/type/file_id) so the user
     # question turn persists its attachments and they render after a refresh
     # (the submit schema's SubmitFileSchema drops the display fields).
-    session, session_version = await LinsightWorkbenchImpl.submit_user_question(
-        submit_obj,
-        login_user,
-        display_files=data.files,
-        session_subject=session_subject,
-        api_meta=api_meta,
-        telemetry_source=telemetry_source,
-        session_name=session_name,
-    )
+    try:
+        session, session_version = await LinsightWorkbenchImpl.submit_user_question(
+            submit_obj,
+            login_user,
+            display_files=data.files,
+            display_references=data.composer_references,
+            session_subject=session_subject,
+            api_meta=api_meta,
+            telemetry_source=telemetry_source,
+            session_name=session_name,
+            **({"project_intent": project_intent} if project_intent else {}),
+            **({} if persist_user_turn else {"persist_user_turn": False}),
+        )
+    except Exception:
+        if consumed:
+            await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
+        raise
+    if run_id is not None:
+        # Before the run can be queued or stopped: ``task_exec._find_run_record``
+        # finds the record of a queued run by this (the worker stores the same key).
+        from bisheng.linsight.domain.task_exec import RUN_ID_META_KEY
+
+        meta = session_version.api_meta if isinstance(session_version.api_meta, dict) else {}
+        session_version.api_meta = {**meta, RUN_ID_META_KEY: run_id}
+        await LinsightSessionVersionDao.insert_one(session_version)
+    if on_session_created is not None:
+        await on_session_created(session, session_version)
 
     # Persist the bot task turn BEFORE enqueueing. The worker's start-time call
     # (`_execute_workflow`) is the same find-then-insert upsert with no unique
@@ -85,19 +132,20 @@ async def submit_task_turn(
     # start-execute remains a late retry and is safe to arrive after this — the
     # executor rejects re-entry on an already-running session.
     try:
-        await linsight_execute_utils.enqueue_session_for_execution(session_version)
+        await linsight_execute_utils.enqueue_session_for_execution(
+            session_version, **({"run_id": run_id} if run_id is not None else {})
+        )
     except Exception as exc:
-        if not strict_enqueue:
-            logger.exception(
-                f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
-                f"svid={session_version.id}; relying on client start-execute"
-            )
-            return session, session_version
         logger.exception(
             f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
             f"svid={session_version.id}; marking the version failed"
         )
         await _mark_enqueue_failed(session_version, linsight_execute_utils)
+        if consumed:
+            await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
+        if not strict_enqueue:
+            # F004 unified send / relay run: the caller releases the reservation.
+            raise LinsightStartTaskError() from exc
         raise OpenApiTaskQueueUnavailableError() from exc
 
     return session, session_version
@@ -114,6 +162,20 @@ async def _mark_enqueue_failed(session_version: LinsightSessionVersion, linsight
         await linsight_execute_utils.persist_task_turn_message(session_version)
     except Exception:
         logger.exception(f"[TASK_SUBMIT] could not record the enqueue failure svid={session_version.id}")
+
+
+async def _consume_task_invite(user_id: int) -> bool:
+    """Consume one invite use when the switch is on.
+
+    Returns whether a use was taken, so the caller can give it back if the
+    turn is never created. A missing switch stays off.
+    """
+    system_config = await settings.aget_all_config()
+    if not system_config.get("linsight_invitation_code", False):
+        return False
+    if await InviteCodeService.use_invite_code(user_id=user_id) is False:
+        raise LinsightUseUpError()
+    return True
 
 
 __all__ = ["ENQUEUE_FAILED_MESSAGE", "submit_task_turn"]

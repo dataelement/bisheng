@@ -1,0 +1,36 @@
+import request from "@/controllers/request";
+import type { PricingCurrency } from "./modelPricing";
+
+export type ModelType = "llm" | "embedding" | "rerank" | "asr" | "asr_rt" | "tts";
+export interface DiscoveredModel {
+  model_name: string;
+  display_name: string;
+  model_type: ModelType | null;
+  type_source: "metadata" | "registry" | "unknown" | "unsupported" | "speech";
+  // Present when the vendor model list published a total context window.
+  context_window?: number;
+  // F016: present on rows listed from the bundled price catalog.
+  catalog?: { vendor: string; label: string; currency: PricingCurrency; input: string; output: string };
+}
+export type DiscoverySource = "auto" | "live" | "preset";
+export interface DiscoveryResult {
+  models: DiscoveredModel[];
+  source?: "live" | "preset";
+  // "price_catalog": F016 bundled price catalog, shown when no vendor list is available.
+  scope?: "catalog" | "local" | "deployments" | "azure_models" | "price_catalog";
+  docs_url?: string;
+  catalog_date?: string;
+}
+export interface DiscoveryConnection {
+  provider: string;
+  config: Record<string, string>;
+  server_id?: number;
+  source?: DiscoverySource;
+  options?: Record<string, string>;
+}
+export async function discoverModels(
+  connection: DiscoveryConnection,
+): Promise<DiscoveryResult> {
+  const options = { preserveError: true, showError: false, timeout: 60000 };
+  return await request.post("/api/v1/llm/models/discover", connection, options);
+}

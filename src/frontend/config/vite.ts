@@ -49,6 +49,7 @@ interface FrontendProxyOptions {
   rewrite?: (url: string) => string;
   verbose?: boolean;
   minioEnvName?: string;
+  legacyAdminScope?: boolean;
 }
 
 /** Shared API/WS safety; each application owns its route prefixes and service targets. */
@@ -59,7 +60,7 @@ export function createFrontendProxy(
   const warnMinio = options.minioEnvName
     ? createMinioWarning(options.minioEnvName, target)
     : undefined;
-  return {
+  const config: ProxyOptions = {
     target,
     changeOrigin: true,
     xfwd: true,
@@ -83,4 +84,18 @@ export function createFrontendProxy(
       }
     },
   };
+  if (options.legacyAdminScope) {
+    config.bypass = (request) => {
+      const requestUrl = request.url ?? '';
+      const url = options.rewrite?.(requestUrl) ?? requestUrl;
+      const isScopeRead = request.method === 'GET' && url === '/api/v1/admin/request-scope';
+      const isBootstrap = request.method === 'POST' && url === '/api/v1/admin/request-scope/bootstrap';
+      if (!isScopeRead && !isBootstrap) return;
+      if (request.headers['transfer-encoding'] || Number(request.headers['content-length'] ?? 0) !== 0) return;
+      // The old endpoint authenticates the current admin and returns their actual scope.
+      request.method = 'GET';
+      request.url = '/api/v1/admin/tenant-scope';
+    };
+  }
+  return config;
 }

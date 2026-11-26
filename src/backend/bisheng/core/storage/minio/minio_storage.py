@@ -25,11 +25,14 @@ from urllib3 import BaseHTTPResponse, PoolManager
 from urllib3.util import Timeout
 from urllib3.util.retry import Retry
 
+from bisheng.common.errcode.storage import BrowserObjectBucketError
 from bisheng.common.services.config_service import settings as _bisheng_settings
+from bisheng.common.services.failure_context import FailureContextAdapter, failure_boundary
 from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.config.settings import MinioConf
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.storage.base import BaseStorage
+from bisheng.core.storage.browser_object_path import browser_bucket_allowed, rewrite_browser_object_text
 
 # F017 AC-06: prefix pattern installed by multi_tenant layout —
 #   Root       → no prefix (e.g. ``knowledge/<file>``)
@@ -133,6 +136,12 @@ def _storage_metric(op: str):
         yield
     except Exception as exc:
         result, http_status, err_code = _classify_storage_exc(exc)
+        transport = type(exc).__module__.startswith(("urllib3", "aiohttp", "httpx", "requests"))
+        storage_error = isinstance(exc, S3Error) and getattr(exc, "code", None) not in ("NoSuchKey", "NoSuchObject")
+        if storage_error or transport or isinstance(exc, (TimeoutError, ConnectionError)):
+            FailureContextAdapter.capture(
+                exc, category="object_storage", service="minio", operation="upload" if op == "put" else "download"
+            )
         # Re-raise a thawed mirror: this CM adds a generator frame whose
         # gen.throw() would reassign __traceback__ on a frozen S3Error and mask
         # the real error with FrozenInstanceError (design §5 坑 6).
@@ -445,7 +454,6 @@ class MinioStorage(BaseStorage, ABC):
         content_type: str = "application/octet-stream",
         **kwargs,
     ) -> None:
-
         if bucket_name is None:
             bucket_name = self.bucket
 
@@ -519,7 +527,6 @@ class MinioStorage(BaseStorage, ABC):
 
     @_metered("get")
     def get_object_sync(self, bucket_name: str | None = None, object_name: str = None) -> bytes | None:
-
         if bucket_name is None:
             bucket_name = self.bucket
 
@@ -597,11 +604,9 @@ class MinioStorage(BaseStorage, ABC):
                 raise StorageSharingFallbackError() from e2
 
     async def object_exists(self, bucket_name: str | None = None, object_name: str = None) -> bool:
-
         return await asyncio.to_thread(self.object_exists_sync, bucket_name=bucket_name, object_name=object_name)
 
     def object_exists_sync(self, bucket_name: str | None = None, object_name: str = None) -> bool:
-
         if not bucket_name:
             bucket_name = self.bucket
 
@@ -632,7 +637,6 @@ class MinioStorage(BaseStorage, ABC):
     async def copy_object(
         self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
     ) -> None:
-
         return await asyncio.to_thread(
             self.copy_object_sync,
             source_bucket=source_bucket,
@@ -641,10 +645,10 @@ class MinioStorage(BaseStorage, ABC):
             dest_object=dest_object,
         )
 
+    @failure_boundary("object_storage", "minio", "write_file")
     def copy_object_sync(
         self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
     ) -> None:
-
         if source_bucket is None:
             source_bucket = self.tmp_bucket
 
@@ -696,6 +700,9 @@ class MinioStorage(BaseStorage, ABC):
         if object_name[0] == "/":
             object_name = object_name[1:]
 
+        if clear_host and not browser_bucket_allowed(bucket, self.bucket, self.tmp_bucket):
+            raise BrowserObjectBucketError()
+
         share_link = self.share_minio_client.presigned_get_object(
             bucket, object_name, expires=timedelta(days=expire_days)
         )
@@ -717,9 +724,10 @@ class MinioStorage(BaseStorage, ABC):
         TODO The logical solution is to deploy ahttpsright of privacyminioUse with front-end
         to be erasedurlhitting the nail on the headminio share<g id="Bold">Address:</g> Let the front end throughnginxProxy to access resources
         """
-        share_host = self.get_minio_share_host()
 
-        return file_url.replace(share_host, "")
+        share_host = self.get_minio_share_host()
+        stripped = file_url.replace(share_host, "")
+        return rewrite_browser_object_text(stripped, self.bucket or "", self.tmp_bucket or "")
 
     async def close(self) -> None:
         """Close Minio Client link"""

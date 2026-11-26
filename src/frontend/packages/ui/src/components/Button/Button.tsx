@@ -3,6 +3,7 @@ import { Slot } from '@radix-ui/react-slot';
 import { cva } from 'class-variance-authority';
 import { Outlined } from 'bisheng-icons';
 import cn from '../../utils/cn';
+import { useLoadingIndicatorRenderer } from '../../providers/LoadingIndicatorProvider';
 
 /**
  * Button — design-system base component (docs-ui-refactor/组件-Button按钮.md).
@@ -61,19 +62,18 @@ const buttonStyles = cva(
         text: '',
         link: '',
       },
-      // Heights/radii per §2 (24/32/40, 4/6/8px). Font sizes reference the
-      // PRIMITIVE type scale vars on purpose: the semantic --text-body remaps
-      // 14→16 under 768px, but control text must not follow (§5.5 / 适配原则 §3).
+      // Heights/radii per §2 (24/32/40, 4/6/8px). Compact-control typography
+      // stays independent of the responsive reading and field roles.
       // Icon size is one 14/16/18 ladder for BOTH icon-only and text+icon (§3.2/3.3).
       // Horizontal padding here is the borderless value (8/16/16); bordered
       // variants override to 7/15/15 in compoundVariants (visual-width parity).
       size: {
         small:
-          'h-6 gap-1 rounded px-2 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] [&_svg]:size-3.5',
+          'h-6 gap-1 rounded px-2 text-control [&_svg]:size-3.5',
         medium:
-          'btn-touch-hit h-8 gap-2 rounded-md px-4 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] [&_svg]:size-4',
+          'btn-touch-hit h-8 gap-2 rounded-md px-4 text-control [&_svg]:size-4',
         large:
-          'h-10 gap-2 rounded-lg px-4 text-[length:var(--font-size-4)] leading-[var(--line-height-4)] [&_svg]:size-[18px]',
+          'h-10 gap-2 rounded-lg px-4 text-control-lg [&_svg]:size-[18px]',
       },
       // `circle` is declared AFTER `size` so its rounded-full wins the merge
       // over the per-size radius; resolveVariants restricts it to icon-only (§1).
@@ -325,6 +325,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) => {
+    const renderIndicator = useLoadingIndicatorRenderer();
+    const loadingSize = size === 'small' ? 'size-3.5' : size === 'large' || size === 'lg' ? 'size-[18px]' : 'size-4';
     const Comp = asChild ? Slot : 'button';
     return (
       <Comp
@@ -343,7 +345,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           children
         ) : (
           <>
-            {loading ? <Outlined.Loading className="animate-spin" /> : icon}
+            {loading ? renderIndicator ? (
+              <span aria-hidden className="inline-flex shrink-0">{renderIndicator({ className: loadingSize })}</span>
+            ) : <Outlined.Loading className="animate-spin" /> : icon}
             {children}
           </>
         )}

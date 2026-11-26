@@ -32,7 +32,10 @@ from bisheng.app_publish.domain.services.capability_bus_service import (
 )
 from bisheng.common.errcode.app_publish import AppCapabilityNotDeclaredError, AppCapabilityRevokedError
 from bisheng.common.errcode.mcp_face import KnowledgeCapabilityRevokedError, RetrievalIdentityMissingError
+from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+from .reference_fixtures import bind_saved_source as bind_saved_source
 
 ACCESS_USER_ID = 93001
 
@@ -69,7 +72,7 @@ def recorded_retrievals(monkeypatch):
     return SimpleNamespace(calls=calls, visible=visible)
 
 
-async def _online_app_declaring(publish_db, app_factory, knowledge_refs):
+async def _online_app_declaring(publish_db, app_factory, knowledge_refs, *, binding=None):
     from bisheng.database.models.app_version import AppVersionDao
 
     app_row, version = await app_factory(state="online")
@@ -78,6 +81,8 @@ async def _online_app_declaring(publish_db, app_factory, knowledge_refs):
         row.capabilities = {"knowledge_bases": list(knowledge_refs)}
         session.add(row)
         await session.commit()
+    if binding is not None:
+        await binding(app_row, version)
     return app_row
 
 
@@ -87,11 +92,13 @@ async def _online_app_declaring(publish_db, app_factory, knowledge_refs):
 
 
 async def test_the_whitelist_is_the_declaration_the_application_never_supplies_it(
-    publish_db, app_factory, knowledge_factory, recorded_retrievals
+    publish_db, app_factory, knowledge_factory, recorded_retrievals, bind_saved_source
 ):
     declared = await knowledge_factory(name="产品手册")
     other = await knowledge_factory(name="财务档案")
-    app_row = await _online_app_declaring(publish_db, app_factory, [{"id": str(declared.id)}])
+    app_row = await _online_app_declaring(
+        publish_db, app_factory, [{"id": str(declared.id)}], binding=bind_saved_source
+    )
     recorded_retrievals.visible["ids"] = {declared.id, other.id}
 
     result = await CapabilityBusService.retrieve(app_id=app_row.id, access_user_id=ACCESS_USER_ID, query="报销流程")
@@ -102,11 +109,13 @@ async def test_the_whitelist_is_the_declaration_the_application_never_supplies_i
 
 
 async def test_a_knowledge_base_the_user_can_see_but_the_app_never_declared_is_refused(
-    publish_db, app_factory, knowledge_factory, recorded_retrievals
+    publish_db, app_factory, knowledge_factory, recorded_retrievals, bind_saved_source
 ):
     declared = await knowledge_factory(name="产品手册")
     undeclared = await knowledge_factory(name="财务档案")
-    app_row = await _online_app_declaring(publish_db, app_factory, [{"id": str(declared.id)}])
+    app_row = await _online_app_declaring(
+        publish_db, app_factory, [{"id": str(declared.id)}], binding=bind_saved_source
+    )
     recorded_retrievals.visible["ids"] = {declared.id, undeclared.id}
 
     with pytest.raises(AppCapabilityNotDeclaredError) as excinfo:
@@ -126,14 +135,13 @@ async def test_a_declaration_by_name_resolves_and_an_ambiguous_one_does_not(publ
     unique = await knowledge_factory(name="产品手册")
     await knowledge_factory(name="重名库")
     await knowledge_factory(name="重名库")
-    app_row = await _online_app_declaring(
-        publish_db, app_factory, [{"name": "产品手册"}, {"name": "重名库"}, {"name": "不存在的库"}]
+    # Ambiguous/missing declarations are previewed before a saved source exists.
+    rows = await capability_bus_service.capability_status(
+        tenant_id=unique.tenant_id,
+        capabilities={"knowledge_bases": [{"name": "产品手册"}, {"name": "重名库"}, {"name": "不存在的库"}]},
     )
-
-    declaration = await load_effective_declaration(app_row.id)
-
-    assert declaration.knowledge_whitelist == [unique.id]
-    reasons = {one.label: one.reason for one in declaration.knowledge}
+    assert [row.detail["knowledge_id"] for row in rows if not row.revoked] == [unique.id]
+    reasons = {one.label: one.reason for one in rows}
     assert reasons == {
         "产品手册": capability_bus_service.REASON_OK,
         "重名库": capability_bus_service.REASON_AMBIGUOUS,
@@ -143,14 +151,14 @@ async def test_a_declaration_by_name_resolves_and_an_ambiguous_one_does_not(publ
 
 async def test_a_declared_qa_library_is_not_retrievable(publish_db, app_factory, knowledge_factory):
     qa = await knowledge_factory(name="问答库", knowledge_type=KnowledgeTypeEnum.QA.value)
-    app_row = await _online_app_declaring(publish_db, app_factory, [{"id": str(qa.id)}])
-
-    declaration = await load_effective_declaration(app_row.id)
+    rows = await capability_bus_service.capability_status(
+        tenant_id=qa.tenant_id, capabilities={"knowledge_bases": [{"id": str(qa.id)}]}
+    )
 
     # Unsupported type answers exactly like "gone" — telling the two apart would
     # let a declaration probe for knowledge bases the owner may not see.
-    assert declaration.knowledge_whitelist == []
-    assert declaration.knowledge[0].reason == capability_bus_service.REASON_REVOKED
+    assert rows[0].revoked is True
+    assert rows[0].reason == capability_bus_service.REASON_REVOKED
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +167,7 @@ async def test_a_declared_qa_library_is_not_retrievable(publish_db, app_factory,
 
 
 async def test_the_reachable_set_equals_the_intersection_exactly(
-    publish_db, app_factory, knowledge_factory, recorded_retrievals
+    publish_db, app_factory, knowledge_factory, recorded_retrievals, bind_saved_source
 ):
     """AC-50 「不多给不少给」, written as the set equation it is."""
     declared_and_visible = await knowledge_factory(name="A")
@@ -170,6 +178,7 @@ async def test_the_reachable_set_equals_the_intersection_exactly(
         publish_db,
         app_factory,
         [{"id": str(declared_and_visible.id)}, {"id": str(declared_not_visible.id)}],
+        binding=bind_saved_source,
     )
     recorded_retrievals.visible["ids"] = {declared_and_visible.id, visible_not_declared.id}
 
@@ -187,10 +196,12 @@ async def test_the_reachable_set_equals_the_intersection_exactly(
 
 
 async def test_no_access_user_means_refused_never_the_owner(
-    publish_db, app_factory, knowledge_factory, recorded_retrievals
+    publish_db, app_factory, knowledge_factory, recorded_retrievals, bind_saved_source
 ):
     declared = await knowledge_factory(name="产品手册")
-    app_row = await _online_app_declaring(publish_db, app_factory, [{"id": str(declared.id)}])
+    app_row = await _online_app_declaring(
+        publish_db, app_factory, [{"id": str(declared.id)}], binding=bind_saved_source
+    )
     recorded_retrievals.visible["ids"] = {declared.id}
 
     with pytest.raises(RetrievalIdentityMissingError) as excinfo:
@@ -204,10 +215,12 @@ async def test_no_access_user_means_refused_never_the_owner(
 
 
 async def test_an_application_that_is_not_online_holds_no_capability(
-    publish_db, app_factory, knowledge_factory, recorded_retrievals
+    publish_db, app_factory, knowledge_factory, recorded_retrievals, bind_saved_source
 ):
     declared = await knowledge_factory(name="产品手册")
-    app_row = await _online_app_declaring(publish_db, app_factory, [{"id": str(declared.id)}])
+    app_row = await _online_app_declaring(
+        publish_db, app_factory, [{"id": str(declared.id)}], binding=bind_saved_source
+    )
     from bisheng.database.models.app import AppDao
 
     async with publish_db() as session:
@@ -216,7 +229,7 @@ async def test_an_application_that_is_not_online_holds_no_capability(
         session.add(row)
         await session.commit()
 
-    with pytest.raises(AppCapabilityNotDeclaredError):
+    with pytest.raises(OpenApiCredentialInvalidError):
         await CapabilityBusService.retrieve(app_id=app_row.id, access_user_id=ACCESS_USER_ID, query="报销流程")
     assert recorded_retrievals.calls == []
 
@@ -235,7 +248,7 @@ def test_an_unverifiable_access_token_is_no_access_user(monkeypatch):
             return None
 
     monkeypatch.setattr(model_range_policy, "_access_subject_verifier", RefusingVerifier())
-    principal = SimpleNamespace(subject_ref="app-uuid", tenant_id=1)
+    principal = SimpleNamespace(subject_ref="app-uuid", tenant_id=1, preview_session_id=None)
     request = SimpleNamespace(headers={"X-BiSheng-Access-Token": "forged"})
 
     assert hosted_app_access_user(request, principal) is None
@@ -251,7 +264,7 @@ def test_a_verified_token_names_the_visitor(monkeypatch):
             return model_range_policy.AccessSubject(user_id=ACCESS_USER_ID)
 
     monkeypatch.setattr(model_range_policy, "_access_subject_verifier", Verifier())
-    principal = SimpleNamespace(subject_ref="app-uuid", tenant_id=1)
+    principal = SimpleNamespace(subject_ref="app-uuid", tenant_id=1, preview_session_id=None)
 
     assert hosted_app_access_user(SimpleNamespace(headers={"X-BiSheng-Access-Token": "signed"}), principal) == (
         ACCESS_USER_ID
@@ -351,10 +364,12 @@ def test_a_service_account_still_reaches_the_legacy_v2_helpers(monkeypatch):
 
 
 async def test_a_deleted_declared_knowledge_base_becomes_16273_with_its_name(
-    monkeypatch, publish_db, app_factory, knowledge_factory
+    monkeypatch, publish_db, app_factory, knowledge_factory, bind_saved_source
 ):
     declared = await knowledge_factory(name="产品手册")
-    app_row = await _online_app_declaring(publish_db, app_factory, [{"id": str(declared.id)}])
+    app_row = await _online_app_declaring(
+        publish_db, app_factory, [{"id": str(declared.id)}], binding=bind_saved_source
+    )
 
     from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity
     from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService

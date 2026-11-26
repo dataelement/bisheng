@@ -4,7 +4,7 @@ import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import { Tooltip as SharedTooltip } from "@bisheng/ui";
 import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
+import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
 
 
 import { useLocation, useNavigate } from "react-router-dom";
@@ -12,10 +12,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { SpaceBreadcrumb } from "./SpaceBreadcrumb";
 import { SpaceActionMenuItems, getSpaceActionFlags } from "./SpaceActionMenuItems";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { useRecoilValue } from "recoil";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
+import desktopLayout from "./KnowledgeSpaceLayout.module.css";
 
 /**
  * Space header: location trail (space anchor + folder path, with the space action
@@ -42,6 +43,8 @@ interface KnowledgeSpaceHeaderProps {
   onClearSelection: () => void;
   onBatchDownload: () => void;
   canBatchDownload?: boolean;
+  canBatchTag?: boolean;
+  canBatchRetry?: boolean;
   onBatchTag: () => void;
   onBatchRetry: () => void;
   onBatchDelete: () => void;
@@ -58,7 +61,7 @@ interface KnowledgeSpaceHeaderProps {
   hasSimilarSelected?: boolean;
   /** Opens the similar-document processing dialog (restricted to the current selection). */
   onProcessSimilar?: () => void;
-  /** Whether the current user can manage members (gates the process-similar entry). */
+  /** Whether the current user can manage space permissions. */
   canManageMembers?: boolean;
 
   // ── Space-level actions (breadcrumb menu; available at every folder depth) ──
@@ -84,11 +87,10 @@ export function KnowledgeSpaceHeader({
   onTriggerWebLink,
   canCreateFolder = false,
   canUploadFile = false,
-  selectedCount,
-  hasFoldersSelected,
-  hasFailedFiles,
   onBatchDownload,
   canBatchDownload = false,
+  canBatchTag = false,
+  canBatchRetry = false,
   onBatchTag,
   onBatchRetry,
   onBatchDelete,
@@ -111,9 +113,7 @@ export function KnowledgeSpaceHeader({
   const navigate = useNavigate();
   const location = useLocation();
   const bishengConfig = useRecoilValue(bishengConfState);
-  const isH5 = usePrefersMobileLayout();
 
-  const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
   const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
   const spaceActions = {
     space,
@@ -129,24 +129,27 @@ export function KnowledgeSpaceHeader({
   // segment, and a second copy up here would read as the current folder's.
   // Also hidden when every row is permission-gated away — an empty menu.
   const showSpaceSettingsButton = currentPath.length === 0 && getSpaceActionFlags(spaceActions).hasAny;
-  const selectedThreshold = isH5 ? 0 : 1;
   const showAddMenu = canCreateFolder || canUploadFile;
-  // Filter / sort / search / view-toggle all moved into FileListToolbar.
-  const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
-
   const showProcessSimilar = Boolean(
-    versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar,
+    versionManagementEnabled && hasSimilarSelected && onProcessSimilar,
   );
-  // The danger row gets its own group only when something sits above it.
-  const hasBatchActionsAboveDelete =
+  const showBatchMove = Boolean(onBatchMove) && canBatchMove;
+  const hasBatchMenu =
     showProcessSimilar ||
     canBatchDownload ||
-    (isAdmin && (!hasFoldersSelected || hasFailedFiles)) ||
-    Boolean(onBatchMove);
+    canBatchTag ||
+    canBatchRetry ||
+    showBatchMove ||
+    canBatchDelete;
+  // Filter / sort / search / view-toggle all moved into FileListToolbar.
+  const showToolbarActions = showAddMenu || hasBatchMenu;
+  // The danger row gets its own group only when something sits above it.
+  const hasBatchActionsAboveDelete =
+    showProcessSimilar || canBatchDownload || canBatchTag || canBatchRetry || showBatchMove;
 
   const batchAndAddActions = showToolbarActions && (
     <div className="flex shrink-0 items-center gap-2">
-      {selectedCount > selectedThreshold && (
+      {hasBatchMenu && (
         <Dropdown
           align="end"
           menu={
@@ -161,22 +164,18 @@ export function KnowledgeSpaceHeader({
                   {localize("com_knowledge.batch_download")}
                 </DropdownItem>
               )}
-              {isAdmin && !hasFoldersSelected && (
+              {canBatchTag && (
                 <DropdownItem onSelect={onBatchTag} icon={<Outlined.Tag />}>
                   {localize("com_knowledge.batch_add_tags")}
                 </DropdownItem>
               )}
-              {isAdmin && hasFailedFiles && (
+              {canBatchRetry && (
                 <DropdownItem onSelect={onBatchRetry} icon={<Outlined.Refresh />}>
                   {localize("com_knowledge.batch_retry")}
                 </DropdownItem>
               )}
-              {onBatchMove && (
-                <DropdownItem
-                  disabled={!canBatchMove}
-                  onSelect={onBatchMove}
-                  icon={<Outlined.MoveToFolder />}
-                >
+              {showBatchMove && (
+                <DropdownItem onSelect={onBatchMove} icon={<Outlined.MoveToFolder />}>
                   {localize("com_knowledge.move")}
                 </DropdownItem>
               )}
@@ -261,16 +260,14 @@ export function KnowledgeSpaceHeader({
   );
 
   return (
-    <div className="flex min-h-8 items-center justify-between gap-3 px-4 pb-4 pt-4 max-[767px]:gap-2 max-[767px]:pb-3">
+    <div className={`${desktopLayout.header} flex min-h-8 items-center justify-between gap-3 px-4 pb-4 pt-4 max-[767px]:gap-2 max-[767px]:pb-3`}>
       {/* 左侧：返回 + 位置面包屑。首段永远是空间本身，空间级操作挂在它的下拉里，
                 所以下钻到任意层级都不会丢失「我在哪个空间」和空间级操作（设计稿 11772:70584） */}
       {/* -ml-2 pulls the whole group 8px left on its own, without touching the
                 row's px-4 — that padding is shared with the right-hand actions, so
                 shrinking it there would drag those 8px right along with it. */}
       <div className="-ml-2 flex min-w-0 flex-1 items-center gap-1 text-sm">
-        {/* Desktop back button. The module has no space / folder column any more,
-                    so this is the way up: folder → parent folder → space root → the
-                    知识空间 home. Mobile keeps its own top bar and Title ▾ drawer. */}
+        {/* This header is desktop-only, including when the DSH pane is narrow. */}
         <button
           type="button"
           onClick={() => {
@@ -282,11 +279,11 @@ export function KnowledgeSpaceHeader({
             onNavigateFolder(parent?.id);
           }}
           aria-label={localize("com_ui_go_back")}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1 max-[767px]:hidden"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
         >
           <Outlined.ArrowLeft className="size-4" />
         </button>
-        <div className="mx-1 h-4 w-px shrink-0 bg-border-base max-[767px]:hidden" aria-hidden />
+        <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
         <SpaceBreadcrumb
           space={space}
           currentPath={currentPath}

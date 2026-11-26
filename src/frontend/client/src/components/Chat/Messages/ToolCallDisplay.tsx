@@ -4,18 +4,30 @@
  * Inflight  : `⏳ 正在调用 {display_name} 工具` (no chips)
  * Finished  : `✓ 已{动作}{类别} ({N} 个结果)` + inline chip badges for each result
  * Failed    : `⚠️ {display_name} 失败: {error}`
+ * Stopped   : neutral `{display_name} stopped` — the user stopped the run while
+ *             the call was running (F004); not a failure, no error detail
  *
  * 3 variants via `tool_type`:
  *   - "knowledge"   → 「已检索知识 (N 个结果)」, doc-style chips
  *   - "web"         → 「已联网搜索 (N 个结果)」, site-style chips (title + source)
- *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview
+ *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview;
+ *                     "查看代码和输出" opens the
+ *                     call's parameters and output (ToolCodeOutput, F004 T060)
  */
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from "bisheng-icons";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, StopCircle } from "lucide-react";
 import { memo, useEffect, useState, type FC } from "react";
 import type { AgentToolCall } from "~/api/chatApi";
+import { isMemoryToolEvent } from "~/api/memory";
+import { MemorySearchHits } from "~/components/Memory/MemorySearchHits";
+import { describeMemoryStep, memoryStepLabel, mergeMemorySearchSteps } from "~/components/Memory/memoryStep";
 import { useLocalize } from "~/hooks";
+import { STOPPED_TOOL_NOTE } from "~/hooks/unifiedRun";
 import { cn } from "~/utils";
+import { toolCallDisplayName } from "~/utils/toolCallName";
+import { hasToolCodeOutput, ToolCodeOutput } from "./ToolCodeOutput";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
@@ -52,7 +64,7 @@ function resolveToolName(
 ): string {
     const key = BUILTIN_TOOL_I18N[(tc.tool_name || "").toLowerCase()];
     if (key) return localize(key);
-    return tc.display_name || tc.tool_name || localize("com_tools_generic_fallback");
+    return toolCallDisplayName(tc.display_name || tc.tool_name || localize("com_tools_generic_fallback"));
 }
 
 function parseResults(raw: any): any[] {
@@ -238,8 +250,77 @@ const variantStyles = {
     },
 } as const;
 
-const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) => {
+/**
+ * F132: memory tool events arrive redacted (`{redacted, op, item_ids, ok, reason_code}`).
+ * The row says what the call did and whether it worked — "已记下 1 条记忆",
+ * "记忆写入被拒绝：内容里有相对时间" — but never shows memory text, which is not in
+ * the event. A finished search with hits opens to list the items it returned
+ * (MemorySearchHits); several back-to-back searches arrive as one row.
+ */
+export const MemoryToolStep: FC<{ toolCalls: ToolCallDisplayProps["toolCall"][]; showConnector: boolean }> = ({
+    toolCalls,
+    showConnector,
+}) => {
     const localize = useLocalize();
+    const [open, setOpen] = useState(false);
+    const steps = toolCalls.map((call) => describeMemoryStep(call));
+    const step = steps.length > 1 ? mergeMemorySearchSteps(steps) : steps[0];
+    const expandable = step.op === "search" && step.state === "done" && step.itemIds.length > 0;
+    const icon =
+        step.state === "running" ? (
+            <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
+        ) : step.state === "failed" ? (
+            <AlertCircle size={16} className="shrink-0 text-red-500" />
+        ) : (
+            <Outlined.Bulb size={16} className="shrink-0 text-text-3" />
+        );
+    const label = memoryStepLabel(step, localize);
+    return (
+        <div className="flex w-full min-w-0 gap-1.5" data-memory-step={step.state}>
+            <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
+                {icon}
+                {showConnector && <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-1 pb-3">
+                {expandable ? (
+                    <button
+                        type="button"
+                        className="group flex w-fit items-center gap-1 text-sm leading-[22px] text-text-3 hover:text-text-1"
+                        aria-expanded={open}
+                        onClick={() => setOpen((v) => !v)}
+                    >
+                        <span>{label}</span>
+                        <Outlined.Down size={14} className={cn("shrink-0 transition-transform", !open && "-rotate-90")} />
+                    </button>
+                ) : (
+                    <span className={cn("text-sm leading-[22px] text-text-3", step.state === "running" && "animate-pulse")}>
+                        {label}
+                    </span>
+                )}
+                {expandable && open && (
+                    <div className="w-fit max-w-[560px] border-l-2 border-border-base py-0.5 pl-3">
+                        <MemorySearchHits itemIds={step.itemIds} />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) =>
+    isMemoryToolEvent(toolCall) ? (
+        <MemoryToolStep toolCalls={[toolCall]} showConnector={showConnector} />
+    ) : (
+        <RegularToolCall toolCall={toolCall} showConnector={showConnector} />
+    ),
+);
+
+const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall: storedCall, showConnector = false }) => {
+    const localize = useLocalize();
+    // F004: a call that was running when the user stopped the run is stored
+    // with this note in `error`. It is shown as stopped, not as a failure.
+    const stopped = !storedCall.inflight && storedCall.error === STOPPED_TOOL_NOTE;
+    const toolCall = stopped ? { ...storedCall, error: null } : storedCall;
     const variant = classifyToolType(toolCall);
     const rawResults = toolCall.error ? [] : parseResults(toolCall.results);
     // Per v2.5 spec §3:
@@ -265,14 +346,18 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                     ? ((toolCall.tool_name || "").toLowerCase() === "web_fetch" ? "web_fetch" : "web_search")
                     : "tool";
         const state = toolCall.inflight ? "running" : toolCall.error ? "failed" : "done";
-        return localize(`com_tools_state_${phase}_${state}`, { name });
+        return stopped
+            ? localize("runMessage.toolStopped", { name })
+            : localize(`com_tools_state_${phase}_${state}`, { name });
     })();
     const style = variantStyles[variant];
     // Panel only renders when there is actual content: errors, or finished
     // knowledge/web variants with results. Inflight no longer surfaces raw
     // args JSON, so the panel would otherwise be an empty gap.
+    const hasCodeOutput = variant === "tool" && hasToolCodeOutput(toolCall);
     const hasDetails =
         !!toolCall.error ||
+        hasCodeOutput ||
         (!toolCall.inflight && variant !== "tool" && resultCount > 0);
 
     // Web variant stays open by default after finish (spec §3.2.4); errors
@@ -301,6 +386,8 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
         <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
     ) : toolCall.error ? (
         <AlertCircle size={16} className="shrink-0 text-red-500" />
+    ) : stopped ? (
+        <StopCircle size={16} className="shrink-0 text-text-3" data-testid="tool-call-stopped" />
     ) : (
         style.icon
     );
@@ -350,9 +437,12 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                     style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
                 >
                     <div className="overflow-hidden min-h-0 text-xs text-text-secondary">
-                        {toolCall.error && (
+                        {parseFailureInfo(toolCall.failure_info) && <ChatErrorCard failureInfo={toolCall.failure_info} />}
+                        {toolCall.error && !toolCall.failure_info && (
                             <div className="leading-[22px]">{toolCall.error}</div>
                         )}
+
+                        {hasCodeOutput && expanded && <ToolCodeOutput toolCall={toolCall} />}
 
                         {!toolCall.inflight && !toolCall.error && variant === "knowledge" && knowledgeChips.length > 0 && (
                             <div className="flex flex-wrap gap-2">
@@ -394,7 +484,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
             </div>
         </div>
     );
-});
+};
 
 ToolCallDisplay.displayName = "ToolCallDisplay";
 

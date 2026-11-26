@@ -1,5 +1,7 @@
 import { Button } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
+import { MODULE_PAGE_DESKTOP_COLUMN, MODULE_PAGE_DESKTOP_FRAME } from "~/components/ModuleHome";
+import settingsLayout from "~/components/ModuleHome/ModuleSettingsLayout.module.css";
 import { useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -291,10 +293,10 @@ export function ChannelSettingsPage() {
   return (
     <div
       ref={knowledgePickerHostRef}
-      className="flex h-full min-h-0 bg-white"
+      className={`${MODULE_PAGE_DESKTOP_FRAME} ${settingsLayout.frame} flex h-full min-h-0 bg-white`}
     >
-      <main className="flex min-h-0 w-full flex-1 flex-col px-4 pt-4">
-        <header className="flex h-8 shrink-0 items-center gap-3">
+      <main className={`${MODULE_PAGE_DESKTOP_COLUMN} ${settingsLayout.content} flex min-h-0 w-full flex-1 flex-col px-4 pt-4`}>
+        <header className={`${settingsLayout.header} flex h-8 shrink-0 items-center gap-3`}>
           <button
             type="button"
             aria-label={settings.localize("back")}
@@ -313,12 +315,12 @@ export function ChannelSettingsPage() {
           </h1>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto py-4">
+        <div className={`${settingsLayout.body} min-h-0 flex-1 overflow-y-auto py-4`}>
           <div
             className={
-              showTwoColumns
-                ? "grid grid-cols-2 items-start gap-10 max-[900px]:grid-cols-1"
-                : "mx-auto w-full max-w-[648px]"
+              `${settingsLayout.form} ${showTwoColumns
+                ? `${settingsLayout.twoColumns} grid grid-cols-2 items-start gap-10 max-[900px]:grid-cols-1`
+                : "mx-auto w-full max-w-[648px]"}`
             }
           >
             {settings.canEditBusiness && (

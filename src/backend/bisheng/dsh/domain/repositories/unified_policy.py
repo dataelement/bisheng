@@ -1,12 +1,10 @@
 """Transactional visibility and credit policy storage within the current tenant."""
 
-from decimal import Decimal
-
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshOperationConflictError
-from bisheng.core.context.tenant import strict_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
 from bisheng.database.models.tenant import UserTenant
 from bisheng.dsh.domain.models.unified_policy import (
     CreditRule,
@@ -45,11 +43,10 @@ class UnifiedPolicyRepository:
             raise DshInvalidRequestError()
 
     @staticmethod
-    def visibility_payload(row: ModelVisibility | None) -> dict:
+    def visibility_payload(row: ModelVisibility | None, *, default_everyone: bool = False) -> dict:
         return {
             "version": row.version if row else 0,
-            "everyone": row.everyone if row else False,
-            "credit_multiplier": format(Decimal(row.credit_rate if row else 100) / 100, "f"),
+            "everyone": row.everyone if row else default_everyone,
             "subjects": row.subjects if row else [],
         }
 
@@ -63,11 +60,16 @@ class UnifiedPolicyRepository:
             "monthly_credits": credits_from_tokens(row.monthly_token_limit),
         }
 
-    def visibility(self, model_id: int) -> dict:
+    def visibility(self, model_id: int, *, default_everyone: bool = False) -> dict:
+        """``default_everyone`` describes a model without a stored row.
+
+        Platform catalog callers use True in both deployment modes; accounting
+        callers retain their explicit policy-row contract.
+        """
         require_tenant()
         with strict_tenant_filter():
             row = self.session.exec(select(ModelVisibility).where(ModelVisibility.model_id == model_id)).one_or_none()
-        payload = self.visibility_payload(row)
+        payload = self.visibility_payload(row, default_everyone=default_everyone)
         from bisheng.user.domain.models.user import User
 
         user_ids = [item["id"] for item in payload["subjects"] if item["kind"] == "USER"]
@@ -137,7 +139,6 @@ class UnifiedPolicyRepository:
             raise DshOperationConflictError()
         if row is None:
             row = ModelVisibility(tenant_id=tenant, model_id=model_id, updated_by=actor)
-        row.credit_rate = value.credit_rate
         row.everyone = value.everyone
         row.subjects = [item.model_dump() for item in sorted(value.subjects, key=lambda item: (item.kind, item.id))]
         row.version = value.version + 1
@@ -177,11 +178,63 @@ class UnifiedPolicyRepository:
         self._audit(actor, f"credits:{subject.kind}:{subject.id}", before, after)
         return after
 
+    def preview_user_limit(self, user_id: int, value: CreditRuleValue) -> int:
+        """The effective limit if this user's own rule were saved as ``value``; writes nothing (F016)."""
+        require_tenant()
+        departments = self.memberships._department_ancestor_ids(user_id, [])
+        roles = self.memberships._role_ids(user_id)
+        with strict_tenant_filter():
+            rules = [
+                row.model_dump()
+                for row in self.session.exec(select(CreditRule)).all()
+                if (row.subject_type, row.subject_id) != ("USER", user_id)
+            ]
+        rules.append(
+            {
+                "subject_type": "USER",
+                "subject_id": user_id,
+                "enabled": value.enabled,
+                "monthly_token_limit": value.monthly_token_limit,
+            }
+        )
+        return effective_token_limit(user_id=user_id, departments=departments, roles=roles, rules=rules)
+
+    def visible_model_ids(self, user_id: int, model_ids: list[int]) -> set[int]:
+        """Models of ``model_ids`` this user may pick in either deployment mode.
+
+        A model without a stored visibility row is visible to everyone; a stored
+        row applies exactly as under DSH. Credits are not involved.
+        """
+        require_tenant()
+        if not model_ids:
+            return set()
+        with strict_tenant_filter():
+            rows = {
+                row.model_id: row
+                for row in self.session.exec(
+                    select(ModelVisibility).where(ModelVisibility.model_id.in_(model_ids))
+                ).all()
+            }
+        restricted = [row for row in rows.values() if not row.everyone]
+        departments: set[int] = set()
+        roles: set[int] = set()
+        if restricted:
+            departments = set(self.memberships._department_ancestor_ids(user_id, self.memberships._departments()))
+            roles = set(self.memberships._role_ids(user_id))
+        visible = set()
+        for model_id in model_ids:
+            row = rows.get(model_id)
+            if row is None or ModelVisibilityInput(**self.visibility_payload(row)).permits(
+                user_id=user_id, departments=departments, roles=roles
+            ):
+                visible.add(model_id)
+        return visible
+
     def effective(self, user_id: int, *, lock: bool = False) -> DshPolicySnapshot:
         tenant = require_tenant()
         if lock:
             self.memberships._lock_tenant()
-        departments = self.memberships._department_ancestor_ids(user_id, self.memberships._departments())
+        departments = self.memberships._department_ancestor_ids(user_id, [])
         roles = self.memberships._role_ids(user_id)
         with strict_tenant_filter():
             models = self.session.exec(select(ModelVisibility)).all()
@@ -212,3 +265,35 @@ class UnifiedPolicyRepository:
         return DshPolicySnapshot(
             tenant_id=tenant, user_id=user_id, rows=rows, shared_token_limit=limit, ledger_epoch=epoch
         )
+
+    def ledger_policy(self, user_id: int, *, lock: bool = False) -> DshPolicySnapshot:
+        """Ledger metadata without personal grants; grants no model or allowance."""
+        tenant = require_tenant()
+        if lock:
+            self.memberships._lock_tenant()
+        with strict_tenant_filter():
+            ledger = self.session.exec(
+                select(PersonalLedgerState).where(PersonalLedgerState.user_id == user_id)
+            ).one_or_none()
+        return DshPolicySnapshot(
+            tenant_id=tenant,
+            user_id=user_id,
+            rows=[],
+            shared_token_limit=0,
+            ledger_epoch=ledger.quota_epoch if ledger else 1,
+        )
+
+    def accounting_policy(self, user_id: int, *, lock: bool = False) -> DshPolicySnapshot:
+        """Recover historical/operator usage even if the person belongs elsewhere.
+
+        Admission still verifies current identity and model access. A foreign
+        person's accounting partition must never acquire personal grants.
+        """
+        tenant = require_tenant()
+        with bypass_tenant_filter():
+            home = self.session.exec(
+                select(UserTenant.tenant_id).where(
+                    UserTenant.user_id == user_id, UserTenant.is_active == 1, UserTenant.status == "active"
+                )
+            ).one_or_none()
+        return self.effective(user_id, lock=lock) if home == tenant else self.ledger_policy(user_id, lock=lock)

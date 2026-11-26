@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { ReferenceStateHint } from "@/components/bs-comp/formFields/ReferenceStateHint";
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
 import { Button, Input, Textarea } from '@bisheng/ui';
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
@@ -31,6 +32,7 @@ export default function Setting() {
 
   const { appConfig } = useContext(locationContext)
   const { assistantState, dispatchAssistant } = useAssistantStore();
+  const savedKnowledge = new Map(assistantState.knowledge_list.map(item => [String(item.id), item]));
 
   return (
     <div
@@ -57,6 +59,7 @@ export default function Setting() {
                   dispatchAssistant("setting", { model_name: val })
                 }
               />
+              <ReferenceStateHint states={assistantState.reference_states?.filter(row => row.target_type === 'model' && row.target_id === String(assistantState.model_name))} />
             </div>
             <div className="mb-4 px-6">
               <label htmlFor="slider" className="bisheng-label">
@@ -150,17 +153,16 @@ export default function Setting() {
                   multiple
                   enableSpace
                   value={assistantState.knowledge_list.map(el => ({
-                    label: el.name,
+                    label: el.name || `${t('references.saved')}: ${el.id}`,
                     value: el.id,
-                    // KnowledgeTypeEnum.SPACE = 3 → space tab; anything else → file tab (F041).
-                    type: el.type === 3 ? 'space' : 'file'
+                    // Existing type metadata is preserved; unknown hidden metadata stays unknown.
+                    type: el.type === 3 ? 'space' : el.type === 1 ? 'qa' : el.type === 0 ? 'file' : undefined
                   }))}
+                  errorKeys={(assistantState.reference_states ?? []).filter(row => !row.is_valid && row.target_type === 'knowledge_space').map(row => row.target_id)}
                   onChange={(vals) =>
                     dispatchAssistant("setting", {
-                      knowledge_list: vals.map(el => ({
-                        name: el.label,
-                        id: el.value,
-                        type: el.type === 'space' ? 3 : 0
+                      knowledge_list: vals.map(el => savedKnowledge.get(String(el.value)) ?? ({
+                        name: el.label, id: el.value, type: el.type === 'space' ? 3 : el.type === 'qa' ? 1 : 0
                       }))
                     })
                   }
@@ -173,12 +175,13 @@ export default function Setting() {
                           {t("build.createNewKnowledge")}
                         </Button>
                       </Link>
-                      <Button variant="link" onClick={() => reload(1, '')}>
+                      <Button variant="link" onClick={() => reload()}>
                         <Outlined.Refresh size={16} className="mr-1" /> {t("build.refresh")}
                       </Button>
                     </div>
                   )}
                 </KnowledgeSelect>
+                <ReferenceStateHint states={assistantState.reference_states?.filter(row => row.target_type === 'knowledge_space' && assistantState.knowledge_list.some(item => String(item.id) === row.target_id))} />
               </div>
               {/* F041: 用户知识库权限校验 toggle — default OFF, gates knowledge-space
                   retrieval by the runtime user's view_file (ON) vs the config author's (OFF). */}
@@ -317,6 +320,27 @@ export default function Setting() {
         </AccordionItem> */}
 
       </Accordion>
+      {/* F132 long-term memory: per-assistant switch, default off (AC-69); explanation always visible (AC-75) */}
+      <h1 className="border-b bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
+        {t("build.memory")}
+      </h1>
+      <div className="px-6 py-4">
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor="assistant-memory-enabled" className="bisheng-label">
+            {t("build.assistantMemory")}
+          </label>
+          <Switch
+            id="assistant-memory-enabled"
+            checked={!!assistantState.memory_enabled}
+            onCheckedChange={(checked) =>
+              dispatchAssistant("setting", { memory_enabled: checked })
+            }
+          />
+        </div>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          {t("build.assistantMemoryDesc")}
+        </p>
+      </div>
     </div>
   );
 }

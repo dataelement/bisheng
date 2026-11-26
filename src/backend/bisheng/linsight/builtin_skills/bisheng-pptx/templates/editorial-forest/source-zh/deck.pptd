@@ -1,0 +1,21 @@
+version: v2
+title: 森林季刊
+size:
+  - 960
+  - 540
+template:
+  id: editorial-forest
+  name: Editorial Forest
+pages:
+  - pages/01.page
+  - pages/02.page
+  - pages/03.page
+  - pages/04.page
+  - pages/05.page
+  - pages/06.page
+  - pages/07.page
+  - pages/08.page
+  - pages/09.page
+  - pages/10.page
+  - pages/11.page
+  - pages/12.page

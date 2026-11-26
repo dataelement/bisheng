@@ -12,6 +12,7 @@ import {
     type KnowledgeSpace,
 } from "~/api/knowledge";
 import { useLocalize, useMediaQuery } from "~/hooks";
+import { SquareBanner } from "~/pages/square/SquareBanner";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
@@ -320,26 +321,7 @@ export default function KnowledgeSquare({
 
     return (
         <div className="h-full w-full flex flex-col bg-white overflow-hidden">
-            <div
-                className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
-            >
-                {/* Decorative scattered icons — kept from the original banner art, recolored
-                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
-                <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 bg-blue-200"
-                    style={{
-                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg-icons.svg)`,
-                        maskImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg-icons.svg)`,
-                        WebkitMaskSize: "cover",
-                        maskSize: "cover",
-                        WebkitMaskPosition: "center",
-                        maskPosition: "center",
-                        WebkitMaskRepeat: "no-repeat",
-                        maskRepeat: "no-repeat",
-                    }}
-                />
-
+            <SquareBanner title={tTitle} description={tSubtitle} artwork="knowledge">
                 {onBack && (
                     <div className="absolute left-4 top-4 z-10">
                         <Button
@@ -352,11 +334,7 @@ export default function KnowledgeSquare({
                     </div>
                 )}
 
-                <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
-                    <h1 className="mb-1 text-[26px] font-semibold text-blue-500">{tTitle}</h1>
-                    <p className="text-[13px] text-text-3">{tSubtitle}</p>
-                </div>
-            </div>
+            </SquareBanner>
 
             <div
                 ref={scrollRef}

@@ -1,0 +1,339 @@
+pageType: content
+background:
+  type: solid
+  color: '#F7F4EB'
+notes: Authored experiment composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. One hypothesis with comparison, measure and a predeclared decision rule
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 27
+      - 665
+      - 20
+    content:
+      text: COURSE WORKSHOP
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#b8beb4'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 看到结果之前，先设计验证方法
+      fontFamily: &ref_1
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 07
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#63756c'
+      bold: false
+      align: right
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 48
+      - 174
+      - 275
+      - 104
+    content:
+      text: |-
+        一次验证
+        一个假设
+      fontFamily: *ref_1
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: true
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 331
+      - 278
+      - 117
+    content:
+      text: 用一个新案例，验证学习者能否运用方法。
+      fontFamily: *ref_0
+      fontSize: 21
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false
+  - elementId: l7
+    elementType: line
+    bounds:
+      - 365
+      - 174
+      - 1
+      - 276
+    viewBox:
+      - 1
+      - 276
+    points: 0,0 0,276
+    border:
+      width: 0.6
+      color: '#b8beb4'
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 402
+      - 177
+      - 141
+      - 34
+    content:
+      text: 假设
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: true
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 561
+      - 177
+      - 350
+      - 58
+    content:
+      text: 明确下一步能够减少犹豫。
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false
+  - elementId: l10
+    elementType: line
+    bounds:
+      - 402
+      - 239
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: '#c2c7be'
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 402
+      - 248
+      - 141
+      - 34
+    content:
+      text: 比较
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: true
+  - elementId: t12
+    elementType: text
+    bounds:
+      - 561
+      - 248
+      - 350
+      - 58
+    content:
+      text: 相同任务；比较现有与修改后的引导。
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false
+  - elementId: l13
+    elementType: line
+    bounds:
+      - 402
+      - 310
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: '#c2c7be'
+  - elementId: t14
+    elementType: text
+    bounds:
+      - 402
+      - 319
+      - 141
+      - 34
+    content:
+      text: 衡量
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: true
+  - elementId: t15
+    elementType: text
+    bounds:
+      - 561
+      - 319
+      - 350
+      - 58
+    content:
+      text: 完成率、耗时与求助次数。
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false
+  - elementId: l16
+    elementType: line
+    bounds:
+      - 402
+      - 381
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: '#c2c7be'
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 402
+      - 390
+      - 141
+      - 34
+    content:
+      text: 决策
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: true
+  - elementId: t18
+    elementType: text
+    bounds:
+      - 561
+      - 390
+      - 350
+      - 58
+    content:
+      text: 达到约定目标后再采用。
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false
+  - elementId: l19
+    elementType: line
+    bounds:
+      - 402
+      - 452
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: '#c2c7be'
+  - elementId: l20
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c9ccc3'
+  - elementId: t21
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 收集结果前先定义成功标准，同时记录相反证据。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false
+  - elementId: t22
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '08'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#243F35'
+      bold: false

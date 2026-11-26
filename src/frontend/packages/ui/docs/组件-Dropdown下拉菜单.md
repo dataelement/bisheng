@@ -2,7 +2,7 @@
 
 > 设计系统 · 下拉菜单 v1 · 2026-10-21 建档
 > 与 [00-总纲.md](00-总纲.md)、[01-设计规范.md](01-设计规范.md) 配套；**面板外壳、选项行、分组与分隔取值引用 [组件-Select选择器.md](组件-Select选择器.md) §5，本文只写差异**；触发按钮见 [组件-Button按钮.md](组件-Button按钮.md)、二次确认见 [组件-Confirm二次确认.md](组件-Confirm二次确认.md)、悬停时序见 [组件-Tooltip文字提示.md](组件-Tooltip文字提示.md) §6、层级见 [组件-Modal弹窗.md](组件-Modal弹窗.md) §5、移动端通则见 [基础-多端适配原则.md](基础-多端适配原则.md)、文案见 [基础-文案规范.md](基础-文案规范.md)。
-> 调研来源（不进展示层）：antd 5 Dropdown（`trigger` 默认 hover、可选 click / contextMenu；`placement` 默认 bottomLeft；危险项 / 禁用 / 图标 / 快捷键 / 级联子菜单；`autoAdjustOverflow`；`zIndexPopup` 1050）、Radix DropdownMenu（menu 语义，点击触发，Item / CheckboxItem / RadioItem / Sub / Label / Separator）、Apple HIG Pull-down buttons（「显示与按钮用途直接相关的动作」、至少 3 项才值得用、危险项红字并弹确认、不要把一个视图的所有动作都藏进去、More 按钮影响可发现性）、Menus（动词标签、需要补充信息时加「…」、不可用项置灰而非隐藏、子菜单限一层且约 5 项以内、同组图标要么都有要么都没有）、Context menus（危险项放最后、分组不超过约 3 组）。
+> 调研来源（不进展示层）：antd 5 Dropdown（`trigger` 默认 hover、可选 click / contextMenu；`placement` 默认 bottomLeft；危险项 / 禁用 / 图标 / 快捷键 / 级联子菜单；`autoAdjustOverflow`；`zIndexPopup` 1050）、Radix DropdownMenu（menu 语义，点击触发，Item / CheckboxItem / RadioItem / Sub / Label / Separator）、Apple HIG Pull-down buttons（「显示与按钮用途直接相关的动作」、至少 3 项才值得用、危险项红字并弹确认、不要把一个视图的所有动作都藏进去、More 按钮影响可发现性）、Menus（动词标签、不可用项置灰而非隐藏、子菜单限一层且约 5 项以内、同组图标要么都有要么都没有）、Context menus（危险项放最后、分组不超过约 3 组）。
 > 设计师拍板（2026-10-21）：默认点击、可选悬停；危险项红字 + 放最后用分隔线隔开 + 点了弹确认；子菜单允许、最多一层；右键菜单暂时不写。
 
 ## 1. 什么时候用
@@ -62,8 +62,7 @@
 
 ### 4.1 菜单项文案
 
-- **用动词开头**：「重命名」「移动到…」「导出为 PDF」，说清点了会发生什么。
-- **点了还需要用户再输入或再选择的，文案后加「…」**：「移动到…」「另存为…」。直接执行的不加。
+- **用动词开头**，说清点击后会发生什么，例如「重命名」「移动到文件夹」和「导出为 PDF」。
 - 文案细则照 [基础-文案规范.md](基础-文案规范.md)。
 
 ### 4.2 排序
@@ -113,7 +112,7 @@
 - 父项右侧放 16px `Outlined.Right`（`text-3`）；悬停或键盘右键 100ms 后打开，父项保持高亮。
 - 子面板外壳同主面板，在父项右侧，与主面板间距 4px，首项与父项顶边对齐；右侧放不下翻到左侧。
 - **子菜单项控制在 5 个左右**；更多说明该单独做一个菜单或换成弹窗。
-- 父项的文案要能让人猜到里面是什么：「移动到…」「导出为」。
+- 父项文案应说清子菜单的内容，例如「移动到文件夹」和「导出为」。
 
 ## 8. 移动端适配
 

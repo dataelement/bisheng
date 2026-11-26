@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import FileView from "@/components/bs-comp/FileView";
+import { ExcelPreview } from "@bisheng/file-viewers";
 import { generateUUID } from "@/components/bs-ui/utils";
 import DocxPreview from "@/pages/KnowledgePage/components/DocxFileViewer";
 import TxtFileViewer from "@/pages/KnowledgePage/components/TxtFileViewer";
@@ -9,7 +10,7 @@ import { useTranslation } from "react-i18next";
 const MemoizedFileView = React.memo(FileView);
 
 export default function FileViewPanne({ file }) {
-    const { t } = useTranslation();
+    const { t } = useTranslation(['bs', 'knowledge']);
     const [postion, setPositon] = useState(null);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [showP, setShowP] = useState(true);
@@ -61,6 +62,9 @@ export default function FileViewPanne({ file }) {
             }
         }
         switch (suffix) {
+            case "xls":
+            case "xlsx":
+                return <ExcelPreview filePath={previewFileUrl} />;
             case "ppt":
             case "pptx":
             case "pdf":
@@ -102,7 +106,7 @@ export default function FileViewPanne({ file }) {
     };
 
     return (
-        <div className="flex-1 bg-gray-100 rounded-md py-4 px-2 relative" onContextMenu={(e) => e.preventDefault()}>
+        <div className="min-w-0 flex-1 bg-gray-100 rounded-md py-4 px-2 relative" onContextMenu={(e) => e.preventDefault()}>
             <div className="h-full overflow-auto">{fileView()}</div>
             {/* chunk menu */}
             {showP && (

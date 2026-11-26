@@ -23,7 +23,7 @@ async def test_subscribe_channel_uses_role_quota_service(monkeypatch):
     )
     from bisheng.role.domain.services.quota_service import QuotaResourceType
 
-    channel = SimpleNamespace(id="channel-1", visibility=ChannelVisibilityEnum.PUBLIC)
+    channel = SimpleNamespace(id="channel-1", tenant_id=7, visibility=ChannelVisibilityEnum.PUBLIC)
     channel_repository = SimpleNamespace(
         find_channels_by_ids=AsyncMock(return_value=[channel]),
     )

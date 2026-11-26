@@ -6,8 +6,6 @@ registered after ``apps``, that path would be swallowed by ``/apps/{app_id}``
 and the nginx fallback page would come back as "application not found".
 """
 
-from fastapi import APIRouter
-
 from bisheng.app_runtime.api.endpoints.app_storage import router as app_storage_router
 from bisheng.app_runtime.api.endpoints.apps import router as apps_router
 from bisheng.app_runtime.api.endpoints.host_isolation import router as host_isolation_router
@@ -15,13 +13,17 @@ from bisheng.app_runtime.api.endpoints.internal_app_proxy import router as inter
 from bisheng.app_runtime.api.endpoints.runtime_delivery import router as runtime_delivery_router
 from bisheng.app_runtime.api.endpoints.runtime_kubernetes import router as runtime_kubernetes_router
 from bisheng.app_runtime.api.endpoints.runtime_management import router as runtime_management_router
+from bisheng.common.request_scope import RequestScope as S
+from bisheng.common.request_scope import ScopedAPIRouter as APIRouter
+from bisheng.common.request_scope import scope_overrides
 
+scope_overrides(internal_app_proxy_router, S.PUBLIC, "unavailable_page")
 router = APIRouter()
-router.include_router(host_isolation_router)
+router.include_router(host_isolation_router, request_scope=S.CREDENTIAL)
 
-router.include_router(runtime_delivery_router)
-router.include_router(runtime_kubernetes_router)
-router.include_router(runtime_management_router)
-router.include_router(app_storage_router)
-router.include_router(internal_app_proxy_router)
-router.include_router(apps_router)
+router.include_router(runtime_delivery_router, request_scope=S.CREDENTIAL)
+router.include_router(runtime_kubernetes_router, request_scope=S.CREDENTIAL)
+router.include_router(runtime_management_router, request_scope=S.TENANT)
+router.include_router(app_storage_router, request_scope=S.CREDENTIAL)
+router.include_router(internal_app_proxy_router, request_scope=S.CREDENTIAL)
+router.include_router(apps_router, request_scope=S.TENANT)

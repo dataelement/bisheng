@@ -21,6 +21,8 @@
  * stopwatch measures how long you have waited, never how much is left, and the
  * whole surface dropped elapsed-time headers for that reason.
  */
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
 import type { FC } from 'react';
 import { useLocalize } from '~/hooks';
@@ -59,6 +61,7 @@ export const IngestPhaseRow: FC<IngestPhaseRowProps> = ({ step }) => {
                 )}
             </span>
             <div className="flex min-w-0 flex-1 flex-col">
+                {parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
                 <span className="truncate text-sm" style={{ color: MUTED }}>
                     {title}
                 </span>

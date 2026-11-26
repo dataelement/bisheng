@@ -110,6 +110,7 @@ async def test_joined_repository_applies_tenant_active_type_creator_and_stable_o
     assert f"knowledge.type = {KnowledgeTypeEnum.SPACE.value}" in compact
     assert f"knowledge.state = {KnowledgeState.PUBLISHED.value}" in compact
     assert "knowledge.user_id != 41" in compact
+    assert "knowledge.id not in (select department_knowledge_space.space_id" in compact
     assert "order by knowledge.update_time desc, knowledge.id desc" in compact
 
 

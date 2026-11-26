@@ -92,6 +92,14 @@ def patches(monkeypatch):
     """Wire every collaborator LoginSyncService touches. The individual
     tests override the return values as needed."""
     from bisheng.sso_sync.domain.services import login_sync_service as m
+    from bisheng.user.application import policy_bindings
+
+    monkeypatch.setattr(policy_bindings, "terminate_policy_for_relocation", AsyncMock())
+    monkeypatch.setattr(policy_bindings, "verify_resolved_policy_home", AsyncMock())
+    monkeypatch.setattr(policy_bindings, "initial_account_default_binding", AsyncMock(return_value=False))
+    monkeypatch.setattr(policy_bindings, "retire_current_policy_bindings", AsyncMock())
+    monkeypatch.setattr(policy_bindings, "seed_policy_defaults", AsyncMock())
+    monkeypatch.setattr(policy_bindings, "policy_membership_ids", AsyncMock(return_value=set()))
 
     # Redis lock: default acquire=True, release no-op. The atomic SET
     # NX EX call lives on ``async_connection.set`` — simplify R1 swapped
@@ -138,6 +146,11 @@ def patches(monkeypatch):
         m.UserDao,
         "aupdate_user",
         AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        m.UserService,
+        "apersist_profile_update",
+        AsyncMock(side_effect=lambda user, **_kwargs: user),
     )
     monkeypatch.setattr(
         m.UserDao,
@@ -769,8 +782,9 @@ class TestExistingUserAttrUpdate:
 
         await LoginSyncService.execute(_payload(name="NewName", email="new@x.com"), request_ip="1.2.3.4")
 
-        m.UserDao.aupdate_user.assert_awaited_once()
-        updated_user = m.UserDao.aupdate_user.await_args.args[0]
+        m.UserService.apersist_profile_update.assert_awaited_once()
+        assert m.UserService.apersist_profile_update.await_args.kwargs == {"from_sync": True}
+        updated_user = m.UserService.apersist_profile_update.await_args.args[0]
         assert updated_user.user_name == "NewName"
         assert updated_user.email == "new@x.com"
 
@@ -792,8 +806,9 @@ class TestExistingUserAttrUpdate:
             request_ip="1.2.3.4",
         )
 
-        m.UserDao.aupdate_user.assert_awaited_once()
-        updated_user = m.UserDao.aupdate_user.await_args.args[0]
+        m.UserService.apersist_profile_update.assert_awaited_once()
+        assert m.UserService.apersist_profile_update.await_args.kwargs == {"from_sync": True}
+        updated_user = m.UserService.apersist_profile_update.await_args.args[0]
         assert updated_user.update_time is not None
 
 

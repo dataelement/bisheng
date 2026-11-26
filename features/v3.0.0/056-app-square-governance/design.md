@@ -30,7 +30,7 @@
 
 ### D3：广场动作与可见范围仍由通用权限驱动
 
-`app` 适用动作集与广场 use 筛选保留，不把“能看到卡片”作为运行记录管理员权限。二者属于不同业务目标。动作 Catalog 改变时审查消费者。
+`app` 适用动作集保留；广场及运行入口按 F118 全局退役要求统一使用 visible 筛选，不把“能看到卡片”作为运行记录管理员权限。二者属于不同业务目标。动作 Catalog 改变时审查消费者。
 
 ### D4：管理权限仍复用 PermissionDialog
 
@@ -129,7 +129,7 @@ flowchart LR
 | 字段 / 入口 | 当前约定 |
 |---|---|
 | 广场列表 `flow_type/slug/app_state/can_share/user_name` | 托管类型 35；slug 为稳定 `/apps/{slug}` 入口；应用态仅 online/stopped；can_share=false；owner 显示沿用既有列表投影 |
-| GET `/api/v1/chat/online` | 现有 page/keyword/tag/type 等筛选；服务端收窄 app 状态和 use 动作，不信客户端 action 扩权 |
+| GET `/api/v1/chat/online` | 现有 page/keyword/tag/type 等筛选；服务端收窄 app 状态和 visible 可见性，不信客户端 action 扩权 |
 | PermissionDialog | resourceType=app，resourceId=内部 app.id；两入口共用，protected owner grant 不算额外放行 |
 | app.visibility_change | 变更人在真实授权 mutation 后回调记录；app/slug/added/removed 元数据；不由查询写入 |
 | 事件登记 | 后端可见 action/namespace、领域 action、前端 log.ts、三语事件名保持 lockstep |
@@ -285,3 +285,5 @@ F056-S1 修订：运行绑定的真实撤销生产者由凭据 Owner 公共协�
 ### 2026-10-29 运行记录时间显示修复
 
 源日志按既有 source_timezone 转 UTC 的查询/导出合同保持。平台表格将 create_time/entry_time 和导出选取时间等带时区时间转换为浏览器本地时间显示，复用 displayTimestamp 格式化函数；不直接显示 UTC 原文，不对无时区时间擅自加减八小时。116 宿主与 backend 为 UTC+8，未调整服务器时间或改写历史记录。
+
+修订记录：2026-11-24，按用户要求完成全平台 use 动作下线。广场移除托管应用的 use 专用筛选及分桶覆盖，所有类型使用 visible，仍保留各类型的合法管理动作边界。

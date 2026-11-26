@@ -1,0 +1,7 @@
+# First installation only. Hot disabling an already-used sandbox is deferred.
+runtime:
+  enabled: false
+sandbox:
+  enabled: false
+gateway:
+  enabled: false

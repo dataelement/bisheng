@@ -1,0 +1,33 @@
+.dsh-inline-reference {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  max-width: min(240px, 100%);
+  margin-inline-end: 4px;
+  padding-inline: 4px;
+  vertical-align: baseline;
+  border-radius: 4px;
+  color: rgb(var(--brand-500));
+  font: inherit;
+  font-size: var(--dsh-composer-font-size, inherit);
+  line-height: var(--dsh-composer-line-height, inherit);
+  cursor: text;
+  user-select: none;
+}
+
+.dsh-inline-reference > svg {
+  flex: none;
+  align-self: center;
+}
+
+.dsh-inline-reference-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (hover: hover) {
+  .dsh-inline-reference:hover {
+    background: rgb(var(--brand-500) / 7%);
+  }
+}

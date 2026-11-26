@@ -4,32 +4,45 @@ import { Atom } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 
 import { useTranslation } from 'react-i18next';
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm'
+import remarkGfm from 'remark-gfm';
+import { PlatformChatMarkdown } from '@/components/bs-comp/appChat/PlatformChatMarkdown';
+import { renderGeneratedFileLink, type GeneratedFile } from './DailyGeneratedFiles';
 
-export const MessageContent = ({ text }: { text: string }) => {
-    const thinkingMatch = text.match(/^:::thinking\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/);
-    text = text.replace(/^:::web\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/, '$2').replace(/\[citation:\d+\]/g, '');
+interface MessageContentProps {
+    text: string;
+    /** Conversation the answer belongs to; with `files`, lets a link naming a generated file download it. */
+    chatId?: string;
+    files?: GeneratedFile[];
+}
 
-    if (thinkingMatch) {
-        const thinkingContent = thinkingMatch[1];
-        const mainContent = thinkingMatch[2];
+function withoutLegacyWebBlock(text: string): string {
+    return text.replace(/^:::web\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/, '$2');
+}
 
-        return (
-            <>
-                <ThinkingBlock content={thinkingContent} />
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {mainContent}
-                </ReactMarkdown>
-            </>
-        );
-    }
+const thinkingPattern = /^:::thinking\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/;
+
+/** Answer body the auditor sees: legacy web blocks dropped, thinking kept out of the citation text. */
+export function visibleAnswerText(text: string): string {
+    const stripped = withoutLegacyWebBlock(text);
+    return stripped.match(thinkingPattern)?.[2] ?? stripped;
+}
+
+export const MessageContent = ({ text, chatId, files }: MessageContentProps) => {
+    const stripped = withoutLegacyWebBlock(text);
+    const thinkingMatch = stripped.match(thinkingPattern);
+    const answer = thinkingMatch ? thinkingMatch[2] : stripped;
+    const renderLink = useMemo(
+        () => chatId ? (href: string, children: ReactNode) => renderGeneratedFileLink(chatId, files ?? [], href, children) : undefined,
+        [chatId, files],
+    );
 
     return (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {text}
-        </ReactMarkdown>
+        <>
+            {thinkingMatch && <ThinkingBlock content={thinkingMatch[1]} />}
+            <PlatformChatMarkdown content={answer} renderLink={renderLink} />
+        </>
     );
 };
 

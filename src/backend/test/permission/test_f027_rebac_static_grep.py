@@ -10,6 +10,7 @@ per-module checks scope their AST to a single function; this file runs a
 project-wide grep so any *new* caller of the deleted patterns (regardless of
 which module added it) fails CI immediately.
 """
+
 from __future__ import annotations
 
 import re
@@ -47,11 +48,7 @@ def test_no_callers_of_acount_user_knowledge():
         capture_output=True,
         text=True,
     )
-    hits = [
-        line
-        for line in proc.stdout.splitlines()
-        if "def acount_user_knowledge" not in line
-    ]
+    hits = [line for line in proc.stdout.splitlines() if "def acount_user_knowledge" not in line]
     assert hits == [], f"acount_user_knowledge still has callers: {hits}"
 
 
@@ -81,7 +78,9 @@ def test_no_callers_pass_page_to_async_list_children():
     # which treats input as null-separated lines (matches across newlines).
     proc = subprocess.run(
         [
-            "grep", "-rnE", "-z",
+            "grep",
+            "-rnE",
+            "-z",
             r"async_list_children\([^)]*\bpage=",
             str(_BISHENG),
         ],
@@ -108,7 +107,7 @@ def test_scan_visible_child_items_has_cursor_loop_invariants():
     assert m, "_scan_visible_child_items not found"
     body = m.group(0)
     assert "batch_cursor" in body
-    assert "_compute_ext_rank_python" in body
+    assert "space_child_cursor_key" in body
     assert re.search(r"len\(visible_page_items\)\s*==\s*page_size", body)
     # The old OFFSET-style scan_page state is gone
     assert "scan_page" not in body

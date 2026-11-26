@@ -23,17 +23,19 @@
       "properties": {
         "origin": {
           "type": "string",
-          "pattern": "^https://[^/]+/?$"
+          "pattern": "^$|(?:^https://[^/]+/?$)",
+          "minLength": 0
         },
         "backendBase": {
           "type": "string",
-          "pattern": "^https?://[^/]+/?$"
+          "pattern": "^$|(?:^https?://[^/]+/?$)",
+          "minLength": 0
         },
         "caConfigMap": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)"
         }
       }
     },
@@ -60,9 +62,9 @@
       "properties": {
         "namespace": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)",
           "allOf": [
             {
               "not": {
@@ -81,27 +83,27 @@
         },
         "credentialsSecret": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)"
         },
         "materialIssuerSecret": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)"
         },
         "admissionTlsSecret": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)"
         },
         "managerAccount": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)"
         },
         "managerReplicas": {
           "type": "integer",
@@ -146,14 +148,31 @@
           "maximum": 32767
         },
         "egressClusterIP": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[0-9a-fA-F.:]+$"
+          "type": "string"
         },
         "pullSecret": {
           "type": "string",
           "maxLength": 63,
           "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+        },
+        "resources": {
+          "type": "object"
+        },
+        "placement": {
+          "type": "object"
+        },
+        "probes": {
+          "type": "object"
+        },
+        "apiTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        },
+        "dnsTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
         }
       }
     },
@@ -186,9 +205,9 @@
       "properties": {
         "namespace": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)",
           "allOf": [
             {
               "not": {
@@ -211,13 +230,14 @@
         },
         "nodeId": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          "pattern": "^$|(?:^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$)",
+          "minLength": 0
         },
         "installationId": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)"
         },
         "architecture": {
           "enum": [
@@ -268,13 +288,13 @@
         },
         "dataKeyConfigMap": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 63,
-          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          "pattern": "^$|(?:^[a-z0-9]([a-z0-9-]*[a-z0-9])?$)"
         },
         "dataPublicKeys": {
           "type": "object",
-          "minProperties": 1,
+          "minProperties": 0,
           "maxProperties": 8,
           "additionalProperties": {
             "type": "string",
@@ -352,6 +372,20 @@
               "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
             }
           }
+        },
+        "helperResources": {
+          "type": "object"
+        },
+        "timeouts": {
+          "type": "object"
+        },
+        "placement": {
+          "type": "object"
+        },
+        "operationTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 1800
         }
       }
     },
@@ -436,7 +470,7 @@
         },
         "controlAllowedCidrs": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 0,
           "maxItems": 32,
           "items": {
             "type": "string",
@@ -445,7 +479,7 @@
         },
         "entryAllowedCidrs": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 0,
           "maxItems": 32,
           "items": {
             "type": "string",
@@ -500,6 +534,11 @@
         "apiServer": {
           "type": "string",
           "pattern": "^https://[^/]+/?$"
+        },
+        "platformPodPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         }
       }
     },
@@ -507,7 +546,6 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "className",
         "sizeMi",
         "scratchSizeMi",
         "filesystem",
@@ -518,7 +556,10 @@
       ],
       "properties": {
         "className": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "sizeMi": {
           "type": "integer",
@@ -600,13 +641,16 @@
       "properties": {
         "caBundle": {
           "type": "string",
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9+/=\\r\\n]+$"
+          "minLength": 0,
+          "pattern": "^$|^[A-Za-z0-9+/=\\r\\n]+$"
         },
         "timeoutSeconds": {
           "type": "integer",
           "minimum": 1,
           "maximum": 10
+        },
+        "managedByParent": {
+          "type": "boolean"
         }
       }
     },
@@ -659,6 +703,33 @@
           "type": "boolean"
         }
       }
+    },
+    "global": {
+      "type": "object"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "namespaceManagement": {
+      "type": "object",
+      "properties": {
+        "createControl": {
+          "type": "boolean"
+        },
+        "createExecution": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "diagnostics": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#"

@@ -1,0 +1,403 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import { Alert, Button, Tooltip, toast } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { retryKnowledgeFileApi } from "@/controllers/API";
+import DropZone from "@/components/bs-comp/knowledgeUploadComponent/DropZone";
+import StepProgress from "@/components/bs-ui/step";
+import { knowledgeUploadsApi } from "@/controllers/API/knowledgeUploads";
+import {
+  knowledgeQueryKeys,
+  type KnowledgeQueryScope,
+} from "@/controllers/hooks/knowledge";
+import { showApiError } from "@/controllers/request";
+import FileUploadStep2, { type Step2PersistState } from "./FileUploadStep2";
+import { SpaceUploadPreview, type PreviewBook } from "./SpaceUploadPreview";
+import { SpaceUploadProgress } from "./SpaceUploadProgress";
+import {
+  initialWizardStrategy,
+  wizardOverrides,
+  type WizardFile,
+  type WizardStrategy,
+} from "./uploadWizardRules";
+import { useSpaceUploadQueue } from "./useSpaceUploadQueue";
+
+export type { Upload } from "./useSpaceUploadQueue";
+interface SpaceFileUploadPanelProps {
+  scope: KnowledgeQueryScope;
+  spaceId: number;
+  parentId: number | null;
+  onBack?: () => void;
+}
+export function SpaceFileUploadPanel(props: SpaceFileUploadPanelProps) {
+  return (
+    <UploadWizard
+      key={JSON.stringify([props.scope, props.spaceId, props.parentId])}
+      {...props}
+    />
+  );
+}
+function UploadWizard({
+  scope,
+  spaceId,
+  parentId,
+  onBack,
+}: SpaceFileUploadPanelProps) {
+  const { t } = useTranslation("knowledge");
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const instance = useId();
+  const queue = useSpaceUploadQueue({ scope, spaceId, parentId });
+  const [step, setStep] = useState(1);
+  const [strategy, setStrategy] = useState<WizardStrategy>();
+  const [book, setBook] = useState<PreviewBook>({});
+  const [busy, setBusy] = useState(false);
+  const [footerTarget, setFooterTarget] = useState<HTMLElement | null>(null);
+  const previewBusy = useRef(false);
+  const handleBusy = useCallback((value: boolean) => {
+    previewBusy.current = value;
+    setBusy(value);
+  }, []);
+  const settings = useQuery({
+    queryKey: [
+      ...knowledgeQueryKeys.space(scope, spaceId),
+      "upload-settings",
+      instance,
+      parentId,
+    ],
+    queryFn: ({ signal }) =>
+      knowledgeUploadsApi.getUploadSettings(spaceId, parentId, signal),
+    retry: false,
+    cacheTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    onError: showApiError,
+  });
+  const files = useMemo<WizardFile[]>(
+    () =>
+      queue.files.map(({ file, staged }) => {
+        const suffix = file.name.split(".").pop()?.toLowerCase() ?? "";
+        return {
+          id: staged.upload_id!,
+          fileName: file.name,
+          file_path: staged.file_path,
+          suffix,
+          fileType: ["xls", "xlsx", "csv", "et"].includes(suffix)
+            ? "table"
+            : "file",
+          split_rule: {},
+        };
+      }),
+    [queue.files],
+  );
+  const ready = Boolean(
+    settings.data &&
+    queue.jobs.length &&
+    queue.jobs.every((job) => job.phase === "staged"),
+  );
+  const handlePreview = useCallback(
+    (id: string, record: PreviewBook[string], path?: string) => {
+      setBook((previous) => {
+        const queued = files.find(
+          (item) => item.id === id || (path != null && item.file_path === path),
+        );
+        const keys = [...new Set([id, queued?.id, path].filter(Boolean))] as string[];
+        if (
+          keys.every(
+            (key) =>
+              previous[key]?.value === record.value &&
+              previous[key]?.fingerprint === record.fingerprint,
+          )
+        )
+          return previous;
+        const next = { ...previous };
+        for (const key of keys) next[key] = record;
+        return next;
+      });
+    },
+    [files],
+  );
+  const handleStrategy = useCallback(
+    (value: Step2PersistState) => setStrategy(value as WizardStrategy),
+    [],
+  );
+  const invalidRules = () =>
+    toast.show({ type: "warning", message: t("f118.invalid_defaults") });
+  const openExisting = (parentId: number | null) => {
+    const next = new URLSearchParams(params);
+    if (parentId === null) next.delete("parent_id");
+    else next.set("parent_id", String(parentId));
+    navigate({ pathname: `/filelib/${spaceId}`, search: next.toString() });
+  };
+  const overwriteExisting = async (row: { knowledge_id: number }) => {
+    try {
+      await retryKnowledgeFileApi({ knowledge_id: row.knowledge_id, file_objs: [row] });
+      toast.show({ type: "success", message: t("f118.upload_duplicate_overwritten") });
+    } catch (error) {
+      showApiError(error);
+      throw error;
+    }
+  };
+  const handleNext = () => {
+    if (!ready || !settings.data) return;
+    setStrategy((previous) => {
+      if (!previous)
+        return initialWizardStrategy(
+          settings.data.effective_defaults,
+          spaceId,
+          files,
+        );
+      const seeded = initialWizardStrategy(
+        settings.data.effective_defaults,
+        spaceId,
+        files,
+      );
+      return {
+        ...previous,
+        rules: {
+          ...previous.rules,
+          fileList: seeded.rules.fileList.map(
+            (file) =>
+              previous.rules.fileList.find((old) => old.id === file.id) ?? file,
+          ),
+        },
+      };
+    });
+    setStep(2);
+  };
+  const handleCommit = (direct: boolean) => {
+    if (!settings.data) return;
+    const chosen = direct
+      ? initialWizardStrategy(settings.data.effective_defaults, spaceId, files)
+      : strategy;
+    if (!chosen) return;
+    if (!direct && previewBusy.current) {
+      toast.show({ type: "warning", message: t("previewInProgress") });
+      return;
+    }
+    try {
+      const rules = Object.fromEntries(
+        files.map((file) => [
+          file.file_path,
+          wizardOverrides(chosen, file.file_path),
+        ]),
+      );
+      if (
+        !direct &&
+        files.some(
+          (file) =>
+            book[file.id] &&
+            (book[file.id].value.status !== "completed" ||
+              book[file.id].fingerprint !==
+                JSON.stringify(rules[file.file_path])),
+        )
+      ) {
+        invalidRules();
+        return;
+      }
+      if (
+        queue.commit(
+          direct ? "direct" : "previewed",
+          (path) => rules[path],
+          book,
+        )
+      )
+        setStep(4);
+    } catch {
+      invalidRules();
+    }
+  };
+  const handleDirectUpload = () => handleCommit(true);
+  return (
+    <section
+      aria-label={t("uploadFile")}
+      className="flex h-full min-h-0 flex-col gap-6 px-4 pt-4"
+    >
+      <header className="flex flex-wrap items-center gap-6">
+        {onBack && (
+          <Tooltip content={t("backToKnowledge")}>
+            <Button
+              type="button"
+              variant="text"
+              color="default"
+              iconOnly
+              aria-label={t("backToKnowledge")}
+              onClick={onBack}
+            >
+              <Outlined.ArrowLeft aria-hidden />
+            </Button>
+          </Tooltip>
+        )}
+        <StepProgress
+          currentStep={step}
+          align="center"
+          className="flex-1"
+          labels={[
+            t("uploadFile"),
+            t("segmentStrategy"),
+            t("textComparison"),
+            t("dataProcessing"),
+          ]}
+        />
+      </header>
+      <div
+        key={step}
+        className={`flex min-h-0 flex-1 flex-col ${step === 3 ? "overflow-hidden" : "overflow-auto"}`}
+      >
+        {step === 1 && (
+          <div className="mx-auto w-full max-w-[1450px] shrink-0 space-y-4 py-4">
+            <DropZone onDrop={queue.handleDrop} onFolderDrop={queue.handleFolder} />
+            {settings.isError ? (
+              <div role="alert">
+                <p>{t("f118.load_failed")}</p>
+                <Button
+                  onClick={() => {
+                    void settings.refetch();
+                  }}
+                >
+                  {t("retry")}
+                </Button>
+              </div>
+            ) : (
+              !settings.data && (
+                <LoadingState label={t("f118.loading_defaults")} className="min-h-32" />
+              )
+            )}
+            <SpaceUploadProgress
+              jobs={queue.jobs}
+              observed={queue.observed}
+              unavailable={queue.unavailable}
+              scrollRows={false}
+              onCancel={queue.handleCancel}
+              onRetry={queue.retry}
+              onRemove={queue.remove}
+              onOpenExisting={openExisting}
+              onOverwrite={overwriteExisting}
+            />
+          </div>
+        )}
+        {step === 2 && <Alert description={t("f118.upload_rules_hint")} />}
+        {step === 2 && strategy && (
+          <FileUploadStep2
+            step={2}
+            kId={spaceId}
+            footerTarget={footerTarget}
+            resultFiles={files}
+            isSubmitting={busy}
+            persistState={strategy}
+            onPersistStateChange={handleStrategy}
+            onPrev={() => setStep(1)}
+            onDirectUpload={handleDirectUpload}
+            onNext={() => {
+              try {
+                files.forEach((file) =>
+                  wizardOverrides(strategy, file.file_path),
+                );
+                setStep(3);
+              } catch {
+                invalidRules();
+              }
+            }}
+            previewRenderer={(value) => (
+              <SpaceUploadPreview
+                scope={scope}
+                spaceId={spaceId}
+                strategy={{ ...strategy, ...value }}
+                book={book}
+                onPreview={handlePreview}
+                onBusy={handleBusy}
+                previewCount={value.previewCount}
+              />
+            )}
+          />
+        )}
+        {step === 3 && strategy && (
+          <SpaceUploadPreview
+            scope={scope}
+            spaceId={spaceId}
+            strategy={strategy}
+            book={book}
+            onPreview={handlePreview}
+            onBusy={handleBusy}
+            editable
+          />
+        )}
+        {step === 4 && (
+          <SpaceUploadProgress
+            jobs={queue.jobs}
+            observed={queue.observed}
+            unavailable={queue.unavailable}
+            onCancel={queue.handleCancel}
+            onRetry={queue.retry}
+            onOpenExisting={openExisting}
+            onOverwrite={overwriteExisting}
+          />
+        )}
+        {step === 4 && queue.unavailable && (
+          <Button
+            onClick={() => {
+              void queue.retryStatus();
+            }}
+          >
+            {t("retry")}
+          </Button>
+        )}
+      </div>
+      <footer
+        ref={setFooterTarget}
+        className="flex shrink-0 flex-wrap items-center justify-center gap-4 border-t border-border-base py-4"
+      >
+        {step === 1 && (
+          <>
+            <Button
+              color="default"
+              variant="outlined"
+              disabled={!ready}
+              onClick={handleDirectUpload}
+            >
+              {t("uploadDirectly")}
+            </Button>
+            <Button disabled={!ready} onClick={handleNext}>
+              {t("nextStep")}
+            </Button>
+          </>
+        )}
+        {step === 3 && (
+          <>
+            <Button
+              color="default"
+              variant="outlined"
+              disabled={busy}
+              onClick={() => setStep(2)}
+            >
+              {t("previousStep")}
+            </Button>
+            <Button color="default" variant="outlined" onClick={handleDirectUpload}>
+              {t("uploadDirectlyDefaults")}
+            </Button>
+            <Button
+              disabled={
+                busy ||
+                !strategy ||
+                !strategy.rules.fileList.length ||
+                files.some((file) => {
+                  const record = book[file.id] ?? book[file.file_path];
+                  return record != null && record.value.status !== "completed";
+                })
+              }
+              onClick={() => handleCommit(false)}
+            >
+              {t("nextStep")}
+            </Button>
+          </>
+        )}
+        {step === 4 && onBack && (
+          <Button onClick={onBack}>{t("backToKnowledge")}</Button>
+        )}
+      </footer>
+    </section>
+  );
+}

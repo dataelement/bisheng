@@ -42,6 +42,55 @@ function useLanding({ cid = 'new', ready = true, catalog = models, task = false 
 const question: ChatAsk = { text: 'Count entries', modelId: 2, space: { id: 'space-1', name: 'Knowledge' } };
 beforeEach(() => localStorage.clear());
 
+test('selects the conversation layout on the first render while the fresh chat and config are pending', () => {
+  const commits: boolean[] = [];
+  const sendMessage = jest.fn(() => true);
+  parkChatAsk(question);
+  const { result, rerender, unmount } = renderHook(({ activeId }) => {
+    const [selectedKbs, setSelectedKbs] = useState<Kb[]>([]);
+    const handoff = useChatAskHandoff({
+      conversationId: 'new', activeConversationId: activeId, locationKey: 'landing',
+      selectedKbs, setSelectedKbs, sendMessage, ready: false,
+      selectedModelId: 1, selectModel: () => true, onModelUnavailable: rejected,
+    });
+    useLayoutEffect(() => { commits.push(handoff.isTextAskPending); });
+    return handoff;
+  }, { initialProps: { activeId: 'previous' } });
+  expect(commits).toEqual([true]);
+  expect(result.current.isTextAskPending).toBe(true);
+  expect(sendMessage).not.toHaveBeenCalled();
+  rerender({ activeId: 'new' });
+  expect(commits.every(Boolean)).toBe(true);
+  expect(sendMessage).not.toHaveBeenCalled();
+  unmount();
+});
+
+test('keeps the conversation layout through preparation and async send, then allows an ordinary new chat', async () => {
+  let accept: (value: boolean) => void = () => undefined;
+  const sendMessage = jest.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+  const selectModel = jest.fn(() => true);
+  const commits: boolean[] = [];
+  parkChatAsk({ ...question, modelId: 1 });
+  const { result, rerender } = renderHook(({ ready }) => {
+    const [selectedKbs, setSelectedKbs] = useState<Kb[]>([]);
+    const handoff = useChatAskHandoff({
+      conversationId: 'new', activeConversationId: 'new', locationKey: 'landing',
+      selectedKbs, setSelectedKbs, sendMessage, ready,
+      selectedModelId: 1, selectModel, onModelUnavailable: rejected,
+    });
+    useLayoutEffect(() => { commits.push(handoff.isTextAskPending); });
+    return handoff;
+  }, { initialProps: { ready: false } });
+  expect(result.current.isTextAskPending).toBe(true);
+  rerender({ ready: true });
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+  expect(result.current.isTextAskPending).toBe(true);
+  expect(commits.every(Boolean)).toBe(true);
+  await act(async () => { accept(true); });
+  expect(result.current.isTextAskPending).toBe(false);
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+});
+
 test('a cached task conversation waits for the fresh daily chat and sends once with the chosen model and space', () => {
   parkChatAsk(question);
   const view = renderHook(useLanding, { initialProps: { cid: 'old-conversation', ready: false, catalog: models, task: true }, wrapper: StrictMode });
@@ -102,7 +151,8 @@ test.each([1, 2])('a knowledge ask settles once with shared model %s and survive
 
 test('an unavailable model returns the question for editing and requires a fresh pick', () => {
   parkChatAsk({ ...question, modelId: 99 });
-  renderHook(useLanding);
+  const { result } = renderHook(useLanding);
+  expect(result.current.isTextAskPending).toBe(false);
   expect(send).toHaveBeenCalledTimes(0);
   expect(rejected).toHaveBeenCalledWith({ ...question, modelId: 99 });
 });
@@ -113,6 +163,7 @@ test('an article attachment is released once after the old knowledge selection c
   const { result } = renderHook(useLanding);
   expect(send).toHaveBeenCalledTimes(0);
   expect(result.current.attachmentAsk).toEqual({ key: expect.any(String), text: 'Summarize', file });
+  expect(result.current.isTextAskPending).toBe(false);
   act(() => result.current.retireAttachmentAsk());
   act(() => mockActivate());
   expect(result.current.attachmentAsk).toBeNull();
@@ -120,6 +171,7 @@ test('an article attachment is released once after the old knowledge selection c
 
 const space = { id: '101', name: 'K1' };
 const selection = [{ ...space, type: 'space' }];
+const spaceReferences = { composerReferences: [{ kind: 'space', label: space.name, offset: 0 }] };
 const strictWrapper = StrictMode;
 
 function renderHandoff(activeConversationId = 'new') {
@@ -148,15 +200,15 @@ test('waits for the sending conversation to reach the new route', () => {
   rerender({ activeId: 'new', locationKey: 'landing', send: sendMessage });
   expect(onTake).toHaveBeenCalledTimes(1);
   expect(sendMessage).toHaveBeenCalledTimes(1);
-  expect(sendMessage).toHaveBeenCalledWith('question');
+  expect(sendMessage).toHaveBeenCalledWith('question', null, spaceReferences);
 });
 
-test('keeps a rejected ask until a ready sender accepts it', () => {
+test('keeps a rejected ask until a ready sender accepts it', async () => {
   const { rerender, sendMessage } = renderHandoff();
   sendMessage.mockReturnValue(false);
   parkChatAsk({ text: 'question', space });
-  act(() => mockActivate());
-  expect(sendMessage).toHaveBeenCalledWith('question');
+  await act(async () => mockActivate());
+  expect(sendMessage).toHaveBeenCalledWith('question', null, spaceReferences);
   const readySend = jest.fn(() => true);
   rerender({ activeId: 'new', locationKey: 'landing', send: readySend });
   expect(readySend).toHaveBeenCalledTimes(1);
@@ -171,7 +223,7 @@ test('activation picks up consecutive asks with the same location and selection'
     act(() => mockActivate());
     act(() => mockActivate());
   }
-  expect(sendMessage.mock.calls).toEqual([['first'], ['second'], ['third']]);
+  expect(sendMessage.mock.calls).toEqual(['first', 'second', 'third'].map(text => [text, null, spaceReferences]));
 });
 
 test('strict effect replay submits a mounted ask exactly once', () => {
@@ -228,7 +280,8 @@ test.each([
     expect(sendMessage).toHaveBeenCalledTimes(0);
   } else {
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith(ask.text);
+    if (ask.space) expect(sendMessage).toHaveBeenCalledWith(ask.text, null, spaceReferences);
+    else expect(sendMessage).toHaveBeenCalledWith(ask.text);
   }
   act(() => { mockActivate(); mockActivate(); });
   expect(sendMessage).toHaveBeenCalledTimes('attachment' in ask ? 0 : 1);
@@ -290,4 +343,10 @@ test('hands the selected tag to its own space before sending', () => {
   const { result, sendMessage } = renderHandoff();
   expect(result.current.selectedKbs).toEqual([{ ...space, type: 'space', tag }]);
   expect(sendMessage).toHaveBeenCalledTimes(1);
+  expect(sendMessage).toHaveBeenCalledWith('tagged question', null, {
+    composerReferences: [
+      ...spaceReferences.composerReferences,
+      { kind: 'space', label: '#Report', offset: 0, is_tag: true },
+    ],
+  });
 });

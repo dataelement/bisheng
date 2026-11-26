@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import TYPE_CHECKING
 
@@ -21,20 +22,25 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.schemas.telemetry.event_data_schema import DeleteMessageSessionEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, bypass_tenant_filter_if
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
-from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
+from bisheng.workflow.domain.repositories.history_repository import WorkflowHistoryRepository
 
 if TYPE_CHECKING:
     from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
+
+
+def slides_preview_key(object_name: str) -> str:
+    """Where the PDF preview of a kept slide deck is cached: next to the deck."""
+    return f"{object_name}.preview.pdf"
 
 
 class ChatSessionService:
@@ -42,9 +48,12 @@ class ChatSessionService:
 
     @staticmethod
     async def get_chat_history(
-        chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20
+        chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20, *, read_scope=None
     ) -> list["ChatMessageHistoryResponse"]:
         """Retrieve chat history for a user."""
+        if read_scope is not None:
+            with read_scope:
+                return await ChatSessionService.get_chat_history(chat_id, flow_id, message_id, page_size)
         from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 
         if not chat_id or not flow_id:
@@ -65,8 +74,13 @@ class ChatSessionService:
     async def get_session_info(
         chat_id: str,
         subject: SessionSubject | None = None,
+        *,
+        read_scope=None,
     ) -> MessageSession | None:
         """Get session details with logo URL resolved."""
+        if read_scope is not None:
+            with read_scope:
+                return await ChatSessionService.get_session_info(chat_id, subject)
         res = await MessageSessionDao.async_get_one(chat_id)
         if res and res.is_delete:
             res = None
@@ -113,9 +127,30 @@ class ChatSessionService:
         return await MessageSessionDao.async_insert_one(subject.stamp(session))
 
     @staticmethod
-    async def rename_session(conversation_id: str, name: str) -> None:
+    async def rename_session(conversation_id: str, name: str, login_user: UserPayload) -> None:
         """Rename a chat session."""
+        await ChatSessionService._own_conversation_or_raise(conversation_id, login_user)
         await MessageSessionDao.update_session_name(conversation_id, name)
+
+    @staticmethod
+    async def create_owned_project_session(session, login_user, project_id):
+        """Insert a new natural-person session and its project membership atomically."""
+        from bisheng.chat_session.domain.repositories.project_session_repository import ProjectSessionRepository
+        from bisheng.chat_session.domain.schemas.projects import ProjectActor
+        from bisheng.common.errcode.chat import ProjectInputError
+        from bisheng.database.models.org_snapshot import astamp_session
+
+        actor = ProjectActor(tenant_id=login_user.tenant_id, user_id=login_user.user_id)
+        if session.api_subject_type is not None:
+            raise ProjectInputError()
+        session = SessionSubject.natural_person(tenant_id=actor.tenant_id, user_id=actor.user_id).stamp(session)
+        # Preserve the preparation otherwise done by async_insert_one before
+        # entering the atomic project/session transaction.
+        if not session.group_ids:
+            session.group_ids = [group.group_id for group in await UserGroupDao.aget_user_group(actor.user_id)]
+        await astamp_session(session)
+        await asyncio.to_thread(ProjectSessionRepository.create, actor, session, str(project_id))
+        return session
 
     @staticmethod
     async def _own_conversation_or_raise(chat_id: str, login_user: UserPayload) -> MessageSession:
@@ -175,6 +210,8 @@ class ChatSessionService:
             if not object_names:
                 return
             minio_client = await get_minio_storage()
+            # A deck may also hold the PDF its preview was converted to.
+            object_names |= {slides_preview_key(n) for n in object_names if n.lower().endswith((".ppt", ".pptx"))}
             for object_name in object_names:
                 try:
                     await minio_client.remove_object(object_name=object_name)
@@ -184,7 +221,9 @@ class ChatSessionService:
             logger.exception("failed to clean up attachments of chat {}", chat_id)
 
     @staticmethod
-    async def resolve_attachment_url(chat_id: str, file_id: str, login_user: UserPayload) -> str:
+    async def resolve_attachment_url(
+        chat_id: str, file_id: str, login_user: UserPayload, *, alias_key: str | None = None
+    ) -> str:
         """Issue a fresh link for one attachment of one conversation.
 
         The link handed out at upload time expires, so the client comes back
@@ -192,12 +231,48 @@ class ChatSessionService:
         conversation's messages and never taken from the caller -- signing a
         caller-supplied name would open the whole bucket to anyone with an
         account.
+
+        ``alias_key`` (F004): when no stored attachment has this ``file_id``, the
+        newest one whose ``alias_key`` field equals it is signed instead. The
+        unified runtime passes ``workspace_file_id``: the id a generated file had
+        in the live events of its run, kept on the answer's copy.
         """
         owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner, alias_key=alias_key)
 
+    @staticmethod
+    async def resolve_audit_attachment_url(chat_id: str, file_id: str) -> str:
+        """Sign a code-interpreter file of a conversation for an auditor.
+
+        The caller has already checked the audit scope. User uploads are not
+        part of what an auditor may download, so only generated files are found.
+        """
+        owner = await MessageSessionDao.async_get_one(chat_id)
+        if owner is None:
+            raise NotFoundError.http_exception()
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner, only_source="code_interpreter")
+
+    @staticmethod
+    async def _sign_attachment(
+        chat_id: str, file_id: str, owner, *, only_source: str | None = None, alias_key: str | None = None
+    ) -> str:
+        object_name = await ChatSessionService._attachment_object_name(
+            chat_id, file_id, owner, only_source=only_source, alias_key=alias_key
+        )
+        minio_client = await get_minio_storage()
+        return await minio_client.get_share_link(object_name)
+
+    @staticmethod
+    async def _attachment_object_name(
+        chat_id: str, file_id: str, owner, *, only_source: str | None = None, alias_key: str | None = None
+    ) -> str:
+        """Object name of one attachment, read from the conversation's own rows, or NotFound."""
         messages = await WorkflowFileRepository.attachment_messages(chat_id)
-        for attachment in ChatSessionService._attachment_objects(messages, owner):
+        attachments = ChatSessionService._attachment_objects(messages, owner)
+        for attachment in attachments:
             if str(attachment.get("file_id")) != str(file_id):
+                continue
+            if only_source is not None and attachment.get("source") != only_source:
                 continue
             object_name = attachment.get("object_name")
             if attachment.get("_workflow_image") and attachment.get("state") != "ready":
@@ -206,10 +281,52 @@ class ChatSessionService:
                 # Written before attachments were made permanent: the file is
                 # gone with the temp bucket. Say so rather than guess.
                 break
-            minio_client = await get_minio_storage()
-            return await minio_client.get_share_link(object_name)
+            return object_name
+        else:
+            if alias_key:
+                # No attachment has this id. Rows are in insertion order, so the
+                # last match is the newest answer that kept a copy of that file.
+                for attachment in reversed(attachments):
+                    if str(attachment.get(alias_key) or "") != str(file_id) or attachment.get("_workflow_image"):
+                        continue
+                    if only_source is not None and attachment.get("source") != only_source:
+                        continue
+                    if not attachment.get("object_name"):
+                        continue
+                    return attachment["object_name"]
 
         raise NotFoundError.http_exception()
+
+    @staticmethod
+    async def slides_preview(
+        chat_id: str, file_id: str, login_user: UserPayload, share_link=None, *, alias_key: str | None = None
+    ) -> dict:
+        """PDF preview of a ``.ppt``/``.pptx`` kept on a conversation.
+
+        The reader is the conversation owner, or anyone holding a share link to
+        this conversation -- the same rule as reading its messages. The deck is
+        found on the conversation's own rows, never taken from the caller.
+        """
+        from bisheng.linsight.domain.services.artifact_preview_service import is_slide_key, preview_slides_as_pdf
+
+        shared = share_link is not None and share_link.resource_id == chat_id
+        if shared:
+            with bypass_tenant_filter():
+                owner = await MessageSessionDao.async_get_one(chat_id)
+            if owner is None or owner.is_delete:
+                raise NotFoundError.http_exception()
+        else:
+            owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        with bypass_tenant_filter_if(shared):
+            object_name = await ChatSessionService._attachment_object_name(chat_id, file_id, owner, alias_key=alias_key)
+        if not is_slide_key(object_name):
+            raise NotFoundError.http_exception()
+        return await preview_slides_as_pdf(
+            object_name,
+            preview_key=slides_preview_key(object_name),
+            lock_id=f"chat:{chat_id}:{file_id}",
+            log_tag=f"chat_id={chat_id} file_id={file_id}",
+        )
 
     @staticmethod
     async def delete_session(chat_id: str, login_user: UserPayload, request_ip: str) -> None:
@@ -236,7 +353,7 @@ class ChatSessionService:
         elif session_chat.flow_type == FlowType.WORKSTATION.value:
             await AuditLogService.delete_chat_message(login_user, request_ip, session_chat)
         else:
-            flow_info = await FlowDao.aget_flow_by_id(session_chat.flow_id)
+            flow_info = next(iter(await WorkflowHistoryRepository.aget_by_ids([session_chat.flow_id])), None)
             if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
                 await AuditLogService.delete_chat_workflow(login_user, request_ip, flow_info)
 
@@ -269,28 +386,18 @@ class ChatSessionService:
         flow_ids: list = []
         user_ids: list = []
 
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+        from bisheng.utils.async_utils import run_async_safe
 
         if task_id:
-            if not login_user.is_admin():
-                task = MarkTaskDao.get_task_byid(task_id)
-                if str(login_user.user_id) not in task.process_users.split(","):
-                    raise UnAuthorizedError()
-                if user_groups:
-                    task = MarkTaskDao.get_task_byid(task_id)
-                    group_flow_ids = task.app_id.split(",")
-                    if not group_flow_ids:
-                        return PageList(list=[], total=0)
-                else:
-                    task = MarkTaskDao.get_task_byid(task_id)
-                    if str(login_user.user_id) not in task.process_users.split(","):
-                        raise UnAuthorizedError()
-                    group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
-            else:
-                group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+            from bisheng.chat_session.domain.services.mark_read_authorization import require_mark_task_reader
+
+            task = run_async_safe(require_mark_task_reader(task_id, login_user))
+            group_flow_ids = [value.strip() for value in task.app_id.split(",") if value.strip()]
+            if not group_flow_ids:
+                return PageList(list=[], total=0)
 
         if keyword:
-            flows = FlowDao.get_flow_list_by_name(name=keyword)
+            flows = WorkflowHistoryRepository.search_by_name(keyword)
             assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
             users = UserDao.search_user_by_name(user_name=keyword)
             if flows:
@@ -304,11 +411,28 @@ class ChatSessionService:
 
         if group_flow_ids:
             if flow_ids and keyword:
-                flow_ids = flow_ids
+                flow_ids = sorted(set(flow_ids) & set(group_flow_ids))
+                if not flow_ids:
+                    return PageList(list=[], total=0)
             else:
                 flow_ids = group_flow_ids
 
-        res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
+        res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids, include_delete=False)
+        from bisheng.chat_session.domain.services.session_read_authorization import require_session_read
+
+        authorized = []
+        for session in res:
+            if task_id:
+                if session.is_delete or session.tenant_id != task.tenant_id or session.flow_id not in group_flow_ids:
+                    continue
+            else:
+                try:
+                    run_async_safe(require_session_read(session, login_user))
+                except UnAuthorizedError:
+                    continue
+            if flow_type is None or session.flow_type == flow_type:
+                authorized.append(session)
+        res = authorized
         total = len(res)
 
         chat_status_ids = [one.chat_id for one in res]
@@ -344,6 +468,7 @@ class ChatSessionService:
                     continue
             result.append(tmp)
 
+        total = len(result)
         result = result[(page_num - 1) * page_size : page_num * page_size]
         return PageList(list=result, total=total)
 
@@ -404,6 +529,8 @@ class ChatSessionService:
         flow_id: str,
         login_user: UserPayload,
         request_ip: str,
+        *,
+        resource=None,
     ) -> MessageSession | None:
         """Get or create a session for Gateway's violation-message logging.
 
@@ -418,12 +545,26 @@ class ChatSessionService:
         """
         session_info = MessageSessionDao.get_one(chat_id=chat_id)
         if session_info:
+            if (
+                session_info.user_id != login_user.user_id
+                or session_info.tenant_id != _resolve_leaf_tenant_id(login_user)
+                or session_info.flow_id != flow_id
+                or session_info.is_delete
+                or session_info.api_subject_type is not None
+            ):
+                raise NotFoundError.http_exception()
             return session_info
 
         # F017 AC-11: resolve leaf tenant; raise 19504 if unavailable.
         leaf_tenant_id = _resolve_leaf_tenant_id(login_user)
 
-        flow_info = FlowDao.get_flow_by_id(flow_id)
+        flow_info = (
+            resource
+            if getattr(resource, "flow_type", None) == FlowType.WORKFLOW.value
+            else FlowDao.get_flow_by_id(flow_id)
+            if resource is None
+            else None
+        )
         if flow_info:
             session_info = MessageSessionDao.insert_one(
                 MessageSession(
@@ -439,7 +580,7 @@ class ChatSessionService:
             if flow_info.flow_type == FlowType.WORKFLOW.value:
                 AuditLogService.create_chat_workflow(login_user, request_ip, flow_id, flow_info)
         else:
-            assistant_info = AssistantDao.get_one_assistant(flow_id)
+            assistant_info = resource if resource is not None else AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
                 session_info = MessageSessionDao.insert_one(
                     MessageSession(
@@ -452,7 +593,7 @@ class ChatSessionService:
                         tenant_id=leaf_tenant_id,
                     )
                 )
-                AuditLogService.create_chat_assistant(login_user, request_ip, flow_id)
+                AuditLogService.create_chat_assistant(login_user, request_ip, flow_id, assistant_info)
 
         if session_info:
             telemetry_service.log_event_sync(

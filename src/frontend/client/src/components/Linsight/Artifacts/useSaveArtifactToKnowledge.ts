@@ -99,7 +99,7 @@ async function stageUpload(
     blob: Blob,
     fileName: string,
     localize: Localize,
-): Promise<{ filePath: string; repeat: boolean }> {
+): Promise<{ filePath: string; previewUploadRef: string; repeat: boolean }> {
     let staged: UploadFileResponse | undefined;
     const { failures, earlyStop } = await uploadFilesSequential(
         spaceId,
@@ -115,7 +115,7 @@ async function stageUpload(
     }
     // uploadFileToServerApi rejects when file_path is absent, so a resolved
     // response always carries it.
-    return { filePath: staged.file_path, repeat: Boolean(staged.repeat) };
+    return { filePath: staged.file_path, previewUploadRef: staged.preview_upload_ref!, repeat: Boolean(staged.repeat) };
 }
 
 /**
@@ -127,9 +127,10 @@ async function stageUpload(
 async function registerStagedFile(
     spaceId: string,
     filePath: string,
+    previewUploadRef: string,
     parentId: number | null,
 ): Promise<KnowledgeFile[]> {
-    const register = () => addFilesApi(spaceId, { file_path: [filePath], parent_id: parentId });
+    const register = () => addFilesApi(spaceId, { file_path: [filePath], preview_upload_refs: [previewUploadRef], parent_id: parentId });
     try {
         return await register();
     } catch (firstErr) {
@@ -197,7 +198,7 @@ export function useSaveArtifactToKnowledge(
                     staged = await stageUpload(spaceId, blob, candidate, localize);
                 }
 
-                const registered = await registerStagedFile(spaceId, staged.filePath, parentId);
+                const registered = await registerStagedFile(spaceId, staged.filePath, staged.previewUploadRef, parentId);
                 const blocked = new Set(
                     extractDuplicateFileEntries(registered).map((entry) => entry.fileId),
                 );

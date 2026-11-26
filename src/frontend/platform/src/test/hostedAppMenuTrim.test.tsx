@@ -153,9 +153,8 @@ describe("⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-
       <HostedAppCard
         currentUser={{ user_id: 1 }}
         isAdmin
-        canDelete
-        canSwitch
-        canManagePermission
+        actions={["edit", "delete", "publish", "unpublish", "manage_permission"]}
+        onLoadActions={vi.fn().mockResolvedValue({ actions: [], hasError: false })}
         onPermission={vi.fn()}
         onChanged={vi.fn()}
         {...overrides}
@@ -205,13 +204,14 @@ describe("⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-
   })
 
   it("drops the permission entry for a caller who may not manage it", async () => {
-    renderHosted({ item: { app_state: "stopped", status: 1 }, canManagePermission: false })
+    renderHosted({ item: { app_state: "stopped", status: 1 }, actions: ["delete"] })
     await openMenu()
 
     expect(menuItemTexts()).toEqual([MENU_LABELS.delete])
   })
   it("shows version information without a dropdown for an online hosted app", async () => {
     renderHosted({ item: { app_state: "online", status: 2 } })
+    await userEvent.click(screen.getByRole("button", { name: "skills.version" }))
     await screen.findByText("hostedApp.version.noCode")
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
   })

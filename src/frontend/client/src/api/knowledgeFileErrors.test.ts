@@ -3,12 +3,25 @@ import catalog from '../../../packages/locales/src/api_errors/en.json';
 import { extractKnowledgeFileError, getSpaceChildrenApi } from './knowledge';
 import request from './request';
 jest.mock('~/api/request', () => ({ __esModule: true, default: { get: jest.fn() } }));
-beforeAll(async () => { await i18next.init({ lng: 'en', resources: { en: { translation: { api_errors: catalog } } } }); });
+beforeAll(async () => {
+  await i18next.init({
+    lng: 'en',
+    resources: { en: { translation: {
+      api_errors: catalog,
+      com_knowledge: { file_parse_failed_detail: '{{message}} (error code: {{code}})' },
+    } } },
+  });
+});
 it.each([{ error_message: 'PRIVATE stack' }, { remark: 'PRIVATE SQL' }, { remark: JSON.stringify({ data: { exception: 'PRIVATE' } }) }, { remark: JSON.stringify({ status_code: 49999, status_message: 'PRIVATE' }) }])('does not expose unknown parse evidence: %p', raw => {
  expect(extractKnowledgeFileError(raw)).not.toContain('PRIVATE');
 });
 it('retains registered business context without technical exceptions', () => {
  expect(extractKnowledgeFileError({ remark: JSON.stringify({ status_code: 10019, data: { exception: 'PRIVATE' } }) })).toBe(catalog['10019']);
+});
+
+it('labels a generic document parse failure with its error code', () => {
+ const remark = JSON.stringify({ status_code: 10952, status_message: 'Document parsing failed' });
+ expect(extractKnowledgeFileError({ remark })).toBe(`${catalog['10952']} (error code: 10952)`);
 });
 
 it('does not label rename metadata as a parse failure', () => {

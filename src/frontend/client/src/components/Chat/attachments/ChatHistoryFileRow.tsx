@@ -6,14 +6,22 @@ import { getViewerType } from '~/pages/knowledge/FilePreview/viewers';
 import { downloadFile } from '~/utils';
 import {
     getChatAttachmentFileName,
+    getReissuableAttachment,
+    reissueAttachmentUrl,
     resolveChatAttachmentUrl,
 } from './chatAttachmentUtils';
 import { toChatArtifact } from './collectChatAttachments';
+import { FileAttachmentResourceCard } from './AttachmentResourceCards';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 
 interface ChatHistoryFileRowProps {
     onPreviewFile?: (file: ArtifactFile) => void;
+    /** Lets a kept attachment open through a fresh link instead of its expiring upload link. */
+    conversationId?: string;
+    variant?: 'resource';
     file: {
+        file_id?: string;
+        object_name?: string;
         name?: string;
         file_name?: string;
         filename?: string;
@@ -23,12 +31,13 @@ interface ChatHistoryFileRowProps {
         url?: string;
         path?: string;
         previewUrl?: string;
+        size?: number | string;
     };
 }
 
 /** Horizontal history attachment card with a shared workspace preview. */
-export function ChatHistoryFileRow({ file, onPreviewFile }: ChatHistoryFileRowProps) {
-    const [previewOpen, setPreviewOpen] = useState(false);
+export function ChatHistoryFileRow({ file, conversationId, onPreviewFile, variant }: ChatHistoryFileRowProps) {
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const fileName = getChatAttachmentFileName(file);
     const fileType = getFileTypebyFileName(fileName);
     const TypeIcon = getFileTypeIcon(fileName);
@@ -38,34 +47,40 @@ export function ChatHistoryFileRow({ file, onPreviewFile }: ChatHistoryFileRowPr
     const canDownload = !!fileUrl && !canPreview;
     const isInteractive = canPreview || canDownload;
 
-    const handleClick = () => {
-        const artifact = toChatArtifact(file);
+    const handleClick = async () => {
+        const artifact = toChatArtifact(file, conversationId);
         if (artifact && onPreviewFile) {
             onPreviewFile(artifact);
             return;
         }
+        const url = await reissueAttachmentUrl(getReissuableAttachment(file, conversationId), fileUrl);
+        if (!url) return;
         if (canPreview) {
-            setPreviewOpen(true);
+            setPreviewUrl(url);
             return;
         }
-        if (canDownload && fileUrl) {
-            downloadFile(fileUrl, fileName);
+        if (canDownload) {
+            downloadFile(url, fileName);
         }
     };
 
     return (
         <>
-            <button type="button" className="dsh-chat-attachment" onClick={handleClick} disabled={!isInteractive}
-                title={fileName}>
-                <span className="dsh-resource-icon"><TypeIcon size={28} /></span>
-                <span className="min-w-0 flex-1">
-                    <span className="dsh-resource-name block text-text-1">{fileName}</span>
-                    <span className="dsh-resource-meta block">{fileType.toUpperCase()}</span>
-                </span>
-            </button>
+            {variant === 'resource' ? (
+                <FileAttachmentResourceCard name={fileName} size={file.size} onClick={isInteractive ? handleClick : undefined} />
+            ) : (
+                <button type="button" className="dsh-chat-attachment" onClick={handleClick} disabled={!isInteractive}
+                    title={fileName}>
+                    <span className="dsh-resource-icon"><TypeIcon size={28} /></span>
+                    <span className="min-w-0 flex-1">
+                        <span className="dsh-resource-name block text-text-1">{fileName}</span>
+                        <span className="dsh-resource-meta block">{fileType.toUpperCase()}</span>
+                    </span>
+                </button>
+            )}
 
-            {canPreview && fileUrl && (
-                <OGDialog open={previewOpen} onOpenChange={setPreviewOpen}>
+            {canPreview && previewUrl && (
+                <OGDialog open onOpenChange={(open) => !open && setPreviewUrl(null)}>
                     <OGDialogContent
                         showCloseButton
                         className="flex h-[min(85vh,900px)] w-[min(92vw,960px)] max-w-none flex-col overflow-hidden p-0"
@@ -73,7 +88,7 @@ export function ChatHistoryFileRow({ file, onPreviewFile }: ChatHistoryFileRowPr
                         <FilePreview
                             fileName={fileName}
                             fileType={fileType}
-                            fileUrl={fileUrl}
+                            fileUrl={previewUrl}
                         />
                     </OGDialogContent>
                 </OGDialog>

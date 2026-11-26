@@ -3,6 +3,8 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import type { KnowledgeSpace } from '~/api/knowledge';
 import { useDesktopNavigation } from '~/components/Chat/useDesktopNavigation';
 import { KnowledgeSquarePane } from './KnowledgeSquarePane';
+jest.mock('~/components/Nav/NewChat', () => ({ useStartNewChat: () => jest.fn() }));
+jest.mock('~/hooks/useClientEnvironment', () => ({ useClientEnvironment: () => ({ channel: 'desktop' }) }));
 
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
 jest.mock('~/components/Chat/desktopEmbedding', () => ({ isDesktopEmbedded: () => true }));

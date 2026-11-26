@@ -1,13 +1,25 @@
-import { Cascader, type CascaderOption, type CascaderPath } from "@bisheng/ui";
+import { Cascader, Tooltip, type CascaderOption, type CascaderPath } from "@bisheng/ui";
 import { memo, useEffect, useMemo } from "react";
 import { useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
-import type { BsConfig } from "~/types/chat";
+import type { BsConfig, ModelPricingHint } from "~/types/chat";
+
+/**
+ * Credit ratio after the model name: "3.00x" or "Free"; nothing when the server sent none.
+ * The base model reads "1.00x" without a word: picker cells are narrow and truncate long labels.
+ */
+function modelRatioText(hint: ModelPricingHint | null | undefined, free: string): string {
+  if (!hint) return "";
+  if (hint.free) return free;
+  return hint.ratio ? `${hint.ratio}x` : "";
+}
 
 interface AiModelSelectProps {
   options?: BsConfig["models"];
   value: number;
   disabled: boolean;
+  /** Shown as a tooltip while the selector is disabled, to say when it comes back. */
+  disabledReason?: string;
   /** User-initiated model selection. */
   onChange: (value: string) => void;
   /**
@@ -19,7 +31,7 @@ interface AiModelSelectProps {
   onAutoChange?: (value: string) => void;
 }
 
-const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }: AiModelSelectProps) => {
+const AiModelSelect = memo(({ options, value, disabled, disabledReason, onChange, onAutoChange }: AiModelSelectProps) => {
   const localize = useLocalize();
   const selectCopy = useSelectCopy();
   // Dedup by model id — multiple LLM servers can expose the same model,
@@ -40,6 +52,7 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
   }, [options]);
 
   const unknownProvider = localize("modelPicker.unknownProvider");
+  const ratioFree = localize("modelPicker.ratioFree");
   const { cascaderOptions, modelPaths } = useMemo(() => {
     const groups = new Map<string, CascaderOption>();
     const paths = new Map<string, CascaderPath>();
@@ -50,11 +63,14 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
         groups.set(providerKey, { value: providerKey, label: providerName, children: [] });
       }
       const id = String(model.id);
-      groups.get(providerKey)!.children!.push({ value: id, label: model.displayName?.trim() || model.name });
+      const name = model.displayName?.trim() || model.name;
+      // The shared Cascader takes plain-text labels, so the ratio rides in the label text.
+      const ratio = modelRatioText(model.pricing_hint, ratioFree);
+      groups.get(providerKey)!.children!.push({ value: id, label: ratio ? `${name} · ${ratio}` : name });
       paths.set(id, [providerKey, id]);
     }
     return { cascaderOptions: [...groups.values()], modelPaths: paths };
-  }, [uniqueOptions, unknownProvider]);
+  }, [uniqueOptions, unknownProvider, ratioFree]);
 
   // Auto-select first option when current value is invalid
   useEffect(() => {
@@ -72,7 +88,7 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
     }
   }, [uniqueOptions, value, onAutoChange, onChange]);
 
-  return (
+  const cascader = (
     <Cascader
       {...selectCopy}
       variant="ghost"
@@ -95,6 +111,9 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
       className="min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)]"
     />
   );
+  // The tooltip adds a hover zone around a disabled trigger, so it is mounted
+  // only while there is a reason to show.
+  return disabled && disabledReason ? <Tooltip content={disabledReason}>{cascader}</Tooltip> : cascader;
 });
 
 AiModelSelect.displayName = "AiModelSelect";

@@ -1,0 +1,100 @@
+pageType: cover
+background:
+  type: solid
+  color: '#F0C8A0'
+notes: Native PPTD adaptation of Zara Zhang / Playful. MIT. Example figures are illustrative.
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 758
+      - 66
+      - 115
+      - 141
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#F0C8A0'
+    border:
+      width: 2
+      color: '#1A1A1A'
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 782
+      - 93
+      - 70
+      - 93
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#1A1A1A'
+    border:
+      width: 0
+      color: '#1A1A1A'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 150
+      - 716
+      - 228
+    content:
+      text: |-
+        做一点
+        好东西
+      fontFamily:
+        latin: Arial Black
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 61
+      color: '#1A1A1A'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 420
+      - 730
+      - 45
+    content:
+      text: 创意方向与视觉系统
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 22
+      color: '#1A1A1A'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#1A1A1A'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#1A1A1A'
+      lineHeight: 1.12
+      bold: false

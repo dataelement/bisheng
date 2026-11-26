@@ -38,6 +38,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
             knowledge_id: kid,
             file_list: filesRef.current.map(file => ({
                 file_path: file.file_path,
+                ...(file.preview_upload_ref ? { preview_upload_ref: file.preview_upload_ref } : {}),
                 excel_rule: file.fileType === 'file' ? {} : {
                     "append_header": true,
                     "header_end_row": 1,

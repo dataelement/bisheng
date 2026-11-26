@@ -16,7 +16,15 @@ def account_availability(monkeypatch):
 
 
 def tool(id=1, kind=1, name="Current time", key="get_current_time"):
-    return SimpleNamespace(id=id, is_preset=kind, name=name, tool_key=key, desc="Description", is_delete=0)
+    return SimpleNamespace(
+        id=id,
+        is_preset=kind,
+        name=name,
+        tool_key=key,
+        desc="Description",
+        is_delete=0,
+        extra=json.dumps({"operationId" if kind == 0 else "name": name}),
+    )
 
 
 def make_service(monkeypatch, rows):
@@ -61,7 +69,7 @@ async def test_catalog_uses_resource_permissions_without_publication(monkeypatch
 async def test_readonly_demo_still_calls_the_normal_authorized_work_path(monkeypatch):
     app, work = make_service(monkeypatch, [tool(1, 2, "demo_check_inventory", "hash")])
     result = await app.trial(1, {"product_code": "MAT-001"})
-    work.call_tool.assert_awaited_once_with("bisheng_tool_1", {"product_code": "MAT-001"})
+    work.call_tool.assert_awaited_once_with("demo_check_inventory", {"product_code": "MAT-001"})
     assert result["result"]["available"] == 85
     assert result["demo_data"] is True
 
@@ -102,7 +110,7 @@ async def test_mcp_error_payload_is_audited_as_incomplete(monkeypatch):
     service._executor = AsyncMock(return_value=executor)
     work.publications.audit = AsyncMock()
     with pytest.raises(HTTPException) as error:
-        await service.call_tool("bisheng_tool_1", {})
+        await service.call_tool("demo_check_inventory", {})
     assert error.value.status_code == 502
     assert [call.args[-1]["status"] for call in work.publications.audit.await_args_list] == ["STARTED", "INCOMPLETE"]
 
@@ -142,11 +150,11 @@ async def test_work_call_accepts_resource_permission_without_publication(monkeyp
     service._tools = work._tools
     executor = SimpleNamespace(args_schema={"type": "object"}, ainvoke=AsyncMock(return_value="time"))
     service._executor = AsyncMock(return_value=executor)
-    assert await service.call_tool("bisheng_tool_1", {}) == "time"
+    assert await service.call_tool("get_current_time", {}) == "time"
     work.publications.list_enabled.assert_not_awaited()
     work._tools.return_value = {}
     with pytest.raises(HTTPException) as error:
-        await service.call_tool("bisheng_tool_1", {})
+        await service.call_tool("get_current_time", {})
     assert error.value.status_code == 403
     assert executor.ainvoke.await_count == 1
 
@@ -197,6 +205,22 @@ async def test_only_authorized_tools_can_change_account_availability(monkeypatch
     save = AsyncMock()
     monkeypatch.setattr(UserToolAvailabilityService, "save", save)
     app, work = make_service(monkeypatch, [tool(38, key="web_search"), tool()])
+    from bisheng.core.context import tenant
+    from bisheng.permission.application import business_authorization
+    from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+
+    monkeypatch.setattr(tenant, "get_current_tenant_id", lambda: 2)
+    load = AsyncMock(
+        side_effect=lambda tool_id: (
+            SimpleNamespace(id=tool_id, type=12, tenant_id=2, is_delete=0, is_preset=1) if tool_id in (38, 1) else None
+        )
+    )
+    monkeypatch.setattr(GptsToolsDao, "aget_one_tool", load)
+    monkeypatch.setattr(
+        GptsToolsDao, "aget_one_tool_type", AsyncMock(return_value=SimpleNamespace(id=12, tenant_id=2, is_delete=0))
+    )
+    permission = AsyncMock(return_value=True)
+    monkeypatch.setattr(business_authorization, "check_business_action", permission)
     work.publications.audit = AsyncMock()
     assert await app.set_availability(38, False) == {"tool_id": 38, "enabled": False}
     save.assert_awaited_once_with(38, False)
@@ -227,7 +251,7 @@ async def test_each_tool_kind_can_be_disabled_and_removed_from_work(monkeypatch,
     assert await work._tools() == {}
     work._executor = AsyncMock()
     with pytest.raises(HTTPException) as failure:
-        await work.call_tool("bisheng_tool_7", {})
+        await work.call_tool("get_current_time", {})
     assert failure.value.status_code == 403
     work._executor.assert_not_awaited()
 
@@ -254,14 +278,16 @@ async def test_catalog_exposes_stable_translation_identity_for_builtins(monkeypa
     assert row["description"] == "Description"
     assert row["provider"] == "Enterprise tools"
     assert row["resource_id"] == 9
-    assert row["invocation_name"] == "mcp__bisheng__bisheng_tool_9"
+    assert row["invocation_name"] == (
+        "mcp__bisheng__tianyancha_get_company_baseinfo" if kind == 1 else "mcp__bisheng__configured_name"
+    )
 
 
 @pytest.mark.parametrize("target_id", [1, 2, 3])
 async def test_tool_order_stays_stable_across_availability_changes_and_reload(monkeypatch, target_id):
     from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
 
-    tools = [tool(3, 2), tool(4, 1), tool(2, 1), tool(1, 0)]
+    tools = [tool(3, 2, "mcp_time"), tool(4, 1, key="disabled_time"), tool(2, 1), tool(1, 0, "api_time")]
     disabled = AsyncMock(return_value={4})
     monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", disabled)
     app, _ = make_service(monkeypatch, tools)
@@ -283,7 +309,7 @@ async def test_daily_picker_only_exposes_curated_children_and_preserves_defaults
     from bisheng.permission.application import business_authorization
     from bisheng.tool.domain.services.tool import ToolServices
 
-    permission = AsyncMock(return_value={"12": frozenset({"use"})})
+    permission = AsyncMock(return_value={"12": frozenset({"visible"})})
     monkeypatch.setattr(business_authorization, "batch_check_business_actions", permission)
     monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value={1}))
     result = await app.picker_tools(
@@ -298,3 +324,16 @@ async def test_daily_picker_only_exposes_curated_children_and_preserves_defaults
     assert result[0]["children"][0]["enabled"] is False
     assert await app.picker_tools(configured_tools=[]) == []
     ToolServices().get_tool_list.assert_not_awaited()
+
+
+async def test_an_auto_enabled_workbench_tool_is_not_listed(monkeypatch):
+    """F005 AC-10: the capability center leaves out a tool the admin auto-enabled."""
+    from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+    async def _ids(cls):
+        return {2}
+
+    monkeypatch.setattr(WorkStationService, "aauto_enabled_tool_ids", classmethod(_ids))
+    app, _ = make_service(monkeypatch, [tool(), tool(2, name="Code interpreter", key="bisheng_code_interpreter")])
+
+    assert [row["resource_id"] for row in (await app.list())["items"]] == [1]

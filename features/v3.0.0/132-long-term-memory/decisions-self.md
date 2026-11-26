@@ -1,0 +1,129 @@
+# 自己做的决定
+
+按 goal-runbook §4"自己定"处理的事项，每条一行：任务号｜遇到什么｜怎么定的｜为什么。
+
+- T001｜worktree 软链的是主检出的 `.venv`，`uv run` 默认会按本 worktree 的 lock 同步这个共享环境｜后端测试一律用 `uv run --no-sync python -m pytest`（清代理六变量）代替 `uv run pytest`｜不改共享环境；`-m pytest` 让 `import bisheng` 解析到 worktree 代码而不是主检出的 editable 安装
+- T001｜基线运行期间本 worktree 已有改动，直接跑会污染基线｜基线改在 `git worktree add --detach` 出的干净目录（scratchpad/basewt，代码等于 origin/feat/3.0.0）上生成｜基线必须是未改动代码的结果
+- T001｜串行全量后端测试约 5 小时（无中间件时大量连接超时）｜〔基线比对〕改为按 `test/` 顶层条目轮转分 8 片并行（scratchpad/shard_run.py），基线与比对用同一分片规则，合并 junit 后用 compare_junit.py 比较；两处既有收集错误用 `--continue-on-collection-errors` 跳过｜判定口径不变（新增失败数），只是运行方式
+- T001｜〔架构检查〕的 xargs 串行要 15 分钟以上｜加 `-P8` 并行，输出排序后与基线比较｜输出集合与串行一致
+- T002–T008｜V1–V8 的调查与实验由三个并行子代理完成，结论原文进 verification.md｜—｜节省主线上下文
+- T009｜V1、V3、V4、V5、V6 的结论改了落点或实现细节，方向更严或等价｜作为 design §9 末的 R1–R7、R9 直接回写｜不改验收标准含义，不放宽隔离/权限/脱敏
+- T010｜tasks 列的错误码之外还需要"类型非法""内容为空""无可用整理模型"｜增加 12110、12111、12112，同批进三语文案｜guard 与整理需要可区分的原因码
+- T012｜实现需要几列 design §4.2 没列的字段｜`memory_item.rewritten`（过期事件只改写一次，T093）；`memory_turn_record.scene_class`、`ended`（常驻快照归因与深度研究轮结束）；索引名按表加前缀｜纯新增列，不影响契约
+- T013｜`src/backend/AGENTS.md`：独立新表由 `create_all(checkfirst=True)` 建，revision 只管既有表｜迁移只给 `assistant` 加 `memory_enabled`；downgrade 删该列并删六张新表｜符合仓库的迁移规则，且可逆
+- T014｜服务需要 Redis（常驻缓存、计数、整理锁），测试不能依赖 Redis｜新增窄接口 `MemoryKV`（`services/kv.py`，真实实现 `RedisKV` 直接用原始命令不走 pickle）与测试替身 `InMemoryKV`；数据库会话经 `repositories/_db.py` 一个接缝供测试替换｜与三个 ports 同一思路
+- T028/T030｜write 与 edit/delete/clear/undo 共用"新建、条件替换、条件删除"三个内部方法｜在 T028 一次写出全部方法，T029 的测试写好后直接通过，T030 只补 MinIO 实现｜拆开写会重复同一套事务代码；T029 的测试独立覆盖了这些分支
+- T029｜撤销时找不到写入记录（被清空，或不是本人的记录）｜一律返回"已清空"原因码 12104｜不向非本人透露记录是否存在
+- T030｜详情对象放在哪个桶｜放平台默认桶的 `memory/` 前缀下；该桶的匿名读策略只覆盖 `knowledge/images/*` 与 `tmp/images/*`｜不新增桶配置项（新增 config 顶层键会让旧镜像起不来）
+- T001｜按位置轮转分片时，新增 `test/memory` 目录会让其后所有目录换到别的分片，执行顺序变化引出与本功能无关的顺序依赖失败（误报）｜改为按目录名 crc32 取模分片，并在干净 worktree 上重新生成基线｜新增目录不再移动其他目录
+- T014｜别的测试套件会注册全局租户过滤事件，合跑时记忆测试的 SQLite 会话因缺租户上下文报错｜测试的会话接缝包 `bypass_tenant_filter()`；生产代码不变（仓储层本来就显式按租户与用户过滤）｜只影响测试替身
+- T088｜AC-35 的两条用例要在"我的记忆"关闭时判定，而运行器两种条件都会跑｜在用例 notes 写明只看"不带记忆"条件的结果；T089 解读报告时按此读｜运行器保持通用
+
+## Wave 8–13（并行 worktree 中各 Wave 自己定的决定，原文见 wave-notes/）
+- T049–T052｜本 worktree 建在 `main`（af1894a538），不含 Wave 0–7 的记忆模块｜开工前用 `git switch -C worktree-wf_f7c3abc6-f5a-1 b6a036d4b4` 把本分支指向 `feat/v3.0.0/132-long-term-memory` 的 Wave 7 验收提交，再开始实现｜任务说明写明基底含 Wave 0–7；工作区当时干净，只动本 worktree 自己的分支。合并方请以 b6a036d4b4 为本分支的基底。
+- T050｜新会话的 `chat_id` 在 endpoint 层还不存在（`_agent_initialize_chat` 里才生成），endpoint 无法直接调 `MemoryGate.open`｜登录态 endpoint（`workstation/api/endpoints/chat.py`）构造一个调用 `MemoryGate.open` 的回调 `memory_register`，经 `stream_chat_completion` 传到 `_agent_initialize_chat`，在会话确定之后、本轮问题行插入之前调用｜与助手/工作流的 `memory_register` 做法一致（决策 6、R2）；在问题行之前登记，首轮问题不会落到水位之下（AC-40）；开放面入口不传回调，所以不登记。
+- T050｜开放面调用一个曾被登录态登记过的会话时，按 `chat_id` 仍能查到登记行｜只有传了 `memory_register` 的一轮才调用 `MemoryGate.resolve`；没传时既不带入、不给工具，也不写本轮记录、不调 `end_turn`｜比"有登记行就启用"更严，满足 AC-10。
+- T050｜日常入口发起的任务模式（`_task_mode_stream_completion`）也经同一个 endpoint｜已有会话在 `submit_task_turn` 入队前登记；新会话只能在 submit 之后拿到 `chat_id` 再登记｜design 决策 6 写明"从日常入口转入任务模式的情况已被上一条覆盖"；新会话存在 worker 先于登记解析的竞争，后果只是该轮不用记忆（保守方向）。
+- T050｜记忆已启用时工具列表恒非空，直连分支走不到｜测试用"记忆工具构建失败"驱动直连分支，断言系统消息仍带常驻块｜两条分支都要测（design §4.4）。
+- T050｜作者或用户配置的工具与记忆工具同名｜加记忆工具前调 `split_reserved_tools`，以记忆工具为准并记告警｜决策 10"同名工具"。
+- T050/T052｜本轮概要行何时写｜在轮开始取常驻块时写（`add_summary`），回答落库后由 `bind_turn` 补 `message_id`｜中断路径只能同步，开头写好后中断路径只需 `bind_turn_sync`，不需要同步版 `add_summary`；不改记忆模块既有文件。
+- T050/T052｜常驻块为空或带入失败时 `add_summary` 的 `resident_rev`、`resident_day` 传什么｜传 `None`｜`TurnRecordService._flags` 把 `resident_rev is not None` 当作"有归因"；传空块的 rev 会让 `/flags` 与流式信号不一致（契约：has_attribution = 带入了非空常驻块或有检索）。
+- T052｜`memory` SSE 事件的 `type` 字段契约未定｜用 `"over"`，载荷只含 `{turn_id, has_write, has_attribution}`；最后一条带 `message_id`（答案行 id），排在 `agent_answer/end` 之前｜前端按 category 识别；带 `message_id` 便于前端把标志挂到气泡上。
+- T052｜一轮内何时下发信号｜每次工具结束后若标志有变化就下发一次（写入后立刻可见，AC-21）；结束前再下发一次带 `message_id` 的最终标志；三项标志都为假时不下发｜只读常驻、只检索的轮次同样有归因信号（AC-87）。
+- T052｜记忆工具的错误文本（如参数校验错误）可能回显入参｜记忆工具的 `error` 一律替换为固定文本"记忆操作失败"｜脱敏只看工具名，不放宽（决策 10）。
+- T052｜内容安全替换输出的路径（`persist_safety_replacement`）也会落答案行｜同样 `bind_turn` + `end_turn` 并下发信号｜替换前的显式写入已经发生，用户需要能看到并撤销。
+- T051｜测试里计算事件顺序时，`user_message` 事件没有 `category` 键导致 KeyError（测试写错）｜改用 `b.get('category')`，随 T052 提交｜断言含义不变。
+- T049/T051｜测试替身放哪｜新建 `test/workstation/memory_support.py`，从 `test/memory/conftest.py` 精简复制 SQLite 接缝、KV、索引、详情替身，不导入、不修改该 conftest；流的外围按 `test_stream_interrupt_persist.py` 的做法打桩，模型是脚本化的假 agent，会真实调用传给它的工具｜按任务说明"复制所需内容"。
+- T053–T059｜本 worktree 建在 `main`（af1894a538）上，不含 Wave 0–7｜用 `git switch -C worktree-wf_f7c3abc6-f5a-2 b6a036d4b4` 把本分支切到 `feat/v3.0.0/132-long-term-memory` 的 Wave 7 验收提交上再开工｜任务说明写明基线应含 Wave 0–7；工作树当时干净，没有丢失任何改动。
+- T054｜记忆逻辑放在哪里｜新建 `api/services/assistant_memory.py`，`assistant_agent.py` 只加调用｜`assistant_agent.py` 的改动保持最小；新文件属于 Service 层，可以引用 `memory`。
+- T054｜开关开启时记忆工具每轮都要带新的 `MemoryContext`（`turn_id` 每轮不同，工具描述里还有当天日期）｜开启的轮次每轮重建工具与 agent；关闭的轮次只在"上一轮是开启"时重建一次｜tasks 写"状态变化时重建"，每轮重建是它的超集，结果一致；`init_agent` 只做图的构建，代价小。
+- T054｜开关关闭的轮次是否复制输入列表｜只有需要改动（插入常驻或替换回放的记忆结果）时才复制，否则原样返回同一个列表｜V5 证明客户端切片依赖列表别名，记忆关闭时与改动前行为完全一致。
+- T054｜开关先读还是登记行先读｜先按主键读 `assistant.memory_enabled`，为关时不再调用 `MemoryGate.resolve`｜少一次查询，判定结果相同。
+- T054｜作者配置了 `memory_` 前缀的工具、而助手记忆关闭时｜保留作者的工具；只在记忆开启的轮次用 `split_reserved_tools` 去掉并记告警｜记忆关闭时不改变现有行为。
+- T054/T056｜本轮常驻文本为空时概要行的 `resident_rev`｜写 `None`｜`TurnRecordService._flags` 把 `resident_rev` 非空当作"有归因"；契约要求只有常驻块非空或有检索时才算有归因。
+- T056｜WebSocket `memory` 消息的形状｜`{"category": "memory", "type": "memory", "message": {turn_id, has_write, has_attribution}, "chat_id", "flow_id", "message_id": null, ...}`，不经 `ChatResponse`（其 `type` 校验不允许 `memory`）｜契约写"message type `memory`"，`category` 与 `type` 都设为 `memory`，前端按任一字段判别都成立。
+- T056｜何时下发信号｜显式写入成功时立即发一次（工具 `on_write`），`run()` 返回前若有写入或归因再发一次｜中断的轮次也能拿到写入提示；前端按 `turn_id` 去重即可。
+- T056｜`on_tool_start` 的脱敏入参来源｜优先用回调的 `inputs` 字典（拿得到 `action` 作为 `op`），没有时用 `input_str`｜`input_str` 是 Python repr，不是 JSON，解析不出 `op`。
+- T056｜工具出错路径的输出｜错误文本整体替换为 `{"redacted": true, "op", "item_ids": []}` 的 JSON｜错误文本可能引用条目原文（测试里构造了这种情况）。
+- T056｜ReAct 结果里的 `AgentAction` 带原始参数｜在 `finalize_result` 里一并脱敏｜它不落库，但会进 `BISHENG_RECORD_HISTORY` 调试文件；脱敏代价为零。
+- T058｜异常分支（不落回答）如何结束本轮｜`question_saved` 为真时调 `after_answer_persisted(None, False)`，`end_turn` 用会话当前最大消息 id｜R2 要求异常分支也结束本轮。
+- T058｜登记回调或落库回调抛错｜`client.py` 里捕获并记日志，不影响对话｜记忆失败不得打断助手（AC-61 的同类原则）。
+- T053/T055/T057｜测试要用 `test/memory/conftest.py` 的夹具，但不能改它｜测试文件用 `from test.memory.conftest import ... # noqa: F401` 引入夹具；共享的桩模型与工厂注入放在新文件 `test/assistant/memory_support.py`｜不新增 conftest，不影响 `test/assistant` 下其它测试。
+- T054｜T053 的一条断言写错：ReAct 把问题包成 "Question: ..." 的消息｜改为断言问题文本包含在最后一条消息里、常驻消息位于它之前｜测试本身写错，判定没有放宽。
+- T058｜T057 的两处测试写错：`update_assistant` 现有代码把未传的 `temperature` 写成 `None` 导致 `AssistantInfo` 校验失败；构造 `ChatClient` 时读到真实配置存储｜测试请求里带上 `temperature`；在测试夹具里替换 `client_module.settings` 与历史读取｜都是测试替身不完整，与功能无关。
+- 环境｜worktree 分支创建时基于 main（af1894a538），不含 Wave 0–7 的记忆模块｜在本 worktree 内用 `git checkout -B` 把本分支移到 `feat/v3.0.0/132-long-term-memory` 的 b6a036d4b4 再开工｜任务说明写明基线应含 Wave 0–7；工作区当时没有改动，不影响其他 worktree。
+- T061｜`SearchService.search` 只取回调用前已知 id 的详情，节点要的是"所有带详情的命中都用详情全文"｜新建 `memory/domain/services/workflow_retrieval.py`：先检索，再按 `detail_object_key(tenant, user, item_id)` 逐条读取详情；读取失败时保留短内容并计 `detail_read_failed`；成功的计入 `mark_detail_read`｜不改 `search.py`，避免与并行 Wave 冲突；详情对象键由同一个函数生成，与 `MinioDetailStore.put` 一致。
+- T061｜输出项 metadata 是否带条目 id｜不带，只有 `type`、`recorded_at`、`event_time`、`source` 四个键｜按跨 Wave 契约原样实现；`event_time` 没有时为 `null`。
+- T061｜`limit` 的合法取值｜接受 1–100 的 int、整数值的 float（如 30.0）与纯数字字符串；拒绝 bool、小数、非数字、越界值，均抛 12108；缺省为 20｜JSON 里 `30` 与 `30.0` 前端无法区分；bool 是 int 子类，单独排除。
+- T061｜`limit` 在哪校验｜节点构造时调用 `parse_limit`；上线时在 `update_flow_status` 先于 `Workflow(...)` 显式校验｜构造时抛出会被上线流程包成 `WorkFlowInitError(10526)`，显式校验才能返回 12108。
+- T061｜引用变量不是文字时怎么转｜dict / list / tuple 用 `json.dumps(ensure_ascii=False)`，None 转空串，其他用 `str()`；整个查询 strip 后为空则不检索｜默认的 `PromptTemplateParser.format` 对 dict 用 Python repr，不是可读文字。
+- T061｜节点从同步上下文调用异步检索｜用 `bisheng.utils.async_utils.run_async_safe`，超时 60 秒｜与 `workflow/common/knowledge.py` 的知识空间检索做法一致。
+- T061｜运行日志｜`parse_log` 只返回 `{id}.query` 与 `{id}.retrieved_count` 两项；节点内不打印条目内容｜AC-86。
+- T061｜节点内的记忆模块导入｜在 `_run` 与上线校验函数里延迟导入｜`node_manage` 在导入期加载所有节点，延迟导入可以避免工作流包导入时拉起记忆模块。
+- T063｜开关查询的位置｜按 R5 放在 `worker/workflow/tasks.py::_execute_workflow`（函数 `_online_memory_switch`）；`chat_id` 为空时不查；查询异常按关处理｜tasks.md T063 的文件清单没有列 tasks.py，以 R5 为准；评测与调试运行不读库。
+- T063｜上线校验函数放在哪｜`workflow/nodes/memory_retriever/memory_retriever.py::check_memory_nodes_for_publish`，由 `api/services/workflow.py` 的 ONLINE 分支调用；先查开关（12109），再逐节点查 `limit`（12108）｜节点类型与参数结构属于工作流模块；读开关复用 `app_switch.start_node_memory_enabled`。
+- T065｜一轮结束时 `enabled` 怎么判定｜`MemoryGate.resolve_sync(chat_id, SCENE_WORKFLOW, app_enabled=本次运行的开关) is not None`；续跑时开关取自 `_global_workflow` 里原对象的 `graph_state`；原对象已失效时按未启用处理｜续跑沿用首次取得的值（R5）；整个调用包在 try 里，失败不改变任务结果。
+- T065｜登记回调的异常｜`WorkflowClient._register_memory_session` 捕获异常并写日志，支持同步或异步回调｜登记失败不能中断工作流；`common/` 下的客户端不导入记忆模块。
+- T060/T062/T064｜工作流测试目录下的夹具｜新建 `test/workflow/memory_fixtures.py`，复用 `test/memory/conftest.py` 里的替身类，自建夹具；异步引擎用 `NullPool`｜节点在 `run_async_safe` 的桥接事件循环上检索，aiosqlite 连接不能跨事件循环复用。
+- T062/T064｜导入真实的 `bisheng.worker.workflow.tasks`｜沿用 `test/workflow/test_workflow_tasks.py` 的做法：给被预先 mock 的 `bisheng.worker` 一个带包路径的模块｜仓库已有先例。
+- T063→T066｜T063 提交后 `test/memory/spike/test_v4_graph_state.py` 的两个用例失败（它把 `GraphState` 替换成不接受参数的 lambda）｜按任务顺序由 T066 删除该实验测试｜T066 的任务内容就是删除它；T063–T065 三个提交之间这两个用例为红。
+- T067｜本 worktree 建出来时基于 `main`（af1894a538），不含 Wave 0–7 的记忆模块｜用 `git switch -C worktree-wf_f7c3abc6-f5a-4 b6a036d4b4` 把本分支移到其他并行 Wave 共用的基线｜工作区当时干净，基线与兄弟分支一致，协调者合并时不会多出 `main` 上的无关提交。
+- T067｜测试放在 `test/linsight/` 下，用不到 `test/memory/conftest.py` 的 fixture｜新建 `test/linsight/_memory_doubles.py`，复制最小的 SQLite 接缝、KV、索引、详情替身，测试模块按名字导入 fixture｜brief 要求复制而不是跨目录引用；文件名以 `_` 开头，pytest 不把它当测试收集，也不影响 `test/linsight` 下其他测试。
+- T068｜日常对话进入任务模式时，新会话的 `chat_id` 在 `submit_user_question` 内部生成，入队也在 `submit_task_turn` 内部；Wave 8 在 `chat.py` 端点里登记时拿不到这个 `chat_id`｜给 `submit_task_turn` 加一个默认 `None` 的参数 `on_session_created`，在会话建好之后、入队之前调用；只有 `chat_service._task_mode_stream_completion` 传入登记回调｜登记必须早于 worker 开始本轮，否则首轮读不到登记行。开放 API 走 `task_mode_service` 直接调 `submit_task_turn`，不传回调；开放面的日常路由在 `open_api/domain/schemas/workstation.py:88` 把 `task_mode` 强制置为 False，所以 `_task_mode_stream_completion` 只能从登录态端点进入。`chat_service.py` 只改了 `:2699` 一处调用，与 Wave 8 的改动区域不重叠。
+- T068｜轮次结束要让整理知道"本轮结果已最终"｜轮结束时把本轮概要行的 `ended` 列置为真（该列在模型里已有、此前未被使用），新增 `memory/domain/services/linsight_turns.py` 承载这条更新和"按任务消息行找未结束轮"的查询｜不改既有记忆文件；整理据此区分进行中、停在补充输入与已结束。
+- T068｜`end_turn` 的 `last_message_id`｜取本轮任务消息行 id（按 svid 经 `get_task_feedback_by_version` 找到），找不到时传 `None`（当前最大）｜与 V7 的建议一致。
+- T068｜部分既有测试用 `LinsightWorkflowTask.__new__` 构造执行器，不经过 `__init__`｜开始与结束都经 `_begin_memory_round` / `_end_memory_round`，内部用 `getattr` 兜底创建 `LinsightMemoryRound`｜既有测试不因缺少新属性而失败。
+- T068｜三个登录态端点之外的 `/workbench/start-execute` 是否登记｜不登记｜spec 只点名提交、继续、补充输入三个；提交端点已在客户端调用 start-execute 之前完成登记。
+- T070｜调研子代理能否用 `memory_search`｜两个记忆工具都加入 `_SUBAGENT_TOOL_DENY`，记忆文本也只挂在主图｜R3 写明"子 agent 不读写记忆"。
+- T070｜"有归因"的口径｜只在本轮带入了非空常驻块、或检索取回了条目时为真；经验类带入不计入；常驻块为空时本轮概要行的 `resident_rev` 写 `None`｜`GET /turn` 的 `resident` 按快照返回常驻条目、不含经验条目；把经验类算作归因会出现"有归因标志但面板里没有内容"。`flags` 按 `resident_rev is not None` 判归因，所以空常驻必须写 `None`。
+- T070｜记忆信号的下发时机｜在三处下发并按 `(turn_id, has_write, has_attribution)` 去重：显式写入成功的回调、记忆工具的结束帧（覆盖检索）、轮结束｜任务消息 WS 在 `FINAL_RESULT` 后关闭（`message_stream_handle.py:22-23`），只在轮结束下发会到不了前端。
+- T070｜提示词与工具同步｜记忆文本＝工具说明＋常驻块＋经验块，在轮开始时生成一次；`create_linsight_agent` 只在工具列表里确有 `memory_` 工具时才挂记忆中间件｜遵守 linsight/AGENTS.md 的 prompt ⟺ tool 约束。
+- T072｜`ExecStep.output` 是字符串字段｜`params` 换成 `{"redacted": true, "op", "item_ids"}` 字典，`output` 换成同一字典的 JSON 字符串；条目 id 优先从返回里取｜满足字段类型，两处内容一致。
+- T072｜`WorkspaceBackend.write/awrite` 的拦截范围｜只拦 `large_tool_results/` 下、内容以记忆工具输出固定前缀开头的写入，返回 `WriteResult(error=...)`｜三条卸载路径写失败时都保留原消息（V3 已核实），其余写入不受影响。
+- T072｜压缩生成的摘要文本（V3 落点 13）｜不处理｜R4 已把它记入 §8 已知限制。
+- T074｜整理读取深度研究的入口｜在 linsight 侧新增 `read_round_for_memory(chat_id, message_id)`：按任务消息行取 svid，再取该版本的 `question`、`output_result.answer` 与是否终态；记忆模块只调这个函数｜满足"不直接查深度研究的表"。
+- T074｜一轮的文本上限｜问题截到 2000 字，回答截到总量 24000 字｜沿用日常整理的 `MAX_MESSAGE_CHARS`、`MAX_TOTAL_CHARS`。
+- T074｜几种异常轮的处理｜`ended` 但版本未到终态：等待；任务消息行或版本找不到：置位并记 `op='abandoned'`；会话已删除、记忆关闭或登记行换了主人：只置位不整理；超过 24 小时未结束：置位并记 `op='abandoned'`｜失败方向都是"少整理"。单轮失败不影响同一用户其他轮，失败由 `Consolidator` 计数，下次扫描重试。
+- T074｜`consolidator.py` 是否要改｜不改；在 `factory.get_consolidator` 里通过已有的 `extra_steps` 参数接入 `LinsightRoundConsolidation`｜`Consolidator` 已预留 `extra_steps`，按 brief 只有本 Wave 改 `factory.py`。
+- T075｜`test/memory/spike/` 目录｜只删除 `test_v3_linsight_paths.py`，目录留给协调者在合并后删除｜brief 的要求；本 worktree 里 Wave 9、10 的实验测试仍在。
+- 环境｜worktree 起点是 main（af1894a538），不含 Wave 0–7｜用 `git switch -C` 把本 worktree 自己的分支指到 `feat/v3.0.0/132-long-term-memory` 的 b6a036d4b4（Wave 7 accepted）后再开工｜任务要求的基线是含 Waves 0–7 的提交，worktree 干净，切分支只影响本 worktree。
+- 环境｜`platform/node_modules` 整体软链到主检出后，`@bisheng/ui` 等工作区包的相对链接解析到主检出的 `packages/ui`（版本不同，引用了未安装的 `react-day-picker`），vitest 与 typecheck 都报错｜把 `platform`、`client`、`packages/chat`、`packages/file-viewers` 的 `node_modules` 改成本地目录：其余条目逐个软链到主检出，`@bisheng/*` 重新建相对链接指向本 worktree 的 packages｜不安装依赖，只换软链；改后基线 `pnpm typecheck` 退出码为 0。这些目录被 gitignore，不进提交。
+- 全部｜测试放置位置｜用 tasks.md 点名的 `__tests__/` 路径（V6 说两种都可被 include 匹配）｜验收命令按名字过滤，任务路径与文件名一一对应，便于追溯。
+- T076｜节点分组名在模板里一直是中文字面量，并兼作 i18n key（`node.<type>.<分组名>`）｜新分组名用英文 key：`retrieval_settings`、`output`（检索节点），`memory`（开始节点）｜源码不新增中文字面量；渲染方式 `t(\`node.${type}.${name}\`)` 不变。
+- T076｜图标｜`bisheng-icons` 的 `Outlined.Notebook`，底色 `bg-[#E4D7FF]`｜平台规定优先用 bisheng-icons，色值与现有节点区分。
+- T076｜单节点运行按钮｜不给记忆检索节点加"运行此节点"｜单节点运行不建 GraphEngine，`chat_id` 为空，节点只会输出空数组（V4）。
+- T077｜存量工作流的开始节点没有 `memory_enabled`，作者无法开启｜在 `util/flowCompatible.ts` 的 `comptibleStart` 末尾幂等补上"记忆"分组（值为关），不改 `v`｜不补的话 AC-70 对存量工作流不可达；不改 `v`，后端开始节点 `v` 判定不受影响；缺失仍按关处理。
+- T077｜AC-75 说明要"在开关旁"｜给 `SwitchItem` 增加可选 `desc` 字段，开关下方常显一行说明；`desc` 不设时渲染与原来一致（仅外层多一层 div）｜tooltip 需要悬停才能看到，不满足"旁边说明"。
+- T077｜保存路径原本不调用 `validateNodes`｜在 `Header.tsx` 的 `handleSaveClick` 与 `handleSaveNewVersion` 里加 `validateMemoryLimits`，不合法时提示范围并不保存；`validateNodes`（运行、上线）也校验 limit；上线额外传 `{ publish: true }` 检查开关｜AC-80 要求保存时拒绝；AC-85 只约束上线，画布调试不拦（调试 `chat_id` 为空，本来就取不到记忆）。`Header.tsx` 不在任务文件清单里，是接入点所需。
+- T077｜纯函数位置｜判定逻辑放新文件 `util/workflowMemory.ts`（模板分组工厂、limit 判定、开关判定），`useNodeEvent.ts` 导出 `validateMemoryLimits` 与常量｜模板、存量升级、校验三处共用一份定义。
+- T077｜limit 判定｜接受 1–100 的整数和纯数字字符串，拒绝 0、101、1.5、空串、非数字｜`InputItem` 的数字输入把值存成数字或空串，导入的旧数据可能是字符串。
+- T078｜开关放在哪｜设置页末尾新增"记忆"标题块（不放折叠面板里），开关加常显说明｜折叠面板默认收起，说明会被藏住；`memory_enabled` 经 `dispatchAssistant('setting')` 写入状态，`handleSave` 以 `...assistantState` 原样提交。
+- T079｜下拉的选项来源｜用 `useModel()` 的 LLM 选项（与工作台模型页 `WorkbenchModel` 同源），控件用现有 `ModelSelect`（Cascader，`close` 可清空）｜沿用现有组件；保存时空值写 `null`，加载时 `memory_model_id` 转成字符串。
+- T079｜测试里 `t` 必须稳定｜全局 setup 的 `useTranslation` 每次返回新 `t`，`useChatConfig` 的 effect 依赖 `t`，会无限重载｜测试文件内改用稳定的 `t` mock（与 `menuNameSave.test.tsx` 同法）。
+- T080｜识别规则｜工具名（`tool_key`/`tool_name`/`name`）以 `memory_` 开头，或载荷本身/`input_str`/`output`/`args`/`results` 等任一字段含 `redacted: true`，即视为记忆操作｜后端脱敏遗漏时也按工具名兜住，比只认 `redacted` 更严。
+- T080｜助手/工作流页｜在 `PlatformConversationMessages` 里对 `run` 卡片做映射：`raw.thought`、`raw.intermediate_steps`、`raw.message`、`text` 全部换成占位，`payload` 只留 `tool_key` 与 `redacted`；`runPresentation` 对同一判定返回 `{ title: '记忆操作', unavailable: false }`｜按 R7，不改共享包；标题不再显示"工具已删除"。
+- T080｜日常页｜`extractDisplayText` 在事件里有记忆工具调用时不再回落原始 JSON：有正文只显示正文，无正文显示占位；`t` 经 ref 读取｜封住 `dailyChatDetail.tsx` 回落 raw 的泄漏口；用 ref 避免 effect 依赖 `t` 造成重复请求。
+- T080｜locale｜占位文案放 `bs.json` 顶层 `memory.operation`｜两处页面都用 bs 命名空间。
+- T081｜本 worktree 建在 `main`（af1894a538）上，不含 Wave 0–7｜开工前把本分支切到特性基线 `b6a036d4b4`（`git switch -C`，当时没有任何改动）｜任务说明写明基线含 Wave 0–7，`features/.../132-long-term-memory/` 与 `bisheng/memory/` 只在该提交里存在。
+- T081｜时区上报挂在哪里｜在 `MainLayout`（所有登录页的外壳）调用 `useMemoryTimezone(user.id)`；localStorage 的键按用户 id 区分，读写都包 try/catch，上报失败不写键｜一处覆盖日常模式、应用聊天与深度研究；按用户分键，同一浏览器换账号时不会漏报；失败不写键，下次加载会重试。
+- T081｜`memory` SSE 事件里的 `message_id` 指向哪一行尚无后端实现可查｜不用它改写当前回答的 id，只把标志并入当前回答｜日常模式的后端（T052）在另一个 Wave，避免把回答 id 改错。
+- T081｜重新生成路径按临时 id 查找回答，`end` 事件换成真实 id 后就查不到｜查找条件加上"或等于 patch.messageId"｜`memory` 事件可能在 `end` 事件之后到达，否则标志会丢。
+- T081｜历史标志何时取｜`getAgentMessages` 成功后再调 `/flags?chat_id` 合并；带 shareToken 的分享页不调｜标志只对本人返回，分享页请求它没有意义。
+- T081｜记忆接口出错时怎样提示｜全部接口带 `skip403Redirect: true, showError: false`，业务错误以翻译后的 `api_errors.<code>` 文案 reject，由组件就地显示｜AC-89 与撤销失败都要求显示接口返回的原因，全局 toast 会重复。
+- T082｜事件时间用什么控件｜`@bisheng/ui` 的 `Input type="date"`｜组件库里 DatePicker 没有落地。
+- T082｜导航与提示图标｜`Outlined.Bulb`（记忆）、`Outlined.History`（归因）｜bisheng-icons 没有"记忆"语义的图标。
+- T082｜共用的类型、来源文案放哪里｜新建 `components/Memory/memoryLabels.ts`，设置页与提示组件共用｜同一概念只有一套文案。
+- T083｜操作提示的数据何时加载｜有写入标志时立即取 `/turn`（提示文案要按"记下/更正/忘掉"显示）；只有归因标志时点开再取｜历史里每条带归因的回答不必各发一次请求。
+- T083｜深度研究没有流式标志｜`MemoryNotice` 增加 `probe` 模式：按 `message_id` 取 `/turn`，没有任何写入、检索、常驻条目就不渲染｜对应 design R8"前端按任务消息行 id 取"。
+- T084｜怎样识别脱敏后的记忆工具事件｜工具名以 `memory_` 开头，或 `args`/`results`（含 JSON 字符串形式）带 `redacted: true`，命中就只显示"记忆操作"占位｜`memory_search` 名字里有 `search`，原来的分类会把它当联网搜索卡片，把脱敏结构当网页结果渲染出来。
+- T085｜WebSocket 的 `memory` 消息挂到哪条消息上｜帧里有 `message_id` 时按 id 找；否则挂到本轮（最后一个用户提问之后）最后一条回答行；本轮还没有回答行时先暂存，收到 `end`/`end_cover`/`close` 帧时再挂｜助手后端（T056）下发的时机与是否带 id 尚未定，这样两种情况都能落到正确的回答上。
+- T085｜应用聊天刷新后的标志从哪来｜不改 `index.tsx` 的历史加载；消息底部用 react-query 按 `chat_id` 取一次 `/flags`，同一会话的所有回答共用缓存｜只在登录态助手会话里发请求，改动面最小。
+- T085｜哪些应用聊天显示｜`appMemoryEnabled`：只认 `flow_type === 5`（助手），且不是只读、不是免登录｜spec 规定工作流的最终输出不做归因；免登录与分享视图没有本人身份。
+- T086｜TaskTurnPanel 要不要改｜`ResultPanel` 已经拿到本轮任务消息 id，`MemoryNotice` 挂在 `ResultPanel` 的点赞下方，可见条件与点赞相同（本人、非只读、非分享）；`TaskTurnPanel` 只补一段注释说明 id 的来源｜一轮 = 一个 svid = 一条任务消息行（R8），点赞与记忆提示用同一个 id。
+- 合并｜Wave 8 与 Wave 11 都在 `chat_service._task_mode_stream_completion` 登记日常入口的任务模式会话｜合并为：Wave 11 的 `on_session_created` 钩子，只在 Wave 8 的登录态 `memory_register` 存在时传入；相应更新 Wave 11 的测试 `test_ac10_daily_task_mode_entry_passes_registration_hook`（同时断言不传回调时没有钩子）｜两边意图相同，取开放面不可能误登记的写法
+- 合并｜Wave 9 的子代理覆盖了主线 scratchpad 里的测试脚本 pt.sh（指向它自己的 worktree）｜合并后发现并恢复｜不影响已提交代码，只影响主线本地命令
+- 合并后｜合跑时 test/linsight 留下的租户 ContextVar（=5）让 Wave 8 测试的会话登记到别的租户，10 个用例只在合跑中失败｜Wave 8 的测试夹具 `memory_support.memory` 固定当前租户为 TENANT_A｜生产路径由中间件设置租户，不受影响；这是测试隔离问题
+- T095｜tasks 写 T095 依赖 T094（test 环境验证），但规程把 T095 列入范围、T094 留给人｜先按实现现状回写 design §4.5、release-contract（INV-44–47 转正、F132 状态）与 AGENTS Quick Map；V5 真实端点兼容性在 §4.5 注明仍待 T094｜不等人工步骤即可完成的部分先完成
+- 收尾｜goal 判定指出 P-02 改了既有测试的断言，违反规程 §8 与 goal 条件｜撤回两处改动（路径限定的 checkout 恢复基线内容），改动另存为 proposed/p02-existing-tests.patch 等用户确认｜如实遵守"不改断言"，接受〔基线比对〕因此出现的新增失败并如实报告
+- 收尾｜用户于 2026-11-13 批准 P-02｜应用 proposed/p02-existing-tests.patch（提交 cc82fc01b9）后重跑〔基线比对〕｜见 progress.md 末行
+- 收尾｜批准 P-02 后的第一次〔基线比对〕出现 1 个新增失败：`test/dsh/test_content_safety_maintenance_cli.py::...[missing_table]`，原因是它启动的子进程在 8 片并行负载下超过 30 秒（TimeoutExpired）｜单独运行 3/3 通过，此前两次全量运行也通过；判定为负载导致的超时，不改该测试，重跑比对确认｜与本功能代码无关

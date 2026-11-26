@@ -1,24 +1,25 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import { getMyResourcePermissions } from "~/api/permission";
 import { triggerUrlDownload } from "../knowledgeUtils";
 import type { FilePreviewProps } from "./index";
 import FilePreviewPage from "./FilePreviewPage";
 
+jest.mock("~/api/permission", () => ({ getMyResourcePermissions: jest.fn() }));
 jest.mock("~/api/knowledge", () => ({
-    ...jest.requireActual("~/api/knowledge"),
     getFilePreviewApi: jest.fn(),
     getFileDownloadApi: jest.fn(),
 }));
-jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
+jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: '7', role: 'member', tenant_id: 60 } }) }));
 jest.mock("~/pages/Subscription/AiChat/FileAiDock", () => ({ FileAiDock: () => null }));
 jest.mock("./RichKnowledgePreview", () => ({ RichKnowledgePreview: () => null }));
 jest.mock("./index", () => ({
     __esModule: true,
-    default: ({ fileUrl, fileType, onDownloadFile, conversionFailed }: FilePreviewProps) => (
+    default: ({ fileUrl, fileType, onDownloadFile, conversionFailed, allowDownload }: FilePreviewProps) => (
         <div>
             <output data-testid="viewer" data-type={fileType} data-conversion-failed={conversionFailed}>{fileUrl}</output>
-            <button onClick={onDownloadFile}>Download</button>
+            {allowDownload && <button onClick={onDownloadFile}>Download</button>}
         </div>
     ),
 }));
@@ -29,6 +30,9 @@ const metadata = { file_source: "space_upload", source_url: "", final_url: "", w
 
 describe("knowledge preview resource contract", () => {
     beforeEach(() => {
+        jest.mocked(getMyResourcePermissions).mockResolvedValue({
+            actions: ["download"], sources: [], mode: "INHERIT", roster_complete: true,
+        } as never);
         __APP_ENV__.BASE_URL = "/workspace";
         window.matchMedia = jest.fn().mockReturnValue({
             matches: false, addEventListener: jest.fn(), removeEventListener: jest.fn(),
@@ -73,7 +77,83 @@ describe("knowledge preview resource contract", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Download" }));
         await waitFor(() => expect(clicks).toEqual(["/bisheng/original/file.pptx?signature=download"]));
         expect(downloadApi).toHaveBeenCalledWith("6", "4");
+        expect(getMyResourcePermissions).toHaveBeenCalledWith("knowledge_file", "4", expect.objectContaining({ signal: expect.anything() }));
         triggerUrlDownload("/bisheng/original/file.pdf?signature=list", "file.pdf");
         expect(clicks[1]).toBe("/bisheng/original/file.pdf?signature=list");
+    });
+
+    it.each([false, true])("hides download for manage-permission-only users (mobile=%s)", async (mobile) => {
+        window.matchMedia = jest.fn().mockReturnValue({
+            matches: mobile, addEventListener: jest.fn(), removeEventListener: jest.fn(),
+        });
+        jest.mocked(getMyResourcePermissions).mockResolvedValue({
+            actions: ["manage_permission"], sources: [], mode: "CUSTOM", roster_complete: true,
+        } as never);
+        previewApi.mockResolvedValue({ ...metadata, original_url: "/bisheng/original/file.docx", preview_url: "" });
+        openPreview("file.docx");
+        await waitFor(() => expect(screen.getByTestId("viewer")).toHaveTextContent("/bisheng/original/file.docx"));
+        expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "com_knowledge.download_file" })).not.toBeInTheDocument();
+    });
+
+    it('retires a revoked download grant when returning to the preview window', async () => {
+        previewApi.mockResolvedValue({ ...metadata, original_url: '/bisheng/original/file.docx', preview_url: '' });
+        openPreview('file.docx');
+        await screen.findByRole('button', { name: 'Download' });
+        let resolve!: (value: Awaited<ReturnType<typeof getMyResourcePermissions>>) => void;
+        jest.mocked(getMyResourcePermissions).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+        act(() => window.dispatchEvent(new Event('focus')));
+        expect(screen.queryByRole('button', { name: 'Download' })).not.toBeInTheDocument();
+        await act(async () => resolve({ actions: ['manage_permission'] } as never));
+        expect(screen.queryByRole('button', { name: 'Download' })).not.toBeInTheDocument();
+    });
+
+    it('does not start a late signed download after leaving the preview page', async () => {
+        previewApi.mockResolvedValue({ ...metadata, original_url: '/bisheng/original/file.docx', preview_url: '' });
+        let resolve!: (value: Awaited<ReturnType<typeof getFileDownloadApi>>) => void;
+        downloadApi.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+        const click = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+        const view = openPreview('file.docx');
+        fireEvent.click(await screen.findByRole('button', { name: 'Download' }));
+        view.unmount();
+        await act(async () => resolve({ original_url: '/bisheng/original/file.docx', preview_url: '' }));
+        expect(click).not.toHaveBeenCalled();
+    });
+
+    it('does not replace the current preview with a late response for the previous file', async () => {
+        function Navigate() {
+            const navigate = useNavigate();
+            return <button onClick={() => navigate('/knowledge/file/5?spaceId=6&name=next.docx')}>Next</button>;
+        }
+        let resolve!: (value: Awaited<ReturnType<typeof getFilePreviewApi>>) => void;
+        previewApi.mockImplementationOnce(() => new Promise(done => { resolve = done; }))
+            .mockResolvedValueOnce({ ...metadata, original_url: '/bisheng/original/next.docx', preview_url: '' });
+        render(<MemoryRouter initialEntries={['/knowledge/file/4?spaceId=6&name=file.docx']}>
+            <Navigate /><Routes><Route path='/knowledge/file/:fileId' element={<FilePreviewPage />} /></Routes>
+        </MemoryRouter>);
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        await waitFor(() => expect(screen.getByTestId('viewer')).toHaveTextContent('/bisheng/original/next.docx'));
+        await act(async () => resolve({ ...metadata, original_url: '/bisheng/original/old.docx', preview_url: '' }));
+        expect(screen.getByTestId('viewer')).toHaveTextContent('/bisheng/original/next.docx');
+    });
+
+    it('does not reuse the last file download grant during navigation or after a late response', async () => {
+        function Navigate() {
+            const navigate = useNavigate();
+            return <button onClick={() => navigate('/knowledge/file/5?spaceId=6&name=next.docx')}>Next</button>;
+        }
+        previewApi.mockResolvedValue({ ...metadata, original_url: '/bisheng/original/file.docx', preview_url: '' });
+        let resolve!: (value: Awaited<ReturnType<typeof getMyResourcePermissions>>) => void;
+        jest.mocked(getMyResourcePermissions).mockResolvedValueOnce({ actions: ['download'] } as never)
+            .mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+        render(<MemoryRouter initialEntries={['/knowledge/file/4?spaceId=6&name=file.docx']}>
+            <Navigate /><Routes><Route path='/knowledge/file/:fileId' element={<FilePreviewPage />} /></Routes>
+        </MemoryRouter>);
+        await screen.findByRole('button', { name: 'Download' });
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        await waitFor(() => expect(jest.mocked(getMyResourcePermissions).mock.calls.some(([kind, id]) => kind === 'knowledge_file' && id === '5')).toBe(true));
+        expect(screen.queryByRole('button', { name: 'Download' })).not.toBeInTheDocument();
+        await act(async () => resolve({ actions: ['manage_permission'] } as never));
+        expect(screen.queryByRole('button', { name: 'Download' })).not.toBeInTheDocument();
     });
 });

@@ -7,27 +7,27 @@ describe("canManageModelSettings", () => {
     expect(canManageModelSettings({ role: "admin" } as any)).toBe(true);
   });
 
-  it("allows non-admin users with model menu access in single-tenant", () => {
+  it("keeps non-admin model-menu users read-only in single-tenant", () => {
     expect(
       canManageModelSettings({
         role: "editor",
         web_menu: ["build", "model"],
       } as any),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("rejects non-admin model-menu users in multi-tenant (admin-only)", () => {
     // Multi-tenant: the legacy web_menu['model'] fallback no longer applies —
     // only super admin / Child Admin manage models (mirrors get_tenant_admin_user).
     expect(
-      canManageModelSettings({ role: "editor", web_menu: ["build", "model"] } as any, true),
+      canManageModelSettings({ role: "editor", web_menu: ["build", "model"] } as any),
     ).toBe(false);
   });
 
   it("still allows super admin / global super / Child Admin in multi-tenant", () => {
-    expect(canManageModelSettings({ role: "admin" } as any, true)).toBe(true);
-    expect(canManageModelSettings({ is_global_super: true } as any, true)).toBe(true);
-    expect(canManageModelSettings({ is_child_admin: true } as any, true)).toBe(true);
+    expect(canManageModelSettings({ role: "admin" } as any)).toBe(true);
+    expect(canManageModelSettings({ is_global_super: true } as any)).toBe(true);
+    expect(canManageModelSettings({ is_child_admin: true } as any)).toBe(true);
   });
 
   it("rejects users without model menu access", () => {

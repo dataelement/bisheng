@@ -62,7 +62,6 @@ export function Cascader(props: CascaderProps) {
     loadingText = 'Loading…',
     loadErrorText = 'Load failed. Try again.',
     backLabel = 'Back',
-    doneLabel = 'Done',
     clearLabel = 'Clear',
     removeLabel = 'Remove',
     searchPlaceholder = 'Search',
@@ -74,6 +73,7 @@ export function Cascader(props: CascaderProps) {
   const treeId = `${id ?? generatedId}-tree`;
   const anchorRef = React.useRef<HTMLElement | null>(null);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const restoreFocusOnClose = React.useRef(true);
   const hoverTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [loadedChildren, setLoadedChildren] = React.useState(
@@ -86,7 +86,6 @@ export function Cascader(props: CascaderProps) {
       loadedChildren.get(cascaderPathKey(path)) ?? option.children,
     [loadedChildren],
   );
-
   const allEntries = React.useMemo(
     () => flattenCascader(options, getChildren, true),
     [options, getChildren],
@@ -102,7 +101,6 @@ export function Cascader(props: CascaderProps) {
       },
     [options, getChildren],
   );
-
   const { selected, commit } = useCascaderValue(props, resolveEntry);
   const selectedKeys = React.useMemo(() => new Set(selected.map(cascaderPathKey)), [selected]);
 
@@ -147,17 +145,24 @@ export function Cascader(props: CascaderProps) {
       openRef.current = next;
       if (openProp === undefined) setInnerOpen(next);
       onOpenChange?.(next);
-      if (next) {
-        const restoredPath = selected[0] ?? [];
-        setExpandedPath(restoredPath);
-        setActive(activePositionForPath(options, restoredPath, getChildren));
-      } else if (keyword) {
-        setKeyword('');
-        search('');
-      }
     },
-    [getChildren, keyword, onOpenChange, openProp, options, search, selected],
+    [onOpenChange, openProp],
   );
+  const previousOpen = React.useRef(false);
+  React.useEffect(() => {
+    const opened = isOpen && !previousOpen.current;
+    const closed = !isOpen && previousOpen.current;
+    previousOpen.current = isOpen;
+    if (opened) {
+      const restoredPath = selected[0] ?? [];
+      setExpandedPath(restoredPath);
+      setActive(activePositionForPath(options, restoredPath, getChildren));
+    }
+    if (closed && keyword) {
+      setKeyword('');
+      search('');
+    }
+  }, [getChildren, isOpen, keyword, options, search, selected]);
 
   React.useEffect(
     () => () => {
@@ -184,7 +189,6 @@ export function Cascader(props: CascaderProps) {
     },
     [getChildren, loadedChildren],
   );
-
   const subtreeLoaded = React.useCallback(
     function loaded(entry: CascaderEntry): boolean {
       const option = entry.options[entry.options.length - 1];
@@ -202,7 +206,6 @@ export function Cascader(props: CascaderProps) {
     },
     [getChildren],
   );
-
   const canSelect = React.useCallback(
     (entry: CascaderEntry) => {
       const option = entry.options[entry.options.length - 1];
@@ -212,7 +215,6 @@ export function Cascader(props: CascaderProps) {
     },
     [checkStrictly, isParent, multiple, subtreeLoaded],
   );
-
   const getSelectionState = React.useCallback(
     (entry: CascaderEntry): boolean | 'indeterminate' => {
       if (checkStrictly || !multiple || !isParent(entry)) return selectedKeys.has(entry.key);
@@ -227,7 +229,6 @@ export function Cascader(props: CascaderProps) {
     },
     [checkStrictly, getChildren, isParent, multiple, selectedKeys],
   );
-
   const handleSelect = React.useCallback(
     (entry: CascaderEntry) => {
       if (!canSelect(entry)) return;
@@ -256,7 +257,6 @@ export function Cascader(props: CascaderProps) {
     },
     [canSelect, checkStrictly, commit, getChildren, isParent, multiple, selected, selectedKeys, setOpen],
   );
-
   const handleOpen = React.useCallback(
     async (entry: CascaderEntry) => {
       const option = entry.options[entry.options.length - 1];
@@ -299,7 +299,6 @@ export function Cascader(props: CascaderProps) {
     },
     [checkStrictly, commit, getChildren, isParent, loadData, loadingKeys, multiple, onLoadError, setOpen],
   );
-
   const handleHoverOpen = (entry: CascaderEntry) => {
     if (phone || expandTrigger !== 'hover') return;
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
@@ -320,6 +319,15 @@ export function Cascader(props: CascaderProps) {
     });
   }, [active.level, columns, searchResults]);
 
+  const handleBack = () => {
+    const previousLevel = Math.max(columns.length - 2, 0);
+    const parentValue = expandedPath[previousLevel];
+    const index = columns[previousLevel]?.options.findIndex((item) => item.value === parentValue) ?? 0;
+    setExpandedPath((path) => path.slice(0, previousLevel));
+    setActive({ level: previousLevel, index: Math.max(index, 0) });
+    anchorRef.current?.focus({ preventScroll: true });
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (!interactive) return;
     const typing = event.currentTarget instanceof HTMLInputElement;
@@ -338,6 +346,7 @@ export function Cascader(props: CascaderProps) {
       return;
     }
     if (event.key === 'Tab') {
+      restoreFocusOnClose.current = false;
       setOpen(false);
       return;
     }
@@ -355,13 +364,13 @@ export function Cascader(props: CascaderProps) {
     }
     const entry = visibleEntries[active.index];
     if (!entry) return;
-    if (event.key === 'ArrowRight' || event.key === 'Enter') {
+    if (event.key === 'Enter' || (event.key === 'ArrowRight' && !typing)) {
       event.preventDefault();
       if (isParent(entry) && searchResults === null) void handleOpen(entry);
       else handleSelect(entry);
       return;
     }
-    if (event.key === 'ArrowLeft' && searchResults === null && active.level > 0) {
+    if (event.key === 'ArrowLeft' && !typing && searchResults === null && active.level > 0) {
       event.preventDefault();
       const previousLevel = active.level - 1;
       const parentValue = expandedPath[previousLevel];
@@ -378,7 +387,7 @@ export function Cascader(props: CascaderProps) {
 
   const handleKeyword = (next: string) => {
     setKeyword(next);
-    setActive({ level: 0, index: 0 });
+    setActive({ level: next ? 0 : columns.length - 1, index: 0 });
     search(next);
     if (!isOpen) setOpen(true);
   };
@@ -453,7 +462,6 @@ export function Cascader(props: CascaderProps) {
       onRemove={(path) => commit(selected.filter((item) => cascaderPathKey(item) !== cascaderPathKey(path)))}
     />
   );
-
   const ownCombobox = searchableInTrigger ? {} : { ...comboboxProps, id, tabIndex: disabled ? -1 : 0 };
   const triggerNode = (
     <SelectionTrigger
@@ -470,6 +478,7 @@ export function Cascader(props: CascaderProps) {
       allowClear={allowClear}
       clearLabel={clearLabel}
       body={body}
+      hasSearchInput={searchableInTrigger}
       hasMultipleTags={multiple && hasValue}
       customTrigger={trigger}
       className={cn(autoWidth && 'w-fit', className)}
@@ -516,31 +525,22 @@ export function Cascader(props: CascaderProps) {
       getChildren={getChildren}
     />
   );
-
   const mobilePanel = phone ? (
     <CascaderMobilePanel
-      open={isOpen}
       treeId={treeId}
+      activeDescendant={cascaderOptionId(treeId, searchResults ? 0 : active.level, active.index)}
       multiple={multiple}
       searchable={searchable}
       keyword={keyword}
       columns={columns}
       searchResults={searchResults}
-      panelRadius={panelRadius}
-      panelClassName={panelClassName}
       backLabel={backLabel}
-      doneLabel={doneLabel}
       clearLabel={clearLabel}
       searchPlaceholder={searchPlaceholder}
       panel={panel}
-      onBack={() => {
-        const nextLevel = Math.max(columns.length - 2, 0);
-        setExpandedPath((path) => path.slice(0, nextLevel));
-        setActive({ level: nextLevel, index: 0 });
-      }}
+      onBack={handleBack}
       onKeyword={handleKeyword}
       onKeyDown={handleKeyDown}
-      onClose={() => setOpen(false)}
     />
   ) : null;
 
@@ -552,34 +552,42 @@ export function Cascader(props: CascaderProps) {
       }}
     >
       {anchored}
-      {!phone && (
-        <PopoverPrimitive.Portal>
-          <PopoverPrimitive.Content
-            id={treeId}
-            role="tree"
-            aria-multiselectable={multiple || undefined}
-            side="bottom"
-            align="start"
-            sideOffset={PANEL_SIDE_OFFSET}
-            collisionPadding={PANEL_COLLISION_PADDING}
-            onOpenAutoFocus={(event) => event.preventDefault()}
-            onCloseAutoFocus={(event) => event.preventDefault()}
-            onInteractOutside={(event) => {
-              if (anchorRef.current?.contains(event.target as Node)) event.preventDefault();
-            }}
-            className={panelSurfaceClass(
-              panelRadius,
-              cn(
-                'flex w-max min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-16px)] overflow-x-auto',
-                panelClassName,
-              ),
-            )}
-          >
-            {panel}
-          </PopoverPrimitive.Content>
-        </PopoverPrimitive.Portal>
-      )}
-      {mobilePanel}
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          id={phone ? undefined : treeId}
+          role={phone ? 'dialog' : 'tree'}
+          aria-label={phone ? props['aria-label'] : undefined}
+          aria-labelledby={phone ? props['aria-labelledby'] : undefined}
+          aria-multiselectable={(!phone && multiple) || undefined}
+          side="bottom"
+          align="start"
+          sideOffset={PANEL_SIDE_OFFSET}
+          collisionPadding={PANEL_COLLISION_PADDING}
+          onOpenAutoFocus={(event) => {
+            restoreFocusOnClose.current = true;
+            event.preventDefault();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (phone && restoreFocusOnClose.current) anchorRef.current?.focus({ preventScroll: true });
+          }}
+          onInteractOutside={(event) => {
+            if (anchorRef.current?.contains(event.target as Node)) event.preventDefault();
+            else restoreFocusOnClose.current = false;
+          }}
+          className={panelSurfaceClass(
+            panelRadius,
+            cn(
+              phone
+                ? 'flex w-[var(--radix-popover-trigger-width)] min-w-40 max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden'
+                : 'flex w-max min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-16px)] overflow-x-auto',
+              panelClassName,
+            ),
+          )}
+        >
+          {phone ? mobilePanel : panel}
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
   );
 }

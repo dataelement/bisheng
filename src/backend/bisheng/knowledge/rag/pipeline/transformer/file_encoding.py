@@ -4,13 +4,15 @@ shougang deployments.
 Encoding format: PREFIX-DOCTYPE-DOMAIN-YYYYMMNNNNNNNN
 Example: GF-STD-SC-20260500000001
 """
+
 from __future__ import annotations
 
 import asyncio
 import re
 import threading
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 from loguru import logger
@@ -48,8 +50,10 @@ class _AsyncRunner:
                 return
             loop = asyncio.new_event_loop()
             thread = threading.Thread(
-                target=self._run, args=(loop,),
-                daemon=True, name='shougang-encoding-async',
+                target=self._run,
+                args=(loop,),
+                daemon=True,
+                name="shougang-encoding-async",
             )
             thread.start()
             self._loop = loop
@@ -139,8 +143,8 @@ CLASSIFY_PROMPT = """# 角色
 - 输出格式必须严格为: 文档类型编码-业务域编码, 例如: STD-SC"""
 
 VALID_PATTERN = re.compile(
-    r'^(POL|STD|PRO|SPC|REP|DGN|CAS|PAT|TRN|NEW)-'
-    r'(SC|TZ|YF|CG|YX|CW|SB|AQ|HB|ZL|RL|XX|NY|GL)$'
+    r"^(POL|STD|PRO|SPC|REP|DGN|CAS|PAT|TRN|NEW)-"
+    r"(SC|TZ|YF|CG|YX|CW|SB|AQ|HB|ZL|RL|XX|NY|GL)$"
 )
 FALLBACK = "STD-SC"
 SEQ_CAP = 99999999
@@ -157,9 +161,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         self.invoke_user_id = invoke_user_id
         self.knowledge_file = knowledge_file
 
-    def transform_documents(
-        self, documents: Sequence[Document], **kwargs: Any
-    ) -> Sequence[Document]:
+    def transform_documents(self, documents: Sequence[Document], **kwargs: Any) -> Sequence[Document]:
         # Sync entry point. Pipeline.run calls this directly. Pipeline.arun's
         # default atransform_documents wraps us in a thread executor. We
         # delegate the actual async work to a single shared runner loop so
@@ -169,8 +171,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             _async_runner.submit(self._do_work())
         except Exception as e:
             logger.warning(
-                f"[shougang.encoding] file_id={getattr(self.knowledge_file, 'id', None)} "
-                f"transformer_error: {e}"
+                f"[shougang.encoding] file_id={getattr(self.knowledge_file, 'id', None)} transformer_error: {e}"
             )
         return list(documents)
 
@@ -186,8 +187,10 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             type_business_code = await self._classify_with_llm()
             seq = await self._compute_seq()
             self.knowledge_file.file_encoding = self._compose_encoding(
-                shougang_conf.prefix, type_business_code,
-                self.knowledge_file.create_time, seq,
+                shougang_conf.prefix,
+                type_business_code,
+                self.knowledge_file.create_time,
+                seq,
             )
             logger.info(
                 f"[shougang.encoding] file_id={self.knowledge_file.id} "
@@ -200,18 +203,14 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             try:
                 seq = await self._compute_seq()
                 self.knowledge_file.file_encoding = self._compose_encoding(
-                    shougang_conf.prefix, FALLBACK,
-                    self.knowledge_file.create_time, seq,
+                    shougang_conf.prefix,
+                    FALLBACK,
+                    self.knowledge_file.create_time,
+                    seq,
                 )
-                logger.warning(
-                    f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                    f"fallback used: {e}"
-                )
+                logger.warning(f"[shougang.encoding] file_id={self.knowledge_file.id} fallback used: {e}")
             except Exception as inner:
-                logger.error(
-                    f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                    f"abandoned: outer={e} inner={inner}"
-                )
+                logger.error(f"[shougang.encoding] file_id={self.knowledge_file.id} abandoned: outer={e} inner={inner}")
 
     async def _classify_with_llm(self) -> str:
         try:
@@ -219,47 +218,37 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             # so the workbench config row resolves to that tenant's row (or
             # Root via share fallback) rather than the worker's empty
             # ContextVar.
-            tenant_id = getattr(self.knowledge_file, 'tenant_id', None)
-            llm_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id)
-            if (not llm_conf
-                    or not llm_conf.chat_title_llm
-                    or not llm_conf.chat_title_llm.id):
-                logger.warning(
-                    f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                    f"fallback: chat_title_llm_unset"
-                )
+            tenant_id = getattr(self.knowledge_file, "tenant_id", None)
+            llm_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id, slots=("chat_title_llm.id",))
+            if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
+                logger.warning(f"[shougang.encoding] file_id={self.knowledge_file.id} fallback: chat_title_llm_unset")
                 return FALLBACK
 
             llm = await LLMService.get_bisheng_llm(
                 model_id=llm_conf.chat_title_llm.id,
                 app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                app_name='shougang_file_encoding',
+                app_name="shougang_file_encoding",
                 app_type=ApplicationTypeEnum.DAILY_CHAT,
                 user_id=self.invoke_user_id,
             )
 
-            content = (
-                f"标题: {self.knowledge_file.file_name}\n"
-                f"摘要: {self.knowledge_file.abstract or ''}"
+            content = f"标题: {self.knowledge_file.file_name}\n摘要: {self.knowledge_file.abstract or ''}"
+            response = await llm.ainvoke(
+                [
+                    {"role": "system", "content": CLASSIFY_PROMPT},
+                    {"role": "user", "content": content},
+                ]
             )
-            response = await llm.ainvoke([
-                {"role": "system", "content": CLASSIFY_PROMPT},
-                {"role": "user", "content": content},
-            ])
             result = (response.content or "").strip()
 
             if VALID_PATTERN.match(result):
                 return result
             logger.warning(
-                f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                f"fallback: invalid_format raw={result!r}"
+                f"[shougang.encoding] file_id={self.knowledge_file.id} fallback: invalid_format raw={result!r}"
             )
             return FALLBACK
         except Exception as e:
-            logger.warning(
-                f"[shougang.encoding] file_id={self.knowledge_file.id} "
-                f"fallback: llm_error {e}"
-            )
+            logger.warning(f"[shougang.encoding] file_id={self.knowledge_file.id} fallback: llm_error {e}")
             return FALLBACK
 
     def _month_window(self) -> tuple[datetime, datetime]:
@@ -275,7 +264,9 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         start, end = self._month_window()
         async with get_async_db_session() as session:
             count = await session.scalar(
-                select(func.count()).select_from(KnowledgeFile).where(
+                select(func.count())
+                .select_from(KnowledgeFile)
+                .where(
                     KnowledgeFile.create_time >= start,
                     KnowledgeFile.create_time < end,
                     KnowledgeFile.knowledge_id == self.knowledge_file.knowledge_id,
@@ -300,7 +291,6 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         return count
 
     @staticmethod
-    def _compose_encoding(prefix: str, type_business: str,
-                          create_time: datetime, seq: int) -> str:
+    def _compose_encoding(prefix: str, type_business: str, create_time: datetime, seq: int) -> str:
         ym = create_time.strftime("%Y%m")
         return f"{prefix}-{type_business}-{ym}{seq:08d}"

@@ -1,4 +1,4 @@
-import { isApiError, shouldRetryApiError, resolveErrorMessageTemplate } from "@bisheng/api-client";
+import { isApiError, shouldRetryApiError, referenceErrorMessage, resolveErrorMessageTemplate } from "@bisheng/api-client";
 import { showApiError } from "~/api/request";
 import { useState, useCallback, useRef } from "react";
 import i18next, { type TOptions } from "i18next";
@@ -57,7 +57,9 @@ interface UploadErrorLike {
  * append the generic browser-upload hint as a last-resort fallback.
  */
 function resolveUploadErrorReason(err: UploadErrorLike): string {
-  const { statusCode, errorData } = readUploadError(err);
+  const { statusCode, errorData, referenceData } = readUploadError(err);
+  const referenceMessage = referenceErrorMessage({ status_code: statusCode, data: referenceData }, (key, values) => String(i18next.t(`api_errors.${key}` as `api_errors.${keyof typeof import('../../../locales/en/api_errors.gen.json')}`, { ...values, defaultValue: "" })));
+  if (referenceMessage) return referenceMessage;
   if (statusCode != null) {
     // Typed i18next keys reject a runtime-built string; TranslationKeys is
     // the codebase's escape hatch for exactly this (same as useLocalize).
@@ -87,6 +89,7 @@ function readUploadError(err: unknown): {
   statusCode?: number;
   /** Interpolation values for the api_errors template — scalars only. */
   errorData?: Record<string, string | number>;
+  referenceData?: unknown;
 } {
   if (typeof err !== "object" || err === null) return {};
   const source = err as {
@@ -101,6 +104,7 @@ function readUploadError(err: unknown): {
   return {
     statusCode: typeof rawCode === "number" ? rawCode : undefined,
     errorData: toInterpolationValues(source.data ?? source.errorData ?? source.response?.data?.data),
+    referenceData: source.data ?? source.errorData ?? source.response?.data?.data,
   };
 }
 
@@ -156,6 +160,9 @@ export async function uploadFilesSequential(
     const file = files[i];
     try {
       const res = await uploadFileToServerApi(spaceId, file, filenameOf?.(file));
+      if (typeof res.preview_upload_ref !== 'string' || !res.preview_upload_ref.trim()) {
+        throw new Error('Upload response is missing the preview reference');
+      }
       onSuccess(res, file);
     } catch (err) {
       if (isApiError(err) && (err.kind === "canceled" || err.presentation === "global")) throw err;
@@ -246,7 +253,7 @@ export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): D
   // Backend marks duplicates by setting `old_file_level_path` to a string (possibly empty
   // when the existing file lives at the space root). Real parse failures leave the field
   // unset (None → undefined). Use type check, not truthiness, to keep root-level duplicates.
-  return registeredFiles
+  const entries = registeredFiles
     .filter(
       (file) =>
         file.status === FileStatus.FAILED && typeof file.oldFileLevelPath === "string" && Boolean(file._raw),
@@ -257,6 +264,9 @@ export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): D
       oldFileLevelPath: file.oldFileLevelPath || "",
       rawObj: file._raw,
     }));
+  // Staging uses one temporary object per existing file. Keep its latest
+  // response once, matching the bytes that the server will actually replace.
+  return Array.from(new Map(entries.map((entry) => [entry.fileId, entry])).values());
 }
 
 export function mergeVisibleRegisteredFiles(
@@ -357,16 +367,16 @@ export function useFileUpload({
 
       try {
         // Upload each file to server (sequential, with quota early-stop).
-        const uploadedPaths: string[] = [];
+        const uploaded: UploadFileResponse[] = [];
         const { failures, earlyStop } = await uploadFilesSequential(activeSpace.id, fileArray, (res) =>
-          uploadedPaths.push(res.file_path),
+          uploaded.push(res),
         );
         const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
         if (failureMessage) {
           showToast({ message: failureMessage, severity: NotificationSeverity.WARNING });
         }
 
-        if (uploadedPaths.length === 0) return;
+        if (uploaded.length === 0) return;
 
         // Register all uploaded files and check for duplicates from response.
         // Upload succeeded; register the files. Retry the registration
@@ -376,7 +386,8 @@ export function useFileUpload({
         // retry is caught by the duplicate detection below.
         const registerUploaded = () =>
           addFilesApi(activeSpace.id, {
-            file_path: uploadedPaths,
+            file_path: uploaded.map((item) => item.file_path),
+            preview_upload_refs: uploaded.map((item) => item.preview_upload_ref!),
             parent_id: currentFolderId ? Number(currentFolderId) : null,
           });
         let registeredFiles: Awaited<ReturnType<typeof addFilesApi>>;
@@ -600,6 +611,7 @@ export function useFileUpload({
           (res, file) =>
             uploadedItems.push({
               file_path: res.file_path,
+              preview_upload_ref: res.preview_upload_ref!,
               relative_path: file.webkitRelativePath || file.name,
               size: file.size,
             }),

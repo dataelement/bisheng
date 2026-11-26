@@ -4,7 +4,7 @@ import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasResourceAction,useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
+import { useBuildAppActions } from "./useBuildAppActions";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Outlined } from "bisheng-icons";
@@ -161,21 +161,12 @@ type AppListRow = FlowType & {
     version_list?: { id: string | number }[]
 }
 
-const APP_ACTIONS = [
-    'visible',
-    'edit',
-    'publish',
-    'unpublish',
-    'delete',
-    'manage_permission',
-]
-
 export default function Apps() {
     const { t, i18n } = useTranslation()
     // useErrorPrompt();
 
     useEffect(() => {
-        i18n.loadNamespaces('flow');
+        i18n.loadNamespaces(['flow', 'shared']);
     }, [i18n]);
     const { user } = useContext(userContext);
     const { appConfig } = useContext(locationContext);
@@ -210,33 +201,14 @@ export default function Apps() {
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string; type: string } | null>(null);
-    // Three buckets, one per resource type. A hosted app that fell into the
-    // workflow bucket would be checked against the wrong type and come back
-    // with no actions at all — a card you can see but cannot touch.
     const appRows = dataSource as AppListRow[];
-    const workflowResourceIds = appRows
-        .filter((item) => item.flow_type !== AppNumType.ASSISTANT && item.flow_type !== AppNumType.HOSTED_APP)
-        .map((item) => String(item.id));
-    const assistantResourceIds = appRows
-        .filter((item) => item.flow_type === AppNumType.ASSISTANT)
-        .map((item) => String(item.id));
-    const hostedAppResourceIds = appRows
-        .filter((item) => item.flow_type === AppNumType.HOSTED_APP)
-        .map((item) => String(item.id));
-    const { actions: workflowActions } = useResourceActions('workflow', workflowResourceIds, APP_ACTIONS);
-    const { actions: assistantActions } = useResourceActions('assistant', assistantResourceIds, APP_ACTIONS);
-    const { actions: hostedAppActions } = useResourceActions('app', hostedAppResourceIds, APP_ACTIONS);
-    const resourceActions = { ...workflowActions, ...assistantActions, ...hostedAppActions };
-    const listedAppIds = new Set(appRows.map((item) => String(item.id)));
-    const canRead = (id: string | number) =>
-        user.role === 'admin' ||
-        hasResourceAction(resourceActions, id, 'visible') ||
-        listedAppIds.has(String(id));
-    const canEdit = (id: string | number) => hasResourceAction(resourceActions, id, 'edit');
-    const canPublish = (id: string | number) => hasResourceAction(resourceActions, id, 'publish');
-    const canUnpublish = (id: string | number) => hasResourceAction(resourceActions, id, 'unpublish');
-    const canManage = (id: string | number) => hasResourceAction(resourceActions, id, 'manage_permission');
-    const canDelete = (id: string | number) => hasResourceAction(resourceActions, id, 'delete');
+    const appActions = useBuildAppActions();
+    const canRead = (id: string | number) => appRows.some(item => String(item.id) === String(id));
+    const canEdit = (item: AppListRow) => appActions.can(item, 'edit');
+    const canPublish = (item: AppListRow) => appActions.can(item, 'publish');
+    const canUnpublish = (item: AppListRow) => appActions.can(item, 'unpublish');
+    const canManage = (item: AppListRow) => appActions.can(item, 'manage_permission');
+    const canDelete = (item: AppListRow) => appActions.can(item, 'delete');
     const visibleApps = appRows;
 
     const canManageTemplates = canManageAppTemplates(user);
@@ -306,9 +278,13 @@ export default function Apps() {
     const { open: tempOpen, tempType, flowRef, toggleTempModal } = useCreateTemp()
 
     // on/off line
-    const handleCheckedChange = (checked, data) => {
-        if (checked && !canPublish(data.id)) return;
-        if (!checked && !canUnpublish(data.id)) return;
+    const handleCheckedChange = async (checked, data) => {
+        const result = await appActions.load(data);
+        if (result.hasError) return false;
+        if (!result.actions.includes(checked ? 'publish' : 'unpublish')) {
+            notification.open({ type: 'warning', description: t('build.noPermissionToPublish', { type: typeCnNames[data.flow_type] }) });
+            return false;
+        }
         if (data.flow_type === 5) {
             return changeAssistantStatusApi(data.id, checked ? 2 : 1).then(res => {
                 if (res === null) {
@@ -365,11 +341,13 @@ export default function Apps() {
     }
 
 
-    const handleSetting = (data) => {
+    const handleSetting = async (data) => {
+        const result = await appActions.load(data);
+        if (result.hasError) return;
         if (data.flow_type === AppNumType.HOSTED_APP) {
             return navigate(`/build/apps/${data.id}`)
         }
-        if (!data.write) {
+        if (!result.actions.includes('edit')) {
             return notification.open({ type: 'warning', description: String(t('build.editPermissionRequired')) })
         }
         if (data.flow_type === 5) {
@@ -447,11 +425,12 @@ export default function Apps() {
                                     item={item}
                                     currentUser={user}
                                     isAdmin={user.role === 'admin'}
-                                    canDelete={canDelete(item.id)}
-                                    canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
-                                    canManagePermission={canManage(item.id)}
                                     onPermission={handleOpenPermission}
                                     onChanged={handleHostedAppChanged}
+                                    actions={appActions.actions(item)}
+                                    onLoadActions={() => appActions.load(item)}
+                                    menuLoading={appActions.loading(item)}
+                                    menuError={appActions.error(item)}
                                     labelPannel={
                                         <LabelShow
                                             data={item}
@@ -469,7 +448,7 @@ export default function Apps() {
                                     id={item.id}
                                     logo={<AppAvator id={item.name} flowType={item.flow_type} url={item.logo} />}
                                     type={TypeNames[item.flow_type]}
-                                    edit={canEdit(item.id)}
+                                    edit={canEdit(item)}
                                     // edit={item.write}
                                     title={item.name}
                                     isAdmin={user.role === 'admin'}
@@ -477,7 +456,7 @@ export default function Apps() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     currentUser={user}
-                                    onClick={() => canEdit(item.id) && handleSetting(item)}
+                                    onClick={handleUiRequest(() => handleSetting(item))}
                                     // onSwitchClick={() => {
                                     //     !item.write && item.status !== 2 && message({
                                     //         description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),
@@ -487,17 +466,21 @@ export default function Apps() {
                                     canAddTemplate={canManageTemplates && canRead(item.id)}
                                     onAddTemp={canManageTemplates ? toggleTempModal : undefined}
                                     onCheckedChange={handleCheckedChange}
-                                    onDelete={canDelete(item.id) ? handleDelete : undefined}
-                                    onSetting={(item) => handleSetting(item)}
-                                    onPermission={canManage(item.id) ? handleOpenPermission : undefined}
-                                    showSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
-                                    canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
+                                    onDelete={canDelete(item) ? handleDelete : undefined}
+                                    onSetting={handleUiRequest(handleSetting)}
+                                    onMenuOpen={(row) => { void appActions.load(row); }}
+                                    menuLoading={appActions.loading(item)}
+                                    menuError={appActions.error(item)}
+                                    onPermission={canManage(item) ? handleOpenPermission : undefined}
+                                    showSwitch={item.write || (item.status === 2 ? canUnpublish(item) : canPublish(item))}
+                                    canSwitch={true}
                                     showCopy={canCreateApp && canRead(item.id)}
                                     onCopy={canCreateApp && canRead(item.id) ? handleUiRequest(handleCopyApp) : undefined}
                                     headSelecter={(
-                                        item.version_list?.length ? <CardSelectVersion
+                                        item.flow_type === AppNumType.FLOW ? <CardSelectVersion
                                             showPop={item.status !== 2}
                                             data={item}
+                                            onLoadActions={() => appActions.load(item)}
                                         /> : null)}
                                     labelPannel={
                                         <LabelShow

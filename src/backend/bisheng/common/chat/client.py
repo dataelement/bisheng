@@ -26,6 +26,8 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import AssistantDeletedError, AssistantNotOnlineError, AssistantOtherError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -52,6 +54,9 @@ class ChatMessageExecution:
 
 
 class ChatClient:
+    # F132: set by ChatManager.dispatch_client for logged-in connections only.
+    memory_register = None
+
     def __init__(
         self,
         request: Request,
@@ -88,6 +93,10 @@ class ChatClient:
         self.message_tasks: set[asyncio.Task] = set()
         self.finalizing_tasks: set[asyncio.Task] = set()
         self.background_tasks: set[asyncio.Task] = set()
+        # Department concurrency lease held by this connection (execution lease
+        # only — a page lease belongs to the browser tab and is never stored).
+        self.execution_lease = None
+        self.execution_renew_task = None
         # A queue of streaming outputs to accept the content of the streaming output, processing newquestionEmpty at all times
         self.stream_queue = Queue()
 
@@ -148,29 +157,35 @@ class ChatClient:
                 ),
             )
 
+    def _conversation_scope(self):
+        from contextlib import nullcontext
+
+        port = getattr(self, "kwargs", {}).get("conversation_persistence")
+        return port.scope(self.chat_id, self.client_id, self.user_id) if port and self.chat_id else nullcontext()
+
     async def add_message(self, msg_type: str, message: str, category: str, remark: str = ""):
-        self.chat_history.append({"category": category, "message": message, "remark": remark})
+        with self._conversation_scope():
+            return await self._add_message_in_scope(msg_type, message, category, remark)
+
+    async def _add_message_in_scope(self, msg_type, message, category, remark):
         if not self.chat_id:
-            # debugMode does not need to save history
+            self.chat_history.append({"category": category, "message": message, "remark": remark})
             return None
-        is_bot = 0 if msg_type == "human" else 1
-        msg = ChatMessageDao.insert_one(
-            ChatMessageModel(
-                is_bot=is_bot,
-                source=0,
-                message=message,
-                category=category,
-                type=msg_type,
-                extra=json.dumps({"client_key": self.client_key}, ensure_ascii=False),
-                flow_id=self.client_id,
-                chat_id=self.chat_id,
-                user_id=self.user_id,
-                remark=remark,
-            )
+        row = ChatMessageModel(
+            is_bot=0 if msg_type == "human" else 1,
+            source=0,
+            message=message,
+            category=category,
+            type=msg_type,
+            extra=json.dumps({"client_key": self.client_key}, ensure_ascii=False),
+            flow_id=self.client_id,
+            chat_id=self.chat_id,
+            user_id=self.user_id,
+            remark=remark,
         )
-        # Log Audit Logs, Is New Session
-        if len(self.chat_history) <= 1:
-            session = MessageSession(
+        template = None
+        if not self.chat_history:
+            template = MessageSession(
                 chat_id=self.chat_id,
                 flow_id=self.client_id,
                 flow_name=self.db_assistant.name,
@@ -178,10 +193,17 @@ class ChatClient:
                 user_id=self.user_id,
             )
             if self.session_subject is not None:
-                session = self.session_subject.stamp(session)
-            self.new_session = MessageSessionDao.insert_one(session)
-
-            # RecordTelemetryJournal
+                template = self.session_subject.stamp(template)
+        port = getattr(self, "kwargs", {}).get("conversation_persistence")
+        if port is not None:
+            msg, created = port.save(row, template)
+        else:
+            # Independent credential channels retain their existing subject handling.
+            msg = ChatMessageDao.insert_one(row)
+            created = MessageSessionDao.insert_one(template) if template is not None else None
+        self.chat_history.append({"category": category, "message": message, "remark": remark})
+        if created is not None:
+            self.new_session = created
             await telemetry_service.log_event(
                 user_id=self.user_id,
                 event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
@@ -194,7 +216,9 @@ class ChatClient:
                     app_type=ApplicationTypeEnum.ASSISTANT,
                 ),
             )
-            AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
+            AuditLogService.create_chat_assistant(
+                self.login_user, get_request_ip(self.request), self.client_id, self.db_assistant
+            )
         return msg
 
     async def send_response(
@@ -228,6 +252,23 @@ class ChatClient:
         )
 
     async def init_gpts_agent(self):
+        await AssistantAgent.authorize_chat_target(
+            self.login_user,
+            self.client_id,
+            self.chat_id,
+            self.session_subject,
+            original_assistant_id=self.client_id,
+        )
+        if self.chat_id and self.memory_register is not None:
+            # F132: logged-in connections register the session whenever the chat id is
+            # set or switched; the callable comes from the endpoint, never from here.
+            try:
+                await self.memory_register(self.chat_id)
+            except Exception:
+                logger.exception("memory session registration failed")
+        if self.gpts_agent is not None:
+            await self.gpts_agent.refresh_knowledge_authorization(self.gpts_async_callback)
+            return
         await self.init_chat_history()
         await self.init_gpts_callback()
         try:
@@ -250,15 +291,23 @@ class ChatClient:
             # raise IgnoreException(f'get assistant info error: {str(e)}')
 
             if self.chat_id and self.gpts_agent is None:
-                self.db_assistant = assistant
                 # Conversation businessagentFixed generation from database data,Don't change every time
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
-                await self.gpts_agent.init_assistant(self.gpts_async_callback)
-            elif not self.chat_id:
+                candidate_agent = AssistantAgent(
+                    assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
+                )
+                # F132: only connections whose endpoint injected memory_register are logged in.
+                candidate_agent.memory_allowed = self.memory_register is not None
+                await candidate_agent.init_assistant(self.gpts_async_callback)
+                self.gpts_agent = candidate_agent
                 self.db_assistant = assistant
+            elif not self.chat_id:
                 # The debugging interface is regenerated every time
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
-                await self.gpts_agent.init_assistant(self.gpts_async_callback)
+                candidate_agent = AssistantAgent(
+                    assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
+                )
+                await candidate_agent.init_assistant(self.gpts_async_callback)
+                self.gpts_agent = candidate_agent
+                self.db_assistant = assistant
 
         except BaseErrorCode as e:
             logger.exception("get assistant info error")
@@ -268,6 +317,10 @@ class ChatClient:
             raise AssistantOtherError(exception=e)
 
     async def init_chat_history(self):
+        with self._conversation_scope():
+            await self._init_chat_history_in_scope()
+
+    async def _init_chat_history_in_scope(self):
         # Initialization history, not empty or no reinitialization
         if len(self.chat_history) > 0:
             return
@@ -349,7 +402,18 @@ class ChatClient:
             await self.send_response("reasoning_answer", "end", "", message_id=res.id if res else None)
         # An empty answer carries the terminal marker when stopped before the first token.
         res = await self.add_message("bot", answer, "answer", "break_answer")
+        await self.notify_answer_persisted(res.id if res else None, interrupted=True)
         await self.send_response("answer", "end", "", message_id=res.id if res else None)
+
+    async def notify_answer_persisted(self, message_id, interrupted: bool) -> None:
+        """Tell the agent the turn's answer row exists (or that the turn ended without one)."""
+        hook = getattr(self.gpts_agent, "after_answer_persisted", None) if self.gpts_agent else None
+        if hook is None:
+            return
+        try:
+            await hook(message_id, interrupted)
+        except Exception:
+            logger.exception("after_answer_persisted failed")
 
     async def clear_stream_queue(self):
         while not self.stream_queue.empty():
@@ -368,13 +432,36 @@ class ChatClient:
             if not input_msg:
                 # Session needs to be switched
                 logger.debug(f"need switch agent, client_key: {self.client_key} inputs: {inputs}")
-                self.client_id = inputs.get("data").get("id")
-                self.chat_id = inputs.get("data").get("chatId")
+                target = inputs.get("data") or {}
+                target_id, target_chat_id = target.get("id"), target.get("chatId")
+                await AssistantAgent.authorize_chat_target(
+                    self.login_user,
+                    target_id,
+                    target_chat_id,
+                    self.session_subject,
+                    original_assistant_id=self.client_id,
+                )
+                self.client_id = target_id
+                self.chat_id = target_chat_id
                 self.gpts_agent = None
                 self.gpts_async_callback = None
                 self.chat_history = []
                 await self.init_gpts_agent()
                 return
+
+            # Local import: ``clients/__init__`` pulls in WorkflowClient, which
+            # imports this package's siblings — a module-level import here makes
+            # ``bisheng.common.chat`` circular.
+            from bisheng.common.chat.clients.base import ensure_client_execution_lease
+
+            # Department concurrency: a page lease is only re-asserted; without
+            # one this connection takes its own execution lease on first
+            # execution and keeps it until the socket closes.
+            flow_outcome = await ensure_client_execution_lease(self)
+            if flow_outcome == "rejected":
+                # The existing ``except BaseErrorCode`` below turns this into the
+                # standard error frame with status_code 12045.
+                raise DepartmentDailyChatConcurrentLimitError()
 
             # Inisialisasiagent
             await self.init_gpts_agent()
@@ -429,20 +516,22 @@ class ChatClient:
 
             res = await self.add_message("bot", reasoning_content, "reasoning_answer")
             res = await self.add_message("bot", answer, "answer")
-            if res:
-                await save_message_citations(
-                    message_id=res.id,
-                    items=citation_items,
-                    chat_id=self.chat_id,
-                    flow_id=self.client_id,
-                )
-            else:
-                await save_message_citations(
-                    message_id=None,
-                    items=citation_items,
-                    chat_id=self.chat_id,
-                    flow_id=self.client_id,
-                )
+            with self._conversation_scope():
+                if res:
+                    await save_message_citations(
+                        message_id=res.id,
+                        items=citation_items,
+                        chat_id=self.chat_id,
+                        flow_id=self.client_id,
+                    )
+                else:
+                    await save_message_citations(
+                        message_id=None,
+                        items=citation_items,
+                        chat_id=self.chat_id,
+                        flow_id=self.client_id,
+                    )
+            await self.notify_answer_persisted(res.id if res else None, interrupted=False)
             await self.send_response("answer", "start", "")
             await self.send_response(
                 "answer",
@@ -472,11 +561,19 @@ class ChatClient:
             raise
         except BaseErrorCode as e:
             logger.exception("handle gpts message error: ")
+            if isinstance(e, KnowledgeOperationPlanConflictError):
+                self.gpts_agent = None
+                self.db_assistant = None
+                self.gpts_async_callback = None
+            if question_saved:
+                await self.notify_answer_persisted(None, interrupted=False)
             await self.send_response("system", "start", "")
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         except Exception as e:
             e = AssistantOtherError(exception=e)
             logger.exception("handle gpts message error: ")
+            if question_saved:
+                await self.notify_answer_persisted(None, interrupted=False)
             await self.send_response("system", "start", "")
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         finally:
@@ -490,7 +587,7 @@ class ChatClient:
             return
         self.new_session.name = "New Chat"
 
-        llm_conf = await LLMService.get_workbench_llm()
+        llm_conf = await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             return
         llm = await LLMService.get_bisheng_llm(

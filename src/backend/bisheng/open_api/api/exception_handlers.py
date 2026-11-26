@@ -22,6 +22,7 @@ from bisheng.common.errcode.permission import (
 )
 from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
 from bisheng.open_api.domain.http_status import open_api_http_status
+from bisheng.utils.mask_data import redact_validation_errors
 
 OPEN_API_PATH_PREFIX = "/api/v2"
 # F051: the model protocol face renders errors in the OpenAI shape instead of
@@ -277,7 +278,7 @@ async def open_api_validation_exception_handler(request: Request, exc: RequestVa
     return JSONResponse(
         status_code=400,
         content=jsonable_encoder(
-            {"status_code": 400, "status_message": exc.errors()},
+            {"status_code": 400, "status_message": redact_validation_errors(exc.errors())},
             custom_encoder={ValueError: str},
         ),
     )

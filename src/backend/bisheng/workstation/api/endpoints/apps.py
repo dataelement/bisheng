@@ -6,6 +6,7 @@ from bisheng.api.v1.schemas import ChatList, FrequentlyUsedChat, UnifiedResponse
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.workstation import AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -39,7 +40,8 @@ async def get_recommended_apps(login_user=LoginUserDep):
     kwargs: dict = {"id_list": app_ids, "page": 0, "limit": 0}
     if not login_user.is_admin():
         kwargs["status"] = FlowStatus.ONLINE.value
-    data, _ = FlowDao.get_all_apps(**kwargs)
+    with strict_tenant_filter():
+        data, _ = FlowDao.get_all_apps(**kwargs)
     # An administrator may configure any application id here, hosted ones
     # included; a recommendation card opens the conversation page, which a
     # hosted application does not have.
@@ -103,12 +105,13 @@ async def get_uncategorized_chat(
     first page. ``limit`` is the page size. The legacy ``page`` / ``total`` are gone —
     deep offset pages re-scanned and re-permission-checked every prior page.
     """
-    data = await WorkFlowService.get_uncategorized_flows_envelope(
-        login_user,
-        cursor=cursor,
-        page_size=limit or 8,
-        keyword=keyword,
-    )
+    with strict_tenant_filter():
+        data = await WorkFlowService.get_uncategorized_flows_envelope(
+            login_user,
+            cursor=cursor,
+            page_size=limit or 8,
+            keyword=keyword,
+        )
     return resp_200(data=data)
 
 
@@ -140,7 +143,8 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     pinned_links = UserLinkDao.get_user_link(login_user.user_id, [USED_APP_PIN_TYPE])
     pinned_flow_ids = {link.type_detail for link in pinned_links}
 
-    apps, _ = await FlowDao.aget_all_apps(id_list=flow_ids, status=FlowStatus.ONLINE.value, page=0, limit=0)
+    with strict_tenant_filter():
+        apps, _ = await FlowDao.aget_all_apps(id_list=flow_ids, status=FlowStatus.ONLINE.value, page=0, limit=0)
     # No type exclusion here: now that hosted-app usage is tracked, a hosted app is
     # a legitimate "recently used" entry; the recorded candidate set above is what
     # bounds the list. ``filter_apps_by_action`` still drops anything the user may
@@ -204,7 +208,7 @@ async def record_used_app(
     resolve under their own types and are not the concern of this endpoint.
     """
     flow_id = data.flow_id
-    if not await check_business_action(login_user, resource_type="app", resource_id=flow_id, action="use"):
+    if not await check_business_action(login_user, resource_type="app", resource_id=flow_id, action="visible"):
         return UnAuthorizedError.return_resp()
     UserLinkDao.touch_user_link(user_id=login_user.user_id, type=USED_APP_RECENT_TYPE, type_detail=flow_id)
     return resp_200(message="Recorded")
@@ -232,7 +236,7 @@ async def pin_used_app(login_user=LoginUserDep, data: UsedAppPin = Body(..., des
         login_user,
         resource_type=object_type,
         resource_id=flow_id,
-        action="use",
+        action="visible",
     ):
         return UnAuthorizedError.return_resp()
 
@@ -259,12 +263,8 @@ async def get_app_conversations(flow_id: str, page: int = 1, limit: int = 10, lo
     # holds that account would otherwise see every visitor's conversation in
     # their own list. ``SessionSubject.natural_person`` adds the subject-kind
     # condition (and handles the DaMeng-safe is_delete comparison).
-    subject = SessionSubject.natural_person(
-        tenant_id=login_user.tenant_id, user_id=login_user.user_id
-    )
-    statement = subject.filter_statement(
-        select(MessageSession).where(MessageSession.flow_id == flow_id)
-    )
+    subject = SessionSubject.natural_person(tenant_id=login_user.tenant_id, user_id=login_user.user_id)
+    statement = subject.filter_statement(select(MessageSession).where(MessageSession.flow_id == flow_id))
     sessions = await MessageSessionDao.get_statement_results(statement, page=page, limit=limit)
     if not sessions:
         return resp_200(data={"list": [], "total": 0})

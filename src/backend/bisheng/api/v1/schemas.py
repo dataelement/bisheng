@@ -1,10 +1,11 @@
+from copy import deepcopy
 from datetime import datetime
 from enum import Enum
 from typing import Any, Generic, Literal, TypeVar, Union
 
 from langchain_classic.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.database.models.assistant import AssistantBase
@@ -233,6 +234,7 @@ class UploadFileResponse(BaseModel):
     flowId: str | None = None
     file_path: str
     relative_path: str | None = None  # minioRelative path, i.e.object_name
+    preview_upload_ref: str | None = None
     file_name: str | None = None
     repeat: bool = False  # Duplicate in Knowledge Base
     repeat_file_name: str | None = None  # Returns the file name of a duplicate file if it is a duplicate
@@ -299,6 +301,9 @@ class AssistantUpdateReq(BaseModel):
         description="F041: 用户知识库权限校验 — ON filters knowledge-space retrieval by the runtime "
         "user's view_file, OFF by the config author's; None = do not update",
     )
+    memory_enabled: bool | None = Field(
+        default=None, description="F132: long-term memory switch of this assistant; None = do not update"
+    )
 
     @field_validator("model_name", mode="before")
     @classmethod
@@ -322,10 +327,29 @@ class AssistantSimpleInfo(BaseModel):
     update_time: datetime
 
 
+class AssistantReferenceView(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slot_key: str
+    target_type: Literal["model", "knowledge_space", "knowledge_file"]
+    target_id: str
+    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy", "invalid_scope", "invalid_missing"]
+    is_valid: bool
+
+
 class AssistantInfo(AssistantBase):
+    source_invalid_reason: str | None = Field(
+        default=None, description="Invalid saved configuration requiring explicit repair"
+    )
     tool_list: list[GptsToolsRead] = Field(default_factory=list, description="Tools for assistantsIDVertical")
     flow_list: list[FlowRead] = Field(default_factory=list, description="Skills for assistantsIDVertical")
     knowledge_list: list[KnowledgeRead] = Field(default_factory=list, description="The knowledge base uponIDVertical")
+    knowledge_ids: list[int] = Field(
+        default_factory=list, description="Original configured knowledge IDs, including invalid selections"
+    )
+    reference_states: list[AssistantReferenceView] | None = Field(
+        default=None, description="Inspected reference facts; null when a write response has not read them"
+    )
     can_share: bool = Field(
         default=False,
         description="Current user may create an app share link",
@@ -358,7 +382,8 @@ class GroupAndRoles(BaseModel):
 
 
 class CreateUserReq(BaseModel):
-    user_name: str = Field(max_length=30, description="Username")
+    user_name: str = Field(max_length=128, description="Nickname; new values use the identity policy")
+    external_id: str | None = Field(default=None, max_length=255, description="Login account; immutable after creation")
     password: str = Field(description="Passwords")
     group_roles: list[GroupAndRoles] = Field(
         default_factory=list,
@@ -438,17 +463,29 @@ class ToolConfig(BaseModel):
     is_preset: int | None = Field(default=None, description="0=custom, 1=builtin, 2=mcp")
     description: str | None = Field(default=None)
     default_checked: bool = Field(default=False, description="Initial checked state for new sessions")
+    # F005: hidden from every end-user picker and added to every workbench send
+    # (for users with visibility permission). Mutually exclusive with ``default_checked``.
+    auto_enabled: bool = Field(default=False, description="Auto-enabled: hidden from users, always on")
     children: list[dict] = Field(default_factory=list, description="Selected leaf tools: [{id, name, tool_key, desc}]")
+
+    @model_validator(mode="after")
+    def _auto_enabled_excludes_default_checked(self) -> "ToolConfig":
+        if self.auto_enabled and self.default_checked:
+            self.default_checked = False
+        return self
 
 
 # v2.5 Agent Mode: Configured Organizational Knowledge Base Items
 class OrgKbConfig(BaseModel):
-    """Organization knowledge-base item surfaced in the PlusMenu."""
+    """Configured organization knowledge base. Every one starts selected in a new session (F005)."""
 
     id: int = Field(description="Knowledge.id")
     name: str = Field(description="Knowledge-base display name")
     type: int | None = Field(default=None, description="Knowledge type: 0=doc, 1=qa")
-    default_checked: bool = Field(default=False, description="Initial checked state for new sessions")
+    show_in_composer: bool = Field(
+        default=True,
+        description="Show a tag for it in the composer; hidden ones are still selected and sent",
+    )
     sort_order: int = Field(default=0, description="Display order (ascending)")
 
 
@@ -563,6 +600,21 @@ class KnowledgeSpaceConfig(BaseModel):
 
 
 class ExcelRule(BaseModel):
+    _processing_explicit_input: dict = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def capture_processing_input(cls, value, handler):
+        raw = (
+            {key: deepcopy(item) for key, item in value.items() if key in cls.model_fields and item is not None}
+            if isinstance(value, dict)
+            else None
+        )
+        result = handler(deepcopy(value) if isinstance(value, dict) else value)
+        if raw is not None:
+            result._processing_explicit_input = raw
+        return result
+
     slice_length: int | None = Field(default=10, description="Data Line")
     header_start_row: int | None = Field(default=1, description="Table header start")
     header_end_row: int | None = Field(default=1, description="End of header")
@@ -571,6 +623,38 @@ class ExcelRule(BaseModel):
 
 # File Split Request Base Parameters
 class FileProcessBase(BaseModel):
+    _processing_explicit_input: dict = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def capture_processing_input(cls, value, handler):
+        # This wrap runs before the legacy before-validator fills defaults.
+        # Only rule fields are retained; paths/callbacks/credentials are not.
+        rule_fields = {
+            "split_mode",
+            "separator",
+            "separator_rule",
+            "chunk_size",
+            "chunk_overlap",
+            "hierarchy_level",
+            "append_title",
+            "max_chunk_size",
+            "retain_images",
+            "force_ocr",
+            "enable_formula",
+            "filter_page_header_footer",
+            "excel_rule",
+        }
+        raw = (
+            {key: deepcopy(item) for key, item in value.items() if key in rule_fields and item is not None}
+            if isinstance(value, dict)
+            else None
+        )
+        result = handler(deepcopy(value) if isinstance(value, dict) else value)
+        if raw is not None:
+            result._processing_explicit_input = raw
+        return result
+
     knowledge_id: int = Field(..., description="The knowledge base uponID")
     split_mode: Literal["auto", "custom", "hierarchical"] = Field(
         default="auto", description="Document split mode: auto/custom/hierarchical"
@@ -654,6 +738,9 @@ class UpdatePreviewFileChunk(BaseModel):
 
 class KnowledgeFileOne(BaseModel):
     file_path: str = Field(..., description="FilePath")
+    preview_upload_ref: str | None = None
+    preview_file_id: int | None = Field(default=None, gt=0)
+    preview_source: Literal["original", "converted"] = "original"
     excel_rule: ExcelRule | None = Field(default=None, description="Excel rules")
 
 
@@ -666,6 +753,9 @@ class KnowledgeFileProcess(FileProcessBase):
 
 # Knowledge Base Re-Segment Adjustment
 class KnowledgeFileReProcess(FileProcessBase):
+    confirmation_id: str | None = None
+    plan_digest: str | None = None
+    idempotency_key: str | None = None
     kb_file_id: int = Field(..., description="Knowledge Base FilesID")
     file_path: str = Field(default="", description="FilePath")
     excel_rule: ExcelRule | None = Field(default=None, description="Excel rules")
@@ -686,6 +776,10 @@ class UsedAppPin(BaseModel):
 
 class UpdateKnowledgeReq(BaseModel):
     """Update Knowledge Base Model Request"""
+
+    confirmation_id: str | None = None
+    plan_digest: str | None = None
+    idempotency_key: str | None = None
 
     model_id: int = Field(..., description="embeddingModelsID")
     model_type: str | None = Field(

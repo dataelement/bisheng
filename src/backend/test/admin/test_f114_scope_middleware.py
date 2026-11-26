@@ -22,7 +22,7 @@ def scoped_client(monkeypatch):
     app = FastAPI()
     app.add_middleware(middleware.AdminScopeMiddleware)
 
-    @app.api_route("/{path:path}", methods=["GET", "POST", "PATCH", "DELETE"])
+    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def echo(request: Request, path: str):
         return {
             "scope": get_admin_scope_tenant_id(),
@@ -40,6 +40,39 @@ def test_shared_read_has_no_new_required_header(scoped_client):
     assert response.status_code == 200
     assert response.json() == {"scope": 3, "visible": [3], "all": False}
     assert response.headers["X-Management-Tenant"] == "3"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("PATCH", "/api/v1/guest-link/workflow/flow-a"),
+        ("PATCH", "/api/v1/guest-link/assistant/assistant-a"),
+        ("POST", "/api/v1/knowledge/space/3/uploads"),
+        ("POST", "/api/v1/knowledge/space/3/uploads/upload-a/previews"),
+        ("PUT", "/api/v1/knowledge/space/3/uploads/upload-a/previews/preview-a/chunks/0"),
+        ("DELETE", "/api/v1/knowledge/space/3/uploads/upload-a/previews/preview-a/chunks/0"),
+    ],
+)
+def test_phase_one_writes_require_matching_target_before_handler(scoped_client, method, path):
+    """AC-41/45: reject missing/stale page targets before business work."""
+    client, resolver, _ = scoped_client
+    missing = client.request(method, path)
+    assert missing.status_code == 400
+    assert missing.json()["status_code"] == 19703
+    stale = client.request(method, path, headers={"X-Management-Tenant": "2"})
+    assert stale.status_code == 409
+    assert stale.json()["status_code"] == 19704
+    response = client.request(method, path, headers={"X-Management-Tenant": "3"})
+    assert response.status_code == 200
+    assert response.json() == {"scope": 3, "visible": [3], "all": False}
+    assert resolver.await_args.kwargs["for_write"] is True
+
+
+def test_guest_link_read_uses_selected_scope(scoped_client):
+    """AC-41: management settings inherit the selected resource tenant."""
+    client, _, _ = scoped_client
+    response = client.get("/api/v1/guest-link/workflow/flow-a")
+    assert response.json() == {"scope": 3, "visible": [3], "all": False}
 
 
 @pytest.mark.parametrize("is_super", [True, False])
@@ -88,6 +121,37 @@ def test_execution_and_personal_tasks_do_not_inherit_browser_scope(scoped_client
     assert client.get(path).json()["scope"] is None
     resolver.assert_not_awaited()
     super_check.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/workstation/chat/completions",
+        "/api/v1/workstation/chat/completions/abort",
+        "/api/v1/workstation/gen_title",
+        "/api/v1/workstation/messages/c1",
+        "/api/v1/workstation/messages/c1/agent",
+        "/api/v1/workstation/conversations/c1/stop",
+        "/api/v1/workstation/conversations/c1/events",
+        "/api/v1/linsight/workbench/submit",
+        "/api/v1/linsight/workbench/continue",
+    ],
+)
+def test_personal_workbench_runs_do_not_inherit_browser_scope(scoped_client, path):
+    """24006: a cross-tenant super admin chats as itself in its own tenant."""
+    client, resolver, super_check = scoped_client
+    assert client.post(path).json()["scope"] is None
+    resolver.assert_not_awaited()
+    super_check.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/v1/workstation/config", "/api/v1/workstation/config/daily", "/api/v1/linsight/skill/selectable"]
+)
+def test_workbench_management_routes_keep_browser_scope(scoped_client, path):
+    client, resolver, _ = scoped_client
+    assert client.get(path).json()["scope"] == 3
+    resolver.assert_awaited()
 
 
 def test_service_account_old_header_is_still_legal(scoped_client):

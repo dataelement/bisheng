@@ -38,6 +38,8 @@ interface AiChatMessagesProps {
     hideHeaderTitle?: boolean;
     /** When true, renders messages as a flat list without tree/sibling navigation */
     flatMode?: boolean;
+    /** Use the input box's attachment cards in the flat workbench history. */
+    showComposerAttachments?: boolean;
     scrollOnUserMessage?: boolean;
     /** Knowledge space AI panel: full-width column, 14px body, gray user / borderless assistant */
     knowledgeChatLayout?: boolean;
@@ -188,6 +190,7 @@ export default function AiChatMessages({
     hideShare = false,
     hideHeaderTitle = false,
     flatMode = false,
+    showComposerAttachments,
     scrollOnUserMessage = false,
     knowledgeChatLayout = false,
     allowExport = false,
@@ -444,6 +447,7 @@ export default function AiChatMessages({
                                             : undefined
                                     }
                                     knowledgeChatLayout={knowledgeChatLayout}
+                                    showComposerAttachments={showComposerAttachments}
                                     allowExport={allowExport}
                                     stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
                                     allowFeedback={allowFeedback}
@@ -486,7 +490,7 @@ export default function AiChatMessages({
                         className="flex items-center h-8 justify-center gap-2 rounded-md border border-border-base bg-white/80 px-2.5 text-sm leading-5 text-neutral-800 hover:bg-white/90 transition-colors"
                     >
                         <ArrowDownIcon size={16} />
-                        <span className="text-sm">回到底部</span>
+                        <span className="text-sm">{localize("com_ui.scroll_to_bottom")}</span>
                     </button>
                 </div>
             )}

@@ -7,11 +7,13 @@ enqueue policies.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
+from bisheng.common.errcode.linsight import LinsightStartTaskError, LinsightUseUpError
 from bisheng.common.errcode.open_api import OpenApiTaskQueueUnavailableError
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -29,6 +31,10 @@ from bisheng.workstation.domain.services import task_submit_service
 
 @pytest.fixture
 def io(monkeypatch: pytest.MonkeyPatch):
+    async def _config_off(self):
+        return {}
+
+    monkeypatch.setattr(type(task_submit_service.settings), "aget_all_config", _config_off)
     captured: dict = {"versions": [], "promote_kwargs": None, "telemetry": None}
 
     async def _insert_session(_cls, data: MessageSession):
@@ -131,17 +137,6 @@ async def test_strict_enqueue_failure_fails_the_version_and_raises_26068(io, mon
     assert persisted.await_count == 2
 
 
-async def test_lenient_enqueue_failure_still_returns_the_version(io, monkeypatch):
-    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
-    monkeypatch.setattr(
-        linsight_execute_utils, "enqueue_session_for_execution", AsyncMock(side_effect=RuntimeError("redis down"))
-    )
-
-    _session, version = await task_submit_service.submit_task_turn(_request(), _user())
-
-    assert version.status == SessionVersionStatusEnum.NOT_STARTED
-
-
 async def test_task_turn_is_persisted_before_enqueue(io, monkeypatch):
     order: list[str] = []
     monkeypatch.setattr(
@@ -156,3 +151,131 @@ async def test_task_turn_is_persisted_before_enqueue(io, monkeypatch):
     await task_submit_service.submit_task_turn(_request(), _user(), strict_enqueue=True)
 
     assert order == ["persist", "enqueue"]
+
+
+async def test_invite_switch_rejects_a_submit_with_no_remaining_uses(io, monkeypatch):
+    async def _config_on(self):
+        return {"linsight_invitation_code": True}
+
+    monkeypatch.setattr(type(task_submit_service.settings), "aget_all_config", _config_on)
+    monkeypatch.setattr(
+        task_submit_service.InviteCodeService,
+        "use_invite_code",
+        AsyncMock(return_value=False),
+    )
+
+    with pytest.raises(LinsightUseUpError):
+        await task_submit_service.submit_task_turn(_request(), _user())
+
+    assert io["versions"] == []
+
+
+async def test_run_id_travels_in_the_queue_item_only_when_given(io, monkeypatch):
+    """F004: the worker claims the conversation under the id the send entry reserved it with."""
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+    enqueue = AsyncMock()
+    monkeypatch.setattr(linsight_execute_utils, "enqueue_session_for_execution", enqueue)
+
+    _session, version = await task_submit_service.submit_task_turn(_request(), _user(), run_id="run-reserved")
+    enqueue.assert_awaited_once_with(version, run_id="run-reserved")
+
+    # Every other caller (Open API, legacy send) enqueues exactly as before.
+    enqueue.reset_mock()
+    _session, version = await task_submit_service.submit_task_turn(_request(), _user())
+    enqueue.assert_awaited_once_with(version)
+
+
+async def test_queue_item_of_a_reserved_run_carries_the_run_id(monkeypatch):
+    import bisheng.linsight.worker as worker_mod
+
+    put = AsyncMock()
+
+    class _Queue:
+        def __init__(self, *args, **kwargs):
+            self.put = put
+
+    monkeypatch.setattr(worker_mod, "LinsightQueue", _Queue)
+    monkeypatch.setattr(linsight_execute_utils, "get_redis_client", AsyncMock(return_value=object()))
+    version = MagicMock()
+    version.id, version.tenant_id = "sv-1", 3
+
+    await linsight_execute_utils.enqueue_session_for_execution(version, run_id="run-reserved")
+    await linsight_execute_utils.enqueue_session_for_execution(version)
+
+    reserved, legacy = (call.kwargs["data"] for call in put.await_args_list)
+    assert reserved == worker_mod.encode_queue_item("sv-1", tenant_id=3, run_id="run-reserved")
+    assert reserved["run_id"] == "run-reserved"
+    assert "run_id" not in legacy
+
+
+async def test_relay_turn_writes_no_second_question_row(io, monkeypatch):
+    """F004 relay run: the question rows exist since the messages joined the inbox."""
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+    monkeypatch.setattr(linsight_execute_utils, "enqueue_session_for_execution", AsyncMock())
+    user_turn = AsyncMock()
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_user_turn", user_turn)
+
+    await task_submit_service.submit_task_turn(_request(), _user(), persist_user_turn=False)
+    user_turn.assert_not_awaited()
+    assert len(io["versions"]) == 1
+
+    await task_submit_service.submit_task_turn(_request(), _user())
+    user_turn.assert_awaited_once()
+
+
+async def test_task_submit_persists_composer_references_on_the_question(io, monkeypatch):
+    insert = AsyncMock(side_effect=lambda _cls, message: message)
+    monkeypatch.setattr(ChatMessageDao, "ainsert_one", classmethod(insert))
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+    monkeypatch.setattr(linsight_execute_utils, "enqueue_session_for_execution", AsyncMock())
+    references = [{"kind": "skill", "label": "网页报告", "offset": 2}]
+    request = APIChatCompletion(
+        clientTimestamp="t", model="7", text="📊生成报告", task_mode=True, composer_references=references
+    )
+
+    _, version = await task_submit_service.submit_task_turn(request, _user())
+
+    question = insert.await_args.args[1]
+    assert question.category == "question"
+    assert json.loads(question.message) == {"query": version.question, "files": [], "composer_references": references}
+    assert version.question == "📊生成报告"
+
+
+async def test_reserved_run_enqueue_failure_fails_the_version_and_raises(io, monkeypatch):
+    """F004: the conversation is reserved for this run with the 4-hour queued lease.
+
+    A browser start-execute carries no run id and would wait behind that
+    reservation, so the failure is raised and the caller frees the conversation.
+    """
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+    monkeypatch.setattr(
+        linsight_execute_utils, "enqueue_session_for_execution", AsyncMock(side_effect=RuntimeError("redis down"))
+    )
+
+    with pytest.raises(LinsightStartTaskError):
+        await task_submit_service.submit_task_turn(_request(), _user(), run_id="run-reserved")
+
+    version = io["versions"][-1]
+    assert version.status == SessionVersionStatusEnum.FAILED
+    assert version.output_result["error_type"] == "service_unavailable"
+
+
+async def test_reserved_run_id_is_stored_on_the_run_record_before_enqueue(io, monkeypatch):
+    """F004: a run still in the worker queue is found by its run id (stop, answer)."""
+    from bisheng.linsight.domain.task_exec import RUN_ID_META_KEY
+
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+    seen: dict = {}
+
+    async def enqueue(version, **kwargs):
+        seen["meta_at_enqueue"] = dict(version.api_meta or {})
+
+    monkeypatch.setattr(linsight_execute_utils, "enqueue_session_for_execution", enqueue)
+
+    _session, version = await task_submit_service.submit_task_turn(_request(), _user(), run_id="run-reserved")
+    assert seen["meta_at_enqueue"][RUN_ID_META_KEY] == "run-reserved"
+    assert io["versions"][-1].api_meta[RUN_ID_META_KEY] == "run-reserved"
+
+    # Every other caller leaves the record as it was.
+    _session, plain = await task_submit_service.submit_task_turn(_request(), _user())
+    assert not plain.api_meta

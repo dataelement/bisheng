@@ -97,7 +97,8 @@ echo "[4/5] staging into ${ARTIFACTS_DIR#"${REPO_ROOT}/"}"
 mkdir -p "${ARTIFACTS_DIR}"
 # Only this package's wheels. `rm -f *.whl` here would delete the CLI wheel the
 # manifest still advertises, and /cli/download would 404 for the next release.
-rm -f "${ARTIFACTS_DIR}"/bisheng_sdk-*.whl
+# Published SDK versions remain available to applications with pinned requirements.
+rm -f "${ARTIFACTS_DIR}/${WHEEL_NAME}"
 cp "${WHEEL}" "${ARTIFACTS_DIR}/${WHEEL_NAME}"
 
 if command -v sha256sum >/dev/null 2>&1; then
@@ -122,6 +123,16 @@ path = Path(os.environ["MANIFEST"])
 manifest = {}
 if path.is_file():
     manifest = json.loads(path.read_text(encoding="utf-8"))
+
+previous_sdk = manifest.get("sdk")
+history = manifest.get("sdk_history", [])
+if isinstance(previous_sdk, dict):
+    history = [previous_sdk, *history]
+retained = {}
+for item in history:
+    if isinstance(item, dict) and item.get("filename") != os.environ["SDK_FILENAME"]:
+        retained[item["filename"]] = item
+manifest["sdk_history"] = list(retained.values())
 
 manifest["sdk"] = {
     "version": os.environ["SDK_VERSION"],

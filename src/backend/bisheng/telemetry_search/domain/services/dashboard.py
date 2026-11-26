@@ -11,6 +11,7 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.telemetry import DashboardMaxError, DashBoardShareAuthError
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.search.elasticsearch.manager import get_es_connection
 from bisheng.database.models.role_access import AccessType, WebMenuResource
@@ -167,14 +168,20 @@ class DashboardService(BaseModel):
         """
         if not is_commercial():
             raise UnAuthorizedError()
-        if not await self.login_user.async_access_check(
+        from bisheng.permission.application.identity import is_current_tenant_administrator
+
+        actor = await resolve_permission_actor(self.login_user)
+        if not await is_current_tenant_administrator(
+            self.login_user, actor=actor
+        ) and not await self.login_user.async_access_check(
             0, target_id=WebMenuResource.CREATE_DASHBOARD.value, access_type=AccessType.WEB_MENU
         ):
             raise UnAuthorizedError()
 
-        user_total = await DashboardDao.count_dashboards(
-            dashboard_type=[DashboardType.PRESET_COMMERCIAL, DashboardType.CUSTOM]
-        )
+        with strict_tenant_filter():
+            user_total = await DashboardDao.count_dashboards(
+                dashboard_type=[DashboardType.PRESET_COMMERCIAL, DashboardType.CUSTOM]
+            )
         if user_total >= 20:
             raise DashboardMaxError()
 
@@ -182,14 +189,14 @@ class DashboardService(BaseModel):
 
         dashboard.dashboard_type = DashboardType.CUSTOM.value
         dashboard.user_id = self.login_user.user_id
-        dashboard.tenant_id = self.login_user.tenant_id
+        dashboard.tenant_id = get_current_tenant_id() or self.login_user.tenant_id
 
         dashboard = await DashboardDao.insert(dashboard)
         try:
             adapter = await get_f048_resource_adapter("dashboard")
             await adapter.authorize_created(
                 record=self._new_permission_record(dashboard),
-                actor=await resolve_permission_actor(self.login_user),
+                actor=actor,
             )
         except Exception:
             try:
@@ -231,7 +238,10 @@ class DashboardService(BaseModel):
 
         await self.delete_dashboard_hook(dashboard)
 
-        return await DashboardDao.delete_one(dashboard_id)
+        result = await DashboardDao.delete_one(dashboard_id)
+        if result:
+            await adapter.cleanup_deleted(record=record, actor=await resolve_permission_actor(self.login_user))
+        return result
 
     async def delete_dashboard_hook(self, dashboard: Dashboard):
         """
@@ -337,7 +347,7 @@ class DashboardService(BaseModel):
         new_dashboard.title = new_title
         new_dashboard.dashboard_type = DashboardType.CUSTOM.value
         new_dashboard.user_id = self.login_user.user_id
-        new_dashboard.tenant_id = self.login_user.tenant_id
+        new_dashboard.tenant_id = get_current_tenant_id() or self.login_user.tenant_id
         new_dashboard.status = DashboardStatus.DRAFT.value
         new_dashboard.create_time = None
         new_dashboard.update_time = None
@@ -441,13 +451,33 @@ class DashboardService(BaseModel):
         ).query_telemetry_data()
         return res
 
-    @staticmethod
-    async def get_dataset_options() -> Sequence[Row[Any] | RowMapping | Any]:
+    async def _require_dataset_access(self) -> None:
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
+
+        if self.login_user is None:
+            raise UnAuthorizedError()
+        actor = await resolve_permission_actor(self.login_user)
+        tenant_id = get_current_tenant_id()
+        if (
+            actor.subject_type != "user"
+            or actor.data_scope != DATA_SCOPE_ALL
+            or tenant_id is None
+            or actor.tenant_id != tenant_id
+        ):
+            raise UnAuthorizedError()
+        if not await self.login_user.async_access_check(
+            -1, target_id=WebMenuResource.BOARD.value, access_type=AccessType.WEB_MENU
+        ):
+            raise UnAuthorizedError()
+
+    async def get_dataset_options(self) -> Sequence[Row[Any] | RowMapping | Any]:
         """
         Can get all available datasets for dashboards
         :return:
         """
 
+        await self._require_dataset_access()
         async with get_async_db_session() as session:
             dashboard_dataset_repository = DashboardDatasetRepositoryImpl(session)
             if is_commercial():
@@ -457,8 +487,8 @@ class DashboardService(BaseModel):
 
         return datasets
 
-    @staticmethod
     async def get_dataset_field_enums(
+        self,
         index_name: str,
         field: str,
         keyword: str | None = None,
@@ -468,6 +498,25 @@ class DashboardService(BaseModel):
         """
         Get dataset field enum value with server-side pagination using aggregation filters
         """
+        from fastapi import HTTPException
+
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.database.models.tenant import UserTenantDao
+        from bisheng.telemetry_search.domain.models.dashboard_dataset import SchemaConfig
+
+        if not 1 <= size <= 100 or page < 1 or page * size > 65536:
+            raise HTTPException(status_code=422, detail="Invalid enum pagination")
+        datasets = await self.get_dataset_options()
+        dataset = next((one for one in datasets if one.es_index_name == index_name), None)
+        if dataset is None or any(char in index_name for char in "*,?[]:/\\"):
+            raise NotFoundError()
+        dimensions = SchemaConfig(**dataset.schema_config).dimensions
+        if field not in {one.field for one in dimensions if one.field_type == "string"}:
+            raise NotFoundError()
+        # Legacy telemetry has no tenant_id. Restrict by the authoritative
+        # current tenant membership, including for admins; never query globally.
+        tenant_id = get_current_tenant_id()
+        user_ids = await UserTenantDao.aget_active_user_ids_by_tenant(tenant_id)
         skip = (page - 1) * size
         es_client = await get_es_connection()
 
@@ -492,9 +541,9 @@ class DashboardService(BaseModel):
         else:
             aggs_body = current_aggs
 
-        body = {"size": 0, "aggs": aggs_body}
+        body = {"size": 0, "query": {"terms": {"user_id": user_ids}}, "aggs": aggs_body}
 
-        resp = await es_client.search(index=index_name, body=body)
+        resp = await es_client.search(index=dataset.es_index_name, body=body)
 
         aggs_root = resp.get("aggregations", {})
 

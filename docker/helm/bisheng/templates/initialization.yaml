@@ -1,0 +1,145 @@
+{{- include "bisheng.runtimeDefaults" . -}}
+{{- $root := . -}}
+{{- if and .Values.mysql.enabled (or (and (eq .Values.database.engine "mysql") (not .Values.database.host)) (and .Values.openfga.enabled (not .Values.openfga.database.host)) (and .Values.gateway.enabled (not .Values.gateway.database.host))) }}
+{{ print "\n---" }}
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: {{ include "bisheng.component" (list . "mysql-initialization") }}}
+data:
+  schemas.json: |
+    {{- $schemas := list -}}
+    {{- if and (eq .Values.database.engine "mysql") (not .Values.database.host) -}}{{- $schemas = append $schemas (dict "name" .Values.database.name "username" .Values.database.username "password_file" "/run/mysql-secrets/platform-password") -}}{{- end -}}
+    {{- range $name := list "openfga" "gateway" -}}{{- $value := index $root.Values $name -}}
+    {{- if and $value.enabled (not $value.database.host) -}}{{- $schemas = append $schemas (dict "name" $value.database.name "username" $value.database.username "password_file" (printf "/run/mysql-secrets/%s-password" $name)) -}}{{- end -}}{{- end }}
+    {{ $schemas | toJson }}
+{{ print "\n---" }}
+apiVersion: batch/v1
+kind: Job
+metadata: {name: {{ include "bisheng.component" (list . (printf "mysql-init-%d" .Release.Revision)) }}}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.bootstrap.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.bootstrap.ttlSecondsAfterFinished }}
+  template:
+    spec:
+      restartPolicy: Never
+      {{- include "bisheng.bootstrapPlacement" . | nindent 6 }}
+      automountServiceAccountToken: false
+{{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+{{- end }}
+      containers:
+        - name: mysql-initialization
+          image: {{ include "bisheng.image" (list . .Values.backend.image) | quote }}
+          command: [python, scripts/initialize_mysql.py]
+          args: [--host, {{ include "bisheng.component" (list . "mysql") }}, --port, {{ .Values.mysql.external.port | quote }}, --username, root, --password-file, /run/mysql-secrets/root-password, --timeout, {{ .Values.bootstrap.timeoutSeconds | quote }}, --schemas, /run/mysql-init/schemas.json]
+          resources: {{ toYaml .Values.bootstrap.resources | nindent 12 }}
+          volumeMounts:
+            - {name: schemas, mountPath: /run/mysql-init, readOnly: true}
+            - {name: secrets, mountPath: /run/mysql-secrets, readOnly: true}
+      volumes:
+        - name: schemas
+          configMap: {name: {{ include "bisheng.component" (list . "mysql-initialization") }}}
+        - name: secrets
+          projected:
+            defaultMode: 0400
+            sources:
+              - secret:
+                  name: {{ include "bisheng.authSecret" (list . "mysql-root" .Values.mysql.auth) }}
+                  items: [{key: {{ .Values.mysql.auth.rootPasswordKey }}, path: root-password}]
+{{- if and (eq .Values.database.engine "mysql") (not .Values.database.host) }}
+              - secret:
+                  name: {{ include "bisheng.authSecret" (list . "db-platform" .Values.database.auth) }}
+                  items: [{key: {{ .Values.database.auth.passwordKey }}, path: platform-password}]
+{{- end }}
+{{- range $name := list "openfga" "gateway" -}}{{- $value := index $root.Values $name -}}
+{{- if and $value.enabled (not $value.database.host) }}
+              - secret:
+                  name: {{ include "bisheng.authSecret" (list $root (printf "db-%s" $name) $value.database.auth) }}
+                  items: [{key: {{ $value.database.auth.passwordKey }}, path: {{ $name }}-password}]
+{{- end -}}{{- end }}
+{{- end }}
+{{ print "\n---" }}
+apiVersion: batch/v1
+kind: Job
+metadata: {name: {{ include "bisheng.component" (list . (printf "platform-init-%d" .Release.Revision)) }}}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.bootstrap.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.bootstrap.ttlSecondsAfterFinished }}
+  template:
+    spec:
+      restartPolicy: Never
+      {{- include "bisheng.bootstrapPlacement" . | nindent 6 }}
+      automountServiceAccountToken: false
+{{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+{{- end }}
+      initContainers: {{ include "bisheng.renderInit" . | nindent 8 }}
+      containers:
+        - name: platform-initialization
+          image: {{ include "bisheng.image" (list . .Values.backend.image) | quote }}
+          command: [python, scripts/standard_helm_bootstrap.py]
+          args: [--timeout, {{ .Values.bootstrap.timeoutSeconds | quote }}{{ if .Values.runtime.enabled }}, --runtime{{ end }}{{ if or .Values.openfga.enabled .Values.openfga.allowCreateExternalStore }}, --allow-openfga-bootstrap{{ end }}]
+          env: {{ include "bisheng.backendEnv" . | nindent 12 }}
+          resources: {{ toYaml .Values.bootstrap.resources | nindent 12 }}
+          volumeMounts: {{ include "bisheng.backendMounts" . | nindent 12 }}
+      volumes: {{ include "bisheng.backendVolumes" . | nindent 8 }}
+{{- if .Values.runtime.enabled }}
+{{ print "\n---" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: {{ include "bisheng.component" (list . "key-init") }}}
+automountServiceAccountToken: false
+{{ print "\n---" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "bisheng.component" (list . "key-init") }}
+  namespace: {{ .Values.runtime.execution.namespace }}
+rules:
+  - apiGroups: ['']
+    resources: [configmaps]
+    resourceNames: [{{ .Values.runtime.execution.dataKeyConfigMap }}]
+    verbs: [get, patch]
+{{ print "\n---" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "bisheng.component" (list . "key-init") }}
+  namespace: {{ .Values.runtime.execution.namespace }}
+subjects:
+  - {kind: ServiceAccount, name: {{ include "bisheng.component" (list . "key-init") }}, namespace: {{ .Release.Namespace }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ include "bisheng.component" (list . "key-init") }}}
+{{ print "\n---" }}
+apiVersion: batch/v1
+kind: Job
+metadata: {name: {{ include "bisheng.component" (list . (printf "key-init-%d" .Release.Revision)) }}}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.bootstrap.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.bootstrap.ttlSecondsAfterFinished }}
+  template:
+    spec:
+      restartPolicy: Never
+      {{- include "bisheng.bootstrapPlacement" . | nindent 6 }}
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
+      serviceAccountName: {{ include "bisheng.component" (list . "key-init") }}
+      automountServiceAccountToken: true
+{{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+{{- end }}
+      containers:
+        - name: key-init
+          image: {{ .Values.runtime.images.manager | quote }}
+          command: [python, -m, runtime_manager.bootstrap_keys]
+          args: [--seed, /run/data-seed/seed, --namespace, {{ .Values.runtime.execution.namespace }}, --configmap, {{ .Values.runtime.execution.dataKeyConfigMap }}, --installation, {{ .Values.runtime.execution.installationId }}]
+          resources: {{ toYaml .Values.bootstrap.resources | nindent 12 }}
+          volumeMounts: [{name: seed, mountPath: /run/data-seed, readOnly: true}]
+      volumes:
+        - name: seed
+          secret:
+            secretName: {{ default (include "runtime.name" (list . "data-signing")) .Values.global.credentials.existingDataSecret }}
+            defaultMode: 0440
+            items: [{key: seed, path: seed}]
+{{- end }}

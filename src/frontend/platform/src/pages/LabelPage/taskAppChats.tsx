@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { asRecord, displayText, captureQaOperation, isCurrentQaOperation, type QaOperation } from '@bisheng/chat/core';
 import { showApiError } from '@/controllers/request';
 import type { AnnotationFormHandle } from './annotationTypes';
@@ -153,7 +154,7 @@ function TaskAppChatsContent() {
 
     return <div className="flex h-full min-h-0 flex-col">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingState size="page" />
         </div>}
         <div className="bg-background-login px-4 flex min-h-0 flex-1 flex-col">
             <div className="flex shrink-0 flex-wrap gap-3 justify-between items-center py-4">

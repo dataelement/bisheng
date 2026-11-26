@@ -1,0 +1,181 @@
+pageType: comparison
+background:
+  type: solid
+  color: $paper
+notes: |
+  平台、独立站和本地履约不是互斥选项。平台适合低成本验证需求，独立站沉淀客户资产，本地履约兑现交付和售后体验。企业应按市场成熟度组合三者。
+elements:
+  - elementId: channel-cyan-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 10
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: channel-title-rule
+    elementType: line
+    bounds:
+      - 46
+      - 118
+      - 868
+      - 1
+    viewBox:
+      - 868
+      - 1
+    points: 0,0 868,0
+    border:
+      color: $rule
+      width: 0.9
+  - elementId: channel-table
+    elementType: table
+    bounds:
+      - 46
+      - 166
+      - 868
+      - 268
+    style: $operating-matrix
+    columnWidths:
+      - 0.19
+      - 0.27
+      - 0.27
+      - 0.27
+    rowHeights:
+      - 0.16
+      - 0.14
+      - 0.14
+      - 0.14
+      - 0.14
+      - 0.14
+      - 0.14
+    rows:
+      - - text: 经营维度
+        - text: 平台
+        - text: 独立站
+        - text: 本地履约
+      - - text: 进入速度
+        - text: 快，直接获得需求信号
+        - text: 中，需要自主投放与内容
+        - text: 慢，需要销量与仓网基础
+      - - text: 客户资产
+        - text: 受平台规则约束
+        - text: 数据与关系可沉淀
+        - text: 增加服务与售后触点
+      - - text: 交付体验
+        - text: 由平台方案决定
+        - text: 由企业仓配能力决定
+        - text: 时效与退换货更稳定
+      - - text: 固定投入
+        - text: 低
+        - text: 中
+        - text: 高，库存前置
+      - - text: 主要风险
+        - text: 政策、流量与抽佣
+        - text: 获客效率与转化
+        - text: 库存、现金与当地合规
+      - - text: 管理目标
+        - text: 验证需求与提高周转
+        - text: 沉淀品牌与复购
+        - text: 兑现长期经营体验
+  - elementId: channel-kicker
+    elementType: text
+    bounds:
+      - 46
+      - 24
+      - 520
+      - 16
+    content:
+      text: CHANNEL PORTFOLIO / CONTROL VS. COMMITMENT
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8
+      bold: true
+      letterSpacing: 1.05
+      color: $muted
+  - elementId: channel-title
+    elementType: text
+    bounds:
+      - 46
+      - 52
+      - 850
+      - 42
+    content:
+      style: $title
+      text: 平台、独立站与本地履约，应当组合而不是二选一
+  - elementId: channel-lead
+    elementType: text
+    bounds:
+      - 46
+      - 132
+      - 868
+      - 24
+    content:
+      text: 平台买速度，独立站买客户资产，本地履约买体验确定性。
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      color: $ink
+  - elementId: channel-decision-band
+    elementType: shape
+    bounds:
+      - 46
+      - 454
+      - 868
+      - 34
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: channel-decision
+    elementType: text
+    bounds:
+      - 62
+      - 462
+      - 836
+      - 20
+    content:
+      text: 组合原则｜先平台验证，再把复购用户与高价值 SKU 迁移到自主渠道和本地履约。
+      fontFamily: *ref_0
+      fontSize: 11.5
+      bold: true
+      color: $ink
+  - elementId: channel-source
+    elementType: text
+    bounds:
+      - 46
+      - 506
+      - 790
+      - 14
+    content:
+      text: 管理层研判：基于三类经营模式在流量、客户、履约、库存与合规责任上的差异。
+      fontFamily: *ref_0
+      fontSize: 7.6
+      color: $muted
+  - elementId: channel-page
+    elementType: text
+    bounds:
+      - 868
+      - 506
+      - 46
+      - 14
+    content:
+      text: 16—07
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $ink
+      align:
+        - right
+        - bottom

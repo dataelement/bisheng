@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import { fireEvent, render, screen, waitFor, within } from '@/test/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
 import WorkbenchModel from './WorkbenchModel'
-const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), message: vi.fn(), t: (key: string) => key }))
+const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), message: vi.fn(), t: (key: string) => key, dshEnabled: true }))
 vi.mock('@/components/bs-icons/loading', () => ({ LoadingIcon: () => null, LoadIcon: () => null }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: mocks.t }) }))
-vi.mock('@/hooks/useDshBrowserConfig', () => ({ useDshBrowserConfig: () => ({ config: { enabled: true } }) }))
+vi.mock('@/hooks/useDshBrowserConfig', () => ({ useDshBrowserConfig: () => ({ config: { enabled: mocks.dshEnabled } }) }))
 vi.mock('@/components/bs-ui/toast/use-toast', () => ({ useToast: () => ({ message: mocks.message }) }))
 vi.mock('@bisheng/ui', async (importOriginal) => ({
     ...await importOriginal<typeof import('@bisheng/ui')>(),
@@ -15,7 +15,12 @@ vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
 vi.mock('..', () => ({ useModel: () => ({ llmOptions: [{ value: 'provider', label: 'Provider', children: [{ value: '42', label: 'Original' }, { value: '99', label: 'Hidden' }, { value: '7', label: 'New model' }] }], embeddings: [], asrModel: [], ttsModel: [] }) }))
 vi.mock('@/components/bs-ui/select/cascader', () => ({ default: () => null }))
 vi.mock('../dsh/ModelVisionSwitch', () => ({ ModelVisionSwitch: () => null }))
-vi.mock('../dsh/ModelMultiplierInput', () => ({ ModelMultiplierInput: () => null }))
+vi.mock('@/controllers/API/modelPricing', () => ({
+    getModelPricingRows: vi.fn(async () => []),
+    getModelVisionRows: vi.fn(async () => []),
+    getCreditSettings: vi.fn(async () => ({ version: 1, currency: 'CNY', credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: null })),
+    saveCreditSettings: vi.fn(),
+}))
 vi.mock('../dsh/ModelAccessDialog', () => ({ ModelAccessDialog: () => null }))
 const config = {
     models: [{ id: '42', displayName: 'Original', description: 'Retained' }, { id: '99', displayName: 'Hidden' }],
@@ -25,6 +30,7 @@ const config = {
 const data = [{ id: 1, name: 'Provider', models: [{ id: 42, model_name: 'vendor', model_type: 'llm', online: true }] }]
 beforeEach(() => {
     vi.clearAllMocks()
+    mocks.dshEnabled = true
     mocks.get.mockResolvedValue({ data: config })
     mocks.save.mockResolvedValue(true)
 })
@@ -73,4 +79,60 @@ it('adds a newly chosen default to the saved selectable catalog', async () => {
         chat_default_model_id: '7',
         models: expect.arrayContaining([expect.objectContaining({ id: '7', displayName: 'New model' })]),
     })))
+})
+
+it('saves without any stored model metadata when the desktop module is off', async () => {
+    // Online chat models are offered by default, so an empty metadata list is valid.
+    mocks.dshEnabled = false
+    mocks.get.mockResolvedValue({ data: { ...config, models: [], chat_default_model_id: null } })
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ models: [] })))
+    expect(mocks.message).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }))
+})
+
+it('opens the collapsed settings when the required embedding model blocks saving', async () => {
+    mocks.get.mockResolvedValue({ data: { ...config, embedding_model: null } })
+    const { container } = render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    const save = await screen.findByRole('button', { name: 'model.save' })
+    const details = container.querySelector('details')!
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(save)
+    await waitFor(() => expect(details).toHaveAttribute('open'))
+    expect(mocks.save).not.toHaveBeenCalled()
+})
+
+it('keeps unavailable configured metadata until the administrator explicitly removes it', async () => {
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    const remove = await screen.findByRole('button', { name: 'model.removeConfiguredModel: Hidden' })
+    expect(screen.getByText('Hidden · 99')).toBeInTheDocument()
+    expect(mocks.save).not.toHaveBeenCalled()
+    fireEvent.click(remove)
+    expect(screen.queryByText('Hidden · 99')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+        models: [config.models[0]], chat_default_model_id: '99',
+    })))
+})
+it('exposes the saved unavailable image-reading reference for an explicit clear', async () => {
+    mocks.get.mockResolvedValue({ data: { ...config, image_read_model: { id: '999' } } })
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    await screen.findByRole('button', { name: 'model.save' })
+    fireEvent.click(screen.getByText('model.otherModelSettings'))
+    const imagePicker = screen.getByRole('combobox', { name: 'model.imageReadingModel' })
+    expect(imagePicker).toHaveTextContent('999')
+    fireEvent.click(within(imagePicker).getByRole('button', { name: 'sharedUi.clear' }))
+    fireEvent.click(screen.getByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ image_read_model: null })))
+})
+it('can replace the saved image-reading reference with an available LLM', async () => {
+    mocks.get.mockResolvedValue({ data: { ...config, image_read_model: { id: '999' } } })
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    await screen.findByRole('button', { name: 'model.save' })
+    fireEvent.click(screen.getByText('model.otherModelSettings'))
+    fireEvent.click(screen.getByRole('combobox', { name: 'model.imageReadingModel' }))
+    fireEvent.click((await screen.findAllByText('Provider')).at(-1)!)
+    fireEvent.click(await screen.findByText('New model'))
+    fireEvent.click(screen.getByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ image_read_model: { id: '7' } })))
 })

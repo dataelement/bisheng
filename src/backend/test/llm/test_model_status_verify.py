@@ -8,6 +8,7 @@ See features/v3.0.0-beta1/044-model-status-manual-verify/design.md §3 decision 
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -20,8 +21,21 @@ STATUS_NORMAL = 0
 STATUS_ABNORMAL = 1
 
 
+@pytest.fixture(autouse=True)
+def original_probe_unit_composition(monkeypatch):
+    # These cache/probe unit cases already replace the business DAO. Native
+    # provider fencing and removal are exercised by the model deletion tests.
+    from bisheng.llm.application import model_deletion
+
+    application = SimpleNamespace(
+        areplay_completed_update=AsyncMock(return_value=None),
+        arequire_idle=AsyncMock(),
+    )
+    monkeypatch.setattr(model_deletion, "get_model_deletion_application", AsyncMock(return_value=application))
+
+
 def _model(model_type=LLMModelType.LLM.value):
-    return LLMModel(id=7, server_id=1, model_name="gpt-x", model_type=model_type)
+    return LLMModel(id=7, server_id=1, tenant_id=1, model_name="gpt-x", model_type=model_type)
 
 
 def _login_user():
@@ -97,6 +111,17 @@ class TestVerifyDefeatsTheInfoCache:
     aged out. Verify evicts the entry first.
     """
 
+    @pytest.fixture(autouse=True)
+    def writable_provider_scope(self, monkeypatch):
+        from bisheng.llm.domain.models.llm_server import LLMServer
+
+        monkeypatch.setattr("bisheng.llm.domain.services.llm.get_current_tenant_id", lambda: 1)
+        monkeypatch.setattr(
+            LLMService,
+            "acollect_visible_servers",
+            AsyncMock(return_value=[LLMServer(id=1, name="provider", type="openai", config={}, tenant_id=1)]),
+        )
+
     async def test_verify_evicts_the_cached_model_and_server(self):
         from bisheng.llm.domain.const import LLM_CACHE
         from bisheng.llm.domain.utils import _scoped_cache_key
@@ -108,8 +133,9 @@ class TestVerifyDefeatsTheInfoCache:
         LLM_CACHE[server_key] = "row carrying the pre-rename server config"
 
         with (
+            patch("bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id", AsyncMock(return_value=model)),
             patch(
-                "bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id",
+                "bisheng.llm.domain.services.llm.LLMService._require_model_writable",
                 AsyncMock(return_value=model),
             ),
             patch.object(LLMService, "test_model_status", AsyncMock()),
@@ -134,8 +160,9 @@ class TestVerifyDefeatsTheInfoCache:
             seen["cached_at_probe_time"] = LLM_CACHE.get(model_key)
 
         with (
+            patch("bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id", AsyncMock(return_value=model)),
             patch(
-                "bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id",
+                "bisheng.llm.domain.services.llm.LLMService._require_model_writable",
                 AsyncMock(return_value=model),
             ),
             patch.object(LLMService, "test_model_status", record_cache_state),

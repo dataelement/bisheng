@@ -27,9 +27,9 @@ def login_user():
 async def test_keeps_only_usable_groups(monkeypatch, login_user):
     async def fake_batch(user, *, resource_type, resource_ids, actions):
         assert resource_type == "tool"
-        assert actions == ("use",)
+        assert actions == ("visible",)
         assert sorted(resource_ids) == [362, 627]
-        return {"362": frozenset({"use"})}
+        return {"362": frozenset({"visible"})}
 
     monkeypatch.setattr(
         "bisheng.permission.application.business_authorization.batch_check_business_actions",
@@ -57,7 +57,7 @@ async def test_empty_input_short_circuits(monkeypatch, login_user):
 async def test_group_without_id_is_dropped(monkeypatch, login_user):
     async def fake_batch(user, *, resource_type, resource_ids, actions):
         assert list(resource_ids) == [627]
-        return {"627": frozenset({"use"})}
+        return {"627": frozenset({"visible"})}
 
     monkeypatch.setattr(
         "bisheng.permission.application.business_authorization.batch_check_business_actions",

@@ -91,7 +91,7 @@ def _actor(tenant_id: int = 5) -> PermissionActor:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "action",
-    ("visible", "use", "edit", "delete", "manage_permission"),
+    ("visible", "edit", "delete", "manage_permission"),
 )
 async def test_custom_tool_uses_exact_action(action) -> None:
     record = _record()
@@ -157,42 +157,21 @@ async def test_preset_tool_create_projects_read_only_system_actions() -> None:
     await adapter.authorize_created(record=preset, actor=_actor())
 
     system = permission.calls[0][1]
-    assert system["action_codes"] == ("use", "visible")
+    assert system["action_codes"] == ("visible",)
     assert "owner_user_id" not in system
 
 
 @pytest.mark.asyncio
-async def test_preset_tool_allows_creator_and_keeps_read_only_actions() -> None:
-    preset = _record(preset=True)
-    adapter = F048ToolPermissionAdapter(
-        loader=_Loader((preset,)),
-        permission=_Permission(),
-    )
-    assert await adapter.check_action(resource_id="10", actor=_actor(), action="manage_permission")
-    assert await adapter.check_action(
-        resource_id="10",
-        actor=_actor(),
-        action="use",
-    )
+@pytest.mark.parametrize("owner_user_id", [None, 7])
+async def test_preset_tool_delegates_edit_without_granting_delete(owner_user_id) -> None:
+    preset = replace(_record(preset=True), owner_user_id=owner_user_id)
+    permission = _Permission()
+    adapter = F048ToolPermissionAdapter(loader=_Loader((preset,)), permission=permission)
+    for action in ("visible", "edit", "manage_permission"):
+        assert await adapter.check_action(resource_id="10", actor=_actor(), action=action)
+        assert permission.calls[-1][1][2] == action
     with pytest.raises(InvalidCatalogActionError):
-        await adapter.check_action(
-            resource_id="10",
-            actor=_actor(),
-            action="edit",
-        )
-
-    with_creator = replace(preset, owner_user_id=7)
-    adapter = F048ToolPermissionAdapter(
-        loader=_Loader((with_creator,)),
-        permission=_Permission(),
-    )
-    assert await adapter.check_action(
-        resource_id="10",
-        actor=_actor(),
-        action="use",
-    )
-    with pytest.raises(InvalidCatalogActionError):
-        await adapter.resolve_permission_target(resource_id="10", actor=_actor(), action="edit")
+        await adapter.check_action(resource_id="10", actor=_actor(), action="delete")
 
 
 @pytest.mark.asyncio
@@ -208,7 +187,7 @@ async def test_fga_failure_does_not_fallback_to_legacy_tool_service() -> None:
         await adapter.check_action(
             resource_id="10",
             actor=_actor(),
-            action="use",
+            action="visible",
         )
     assert len(permission.calls) == 1
 
@@ -288,6 +267,10 @@ async def test_refresh_mcp_requires_exact_edit_action(monkeypatch) -> None:
 async def test_visible_tool_list_enumerates_ids_before_database_query(
     monkeypatch,
 ) -> None:
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_preset_child_keys",
+        AsyncMock(return_value={}),
+    )
     preset_tool_type = GptsToolsType(
         id=20,
         tenant_id=1,
@@ -343,6 +326,10 @@ async def test_visible_tool_list_enumerates_ids_before_database_query(
 
 @pytest.mark.asyncio
 async def test_visible_preset_tool_list_is_visible_to_regular_users(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_preset_child_keys",
+        AsyncMock(return_value={}),
+    )
     preset_tool_type = GptsToolsType(
         id=20,
         tenant_id=1,
@@ -410,19 +397,48 @@ async def test_use_tool_list_checks_only_requested_action(monkeypatch) -> None:
     assert batch_actions.await_args.kwargs["actions"] == ("use",)
 
 
-@pytest.mark.asyncio
-async def test_only_global_super_can_update_preset_tool_config(monkeypatch) -> None:
-    load_tool = AsyncMock()
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_preset_config_requires_exact_edit_action(monkeypatch, allowed):
+    row = GptsToolsType(id=10, tenant_id=5, name="Preset", is_preset=1, extra="{}")
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.get_current_tenant_id", lambda: 5)
     monkeypatch.setattr(
-        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_one_tool_type",
-        load_tool,
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_one_tool_type", AsyncMock(return_value=row)
     )
-    login_user = UserPayload(user_id=7, tenant_id=1, user_role=[])
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_preset_child_keys", AsyncMock(return_value={})
+    )
+    authorize = AsyncMock(side_effect=None if allowed else UnAuthorizedError())
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.require_business_action", authorize)
+    save = AsyncMock()
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.GptsToolsDao.update_tools_extra", save)
+    user = UserPayload(user_id=7, tenant_id=5, user_role=[])
+    service = ToolServices(login_user=user)
+    if allowed:
+        assert await service.update_tool_config(10, {"proxy": "https://proxy.example.test"})
+        save.assert_awaited_once()
+    else:
+        with pytest.raises(UnAuthorizedError):
+            await service.update_tool_config(10, {})
+        save.assert_not_awaited()
+    authorize.assert_awaited_once_with(user, resource_type="tool", resource_id=10, action="edit")
 
+
+@pytest.mark.parametrize("foreign,deleted", [(True, False), (False, True)])
+async def test_preset_config_rejects_invalid_target_before_authorization(monkeypatch, foreign, deleted):
+    row = GptsToolsType(id=10, tenant_id=6 if foreign else 5, name="Preset", is_preset=1, is_delete=int(deleted))
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.get_current_tenant_id", lambda: 5)
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_one_tool_type", AsyncMock(return_value=row)
+    )
+    authorize = AsyncMock()
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.require_business_action", authorize)
+    save = AsyncMock()
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.GptsToolsDao.update_tools_extra", save)
+    user = UserPayload(user_id=7, tenant_id=5, user_role=[])
     with pytest.raises(UnAuthorizedError):
-        await ToolServices(login_user=login_user).update_tool_config(10, {})
-
-    load_tool.assert_not_awaited()
+        await ToolServices(login_user=user).update_tool_config(10, {})
+    authorize.assert_not_awaited()
+    save.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -440,6 +456,7 @@ async def test_delete_tool_checks_delete_then_projects_lifecycle(
     adapter = SimpleNamespace(
         load_permission_record=AsyncMock(return_value=_record()),
         project_delete=AsyncMock(),
+        cleanup_deleted=AsyncMock(),
     )
     delete_row = AsyncMock()
     monkeypatch.setattr(

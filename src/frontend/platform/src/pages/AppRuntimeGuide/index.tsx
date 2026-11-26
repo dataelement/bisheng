@@ -12,9 +12,8 @@
  * switch is off" from "the switch is on but the layer is unreachable" without a
  * session — the link may well have arrived by QR code on someone's phone.
  */
-import { Button } from "@bisheng/ui"
+import { Button, StateView, SystemErrorIllustration } from "@bisheng/ui"
 import { getAppConfig } from "@/controllers/API"
-import { PackageOpen } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -44,26 +43,26 @@ export function AppRuntimeGuide() {
       : t("hostedApp.guide.descDisabled")
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-background-main px-6">
-      <div className="flex max-w-lg flex-col items-center text-center">
-        <PackageOpen className="size-12 text-muted-foreground" />
-        <h1 className="mt-4 text-xl font-semibold">
-          {t("hostedApp.guide.title")}
-        </h1>
-        <p className="mt-3 text-sm text-muted-foreground">{description}</p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t("hostedApp.guide.contact")}
-        </p>
-        <Button
-          className="mt-6"
-          variant="outline"
-          onClick={() => {
-            window.location.href = __APP_ENV__.BASE_URL + "/"
-          }}
-        >
-          {t("hostedApp.guide.backHome")}
-        </Button>
-      </div>
+    <div className="flex min-h-screen w-full items-center justify-center bg-bg-page px-6 py-8">
+      <StateView
+        image={<SystemErrorIllustration />}
+        title={t("hostedApp.guide.title")}
+        description={
+          <>
+            <span className="block">{description}</span>
+            <span className="block">{t("hostedApp.guide.contact")}</span>
+          </>
+        }
+        action={
+          <Button
+            onClick={() => {
+              window.location.href = __APP_ENV__.BASE_URL + "/"
+            }}
+          >
+            {t("hostedApp.guide.backHome")}
+          </Button>
+        }
+      />
     </div>
   )
 }

@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 
@@ -35,6 +36,11 @@ def _agent(*, knowledge_auth: bool) -> AssistantAgent:
         knowledge_auth=knowledge_auth,
     )
     agent.invoke_user_id = 150041  # the runtime user, granted the assistant only
+    agent.login_user = UserPayload(user_id=150041, user_name="actor", tenant_id=1, user_role=[])
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    agent.reference_session = AsyncSession()
+    agent._source_links = tuple(_links())
     agent.llm = object()
     agent.knowledge_retriever = {"max_content": 15000}
     agent.citation_registry_collector = SimpleNamespace(clear=lambda: None, list_items=list)
@@ -50,8 +56,8 @@ def _links():
 
 def _knowledge_rows():
     return [
-        SimpleNamespace(id=_ALLOWED_KB, type=KnowledgeTypeEnum.NORMAL.value, name="allowed"),
-        SimpleNamespace(id=_FORBIDDEN_KB, type=KnowledgeTypeEnum.NORMAL.value, name="forbidden"),
+        SimpleNamespace(id=_ALLOWED_KB, type=KnowledgeTypeEnum.NORMAL.value, name="allowed", tenant_id=1),
+        SimpleNamespace(id=_FORBIDDEN_KB, type=KnowledgeTypeEnum.NORMAL.value, name="forbidden", tenant_id=1),
     ]
 
 
@@ -61,17 +67,18 @@ async def _run_init_tools(agent, *, usable_ids):
     )
     with (
         patch(
-            "bisheng.api.services.assistant_agent.AssistantLinkDao.get_assistant_link",
-            AsyncMock(return_value=_links()),
-        ),
+            "bisheng.database.models.assistant.AssistantLinkDao.get_assistant_link",
+            AsyncMock(side_effect=AssertionError("must consume the admitted snapshot links")),
+        ) as independent_links,
         patch(
             "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.get_list_by_ids",
             return_value=_knowledge_rows(),
         ),
+        patch("bisheng.core.context.tenant.get_current_tenant_id", return_value=1),
         patch(
             "bisheng.knowledge.domain.services.space_flow_retrieval.abuild_scoped_login_user",
-            AsyncMock(return_value=SimpleNamespace(user_id=150041)),
-        ),
+            AsyncMock(side_effect=lambda user_id, tenant_id: SimpleNamespace(user_id=user_id)),
+        ) as identity_builder,
         patch.object(
             KnowledgeRag,
             "afilter_usable_knowledge_ids",
@@ -84,7 +91,18 @@ async def _run_init_tools(agent, *, usable_ids):
         patch.object(AssistantAgent, "wrap_citation_tool", lambda self, tool: tool),
         patch.object(AssistantAgent, "_resolve_kb_name_by_id", staticmethod(lambda ids: {})),
     ):
-        await agent.init_tools()
+        try:
+            await agent.init_tools()
+        finally:
+            await agent.reference_session.close()
+        independent_links.assert_not_awaited()
+        if agent.assistant.knowledge_auth:
+            identity_builder.assert_awaited_once_with(agent.invoke_user_id, agent.assistant.tenant_id)
+        else:
+            identity_builder.assert_not_awaited()
+    for call in init_knowledge_tool.await_args_list:
+        assert call.kwargs["reference_session"] is agent.reference_session
+        assert call.kwargs["login_user"] is agent.login_user
     built_for = [
         call.kwargs.get("knowledge_id", call.args[1] if len(call.args) > 1 else None)
         for call in init_knowledge_tool.await_args_list
@@ -99,6 +117,7 @@ async def test_toggle_on_drops_a_knowledge_base_the_runtime_user_cannot_use():
     assert built_for == [_ALLOWED_KB]
     assert _FORBIDDEN_KB not in built_for
     usable_filter.assert_awaited_once()
+    assert usable_filter.await_args.args[0].user_id == agent.invoke_user_id
 
 
 async def test_toggle_on_asks_about_ordinary_knowledge_bases_only():
@@ -110,32 +129,37 @@ async def test_toggle_on_asks_about_ordinary_knowledge_bases_only():
     assert _SPACE not in asked_for
 
 
-async def test_toggle_off_leaves_the_previous_behaviour_alone():
+async def test_toggle_off_skips_permission_filter_and_keeps_all_bindings():
     agent = _agent(knowledge_auth=False)
     built_for, usable_filter = await _run_init_tools(agent, usable_ids=set())
 
-    assert built_for == [_ALLOWED_KB, _FORBIDDEN_KB]
+    assert sorted(built_for) == sorted([_ALLOWED_KB, _FORBIDDEN_KB])
     usable_filter.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
     ("action_map", "expected"),
     [
-        ({_ALLOWED_KB: {"use"}, _FORBIDDEN_KB: set()}, {_ALLOWED_KB}),
-        ({_ALLOWED_KB: {"edit"}, _FORBIDDEN_KB: {"use"}}, {_FORBIDDEN_KB}),
+        ({_ALLOWED_KB: {"visible"}, _FORBIDDEN_KB: set()}, {_ALLOWED_KB}),
+        ({_ALLOWED_KB: {"edit"}, _FORBIDDEN_KB: {"visible"}}, {_FORBIDDEN_KB}),
+        ({_ALLOWED_KB: {"use"}}, set()),
         ({}, set()),
     ],
 )
-async def test_the_filter_keeps_only_the_use_action(action_map, expected):
+async def test_the_filter_keeps_only_canonical_legacy_use_authority(action_map, expected):
+    # F118 AC-35/36/37/66/68/79/82/83 maps legacy KB retrieval/use to
+    # canonical visible. Edit-only and raw unnormalized use cannot grant it.
     with patch(
         "bisheng.knowledge.domain.services.knowledge_permission_service."
         "KnowledgePermissionService.get_knowledge_action_map_async",
         AsyncMock(return_value=action_map),
-    ):
+    ) as permission_map:
+        user = SimpleNamespace(user_id=150041)
         usable = await KnowledgeRag.afilter_usable_knowledge_ids(
-            SimpleNamespace(user_id=150041),
+            user,
             [_ALLOWED_KB, _FORBIDDEN_KB],
         )
+    permission_map.assert_awaited_once_with(user, [_ALLOWED_KB, _FORBIDDEN_KB], ["visible"])
     assert usable == expected
 
 

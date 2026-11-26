@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useServiceAccountOwnerCandidates } from "./useServiceAccountOwnerCandidates";
 import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Button, Input, Textarea, notification } from '@bisheng/ui';
@@ -26,7 +27,6 @@ ServiceAccountForm,
 ServiceAccountItem,
 } from "@/types/api/openApi";
 import { formatIsoDateTime } from "@/util/utils";
-import { Outlined } from "bisheng-icons";
 
 import { type ReactNode,useContext,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -210,7 +210,7 @@ export function OverviewTab({
         </Field>
         {multiTenantEnabled ? (
           <Field label={t("openApiManagement.fields.tenant")}>
-            {tenantName.isLoading ? t("loading") : tenantName.data || "-"}
+            {tenantName.isLoading ? <LoadingState size="inline" label={t("loading")} /> : tenantName.data || "-"}
           </Field>
         ) : null}
         <Field
@@ -269,13 +269,8 @@ export function OverviewTab({
       <div className="flex flex-wrap gap-3">
         {editing ? (
           <>
-            <Button disabled={((String((name) ?? '').length > 128) || (String((description) ?? '').length > 512)) || (loading !== null || !name.trim() || owner.length !== 1)} onClick={handleSave}>
-              {loading === "save" ? (
-                <Outlined.Loading
-                  aria-hidden="true"
-                  className="mr-2 size-4 animate-spin"
-                />
-              ) : null}
+            <Button disabled={((String((name) ?? '').length > 128) || (String((description) ?? '').length > 512)) || (loading !== null || !name.trim() || owner.length !== 1)} onClick={handleSave} loading={loading === "save"}>
+
               {t("save")}
             </Button>
             <Button variant="outlined" disabled={loading !== null} onClick={() => setEditing(false)} color="default">
@@ -287,26 +282,16 @@ export function OverviewTab({
             <Button variant="outlined" disabled={loading !== null} onClick={startEdit} color="default">
               {t("edit")}
             </Button>
-            <Button variant="outlined" disabled={loading !== null} onClick={handleToggle} color="default">
-              {loading === "toggle" ? (
-                <Outlined.Loading
-                  aria-hidden="true"
-                  className="mr-2 size-4 animate-spin"
-                />
-              ) : null}
+            <Button variant="outlined" disabled={loading !== null} onClick={handleToggle} color="default" loading={loading === "toggle"}>
+
               {t(
                 detail.status === "enabled"
                   ? "openApiManagement.actions.disable"
                   : "openApiManagement.actions.enable",
               )}
             </Button>
-            <Button variant="solid" disabled={loading !== null} onClick={handleUiRequest(handleDelete)} color="danger">
-              {loading === "delete" ? (
-                <Outlined.Loading
-                  aria-hidden="true"
-                  className="mr-2 size-4 animate-spin"
-                />
-              ) : null}
+            <Button variant="solid" disabled={loading !== null} onClick={handleUiRequest(handleDelete)} color="danger" loading={loading === "delete"}>
+
               {t("delete")}
             </Button>
           </>

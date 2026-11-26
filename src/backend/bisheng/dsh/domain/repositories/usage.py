@@ -1,5 +1,6 @@
 """Transactional, versioned projection of complete DSH request events."""
 
+import json
 from collections import defaultdict
 from datetime import UTC, datetime
 
@@ -15,6 +16,13 @@ from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
 from bisheng.dsh.domain.schemas.model_policy import model_configs_payload
 from bisheng.dsh.domain.schemas.usage import UsageEvent
+
+
+def _pricing_json(value) -> str | None:
+    if value is None:
+        return None
+    data = value.model_dump(mode="json") if hasattr(value, "model_dump") else value
+    return json.dumps(data, sort_keys=True, separators=(",", ":"))
 
 
 class DshUsageRepository:
@@ -86,6 +94,10 @@ class DshUsageRepository:
                     )
                     if any(getattr(current, k) != getattr(event, k) for k in immutable):
                         raise ValueError("Request identity and admission ownership are immutable")
+                    # F016: the frozen prices are immutable too. Compare normalized JSON because the
+                    # column round-trips through JSON (a CLOB on DM8), never the Python object.
+                    if _pricing_json(current.pricing) != _pricing_json(event.pricing):
+                        raise ValueError("Request price snapshot is immutable")
                     if event.event_version == current.event_version:
                         fields = (
                             "input_tokens",
@@ -111,6 +123,8 @@ class DshUsageRepository:
                     exclude={"billing_timezone", "operation_id", "payload_hash", "operation_generation"}
                 )
                 payload["billed_tokens"] = event.billed_tokens
+                payload["cost_micro"] = event.cost_micro
+                payload["currency"] = event.currency
                 if current is None:
                     current = DshModelCall(**payload)
                     self.session.add(current)
@@ -165,7 +179,7 @@ class DshUsageRepository:
 
         tenant = get_current_tenant_id()
         with strict_tenant_filter():
-            policy = UnifiedPolicyRepository(self.session).effective(user_id, lock=True)
+            policy = UnifiedPolicyRepository(self.session).accounting_policy(user_id, lock=True)
             if policy is None:
                 raise ValueError("Recovery requires a current SQL user policy")
             calls = []
@@ -196,15 +210,17 @@ class DshUsageRepository:
         calculated = {}
         events = []
         for row in calls:
-            if row.total_tokens is not None:
-                key = (row.usage_month, row.model_id)
-                calculated[key] = calculated.get(key, 0) + (row.total_tokens * row.credit_rate + 99) // 100
             data = {key: value for key, value in row.model_dump().items() if key in UsageEvent.model_fields}
             data["billing_timezone"] = next(
                 (item.billing_timezone for item in totals if item.usage_month == row.usage_month), billing_timezone
             )
             data["operation_id"] = row.reconciliation_operation_id if row.usage_source == "RECONCILED" else None
-            events.append(UsageEvent.model_validate_json(json.dumps(data)))
+            event = UsageEvent.model_validate_json(json.dumps(data))
+            # Rebuild through the event so F016 price snapshots and pre-F016 multipliers both apply.
+            if event.billed_tokens is not None:
+                key = (row.usage_month, row.model_id)
+                calculated[key] = calculated.get(key, 0) + event.billed_tokens
+            events.append(event)
         if calculated != sql_totals:
             raise ValueError("SQL summary cannot be reconstructed from retained request evidence")
         return events, policy.recovery_payload()
@@ -225,7 +241,7 @@ class DshUsageRepository:
 
     def complete_recovery(self, user_id: int, *, expected_policy: dict, epoch: int):
         """Publish the recovered epoch only if policy authority has not changed during IO."""
-        current = UnifiedPolicyRepository(self.session).effective(user_id, lock=True)
+        current = UnifiedPolicyRepository(self.session).accounting_policy(user_id, lock=True)
         if current is None or current.recovery_payload() != expected_policy:
             raise ValueError("SQL policy changed during controlled recovery")
         if epoch < current.quota_epoch:
@@ -262,7 +278,7 @@ class DshUsageRepository:
                 )
                 if row.tenant_id == tenant
             ]
-            policy = UnifiedPolicyRepository(self.session).effective(user_id)
+            policy = UnifiedPolicyRepository(self.session).accounting_policy(user_id)
             unknown_pending = self.unknown_pending(user_id)
         if not rows or policy is None or any(row.projected_at is None for row in rows):
             raise ValueError("No trustworthy persisted usage snapshot exists")
@@ -302,7 +318,7 @@ class DshUsageRepository:
                 )
                 if row.tenant_id == tenant
             ]
-            policy = UnifiedPolicyRepository(self.session).effective(user_id)
+            policy = UnifiedPolicyRepository(self.session).accounting_policy(user_id)
         if calls or totals or policy is None:
             raise ValueError("Month history is not proven empty")
         return {

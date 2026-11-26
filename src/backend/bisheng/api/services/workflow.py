@@ -45,10 +45,12 @@ from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
+from bisheng.workflow.application.execution_admission import prepare_node_preview
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
+from bisheng.workflow.nodes.memory_retriever.memory_retriever import check_memory_nodes_for_publish
 from bisheng.workflow.nodes.node_manage import NodeFactory
 
 if TYPE_CHECKING:
@@ -59,17 +61,6 @@ if TYPE_CHECKING:
 # wasted permission lookups when most rows are filtered out.
 _FLOW_PERMISSION_SCAN_BATCH_SIZE = 50
 _APP_COMPAT_PAGE_SCAN_BATCH_SIZE = 50
-
-#: F056: hosted applications are asked for ``use`` in the square, matching the
-#: public entry's own decision (``check_business_action("app", id, actor,
-#: "use")``). This pins only *which action decides visibility* for a type; any
-#: further actions come from the caller's ``additional_actions`` exactly as for
-#: the other types, so a caller that lazy-loads per-card actions (beta1
-#: ``7559c9871``, ``additional_actions=()``) asks the ``app`` bucket for ``use``
-#: alone. ``share`` is never legal for ``app`` (``catalog_policy.py``, K6) and is
-#: dropped by ``_legal_actions_for`` — there is no share-token bypass for a
-#: hosted application, and requesting it would fabricate a capability.
-_SQUARE_VISIBILITY_ACTION_BY_TYPE: dict[str, str] = {"app": "use"}
 
 #: F056: hosted-application states the square lists. "stopped" stays visible on
 #: purpose (决议-5); drafts / pending-capacity / deleted are excluded in SQL, so
@@ -84,11 +75,6 @@ SQUARE_APP_STATES: frozenset[str] = frozenset({"online", "stopped"})
 #: filter: these lists ask for ``visible``, which is legal for ``app``.
 CHAT_ENTRY_EXCLUDED_FLOW_TYPES: frozenset[int] = frozenset({FlowType.HOSTED_APP.value})
 
-#: Actions that bypass the per-resource-type legality filter (F056 design D3).
-#: ``visible`` is answered by ``batch_check_visible``, a different FGA relation
-#: that is deliberately absent from ``REGISTERED_ACTION_CODES`` and therefore
-#: from ``ACTION_RESOURCE_SCOPES``.
-_ACTION_SCOPE_EXEMPT = frozenset({"visible"})
 # F048 visible-first: upper bound on the number of visible app ids OpenFGA may
 # return per resource type (workflow + assistant queried separately). Matches
 # the ceiling used for knowledge_library / knowledge_space / channel so all
@@ -199,7 +185,9 @@ class WorkFlowService(BaseService):
         owner_activity = {one.user_id: int(getattr(one, "delete", 0) or 0) != 1 for one in user_infos}
 
         # Get version information in the list
-        version_infos = FlowVersionDao.get_list_by_flow_ids(resource_ids)
+        # The builder loads a workflow's versions only when its selector opens.
+        # Other consumers retain the historical list enrichment contract.
+        version_infos = [] if managed else FlowVersionDao.get_list_by_flow_ids(resource_ids)
         flow_versions = {}
         for one in version_infos:
             if one.flow_id not in flow_versions:
@@ -255,15 +243,15 @@ class WorkFlowService(BaseService):
         ordinary users.
 
         ``visible`` is exempt on purpose: it is not a registered action code
-        (``_normalize_action`` rejects it and ``batch_check_visible`` answers it
-        instead), so ``ACTION_RESOURCE_SCOPES`` has no row for it. Filtering it
+        (``batch_check_visible`` answers it instead), so
+        ``ACTION_RESOURCE_SCOPES`` has no row for it. Filtering it
         out would drop the square's only visibility question and return an empty
         page for every type.
         """
         return tuple(
             action
             for action in actions
-            if action in _ACTION_SCOPE_EXEMPT or resource_type in ACTION_RESOURCE_SCOPES.get(action, frozenset())
+            if action == "visible" or resource_type in ACTION_RESOURCE_SCOPES.get(action, frozenset())
         )
 
     @classmethod
@@ -272,15 +260,8 @@ class WorkFlowService(BaseService):
         user: UserPayload,
         data: list[dict],
         actions: tuple[str, ...],
-        actions_by_type: dict[str, tuple[str, ...]] | None = None,
     ) -> dict[str, frozenset[str]]:
-        """Ask F048 for the exact actions each resource type can answer.
-
-        ``actions_by_type`` overrides ``actions`` for the named buckets only;
-        omitting it leaves every caller's request exactly as it was. The square
-        uses it to ask hosted applications for ``use`` while workflows and
-        assistants keep their historical ``visible`` (F056 design D3, layer 2).
-        """
+        """Ask F048 for the current actions each resource type can answer."""
         # One bucket per F048 resource type. A row whose type has no bucket is
         # dropped silently and comes back with no actions at all — the symptom
         # is "the cards render but nothing on them can be clicked", never an
@@ -295,7 +276,6 @@ class WorkFlowService(BaseService):
             if resource_type is not None:
                 grouped[resource_type].append(str(item.get("id")))
 
-        overrides = actions_by_type or {}
         # A bucket left with no legal action is skipped rather than asked with an
         # empty tuple: its rows then carry no action at all, which is what makes
         # `can_share` fall back to False for hosted applications without any
@@ -304,7 +284,7 @@ class WorkFlowService(BaseService):
             (resource_type, resource_ids, requested)
             for resource_type, resource_ids in grouped.items()
             if resource_ids
-            for requested in (cls._legal_actions_for(resource_type, overrides.get(resource_type, actions)),)
+            for requested in (cls._legal_actions_for(resource_type, actions),)
             if requested
         ]
 
@@ -337,7 +317,7 @@ class WorkFlowService(BaseService):
         managed: bool = False,
         skip_pagination: bool = False,
         search_description: bool = False,
-        action: str = "use",
+        action: str = "visible",
         cursor: Sequence | None = None,
         app_state: str | None = None,
     ) -> tuple[list[dict], bool]:
@@ -459,7 +439,7 @@ class WorkFlowService(BaseService):
     @classmethod
     def _managed_visible(cls, item, permission_map, required_action):
         if int(item.get("flow_type") or 0) == FlowType.HOSTED_APP.value:
-            return bool(set(item.get("allowed_actions", ())) - {"use"})
+            return bool(set(item.get("allowed_actions", ())) - {"visible"})
         return required_action in permission_map.get(str(item.get("id")), frozenset())
 
     @classmethod
@@ -540,7 +520,7 @@ class WorkFlowService(BaseService):
                     for one in batch
                     if not managed
                     or int(one.get("flow_type") or 0) != FlowType.HOSTED_APP.value
-                    or bool(set(one.get("allowed_actions", ())) - {"use"})
+                    or bool(set(one.get("allowed_actions", ())) - {"visible"})
                 ]
                 writeable_ids |= {
                     str(one.get("id"))
@@ -594,12 +574,6 @@ class WorkFlowService(BaseService):
             # re-emitted on the next batch.
             last_db = batch[-1]
             batch_cursor = [last_db["update_time"], last_db["id"]]
-
-    @classmethod
-    def _square_visibility_action(cls, item: dict, default_action: str) -> str:
-        """Which action decides whether this row is visible in the square."""
-        resource_type = cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(int(item.get("flow_type") or 0))
-        return _SQUARE_VISIBILITY_ACTION_BY_TYPE.get(resource_type, default_action)
 
     @classmethod
     async def _attach_hosted_app_entry_fields(cls, data: list[dict]) -> None:
@@ -666,14 +640,6 @@ class WorkFlowService(BaseService):
         """
         normalized_page_size = max(int(page_size or 1), 1)
         requested_actions = tuple(dict.fromkeys((action, *additional_actions)))
-        # The per-type override swaps the visibility action only; the extras stay
-        # the caller's. Pinning a full tuple here would silently re-add ``edit``
-        # for hosted applications after every caller stopped asking for it.
-        square_actions_by_type = {
-            resource_type: tuple(dict.fromkeys((visibility_action, *additional_actions)))
-            for resource_type, visibility_action in _SQUARE_VISIBILITY_ACTION_BY_TYPE.items()
-        }
-
         visible: list[dict] = []
         visible_actions: dict[str, frozenset[str]] = {}
         batch_cursor: list | None = list(cursor) if cursor else None
@@ -704,16 +670,11 @@ class WorkFlowService(BaseService):
                     user,
                     batch,
                     requested_actions,
-                    actions_by_type=square_actions_by_type,
                 )
-                # Per row, not one action for the whole page: the hosted-application
-                # entry decides with ``use`` (F054), and asking the square with
-                # ``visible`` would produce the one state AC-06 forbids — a card the
-                # user can see and cannot open. ``visible`` and ``can_use`` are
-                # separate FGA relations, so "授了 editor 没授 use" makes them differ.
+                # Every resource type uses the same visibility admission label.
                 for item in batch:
                     item_id = str(item.get("id"))
-                    if cls._square_visibility_action(item, action) in action_map.get(item_id, frozenset()):
+                    if action in action_map.get(item_id, frozenset()):
                         visible.append(item)
                         visible_actions[item_id] = action_map.get(
                             item_id,
@@ -766,7 +727,7 @@ class WorkFlowService(BaseService):
         page_size: int = 10,
         *,
         search_description: bool = False,
-        action: str = "use",
+        action: str = "visible",
     ) -> "PageInfiniteCursorData":
         """Ranked online-app page as an F027 cursor envelope.
 
@@ -859,7 +820,7 @@ class WorkFlowService(BaseService):
         page_size: int = 10,
         managed: bool = False,
         search_description: bool = False,
-        action: str = "use",
+        action: str = "visible",
         app_state: str | None = None,
     ) -> "PageInfiniteCursorData":
         """F027 cursor envelope wrapper for ``/api/v1/workflow/list``.
@@ -1100,7 +1061,7 @@ class WorkFlowService(BaseService):
         cls,
         user: UserPayload,
         data: list[dict],
-        action: str = "use",
+        action: str = "visible",
         exclude_flow_types: frozenset[int] = frozenset(),
     ) -> list[dict]:
         """Keep the rows the caller may act on, minus any excluded type.
@@ -1153,7 +1114,9 @@ class WorkFlowService(BaseService):
             action="edit",
         )
 
-        node_data = BaseNodeData(**node_data.get("data", {}))
+        prepared = await prepare_node_preview(login_user, workflow_id, node_data, node_input)
+        node_input = prepared.node_input
+        node_data = BaseNodeData(**prepared.node_data.get("data", {}))
 
         def _run_node():
             # Nodes are sync and some reach async services through run_async_safe
@@ -1234,16 +1197,36 @@ class WorkFlowService(BaseService):
         version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
             raise NotFoundError()
-        if status == FlowStatus.ONLINE.value:
-            # workflowInitialization check for
-            try:
-                _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False, 10, 10, None)
-            except Exception as e:
-                raise WorkFlowInitError(msg=str(e))
+        from bisheng.api.services.flow import FlowService
 
-            await FlowVersionDao.change_current_version(flow_id, version_info)
-        db_flow.status = status
-        await FlowDao.aupdate_flow(db_flow)
+        if status == FlowStatus.ONLINE.value:
+            # F132: memory retriever nodes need the start-node switch on and a valid limit (AC-85, AC-80)
+            check_memory_nodes_for_publish(version_info.data)
+
+        def validate_version(root, version):
+            try:
+                Workflow(
+                    flow_id,
+                    root.name,
+                    login_user.user_id,
+                    version.data,
+                    False,
+                    10,
+                    10,
+                    None,
+                    tenant_id=root.tenant_id,
+                    flow_user_id=root.user_id,
+                )
+            except Exception as exc:
+                raise WorkFlowInitError(msg=str(exc)) from exc
+
+        await FlowService.transition_current_version(
+            login_user,
+            flow_id,
+            version_id,
+            status=status,
+            validate_version=validate_version if status == FlowStatus.ONLINE.value else None,
+        )
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
@@ -1385,9 +1368,7 @@ class WorkFlowService(BaseService):
             user_link_order[user_link.type_detail] = index
 
         # Get a list of skills visible to the user (no pagination as we need to sort manually)
-        if user.is_admin():
-            data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
-        else:
+        with strict_tenant_filter():
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         data = cls.filter_supported_apps(data)
         data = await cls.filter_apps_by_action(

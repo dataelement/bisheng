@@ -72,7 +72,7 @@ export const publishTaskApi = async (taskId: string): Promise<TaskDB> => {
 };
 
 // 获取任务详情
-export const getTaskInfoApi = async (taskId: string): Promise<{ finetune: TaskDB, log: any, report: any, loss_data: any }> => {
+export const getTaskInfoApi = async (taskId: string): Promise<{ finetune: TaskDB, model_online: boolean, log: any, report: any, loss_data: any }> => {
     return await axios.get(`/api/v1/finetune/job/info?job_id=${taskId}`);
 };
 
@@ -100,8 +100,8 @@ export const uploadTaskFileApi = async (data, config): Promise<FileItem> => {
 };
 
 // 获取预设文件列表
-export const getPresetFileApi = async (data: { page_size: number, page_num: number, keyword: string }): Promise<FileItem[]> => {
-    return await (axios.get(`/api/v1/finetune/job/file/preset`, { params: data }) as Promise<FileDB[]>).then((data) => {
+export const getPresetFileApi = async (data: { page_size: number, page_num: number, keyword: string }, forTask = false): Promise<FileItem[]> => {
+    return await (axios.get(forTask ? '/api/v1/finetune/training-data' : '/api/v1/finetune/job/file/preset', { params: data }) as Promise<FileDB[]>).then((data) => {
         const list = data.list.map(item => {
             return {
                 ...item,
@@ -117,8 +117,8 @@ export const getPresetFileApi = async (data: { page_size: number, page_num: numb
 };
 
 // 获取下载链接
-export const getFileUrlApi = async (urlkey): Promise<{ url: string }> => {
-    return await axios.get(`/api/v1/finetune/job/file/download?file_url=${urlkey}`);
+export const getFileUrlApi = async (urlkey, forTask = false): Promise<{ url: string }> => {
+    return await axios.get(forTask ? '/api/v1/finetune/training-data/download' : '/api/v1/finetune/job/file/download', { params: { file_url: urlkey } });
 };
 
 // 获模型列表
@@ -135,7 +135,7 @@ export const addLLmServer = async (data: any) => {
             ...other
         } : item
     })
-    return await axios.post(`/api/v1/llm`, data)
+    return await axios.post(`/api/v1/llm`, data, { showError: false })
 };
 
 // 修改模型
@@ -147,7 +147,7 @@ export const updateLLmServer = async (data: any) => {
             ...other
         } : item
     })
-    return await axios.put(`/api/v1/llm`, data)
+    return await axios.put(`/api/v1/llm`, data, { showError: false })
 }
 
 // 删除模型
@@ -273,3 +273,6 @@ export const createDatasetApi = async (data: { name: string, files: string, qa_l
 export const deleteDatasetApi = async (id) => {
     return await axios.delete(`/api/v1/finetune/job/file/preset?file_id=${id}`);
 }
+export const getTrainingServicesApi = async (): Promise<{ id: number; server: string }[]> => {
+    return await axios.get('/api/v1/finetune/server/options');
+};

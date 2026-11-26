@@ -3,9 +3,12 @@
  * replaces the legacy SOPEditor/TaskFlow split panes. Top-down flow:
  *   user question bubble → step rows (appended as WS events stream in) →
  *   artifacts area (P4 slot) → footer: task checklist panel + unified input.
- * Everything renders from the Recoil linsight store keyed by versionId; the
- * WS hook (task-message-stream) is mounted here so the event pump stays alive
- * after the old TaskFlow stops rendering.
+ * Everything renders from the Recoil linsight store keyed by versionId.
+ *
+ * F004 (decision 11): this page only shows stored tasks — new tasks and
+ * follow-ups start from the conversation page, so there is no input here. The
+ * owner's view still follows a task that is running (task WebSocket); a share
+ * page shows the stored snapshot only.
  */
 import { OctagonX } from 'lucide-react';
 import { useMemo, useRef } from 'react';
@@ -15,7 +18,6 @@ import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
-import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
@@ -37,24 +39,17 @@ import type { ExecStepEventData } from './stepUtils';
 
 interface ExecutionFlowProps {
     versionId: string;
-    /** conversation id for the input's per-session memory */
-    conversationId?: string;
     isSharePage?: boolean;
-    /** Historical linsight session opened from the home list (flowType 20 →
-        /linsight/:id). The follow-up / continuation flow now lives in the daily
-        /c chat, so the standalone viewer is read-only: render the flow but hide
-        the bottom input (display-only, cannot be used). */
-    readOnly?: boolean;
     /** workspace/preview panel state — lifted to Sop/index so the Header's
         workspace button drives the same drawer */
     artifactsPanel: ReturnType<typeof useArtifactsPanel>;
 }
 
-export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
+export function ExecutionFlow({ versionId, isSharePage = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
-    const { getLinsight, continueConversation, updateLinsight } = useLinsightManager();
-    // Mount the WS pump here (the legacy TaskFlow used to own it).
-    const { stop, sendInput } = useLinsightWebSocket(versionId);
+    const { getLinsight, updateLinsight } = useLinsightManager();
+    // The owner's view follows a running task; a share page opens no channel.
+    const { stop, sendInput, networkFailure } = useLinsightWebSocket(isSharePage ? '' : versionId);
 
     const linsight = getLinsight(versionId);
     // On reload, session-level steps come back inside the "执行准备" pseudo-task;
@@ -70,7 +65,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     // Poll queue-status while queued (running but no execution output yet); the
     // badge clears when the worker picks us up (index → 0) or steps arrive.
     const noProgressYet = !tasks.length && !sessionSteps.length;
-    useLinsightQueuePolling(versionId, running && noProgressYet);
+    useLinsightQueuePolling(versionId, !isSharePage && running && noProgressYet);
     // Gate on noProgressYet too: once steps/tasks arrive polling stops and the
     // last-polled queueCount may stay stale >0, so this prevents the queue card
     // from lingering next to real task rows.
@@ -183,7 +178,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     <LegacySopRow sop={linsight?.sop} />
 
                     {/* queueing card (auto-disappears when the worker picks us up) */}
-                    {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
+                    {queueing && !isSharePage && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
 
                     {!queueing && (
                         // §1.4 spacing rhythm: a uniform gap-3 between top-level
@@ -223,19 +218,15 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     )}
 
                     {/* error / terminated banners */}
+                    {networkFailure && <ChatErrorCard failureInfo={networkFailure} />}
                     {linsight?.taskError && (
                         <ChatErrorCard
+                    errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}
+                    failureInfo={linsight?.taskErrorInfo?.failure_info ?? linsight?.output_result?.failure_info}
                             errorType={linsight.taskErrorInfo?.error_type}
-                            detail={linsight.taskErrorInfo?.detail}
+                            detail={linsight.taskErrorInfo?.detail ?? linsight?.output_result?.detail}
+                            referenceId={linsight.taskErrorInfo?.reference_id ?? linsight?.output_result?.reference_id}
                             fallbackMessage={linsight.taskError}
-                            // Transient errors show a Retry — re-run this round via the
-                            // same continueConversation path as the follow-up input
-                            // (same SV + agent thread). Off on share/history/no-question.
-                            onRetry={
-                                isSharePage || readOnly || !linsight?.question
-                                    ? undefined
-                                    : () => continueConversation(versionId, linsight.question)
-                            }
                         />
                     )}
                     {stopped && !linsight?.taskError && (
@@ -251,7 +242,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         <ResultPanel
                             messageId={linsight?.message_id ?? undefined}
                             liked={linsight?.liked ?? undefined}
-                            allowFeedback={!readOnly && !isSharePage}
+                            allowFeedback={false}
                             onLikedChange={(l) => updateLinsight(versionId, { liked: l })}
                         >
                             <ResultSection
@@ -268,43 +259,13 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 </div>
             </div>
 
-            {/* ── footer: task panel + unified input ────────────────────────── */}
+            {/* ── footer: task panel ────────────────────────────────────────── */}
             <div className="mx-auto w-full max-w-[800px] shrink-0 px-4 pb-4">
                 {/* Design (Figma 12221-40080/40081): card inset 24px each side
                     relative to the input, 12px gap above it. */}
                 <div className="px-6 pb-3">
                     <TaskPanel tasks={tasks} completed={completed} running={running} />
                 </div>
-                {/* Share pages AND historical sessions are read-only — no input.
-                    Continuation now happens in the daily /c chat; the standalone
-                    linsight viewer only displays ("make same style" removed, F035). */}
-                {!isSharePage && !readOnly && (
-                    <TaskModeInput
-                        // The landing route URL is rewritten via history.replaceState after the
-                        // first submit, so react-router's `conversationId` stays 'new'. Treat
-                        // 'new'/empty as "no real id yet" and fall back to the live session_id,
-                        // otherwise follow-up rounds drop session_id and spawn a new session.
-                        conversationId={
-                            conversationId && conversationId !== 'new'
-                                ? conversationId
-                                : linsight?.session_id || 'new'
-                        }
-                        disabled={running || !!pendingInput}
-                        // While actively executing, the disabled input's action button
-                        // morphs into a Stop button — the only stop affordance once the
-                        // task leaves the queue. `stop` (WS hook) terminates the live
-                        // session. During a park (pendingInput) the task is suspended
-                        // awaiting the user's answer (given via the ClarifyCard above),
-                        // NOT executing — so drop the Stop button: showing it reads as
-                        // "running" when nothing is actually running.
-                        running={running && !pendingInput}
-                        onStop={stop}
-                        // F035 multi-turn: a send here continues THIS conversation
-                        // (same session_version + agent thread) instead of starting
-                        // a new session. versionId is the live session_version id.
-                        onFollowUp={(question) => continueConversation(versionId, question)}
-                    />
-                )}
             </div>
 
             {/* ── right-side area: workspace drawer / file preview (mutually exclusive) ── */}

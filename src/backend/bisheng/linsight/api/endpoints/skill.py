@@ -17,8 +17,10 @@ from bisheng.common.errcode.linsight import SkillFileTooLargeError, SkillValidat
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.linsight.domain.schemas.skill_schema import (
+    SkillAutoEnabledUpdate,
     SkillCreateForm,
     SkillDefaultCheckedUpdate,
+    SkillGiteeImportRequest,
     SkillGitHubImportRequest,
     SkillStatusUpdate,
 )
@@ -175,6 +177,15 @@ async def import_skill_from_github(
     return resp_200(detail)
 
 
+@router.post("/import-gitee", summary="Import a skill from a public Gitee directory URL")
+async def import_skill_from_gitee(
+    payload: SkillGiteeImportRequest,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
+    detail = await SkillService().create_from_gitee(_current_tenant_id(), login_user.user_id, payload.url)
+    return resp_200(detail)
+
+
 @router.put("/{name}", summary="Edit skill: form (SKILL.md only) or multipart (whole-bundle replace)")
 async def update_skill(
     name: str,
@@ -212,6 +223,16 @@ async def set_skill_default_checked(
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
 ) -> UnifiedResponseModel:
     await SkillService().set_default_checked(name, payload.default_checked)
+    return resp_200({"ok": True})
+
+
+@router.patch("/{name}/auto-enabled", summary="Auto-enable a skill: hidden from end-user pickers, always available")
+async def set_skill_auto_enabled(
+    name: str,
+    payload: SkillAutoEnabledUpdate,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
+    await SkillService().set_auto_enabled(name, payload.auto_enabled)
     return resp_200({"ok": True})
 
 

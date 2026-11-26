@@ -1,8 +1,6 @@
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
-import { readFileLibDatabase } from '@/controllers/API';
-import { showApiError } from '@/controllers/request';
 import { Select, type SelectOption } from '@bisheng/ui';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useKnowledgeCandidates } from './useKnowledgeCandidates';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -19,29 +17,11 @@ export function QaKnowledgeSelect({ value, error = false, multiple = true, class
     const { t } = useTranslation();
     const selectLabels = useSelectLabels();
     const [open, setOpen] = useState(false);
-    const [keyword, setKeyword] = useState('');
-    const query = useInfiniteQuery({
-        queryKey: ['qa-knowledge-select', keyword],
-        queryFn: ({ pageParam = null }) => readFileLibDatabase({
-            cursor: pageParam,
-            pageSize: 60,
-            name: keyword,
-            type: 1,
-            action: 'use',
-        }),
-        getNextPageParam: page => page.next_cursor ?? undefined,
-        enabled: open,
-        cacheTime: 0,
-        onError: showApiError,
-    });
-
-    const fetchedOptions = query.data?.pages.flatMap(page => page.data
-        .filter((item: { id: string | number | null }) => item.id != null && item.id !== '')
-        .map((item: { id: string | number; name: string }) => ({ value: item.id, label: item.name }))) ?? [];
-    // Keep echoed selections labelled without adding unrelated rows to search results.
-    const options = Array.from(new Map(
-        [...(keyword ? [] : value), ...fetchedOptions].map(option => [option.value, option]),
-    ).values());
+    const candidates = useKnowledgeCandidates('qa', open);
+    const saved = new Map(value.map(item => [String(item.value), item]));
+    const fetched = candidates.options.map(item => ({ ...item, value: saved.get(String(item.value))?.value ?? item.value }));
+    const known = new Set(fetched.map(item => String(item.value)));
+    const options = [...fetched, ...value.filter(item => !known.has(String(item.value))).map(item => ({ ...item, disabled: true }))];
 
     const sharedProps = {
         ...selectLabels,
@@ -55,19 +35,17 @@ export function QaKnowledgeSelect({ value, error = false, multiple = true, class
         open,
         onOpenChange: (next: boolean) => {
             setOpen(next);
-            if (!next) setKeyword('');
+            if (!next) candidates.search('');
         },
-        onSearch: setKeyword,
-        onLoadMore: () => {
-            if (query.hasNextPage && !query.isFetching) void query.fetchNextPage();
-        },
-        loading: query.isInitialLoading,
-        loadingMore: query.isFetchingNextPage,
+        onSearch: candidates.search,
+        onLoadMore: candidates.loadMore,
+        loading: candidates.loading,
+        loadingMore: candidates.loadingMore,
     };
 
     return multiple
         ? <Select {...sharedProps} multiple value={value.map(option => option.value)}
-            onChange={(_values, selectedOptions) => onChange(selectedOptions)} />
+            onChange={(ids) => onChange(ids.map(id => saved.get(String(id)) ?? fetched.find(item => String(item.value) === String(id))!))} />
         : <Select {...sharedProps} value={value[0]?.value ?? null}
             onChange={(_value, option) => onChange(option ? [option] : [])} />;
 }

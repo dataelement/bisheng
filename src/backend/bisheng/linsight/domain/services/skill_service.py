@@ -39,8 +39,14 @@ from bisheng.linsight.domain.schemas.skill_schema import (
     SkillFileEntry,
     SkillRuntimeEntry,
     SkillSelectable,
+    skill_provider,
 )
-from bisheng.linsight.domain.services.github_skill_fetcher import fetch_skill_files, parse_github_url
+from bisheng.linsight.domain.services.github_skill_fetcher import (
+    GithubTarget,
+    fetch_skill_files,
+    parse_gitee_url,
+    parse_github_url,
+)
 from bisheng.linsight.domain.services.skill_store import (
     DISPLAY_NAME_META_KEY,
     MAX_BUNDLE_SIZE,
@@ -158,7 +164,8 @@ class SkillService:
     async def get_selectable(self, user_id=None) -> list[SkillSelectable]:
         from bisheng.linsight.domain.services.user_skills import UserSkillsService
 
-        skills = [row for row, _ in await UserSkillsService(user_id).records()]
+        # F005: an auto-enabled skill is always mounted, so it is not offered in the picker.
+        skills = [row for row, _ in await UserSkillsService(user_id).records() if not row.auto_enabled]
         return [
             SkillSelectable(
                 name=s.name,
@@ -181,6 +188,7 @@ class SkillService:
                 description=skill.description,
                 default_checked=bool(skill.default_checked),
                 content_hash=skill.content_hash,
+                source=skill_provider(skill),
             )
             for skill in skills
         ]
@@ -264,12 +272,15 @@ class SkillService:
         return detail
 
     async def create_from_github(self, tenant_id: int, user_id: int, url: str) -> SkillDetail:
-        """Import a skill from a public GitHub directory URL.
+        """Import a skill from a public GitHub directory URL."""
+        return await self._create_from_repo(tenant_id, user_id, parse_github_url(url))
 
-        The downloaded bundle joins the exact same create chain as the upload path,
-        so frontmatter/size/duplicate checks and the owner tuple are all reused.
-        """
-        target = parse_github_url(url)
+    async def create_from_gitee(self, tenant_id: int, user_id: int, url: str) -> SkillDetail:
+        """Import a skill from a public Gitee directory URL."""
+        return await self._create_from_repo(tenant_id, user_id, parse_gitee_url(url))
+
+    async def _create_from_repo(self, tenant_id: int, user_id: int, target: GithubTarget) -> SkillDetail:
+        """Downloaded bundles join the same create chain as the upload path."""
         files = await fetch_skill_files(target)
         meta = self._extract_meta(files)
         detail = await self._create(tenant_id, user_id, meta.name, meta.display_name, meta.description, files)
@@ -360,6 +371,11 @@ class SkillService:
 
     async def set_default_checked(self, name: str, default_checked: bool) -> None:
         if not await LinsightSkillDao.set_default_checked(name, default_checked):
+            raise SkillNotFoundError()
+
+    async def set_auto_enabled(self, name: str, auto_enabled: bool) -> None:
+        """F005. Stored even while the skill is disabled; it only takes effect while enabled."""
+        if not await LinsightSkillDao.set_auto_enabled(name, auto_enabled):
             raise SkillNotFoundError()
 
     async def delete(self, tenant_id: int, name: str) -> None:

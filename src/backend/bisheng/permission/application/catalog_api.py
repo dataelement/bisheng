@@ -42,12 +42,12 @@ from bisheng.permission.domain.models import (
     PermissionCatalogProjectionTuple,
     PermissionCatalogRelease,
     PermissionGrant,
-    PermissionGrantAssignee,
     PermissionModel,
     PermissionModelAction,
     PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
 )
+from bisheng.permission.domain.repositories.catalog_impact_repository import CatalogImpactRepository
 from bisheng.permission.domain.schemas import (
     CatalogChangeRequest,
     CatalogChangeType,
@@ -71,6 +71,7 @@ from bisheng.permission.domain.services.catalog_service import (
     CatalogService,
     CatalogTupleChange,
 )
+from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
     ModelReferenceSummary,
@@ -154,6 +155,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     existing = (
                         (
                             await session.execute(
@@ -233,6 +235,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     release = (
                         (
                             await session.execute(
@@ -295,6 +298,16 @@ class SqlCatalogState:
                     raise PermissionPublishNotReadyError(msg="Permission Catalog release is missing")
                 return row
 
+    async def release_for_idempotency(self, key: str) -> PermissionCatalogRelease | None:
+        """Read a maintenance publication without reserving or changing it."""
+        with bypass_tenant_filter():
+            async with self._session_factory() as session:
+                return (
+                    await session.exec(
+                        select(PermissionCatalogRelease).where(PermissionCatalogRelease.idempotency_key == key)
+                    )
+                ).one_or_none()
+
     async def current_release(self) -> PermissionCatalogRelease:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
@@ -347,6 +360,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     draft = (
                         (
                             await session.execute(
@@ -501,6 +515,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     draft = (
                         (
                             await session.execute(
@@ -604,6 +619,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     rows = list(
                         (
                             await session.execute(
@@ -645,6 +661,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogRelease)
                         .where(
@@ -675,6 +692,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogRelease)
                         .where(PermissionCatalogRelease.id == context.draft.release_id)
@@ -724,6 +742,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     result = await session.execute(
                         update(PermissionCatalogRelease)
                         .where(
@@ -861,6 +880,8 @@ class SqlCatalogState:
                 )
             ).scalars()
         )
+        if any(row.kind != "CUSTOM" and row.retired_use_level_floor is not None for row in rows):
+            raise ValueError("retired-use floor belongs only to a controlled custom model")
         ids = [int(row.id) for row in rows if row.id is not None]
         pairs = (
             list(
@@ -894,6 +915,9 @@ class SqlCatalogState:
                 active=bool(row.active),
                 allow_same_level=bool(row.allow_same_level),
                 config_scope=row.config_scope,
+                visibility_only_resource_types=tuple(row.visibility_only_resource_types or ()),
+                visibility_level=row.visibility_level,
+                retired_use_level_floor=row.retired_use_level_floor,
             )
             for row in rows
             if row.kind == "CUSTOM"
@@ -972,6 +996,9 @@ class SqlCatalogState:
                 derived_level=model.derived_level,
                 active=model.active,
                 allow_same_level=model.allow_same_level,
+                visibility_only_resource_types=list(model.visibility_only_resource_types),
+                visibility_level=model.visibility_level,
+                retired_use_level_floor=model.retired_use_level_floor,
             )
             session.add(row)
             await session.flush()
@@ -1009,93 +1036,60 @@ class SqlCatalogImpact:
     ) -> CatalogImpactSummary:
         candidate_keys = set(action_impact.affected_model_keys)
         candidate_keys.update(model_impact.changed_model_keys)
+        # Scope-only changes can affect standards whose action selection stays
+        # identical. Include their existing Grants in the impact checksum too.
+        changed_actions = set(action_impact.changed_action_codes)
+        candidate_keys.update(
+            model.model_key
+            for model in (*before_models.models, *after_models.models)
+            if changed_actions.intersection(model.action_codes)
+        )
         before_by_key = {model.model_key: model for model in before_models.models}
         after_by_key = {model.model_key: model for model in after_models.models}
-        with bypass_tenant_filter():
-            async with self._session_factory() as session:
-                grants = (
-                    list(
-                        (
-                            await session.execute(
-                                select(PermissionGrant)
-                                .where(
-                                    PermissionGrant.state != "INACTIVE",
-                                    col(PermissionGrant.model_key).in_(candidate_keys or {""}),
-                                )
-                                .order_by(
-                                    PermissionGrant.tenant_id,
-                                    PermissionGrant.resource_type,
-                                    PermissionGrant.resource_id,
-                                    PermissionGrant.model_key,
-                                    PermissionGrant.id,
-                                )
-                            )
-                        ).scalars()
-                    )
-                    if candidate_keys
-                    else []
-                )
-                grant_ids = [int(row.id) for row in grants if row.id is not None]
-                sources = (
-                    list(
-                        (
-                            await session.execute(
-                                select(PermissionGrantAssignee)
-                                .where(
-                                    col(PermissionGrantAssignee.grant_id).in_(grant_ids),
-                                    PermissionGrantAssignee.state == "ACTIVE",
-                                )
-                                .order_by(
-                                    PermissionGrantAssignee.grant_id,
-                                    PermissionGrantAssignee.id,
-                                )
-                            )
-                        ).scalars()
-                    )
-                    if grant_ids
-                    else []
-                )
-        sources_by_grant: dict[int, list[PermissionGrantAssignee]] = {}
-        for source in sources:
-            sources_by_grant.setdefault(source.grant_id, []).append(source)
-        affected: list[tuple[PermissionGrant, set[str], set[str]]] = []
-        for grant in grants:
-            before_model = before_by_key.get(grant.model_key)
-            after_model = after_by_key.get(grant.model_key)
-            before_effective = set(
-                effective_model_action_codes(
-                    before_model,
-                    before_actions,
-                    grant.resource_type,
-                )
-                if before_model is not None
-                else ()
-            )
-            after_effective = set(
-                effective_model_action_codes(
-                    after_model,
-                    after_actions,
-                    grant.resource_type,
-                )
-                if after_model is not None
-                else ()
-            )
-            if before_effective == after_effective:
-                continue
-            affected.append((grant, before_effective, after_effective))
-        resource_keys = {(row.tenant_id, row.resource_type, row.resource_id) for row, _, _ in affected}
-        assignee_count = sum(len(sources_by_grant.get(int(row.id), ())) for row, _, _ in affected)
-        expansion_count = sum(
-            len(after - before) * len(sources_by_grant.get(int(row.id), ())) for row, before, after in affected
-        )
-        revocation_count = sum(
-            len(before - after) * len(sources_by_grant.get(int(row.id), ())) for row, before, after in affected
-        )
+        repository = CatalogImpactRepository(session_factory=self._session_factory)
+        digest = sha256(repr(("catalog-impact-v2", action_impact.checksum, model_impact.checksum)).encode())
+        resource_count = grant_count = assignee_count = expansion_count = revocation_count = 0
+        previous_resource = None
         affected_assignees_by_model: dict[str, int] = {}
-        for row, _, _ in affected:
-            affected_assignees_by_model[row.model_key] = affected_assignees_by_model.get(row.model_key, 0) + len(
-                sources_by_grant.get(int(row.id), ())
-            )
+        # Cache the small Catalog applicability matrix, never user x resource
+        # combinations. Grant and source pages are both bounded at 200 rows.
+        matrix = {}
+        async for grants in repository.agrant_pages(candidate_keys):
+            affected = []
+            for grant in grants:
+                key = (grant.model_key, grant.resource_type)
+                if key not in matrix:
+                    sets = []
+                    for model, actions in (
+                        (before_by_key.get(grant.model_key), before_actions),
+                        (after_by_key.get(grant.model_key), after_actions),
+                    ):
+                        sets.append(
+                            frozenset(effective_model_action_codes(model, actions, grant.resource_type))
+                            if model is not None
+                            else frozenset()
+                        )
+                    matrix[key] = tuple(sets)
+                before, after = matrix[key]
+                if before != after:
+                    affected.append((grant, before, after))
+            sources = await repository.asource_summaries([int(row.id) for row, _, _ in affected])
+            for row, before, after in affected:
+                count, source_digest = sources[int(row.id)]
+                resource = (row.tenant_id, row.resource_type, row.resource_id)
+                resource_count += resource != previous_resource
+                previous_resource = resource
+                grant_count += 1
+                assignee_count += count
+                expansion_count += len(after - before) * count
+                revocation_count += len(before - after) * count
+                affected_assignees_by_model[row.model_key] = affected_assignees_by_model.get(row.model_key, 0) + count
+                digest.update(
+                    repr(
+                        (*resource, row.model_key, tuple(sorted(before)), tuple(sorted(after)), count, source_digest)
+                    ).encode()
+                    + b"\n"
+                )
         before_action_by_code = {action.code: action for action in before_actions.actions}
         after_action_by_code = {action.code: action for action in after_actions.actions}
         action_changes = tuple(
@@ -1138,37 +1132,10 @@ class SqlCatalogImpact:
             )
             for model_key in model_impact.changed_model_keys
         )
-        source_signatures = {
-            int(row.id): tuple(
-                (
-                    source.source_fingerprint,
-                    source.version,
-                    source.protected,
-                )
-                for source in sources_by_grant.get(int(row.id), ())
-            )
-            for row, _, _ in affected
-        }
-        payload = (
-            action_impact.checksum,
-            model_impact.checksum,
-            tuple(
-                (
-                    row.tenant_id,
-                    row.resource_type,
-                    row.resource_id,
-                    row.model_key,
-                    tuple(sorted(before)),
-                    tuple(sorted(after)),
-                    source_signatures[int(row.id)],
-                )
-                for row, before, after in affected
-            ),
-        )
         return CatalogImpactSummary(
-            checksum=sha256(repr(payload).encode()).hexdigest(),
-            resource_count=len(resource_keys),
-            grant_count=len(affected),
+            checksum=digest.hexdigest(),
+            resource_count=resource_count,
+            grant_count=grant_count,
             assignee_count=assignee_count,
             expansion_count=expansion_count,
             revocation_count=revocation_count,
@@ -1219,12 +1186,11 @@ class SqlCatalogImpact:
             draft.action_release,
             custom_model_actions=custom_actions,
         )
-        references = await self._state.grant_references()
-        model_impact = calculate_model_impact(
-            before.model_release,
-            draft.model_release,
-            grant_references=references,
-        )
+        model_impact = calculate_model_impact(before.model_release, draft.model_release, grant_references={})
+        if model_impact.changed_model_keys:
+            model_impact = calculate_model_impact(
+                before.model_release, draft.model_release, grant_references=await self._state.grant_references()
+            )
         return await self.analyze_draft(
             action_impact=action_impact,
             model_impact=model_impact,
@@ -1355,14 +1321,8 @@ class OpenFGACatalogProjector:
         for subject in TECHNICAL_MARKER_SUBJECTS[1:]:
             subject_active = active_by_subject[subject]
             if subject_active not in (frozenset(), frozenset({old_key})):
-                raise CatalogCommitUnknownError(
-                    f"Catalog active pointer for {subject} is {sorted(subject_active)}"
-                )
-        present_deletes = [
-            change
-            for change in deletes
-            if active_by_subject[change.user] == frozenset({old_key})
-        ]
+                raise CatalogCommitUnknownError(f"Catalog active pointer for {subject} is {sorted(subject_active)}")
+        present_deletes = [change for change in deletes if active_by_subject[change.user] == frozenset({old_key})]
         await self._client.write_tuples(
             writes=[
                 {
@@ -1401,11 +1361,7 @@ class OpenFGACatalogProjector:
         )
         prefix = "permission_catalog_release:"
         return {
-            subject: frozenset(
-                row["object"].removeprefix(prefix)
-                for row in rows
-                if row["object"].startswith(prefix)
-            )
+            subject: frozenset(row["object"].removeprefix(prefix) for row in rows if row["object"].startswith(prefix))
             for subject, rows in zip(TECHNICAL_MARKER_SUBJECTS, pages, strict=True)
         }
 
@@ -1419,6 +1375,13 @@ class OpenFGACatalogProjector:
                     f"Catalog active pointer for {subject} differs: {sorted(subject_active)}"
                 )
         return canonical
+
+    @staticmethod
+    def expected_stage_tuples(draft: CatalogDraftSnapshot) -> tuple[tuple[str, str, str], ...]:
+        """The original Catalog graph, without changing its active pointer."""
+        return tuple(
+            (row["user"], row["relation"], row["object"]) for row in OpenFGACatalogProjector._expected_tuples(draft)
+        )
 
     @staticmethod
     def _expected_tuples(
@@ -1462,6 +1425,7 @@ class OpenFGACatalogProjector:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     existing = set(
                         (
                             await session.execute(
@@ -1510,6 +1474,7 @@ class OpenFGACatalogProjector:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogProjectionTuple)
                         .where(
@@ -1529,7 +1494,6 @@ class F048CatalogApi:
             "name": "协作编辑",
             "action_codes": (
                 "download",
-                "use",
                 "rename",
                 "edit",
                 "create_folder",
@@ -1549,7 +1513,6 @@ class F048CatalogApi:
             "name": "权限管理",
             "action_codes": (
                 "download",
-                "use",
                 "rename",
                 "edit",
                 "create_folder",
@@ -1757,6 +1720,8 @@ class F048CatalogApi:
                     "allow_same_level": model.allow_same_level,
                     "action_codes": list(model.selected_action_codes),
                     "version": row.version,
+                    "visibility_only_resource_types": list(model.visibility_only_resource_types),
+                    "visibility_level": model.visibility_level,
                 }
                 for model in snapshot.model_release.models
             ],
@@ -1797,6 +1762,9 @@ class F048CatalogApi:
                 active=model.active,
                 allow_same_level=model.allow_same_level,
                 config_scope=model.config_scope,
+                visibility_only_resource_types=model.visibility_only_resource_types,
+                visibility_level=model.visibility_level,
+                retired_use_level_floor=model.retired_use_level_floor,
             )
             for model in before.model_release.models
             if model.kind == "CUSTOM"

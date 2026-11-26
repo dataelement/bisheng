@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from bisheng.chat_session.domain.schemas.user_message import ComposerReference
 
 
 class ToolPayload(BaseModel):
@@ -57,6 +60,7 @@ class UseKnowledgeBaseParam(BaseModel):
 class APIChatCompletion(BaseModel):
     clientTimestamp: str
     conversationId: str | None = None
+    project_id: UUID | None = None
     error: bool | None = False
     generation: str | None = ""
     isCreatedByUser: bool | None = False
@@ -69,10 +73,17 @@ class APIChatCompletion(BaseModel):
     skill_ids: list[int] | None = None
     use_knowledge_base: UseKnowledgeBaseParam | None = None
     files: list[dict] | None = None
+    composer_references: list[ComposerReference] | None = None
     search_enabled: bool | None = False
     parentMessageId: str | None = None
     overrideParentMessageId: str | None = None
     responseMessageId: str | None = None
+
+    @model_validator(mode="after")
+    def validate_project_intent(self):
+        if self.project_id is not None and self.conversationId:
+            raise ValueError("Project intent is only accepted for a new conversation")
+        return self
 
     @field_validator("parentMessageId", "overrideParentMessageId", "responseMessageId", mode="before")
     @classmethod

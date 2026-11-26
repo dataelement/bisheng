@@ -3,6 +3,7 @@ import { Outlined } from 'bisheng-icons';
 import { useCallback, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
+import { v4 } from 'uuid';
 import { taskModeState } from '~/store/linsight';
 import type { TMessage } from '~/types/chat';
 import { Constants, QueryKeys } from '~/types/chat';
@@ -32,11 +33,11 @@ export function useStartNewChat(): (projectId?: string) => void {
   const timerRef = useRef<number | null>(null);
 
   // Latest values for the delayed second pass, which must not run a stale closure.
-  const resetRef = useRef<(projectId?: string) => void>(() => undefined);
-  resetRef.current = (projectId) => {
+  const resetRef = useRef<(projectId: string | undefined, newChatKey: string) => void>(() => undefined);
+  resetRef.current = (projectId, newChatKey) => {
     newConversation();
     setTaskMode(false);
-    navigate(projectId ? `/c/new?projectId=${encodeURIComponent(projectId)}` : '/c/new');
+    navigate(projectId ? `/c/new?projectId=${encodeURIComponent(projectId)}` : '/c/new', { state: { newChatKey } });
     queryClient.setQueryData<TMessage[]>(
       [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
       [],
@@ -51,16 +52,38 @@ export function useStartNewChat(): (projectId?: string) => void {
   );
 
   return useCallback((projectId?: string) => {
-    resetRef.current(projectId);
+    // Both reset passes belong to one draft. A later explicit click mints a
+    // different key, including when it selects the same project and URL again.
+    const newChatKey = v4();
+    resetRef.current(projectId, newChatKey);
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
       // A fast send or another navigation must not be reset by this old intent.
       const current = locationRef.current;
       if (current.pathname !== '/c/new' || new URLSearchParams(current.search).get('projectId') !== (projectId ?? null)) return;
-      resetRef.current(projectId);
+      const state: unknown = current.state;
+      if (!state || typeof state !== 'object' || !('newChatKey' in state) || state.newChatKey !== newChatKey) return;
+      resetRef.current(projectId, newChatKey);
     }, SECOND_PASS_DELAY_MS);
   }, []);
+}
+
+/**
+ * Opens a new conversation with deep research turned on. Replaces the current
+ * history entry: the old task-mode landing (`/linsight/new`) sends its visitors
+ * here (F004, decision 11). Lives here because it needs recoil (frozen for new files).
+ */
+export function useOpenDeepResearchChat(): () => void {
+  const navigate = useNavigate();
+  const { newConversation } = useNewConvo(0);
+  const setTaskMode = useSetRecoilState(taskModeState);
+  return useCallback(() => {
+    newConversation();
+    setTaskMode(true);
+    navigate('/c/new', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- newConversation identity is not a trigger
+  }, [navigate, setTaskMode]);
 }
 
 export default function NewChat({

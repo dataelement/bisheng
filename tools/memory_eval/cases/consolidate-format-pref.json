@@ -1,0 +1,32 @@
+{
+  "id": "consolidate-format-pref",
+  "acs": [
+    "AC-46"
+  ],
+  "turns": [
+    {
+      "user": "以后回答别用 emoji，简洁点",
+      "new_session": false,
+      "expect_write": null
+    },
+    {
+      "user": "帮我解释一下 RRF 融合",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "给我介绍一下 BM25",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "😀",
+      "✅",
+      "🚀"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

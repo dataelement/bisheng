@@ -302,13 +302,13 @@ class OpenApiHostedAppEndpointRefusedError(OpenApiAuthError):
 
 class OpenApiTaskModeSyncUnsupportedError(OpenApiAuthError):
     Code = 26060
-    Msg = "Task mode only runs asynchronously; set execution to async"
+    Msg = "Deep research only runs asynchronously; set execution to async"
     http_status = 400
 
 
 class OpenApiTaskConversationNotAcceptedError(OpenApiAuthError):
     Code = 26061
-    Msg = "Task mode starts a new conversation and does not accept a conversation ID"
+    Msg = "Deep research starts a new conversation and does not accept a conversation ID"
     http_status = 400
 
 
@@ -322,7 +322,7 @@ class OpenApiTaskSkillUnavailableError(OpenApiAuthError):
 
 class OpenApiTaskModeForbiddenError(OpenApiAuthError):
     Code = 26063
-    Msg = "The user being acted for has no permission to use task mode"
+    Msg = "The user being acted for has no permission to use deep research"
     http_status = 403
 
 

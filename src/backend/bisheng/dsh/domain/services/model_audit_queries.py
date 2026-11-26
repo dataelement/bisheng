@@ -159,6 +159,7 @@ class DshModelAuditQueryService:
             return {
                 **repository.page(now=self.now(), exclude_auxiliary=True, **query),
                 "request_filter_scope": "MATCHING_REQUESTS",
+                "message_feedback": repository.feedback_for(key, group.user_id, group.conversation_id),
             }
 
         try:

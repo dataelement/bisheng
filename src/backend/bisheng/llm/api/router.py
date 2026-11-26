@@ -1,5 +1,6 @@
 import json
-from typing import Any
+from dataclasses import asdict
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request, UploadFile, WebSocket
 from loguru import logger
@@ -9,8 +10,13 @@ from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
 from bisheng.common.models.config import ConfigKeyEnum
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.llm.application.model_default import ModelDefaultApplication, current_model_default_tenant
+from bisheng.llm.application.model_default_read import get_model_default_read_runtime
+from bisheng.llm.domain.services.default_reference_extractor import MODEL_DEFAULT_SCHEMAS
+from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.utils.http_middleware import _check_is_global_super
 from bisheng.utils.mask_data import JsonFieldMasker
 
@@ -21,9 +27,11 @@ from ..domain.schemas import (
     EvaluationLLMConfig,
     KnowledgeLLMConfig,
     LLMServerCreateReq,
+    ModelRemovalSourcesRequest,
     WorkbenchModelConfig,
 )
 from ..domain.services.asr_realtime import run_realtime_asr
+from ..domain.services.model_discovery import ModelDiscoveryRequest
 
 router = APIRouter(prefix="/llm", tags=["LLM"])
 
@@ -132,17 +140,35 @@ def _envelope(cfg, inherited: bool, blocked: bool) -> dict[str, Any]:
     }
 
 
-def _resolve_write_target(login_user: UserPayload) -> int:
-    """Pick the tenant_id for system-config writes.
+async def _read_default_metadata(key, login_user):
+    raw = await get_model_default_read_runtime().aget_default(key, login_user=login_user)
+    config = MODEL_DEFAULT_SCHEMAS[key].model_validate_json(raw.payload_json)
+    return config, raw.inherited_from_root, raw.fallback_blocked
 
-    Source: ``get_current_tenant_id()`` (admin-scope honored by F019
-    middleware). Falls back to Root for super admins without an active
-    scope.
-    """
-    return get_current_tenant_id() or ROOT_TENANT_ID
+
+def _resolve_write_target(login_user: UserPayload) -> int:
+    """Use the actual current/F019 tenant; explicit identities never select it."""
+    return current_model_default_tenant()
 
 
 # --- LLM server CRUD (unchanged from F020) ---------------------------------
+
+
+@router.get("/system-settings", response_model=UnifiedResponseModel)
+async def system_model_settings(
+    include_impact: bool = Query(False),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    from bisheng.llm.application.system_model_settings import read_system_model_settings
+
+    return resp_200(data=await read_system_model_settings(login_user, include_impact=include_impact))
+
+
+@router.get("/{server_id}/sharing-status", response_model=UnifiedResponseModel)
+async def model_sharing_status(server_id: int, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+    from bisheng.llm.application.model_sharing_status import ModelSharingStatusService
+
+    return resp_200(data=await ModelSharingStatusService().aget(identity=login_user, server_id=server_id))
 
 
 @router.get("")
@@ -174,8 +200,13 @@ async def delete_llm_server(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
     server_id: int = Body(..., embed=True, description="Service Provider UniqueID"),
+    force: Annotated[bool, Query()] = False,
+    confirmation_id: Annotated[str | None, Query(max_length=36)] = None,
+    plan_digest: Annotated[str | None, Query(pattern="^[0-9a-f]{64}$")] = None,
 ):
-    await LLMService.delete_llm_server(request, login_user, server_id)
+    await LLMService.delete_llm_server(
+        request, login_user, server_id, force=force, confirmation_id=confirmation_id, plan_digest=plan_digest
+    )
     return resp_200()
 
 
@@ -184,9 +215,49 @@ async def update_llm_server(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
     server: LLMServerCreateReq = Body(..., description="Service Provider All Data"),
+    force: Annotated[bool, Query()] = False,
+    confirmation_id: Annotated[str | None, Query(max_length=36)] = None,
+    plan_digest: Annotated[str | None, Query(pattern="^[0-9a-f]{64}$")] = None,
 ):
-    ret = await LLMService.update_llm_server(request, login_user, server)
+    ret = await LLMService.update_llm_server(
+        request, login_user, server, force=force, confirmation_id=confirmation_id, plan_digest=plan_digest
+    )
     return resp_200(data=ret)
+
+
+@router.post("/removal-plan")
+async def precheck_removed_models(
+    server: LLMServerCreateReq,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    from bisheng.llm.application.model_references import get_model_reference_application
+
+    result = await (await get_model_reference_application()).aplan_removed_update(identity=login_user, server=server)
+    return resp_200(data=asdict(result))
+
+
+@router.post("/server-removal-plan")
+async def precheck_server_removal(
+    server_id: int = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    from bisheng.llm.application.model_references import get_model_reference_application
+
+    result = await (await get_model_reference_application()).aplan_server_delete(
+        identity=login_user, server_id=server_id
+    )
+    return resp_200(data=asdict(result))
+
+
+@router.post("/removal-sources")
+async def list_removed_model_sources(
+    query: ModelRemovalSourcesRequest,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    from bisheng.llm.application.model_references import get_model_reference_application
+
+    result = await (await get_model_reference_application()).alist_sources(identity=login_user, query=query)
+    return resp_200(data=asdict(result))
 
 
 @router.get("/info")
@@ -199,6 +270,15 @@ async def get_one_llm(
     return resp_200(data=ret)
 
 
+@router.post("/models/discover")
+async def discover_provider_models(
+    data: ModelDiscoveryRequest,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    result = await LLMService.discover_models(data, login_user)
+    return resp_200(data=result)
+
+
 @router.post("/online")
 async def update_model_online(
     request: Request,
@@ -206,7 +286,7 @@ async def update_model_online(
     model_id: int = Body(..., embed=True, description="Model UniqueID"),
     online: bool = Body(..., embed=True, description="Online or not"),
 ):
-    ret = await LLMService.update_model_online(model_id, online)
+    ret = await LLMService.update_model_online(model_id, online, login_user)
     return resp_200(data=ret)
 
 
@@ -232,10 +312,11 @@ async def verify_model_status(
 async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get Idea-Related Model Configurations. Honors admin-scope; envelope
     surfaces ``inherited_from_root`` / ``fallback_blocked`` for the UI."""
-    cfg, inherited, blocked = await LLMService.aget_workbench_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.LINSIGHT_LLM.value, login_user)
     from bisheng.dsh.domain.services.model_catalog import project_workbench_config
 
-    cfg = await project_workbench_config(cfg, login_user.user_id)
+    cfg = await project_workbench_config(cfg, login_user.user_id, operator=login_user)
+    cfg = await LLMService.project_workbench_runtime_capabilities(cfg, login_user=login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -244,7 +325,7 @@ async def get_workbench_settings(login_user: UserPayload = Depends(UserPayload.g
     """Return stored metadata to administrators, preserving hidden and offline rows."""
     target = _resolve_write_target(login_user)
     await _assert_can_write_system_config(login_user, target)
-    cfg, inherited, blocked = await LLMService.aget_workbench_llm_with_meta(tenant_id=target)
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.LINSIGHT_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -263,6 +344,7 @@ async def update_workbench_llm(
         config_obj,
         background_tasks,
         tenant_id=target,
+        login_user=login_user,
     )
     await _audit_system_config_update(
         login_user,
@@ -304,7 +386,7 @@ async def invoke_workbench_tts(
 
 @router.get("/knowledge")
 async def get_knowledge_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    cfg, inherited, blocked = await LLMService.aget_knowledge_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.KNOWLEDGE_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -318,7 +400,7 @@ async def update_knowledge_llm(
     target = _resolve_write_target(login_user)
     await _assert_can_write_system_config(login_user, target)
     before = await _read_before_snapshot(target, ConfigKeyEnum.KNOWLEDGE_LLM.value)
-    ret = await LLMService.update_knowledge_llm(data, tenant_id=target)
+    ret = await LLMService.update_knowledge_llm(data, tenant_id=target, login_user=login_user)
     await _audit_system_config_update(
         login_user,
         ConfigKeyEnum.KNOWLEDGE_LLM.value,
@@ -332,7 +414,7 @@ async def update_knowledge_llm(
 @router.get("/assistant")
 async def get_assistant_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get assistant related model configuration"""
-    cfg, inherited, blocked = await LLMService.aget_assistant_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.ASSISTANT_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -346,7 +428,7 @@ async def update_assistant_llm(
     target = _resolve_write_target(login_user)
     await _assert_can_write_system_config(login_user, target)
     before = await _read_before_snapshot(target, ConfigKeyEnum.ASSISTANT_LLM.value)
-    ret = await LLMService.update_assistant_llm(data, tenant_id=target)
+    ret = await LLMService.update_assistant_llm(data, tenant_id=target, login_user=login_user)
     await _audit_system_config_update(
         login_user,
         ConfigKeyEnum.ASSISTANT_LLM.value,
@@ -360,7 +442,7 @@ async def update_assistant_llm(
 @router.get("/evaluation")
 async def get_evaluation_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get evaluation related model configurations"""
-    cfg, inherited, blocked = await LLMService.aget_evaluation_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.EVALUATION_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -374,7 +456,7 @@ async def update_evaluation_llm(
     target = _resolve_write_target(login_user)
     await _assert_can_write_system_config(login_user, target)
     before = await _read_before_snapshot(target, ConfigKeyEnum.EVALUATION_LLM.value)
-    ret = await LLMService.update_evaluation_llm(data, tenant_id=target)
+    ret = await LLMService.update_evaluation_llm(data, tenant_id=target, login_user=login_user)
     await _audit_system_config_update(
         login_user,
         ConfigKeyEnum.EVALUATION_LLM.value,
@@ -388,7 +470,7 @@ async def update_evaluation_llm(
 @router.get("/workflow")
 async def get_workflow_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get workflow-related model configurations"""
-    cfg, inherited, blocked = await LLMService.aget_workflow_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.WORKFLOW_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -402,7 +484,7 @@ async def update_workflow_llm(
     target = _resolve_write_target(login_user)
     await _assert_can_write_system_config(login_user, target)
     before = await _read_before_snapshot(target, ConfigKeyEnum.WORKFLOW_LLM.value)
-    ret = await LLMService.update_workflow_llm(data, tenant_id=target)
+    ret = await LLMService.update_workflow_llm(data, tenant_id=target, login_user=login_user)
     await _audit_system_config_update(
         login_user,
         ConfigKeyEnum.WORKFLOW_LLM.value,
@@ -418,3 +500,20 @@ async def get_assistant_llm_list(request: Request, login_user: UserPayload = Dep
     """Get a list of optional models for the assistant"""
     ret = await LLMService.get_assistant_llm_list(request, login_user)
     return resp_200(data=ret)
+
+
+@router.post("/settings/defaults/{key}/inheritance", response_model=UnifiedResponseModel)
+async def restore_model_default_inheritance(
+    key: str,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    target = _resolve_write_target(login_user)
+    await _assert_can_write_system_config(login_user, target)
+    before = await _read_before_snapshot(target, key)
+    async with get_async_db_session() as session:
+        resolved = await ModelDefaultApplication.arestore_inheritance(session, key, login_user=login_user)
+        await session.commit()
+    await notify_reference_sync(target, "model_default", key)
+    config = json.loads(resolved.payload_json)
+    await _audit_system_config_update(login_user, key, target, before=before, after=None)
+    return resp_200(data=_envelope(config, resolved.inherited_from_root, resolved.fallback_blocked))

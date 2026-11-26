@@ -20,6 +20,7 @@ from runtime_manager.k8s_client import KubernetesAPIError
 from runtime_manager.k8s_config import KubernetesConfig
 from runtime_manager.k8s_templates import RESOURCE_LABEL, STOP_FINALIZER, production_name
 from runtime_manager.platform_client import PREFIX, PlatformClient, PlatformError
+from tests.fakes import stage_permit
 
 IMAGE = "example.invalid/python@sha256:" + "a" * 64
 HELPER = "example.invalid/helper@sha256:" + "b" * 64
@@ -44,6 +45,8 @@ class Clock:
 
 
 class Platform:
+    authorize_step = staticmethod(stage_permit)
+
     def __init__(self, clock, events):
         self.clock, self.events = clock, events
         self.epoch = 0
@@ -290,7 +293,7 @@ class Cluster:
                 "conditions": [{"type": "Ready", "status": "True"}],
                 "initContainerStatuses": [
                     {"name": c["name"], "state": {"terminated": {"exitCode": 0, "finishedAt": self.clock.iso()}}}
-                    for c in body["spec"]["initContainers"]
+                    for c in body["spec"].get("initContainers", [])
                 ],
                 "containerStatuses": [
                     {"name": c["name"], "ready": True, "imageID": c["image"], "state": {"running": {}}}
@@ -2189,6 +2192,8 @@ def test_completed_stage_at_exact_limit_advances_once_and_observe_shape_stays_sa
         "phase",
         "running",
         "restart_count",
+        "started_at",
+        "probe_state",
     }
 
 

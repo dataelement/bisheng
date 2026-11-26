@@ -1,11 +1,9 @@
 beforeAll(() => { global.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }; });
 import { useState, type ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ChatResourceMenu } from './ChatResourceMenu';
 import { useAgentToolPreferences } from './AgentToolSelector';
 import { ComposerSubmenu } from './ComposerSubmenu';
-import type { BsConfig } from '~/types/chat';
 
 const { RecoilRoot } = jest.requireActual('recoil');
 const originalResizeObserver = global.ResizeObserver;
@@ -15,20 +13,6 @@ beforeAll(() => {
 afterAll(() => { global.ResizeObserver = originalResizeObserver; });
 
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: 'menu-test' } }), useScrollRevealRef: () => () => {} }));
-const mockOrgQuery = jest.fn();
-const mockOrgRefetch = jest.fn();
-let mockOrgError = false;
-jest.mock('~/hooks/queries/data-provider', () => ({
-  useGetOrgToolPages: (query) => {
-    mockOrgQuery(query);
-    return {
-      data: { pages: [{ data: [{ id: 1, name: 'Enterprise' }, { id: 2, name: 'Policies' }] }] },
-      isFetching: false, isError: mockOrgError, hasNextPage: false,
-      fetchNextPage: jest.fn(), refetch: mockOrgRefetch,
-    };
-  },
-}));
-beforeEach(() => { mockOrgError = false; mockOrgQuery.mockClear(); });
 beforeEach(() => localStorage.clear());
 jest.mock('~/store', () => {
   const { atom } = jest.requireActual('recoil');
@@ -97,48 +81,12 @@ test('legacy search toggles through its existing callback; established chat keep
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
 });
 
-test('knowledge bases can be selected independently of spaces, without loading the list before opening', async () => {
-  const change = jest.fn();
-  const user = userEvent.setup();
-  function Picker() {
-    const [value, setValue] = useState([
-      { id: '1', name: 'Space', type: 'space' as const },
-      { id: '1', name: 'Enterprise', type: 'org' as const },
-    ]);
-    return <ChatResourceMenu value={value} showKnowledgeSelection onChange={next => { change(next); setValue(next); }} />;
-  }
-  render(<RecoilRoot><Picker /></RecoilRoot>);
-  await openMenu();
-  expect(mockOrgQuery).not.toHaveBeenCalled();
-  await user.click(screen.getByRole('menuitem', { name: 'dshChat.selectKnowledgeBases' }));
-  expect(mockOrgQuery).toHaveBeenCalledWith(expect.objectContaining({ action: 'visible' }));
-  expect(screen.getByRole('dialog')).toBeInTheDocument();
-  await user.click(screen.getByRole('checkbox', { name: 'Policies' }));
-  expect(change).not.toHaveBeenCalled();
-  await user.click(screen.getByRole('checkbox', { name: 'Enterprise' }));
-  await user.click(screen.getByRole('button', { name: 'dshChat.confirmKnowledge' }));
-  expect(change).toHaveBeenLastCalledWith([
-    { id: '1', name: 'Space', type: 'space' }, { id: '2', name: 'Policies', type: 'org' },
-  ]);
-});
-
-test('knowledge base read failures offer retry instead of an empty list', async () => {
-  mockOrgError = true;
-  const user = userEvent.setup();
+test('offers only the unified knowledge-space picker', async () => {
   render(<RecoilRoot><ChatResourceMenu value={[]} onChange={jest.fn()} showKnowledgeSelection /></RecoilRoot>);
   await openMenu();
-  await user.click(screen.getByRole('menuitem', { name: 'dshChat.selectKnowledgeBases' }));
-  expect(screen.getByRole('alert')).toHaveTextContent('knowledgeBasePicker.loadError');
-  await user.click(screen.getByRole('button', { name: 'dshChat.retryKnowledge' }));
-  expect(mockOrgRefetch).toHaveBeenCalledTimes(1);
-});
-
-test('disabling organization knowledge hides its entry while keeping spaces available', async () => {
-  render(<RecoilRoot><ChatResourceMenu value={[]} onChange={jest.fn()} showKnowledgeSelection
-    config={{ knowledgeBase: { enabled: false } } as BsConfig} /></RecoilRoot>);
-  await openMenu();
   expect(screen.queryByRole('menuitem', { name: 'dshChat.selectKnowledgeBases' })).toBeNull();
-  expect(screen.getByRole('menuitem', { name: 'dshChat.selectKnowledge' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'dshChat.selectKnowledge' }));
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
 });
 
 function SelectedCapabilities() {
@@ -319,4 +267,40 @@ test('saved choices drop children removed from the configured tool group', async
   await waitFor(() => expect(JSON.parse(localStorage.getItem('bs:menu-test:selectedAgentTools')!)[0].children).toEqual([
     { id: 2, tool_key: 'web_search' },
   ]));
+});
+
+test.each(['dalle_image_generator', 'image_generation'])('image tool %s uses the shared display name', async (toolKey) => {
+  const imageTools = [{ id: 4, name: 'Dalle3 drawing', is_preset: 1,
+    children: [{ id: 4, tool_key: toolKey }] }];
+  render(<RecoilRoot><ChatResourceMenu value={[]} onChange={jest.fn()}
+    availableTools={imageTools} showTools /></RecoilRoot>);
+  await openMenu();
+  await openTools();
+  expect(screen.getByRole('menuitemcheckbox', { name: 'tool:tools.image_generation.name' })).toBeInTheDocument();
+  expect(screen.queryByText('Dalle3 drawing')).toBeNull();
+});
+
+// F004 design §7 item 7: uploading is off while a run is in progress.
+test('disabled upload rows say why, and only while they are disabled', async () => {
+  const upload = jest.fn(); const folder = jest.fn();
+  const props = { value: [], onChange: jest.fn(), showFileUpload: true, onFileUploadClick: upload, onFolderUploadClick: folder };
+  const view = render(<RecoilRoot><ChatResourceMenu {...props} fileUploadDisabled fileUploadDisabledReason="wait for the answer" /></RecoilRoot>);
+  await openMenu();
+  const files = screen.getByRole('menuitem', { name: 'com_ui_upload_files' });
+  expect(files).toHaveAttribute('aria-disabled', 'true');
+  expect(files).toHaveTextContent('wait for the answer');
+  expect(files).not.toHaveTextContent('dshChat.uploadDescription');
+  const folders = screen.getByText('com_ui_upload_folder').closest('[role="menuitem"]')!;
+  expect(folders).toHaveAttribute('aria-disabled', 'true');
+  expect(folders).toHaveTextContent('wait for the answer');
+  fireEvent.click(files);
+  fireEvent.click(folders);
+  expect(upload).not.toHaveBeenCalled();
+  expect(folder).not.toHaveBeenCalled();
+  // The reason is tied to the disabled state: enabled rows keep their own description.
+  view.rerender(<RecoilRoot><ChatResourceMenu {...props} fileUploadDisabledReason="wait for the answer" /></RecoilRoot>);
+  const enabled = screen.getByRole('menuitem', { name: 'com_ui_upload_files' });
+  expect(enabled).not.toHaveAttribute('aria-disabled');
+  expect(enabled).toHaveTextContent('dshChat.uploadDescription');
+  expect(screen.queryByText('wait for the answer')).toBeNull();
 });

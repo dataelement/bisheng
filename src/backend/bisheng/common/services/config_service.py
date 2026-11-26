@@ -2,11 +2,14 @@ import json
 import os
 
 import yaml
+from cryptography.fernet import InvalidToken
 from loguru import logger
 
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.config.credential_loader import config_path, load_config, validate_runtime
+from bisheng.core.config.secret_crypto import CredentialConfigurationError
 from bisheng.core.config.settings import (
     CofcoForwardingConf,
     DailyChatConf,
@@ -53,15 +56,15 @@ def write_sandbox_endpoint_cache(payload: dict) -> None:
 
 
 def _merge_sandbox_page(base, payload: dict):
-    """Overlay a valid page payload onto deployment config. None means decrypt failed."""
+    """Overlay a valid page payload; a nonempty invalid ciphertext fails explicitly."""
     update: dict = {}
     if payload["endpoints"]:
         update["endpoints"] = list(payload["endpoints"])
     if payload["token_enc"]:
         try:
             update["token"] = decrypt_token(payload["token_enc"])
-        except Exception:
-            return None
+        except InvalidToken:
+            raise CredentialConfigurationError("sandbox.token: page credential cannot be decrypted") from None
     if not update:
         return base
     return base.model_copy(update=update)
@@ -100,7 +103,7 @@ def read_from_conf(file_path: str) -> str:
     return content
 
 
-def parse_key(keys: list[str], setting_str: str = None, include_key: bool = False) -> str:
+def parse_key(keys: list[str], setting_str: str | None = None, include_key: bool = False) -> str:
     # Setujukey  Back  yamlConfigure invalueAll strings, including comments
     if not setting_str:
         setting_str = read_from_conf(config_file)
@@ -161,25 +164,28 @@ class ConfigService(Settings):
 
     @classmethod
     def load_settings_from_yaml(cls, file_path: str) -> "ConfigService":
-        # Sign up for customYAMLConstructor to handle environment variables
-        yaml.SafeLoader.add_constructor("!env", cls.env_var_constructor)
-        # Get current path
-        current_path = os.path.dirname(os.path.abspath(__file__))
-        # Look up the previous two levels of the catalog
-        current_path = os.path.dirname(os.path.dirname(current_path))
-        # Check if a string is a valid path or a file name
-        if "/" not in file_path:
-            file_path = os.path.join(current_path, file_path)
+        settings_dict = load_config(config_path(file_path)).data
 
-        with open(file_path, encoding="utf-8") as f:
-            settings_dict = yaml.safe_load(f)
+        settings_dict = Settings.normalize_client_settings(settings_dict)
 
-        for key in settings_dict:
-            if key not in Settings.model_fields.keys():
-                raise KeyError(f"Key {key} not found in settings")
+        if "admin" in settings_dict:
+            # Old deployment files must remain loadable, but cannot create users.
+            settings_dict.pop("admin")
+            logger.warning("Ignoring retired admin bootstrap setting; the first registered user becomes administrator")
+
+        known_settings = {}
+        for key, value in settings_dict.items():
+            if key not in Settings.model_fields:
+                logger.warning(
+                    "Ignoring unknown top-level config key {!r} in {}; this setting has no effect", key, file_path
+                )
+                continue
+            known_settings[key] = value
             logger.debug(f"Loading {key} from {file_path}")
 
-        return ConfigService(**settings_dict)
+        # Validate in this exact model instance, not via model_dump/reparse:
+        # the latter would feed already-decrypted credentials to validators.
+        return validate_runtime(known_settings, model_type=cls)
 
     async def init_config(self):
         # Inisialisasiconfig

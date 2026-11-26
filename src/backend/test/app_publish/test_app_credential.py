@@ -37,6 +37,43 @@ import pytest
 from test.app_publish.conftest import ROOT_TENANT_ID, SUB_TENANT_ID
 
 
+@pytest.fixture(autouse=True)
+async def legacy_credential_readers(publish_db, publish_engine, monkeypatch):
+    """This suite owns legacy subject/cache semantics, not v2 serving generations."""
+    import sqlalchemy as sa
+
+    from bisheng.app_publish.domain.models.app_secret_config import AppSecretConfig
+    from bisheng.app_publish.domain.repositories import preview_runtime_repository
+    from bisheng.app_publish.domain.repositories.app_secret_repository import AppSecretConfigRepository
+    from bisheng.app_publish.domain.services import app_secret_service
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.app_runtime, "runtime_protocol_version", 1)
+    # Credential resolution checks preview membership before a formal subject;
+    # that shared reader must use the same SQL fixture even for non-preview keys.
+    monkeypatch.setattr(preview_runtime_repository, "get_async_db_session", publish_db)
+    metadata = sa.MetaData()
+    sa.Table(
+        AppSecretConfig.__tablename__,
+        metadata,
+        *[
+            sa.Column(
+                col.name,
+                col.type.copy(),
+                primary_key=col.primary_key,
+                nullable=col.nullable,
+                server_default=sa.text("CURRENT_TIMESTAMP")
+                if col.name in {"create_time", "update_time"}
+                else col.server_default,
+            )
+            for col in AppSecretConfig.__table__.columns
+        ],
+    )
+    async with publish_engine.begin() as connection:
+        await connection.run_sync(metadata.create_all)
+    monkeypatch.setattr(app_secret_service, "AppSecretConfigRepository", lambda: AppSecretConfigRepository(publish_db))
+
+
 @pytest.fixture()
 def sync_subject_db(monkeypatch):
     """A **synchronous** SQLite holding just ``app`` + ``hosted_app_subject``.
@@ -411,6 +448,7 @@ async def test_delete_hook_revokes_the_runtime_credential(
     subject_id = await _subject_id(app.id)
     assert len(await _live_credentials(subject_id)) == 1
 
+    await _set_state(publish_db, app.id, "deleted")
     failures = await lifecycle_hooks.on_app_deleted(
         app_id=app.id, actor_user_id=owner_user.user_id, tenant_id=ROOT_TENANT_ID
     )
@@ -533,6 +571,7 @@ async def test_the_delete_hook_audits_the_revocation(
     app, _ = await app_factory(state="stopped")
     await AppRuntimeCredentialService.issue(app.id)
 
+    await _set_state(publish_db, app.id, "deleted")
     failures = await lifecycle_hooks.on_app_deleted(
         app_id=app.id, actor_user_id=owner_user.user_id, tenant_id=ROOT_TENANT_ID
     )

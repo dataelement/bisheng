@@ -14,10 +14,14 @@ from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.permission.api.actors import permission_actor
 from bisheng.permission.api.dependencies import (
     PermissionDecisionApiPort,
+    PermissionResourceNormalizerPort,
     get_permission_decision_api,
+    get_permission_resource_normalizer,
 )
 from bisheng.permission.api.responses import permission_error_response
 from bisheng.permission.domain.schemas import PermissionCheckRequest
+from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
+from bisheng.permission.domain.services.permission_action_service import validate_permission_action
 
 router = APIRouter()
 
@@ -27,6 +31,7 @@ async def check_permission_action(
     body: dict[str, Any],
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: PermissionDecisionApiPort = Depends(get_permission_decision_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ) -> UnifiedResponseModel:
     """Check one concrete action against a business-verified target."""
 
@@ -35,15 +40,17 @@ async def check_permission_action(
     except ValidationError:
         return InvalidCatalogActionError.return_resp()
     try:
+        action = validate_permission_action(request.action)
+        resource_type = await resources.anormalize_permission_resource(request.resource_type, request.resource_id)
         actor = await permission_actor(login_user)
-        if request.action == "visible" and actor.super_admin:
+        if action == "visible" and actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
             # This HTTP contract answers privileged operational access. Keep the
             # domain visible Check/BatchCheck/ListObjects relation unchanged.
             return resp_200({"allowed": True})
         allowed = await api.check(
-            resource_type=request.resource_type,
+            resource_type=resource_type,
             resource_id=request.resource_id,
-            action=request.action,
+            action=action,
             actor=actor,
         )
     except BaseErrorCode as error:

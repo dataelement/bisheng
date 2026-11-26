@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import logging
-import pickle
 import socket
 import uuid
 from functools import partial
@@ -11,8 +10,9 @@ from typing import Any, Union
 
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_conn import RedisClient
-from bisheng.core.cache.redis_manager import get_redis_client_sync
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.core.cache.serialization import decode_redis_value
+from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.logger import set_logger_config
 from bisheng.linsight.domain.models.linsight_execute_task import (
     ExecuteTaskStatusEnum,
@@ -43,12 +43,23 @@ _TERMINAL_SESSION_STATUSES = frozenset(
 )
 
 
+# F004 queue item types. An item without ``type`` is a deep-research (planned)
+# item addressed by ``session_version_id``, exactly as before F004.
+ITEM_TYPE_KEY = "type"
+ITEM_TYPE_DIRECT_RELAY = "direct_relay"
+ITEM_TYPE_PLANNED_RELAY = "planned_relay"
+_RELAY_ITEM_TYPES = frozenset({ITEM_TYPE_DIRECT_RELAY, ITEM_TYPE_PLANNED_RELAY})
+# How often a worker looks for runs that wait for a conversation (design §7 item 4).
+PENDING_SWEEP_SECONDS = 30
+
+
 def encode_queue_item(
     session_version_id: str,
     resume: bool = False,
     user_input: Any = None,
     continue_question: str | None = None,
     tenant_id: int | None = None,
+    run_id: str | None = None,
 ) -> dict:
     """Build a Linsight queue item.
 
@@ -70,6 +81,10 @@ def encode_queue_item(
     }
     if tenant_id is not None:
         item["tenant_id"] = tenant_id
+    if run_id is not None:
+        # F004: the run id the send entry (``run_dispatch.submit``) gave this run.
+        # Without it the executor uses the session version id as the run id.
+        item["run_id"] = run_id
     return item
 
 
@@ -86,6 +101,7 @@ def parse_queue_item(raw: Any) -> dict:
             "user_input": raw.get("user_input"),
             "continue_question": raw.get("continue_question"),
             "tenant_id": raw.get("tenant_id"),
+            "run_id": raw.get("run_id"),
         }
     # Legacy bare-string item == new task.
     return {
@@ -94,7 +110,26 @@ def parse_queue_item(raw: Any) -> dict:
         "user_input": None,
         "continue_question": None,
         "tenant_id": None,
+        "run_id": None,
     }
+
+
+def relay_item_type(raw: Any) -> str | None:
+    """``direct_relay`` / ``planned_relay`` for an F004 relay item, else None."""
+    if isinstance(raw, dict) and raw.get(ITEM_TYPE_KEY) in _RELAY_ITEM_TYPES:
+        return raw[ITEM_TYPE_KEY]
+    return None
+
+
+def _positive_tenant_id(value: Any) -> int | None:
+    """The tenant id of a queue item, or None when it is not a positive integer."""
+    if isinstance(value, bool):
+        return None
+    try:
+        tenant_id = int(value)
+    except (TypeError, ValueError):
+        return None
+    return tenant_id if tenant_id > 0 else None
 
 
 def _item_session_version_id(raw: Any) -> str | None:
@@ -186,10 +221,7 @@ class LinsightQueue:
         # Add a new element to the far LEFT (head) of the queue so it is picked
         # up before any tail-queued task. Used by park-and-release for resume
         # items (PRD §4.4.4: an answered task continues ahead of new tasks).
-        # RedisClient.alpush does not pickle, but ablpop/lrange unpickle, so we
-        # must pickle here to keep the queue's serialization uniform with put().
-        payload = pickle.dumps(data) if not isinstance(data, bytes) else data
-        await self.__db.alpush(self.key, payload, expiration=timeout)
+        await self.__db.alpush(self.key, data, expiration=timeout)
 
     async def get_wait(self, timeout=None):
         # Returns the first element of the queue, if empty, wait until an element is queued (the timeout threshold istimeout, if isNonehas been waiting)
@@ -199,7 +231,7 @@ class LinsightQueue:
     async def get_nowait(self):
         # Returns the first element of the queue directly, if the queue is emptyNone
         item = await self.__db.alpop(self.key)
-        return item
+        return decode_redis_value(self.key, item) if item is not None else None
 
     # Get the position of a task's data in the queue
     async def index(self, session_version_id):
@@ -240,6 +272,77 @@ class LinsightQueue:
             if _item_session_version_id(item) == session_version_id:
                 await self.__db.alrem(self.key, item)
 
+    async def waiting_count(self) -> int:
+        """Number of runs waiting in the queue, counted as ``index`` counts them.
+
+        Resume items jump the queue and are not counted.
+        """
+        items = await self.__db.alrange(self.key)
+        return sum(1 for item in items if not _item_is_resume(item))
+
+
+async def _linsight_queue() -> LinsightQueue:
+    return LinsightQueue("queue", namespace="linsight", redis=await get_redis_client())
+
+
+async def enqueue_relay_run(item: dict) -> None:
+    """Put a relay run into the Linsight worker queue (F004, design 决策 9).
+
+    This is the ``enqueue_relay`` of ``RunDispatchService``. ``item`` is what
+    ``RunDispatchService._relay_item`` builds; it must carry ``tenant_id``, which
+    the worker restores before it executes the run.
+    """
+    if _positive_tenant_id(item.get("tenant_id")) is None:
+        raise ValueError(f"relay run {item.get('run_id')} has no tenant_id; it is not queued")
+    item_type = ITEM_TYPE_PLANNED_RELAY if item.get("profile") == "planned" else ITEM_TYPE_DIRECT_RELAY
+    queue = await _linsight_queue()
+    await queue.put({**item, ITEM_TYPE_KEY: item_type})
+    logger.info(
+        "relay run=%s of conversation=%s queued as %s tenant=%s",
+        item.get("run_id"),
+        item.get("conversation_id"),
+        item_type,
+        item.get("tenant_id"),
+    )
+
+
+async def enqueue_waiting_item(item: dict) -> None:
+    """Put a run that waited for its conversation back into the worker queue (F004, design §7 item 4).
+
+    This is the ``enqueue_item`` of ``RunDispatchService``. ``item`` is the
+    queue item the worker stored when it found the conversation held by another
+    run; it carries the run id the conversation is now reserved for. It goes to
+    the head of the queue: the run already waited for its turn once.
+    """
+    if not item.get("session_version_id") or not item.get("run_id"):
+        raise ValueError(f"waiting queue item is not a planned run item: {item!r}")
+    queue = await _linsight_queue()
+    await queue.put_head(item)
+    logger.info("waiting run=%s session_version=%s queued again", item.get("run_id"), item.get("session_version_id"))
+
+
+async def planned_queue_position(conversation_id: str, run_id: str, message: dict) -> int | None:
+    """The ``queue_position`` of ``RunDispatchService``: where a new planned run will wait.
+
+    Returns None when no run waits in the queue (a worker takes the run at once).
+    Otherwise the 1-based position the run gets when it is queued now, counted
+    like ``LinsightQueue.index``.
+    """
+    waiting = await (await _linsight_queue()).waiting_count()
+    return waiting + 1 if waiting > 0 else None
+
+
+async def _prepare_reference_runtime() -> None:
+    """Prepare process-local model and knowledge readers before accepting work."""
+    if settings.openfga.enabled:
+        from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+        await get_f048_process_runtime()
+
+    from bisheng.resource_reference.composition import register
+
+    register()
+
 
 class ScheduleCenterProcess(Process):
     def __init__(
@@ -258,6 +361,7 @@ class ScheduleCenterProcess(Process):
         self.semaphore: asyncio.Semaphore | None = None
         self.node_manager: NodeManager | None = None
         self.heartbeat_task: asyncio.Task | None = None
+        self.pending_sweep_task: asyncio.Task | None = None
         # Strong refs to the fire-and-forget stranded-session repair tasks. asyncio
         # only holds a weak reference to a running task, so without this the loop is
         # free to garbage-collect a repair mid-flight and the session it was meant
@@ -372,6 +476,9 @@ class ScheduleCenterProcess(Process):
             self._release_semaphore()
             return False
 
+        if relay_item_type(raw_item) is not None:
+            return await self._process_relay_item(raw_item)
+
         item = parse_queue_item(raw_item)
         session_version_id = item["session_version_id"]
         if not session_version_id:
@@ -389,6 +496,8 @@ class ScheduleCenterProcess(Process):
             return False
         if terminal:
             logger.info(f"Queue item for terminal session {session_version_id} discarded")
+            if item.get("run_id") is not None:
+                await self._release_reserved_conversation(session_version_id, item["run_id"])
             self._release_semaphore()
             return False
 
@@ -397,6 +506,9 @@ class ScheduleCenterProcess(Process):
 
         exec_task = LinsightWorkflowTask()
         tenant_kwargs = {"tenant_id": item["tenant_id"]} if item.get("tenant_id") is not None else {}
+        if item.get("run_id") is not None:
+            # F004: the run id the send entry reserved the conversation with.
+            tenant_kwargs["run_id"] = item["run_id"]
         if item.get("continue_question") is not None:
             logger.info(
                 f"Continuing conversation session_version_id: {session_version_id} on node {node_manager.node_id}"
@@ -427,6 +539,228 @@ class ScheduleCenterProcess(Process):
         # is held during the (possibly very long) waiting period.
         task.add_done_callback(partial(self.handle_task_result, session_version_id=session_version_id))
         return True
+
+    # ==================== F004 relay runs ====================
+
+    async def _process_relay_item(self, raw_item: dict) -> bool:
+        """Dispatch a relay run (design 决策 9). Same slot contract as ``process_one_item``.
+
+        A relay run has no session version: there is no terminal pre-flight and no
+        ownership key. Liveness is the conversation lease the run renews.
+        """
+        tenant_id = _positive_tenant_id(raw_item.get("tenant_id"))
+        if tenant_id is None or not raw_item.get("conversation_id") or not raw_item.get("run_id"):
+            # Never run without a tenant: the run would read and write unscoped.
+            logger.error("Malformed relay queue item discarded: %r", raw_item)
+            if raw_item.get("conversation_id") and raw_item.get("run_id"):
+                await self._fail_relay_run(raw_item, "The relay run has no tenant and was not executed.")
+            self._release_semaphore()
+            return False
+
+        item = {k: v for k, v in raw_item.items() if k != ITEM_TYPE_KEY}
+        item["tenant_id"] = tenant_id
+        if raw_item[ITEM_TYPE_KEY] == ITEM_TYPE_DIRECT_RELAY:
+            runner = self._run_direct_relay(item)
+        else:
+            runner = self._start_planned_relay(item)
+        logger.info(
+            "Processing %s run_id: %s conversation: %s",
+            raw_item[ITEM_TYPE_KEY],
+            item["run_id"],
+            item["conversation_id"],
+        )
+        task = asyncio.create_task(runner)
+        task.add_done_callback(self.handle_task_result)
+        return True
+
+    async def _run_direct_relay(self, item: dict) -> None:
+        """Execute a ``direct`` relay run in this worker, under the item's tenant."""
+        from bisheng.workstation.domain.services import direct_run, run_message_persist
+
+        token = set_current_tenant_id(item["tenant_id"])
+        try:
+            try:
+                if settings.openfga.enabled:
+                    from bisheng.linsight.domain import task_exec
+
+                    await task_exec.ensure_linsight_permission_runtime()
+                # T043: no HTTP request owns this run, so its answer row and the
+                # "queued" marks of the messages it reads are written from here.
+                # This is the only attachment in this process (no hook factory).
+                hooks, model_id = await run_message_persist.relay_run_hooks(item)
+            except Exception as e:
+                # The run never started, so nothing would end it: without this the
+                # conversation stays reserved until the queued lease lapses.
+                logger.exception("direct relay run %s could not start: %s", item["run_id"], e)
+                await self._fail_relay_run(item, "The worker could not start the run.")
+                return
+            if model_id and not item.get("model_id"):
+                # A relay item carries no model: answer with the conversation's model.
+                item = {**item, "model_id": model_id}
+            # A run that fails reports it itself (run_failed) and does not raise.
+            await direct_run.execute_direct_run(item, on_event=hooks)
+        finally:
+            current_tenant_id.reset(token)
+
+    async def _fail_relay_run(self, item: dict, detail: str) -> None:
+        """Report a relay run that was never executed and give the conversation back.
+
+        ``release`` and not ``on_run_finished``: the inbox still holds the unread
+        messages, and finishing would start the same relay run again at once. The
+        next message sent to the conversation starts a relay run for them.
+        """
+        from bisheng.linsight.domain.services.run_event_stream import RunEventStream
+        from bisheng.workstation.domain.services.run_lease import RunLeaseService
+
+        conversation_id, run_id = item["conversation_id"], item["run_id"]
+        try:
+            redis = (await get_redis_client()).async_connection
+            if not await RunLeaseService(redis).release(conversation_id, run_id):
+                # Another run holds the conversation by now; its stream is not ours to write.
+                return
+            # ``release`` skips the finish script. The inbox is not empty here, so
+            # a run waiting for the conversation stays in the pending list until
+            # the next finish or the pending sweep; nothing is lost.
+            stream = RunEventStream(redis)
+            await stream.append(conversation_id, {"type": "run_started", "run_id": run_id, "data": {"relay": True}})
+            await stream.append(
+                conversation_id,
+                {
+                    "type": "run_failed",
+                    "run_id": run_id,
+                    "data": {"code": 11091, "reason": "task_aborted", "detail": detail, "reference_id": run_id},
+                },
+            )
+        except Exception as e:
+            logger.exception("could not report the failed relay run %s: %s", run_id, e)
+
+    async def _release_reserved_conversation(self, session_version_id: str, run_id: str) -> None:
+        """A queued planned run was discarded: end the reservation its send entry made (F004)."""
+        try:
+            from bisheng.linsight.domain.task_exec import build_run_dispatch
+
+            with bypass_tenant_filter():
+                session = await LinsightSessionVersionDao.get_by_id(session_version_id)
+            conversation_id = getattr(session, "session_id", None)
+            if not conversation_id:
+                return
+            token = set_current_tenant_id(session.tenant_id) if session.tenant_id else None
+            try:
+                await (await build_run_dispatch()).on_run_finished(conversation_id, run_id)
+            finally:
+                if token is not None:
+                    current_tenant_id.reset(token)
+        except Exception as e:
+            logger.exception("could not release the conversation of discarded run %s: %s", run_id, e)
+
+    async def _start_planned_relay(self, item: dict) -> None:
+        """Turn the unread inbox into a deep-research run (design §7 item 1).
+
+        A planned relay item only reserves the conversation; a deep-research run
+        needs a ``linsight_session_version``. The unread messages become the
+        question of a new version, created and queued by the same code a normal
+        deep-research send uses (``run_send.start_planned_relay`` ->
+        ``submit_task_turn``). The queue item carries the relay run id, so the
+        worker that executes it claims the conversation this item reserved.
+
+        When the run cannot be created, the messages are not lost: they are
+        returned to the client in ``run_failed`` (``unread_messages``) and the
+        conversation is freed.
+        """
+        from bisheng.linsight.domain.task_exec import build_run_dispatch
+        from bisheng.workstation.domain.services import run_message_persist, run_send
+
+        conversation_id, run_id = item["conversation_id"], item["run_id"]
+        token = set_current_tenant_id(item["tenant_id"])
+        try:
+            dispatch = await build_run_dispatch()
+            redis = (await get_redis_client()).async_connection
+            messages = await dispatch.drain_inbox(conversation_id)
+            if not messages:
+                # Another reader took the inbox (the user stopped, or a duplicate item).
+                logger.warning("planned relay run %s of conversation %s found an empty inbox", run_id, conversation_id)
+                await dispatch.on_run_finished(conversation_id, run_id)
+                return
+            try:
+                if settings.openfga.enabled:
+                    from bisheng.linsight.domain import task_exec
+
+                    await task_exec.ensure_linsight_permission_runtime()
+                version = await run_send.start_planned_relay(item, messages, redis=redis)
+            except Exception as e:
+                logger.exception(
+                    "planned relay run %s of conversation %s could not be created: %s", run_id, conversation_id, e
+                )
+                unread = await run_message_persist.forget_steer_rows(conversation_id, messages, redis=redis)
+                await self._report_planned_relay_failure(redis, conversation_id, run_id, e, unread)
+                await dispatch.on_run_finished(conversation_id, run_id)
+                return
+            logger.info(
+                "planned relay run %s of conversation %s queued as session version %s with %d message(s)",
+                run_id,
+                conversation_id,
+                version.id,
+                len(messages),
+            )
+        finally:
+            current_tenant_id.reset(token)
+
+    @staticmethod
+    async def _report_planned_relay_failure(
+        redis, conversation_id: str, run_id: str, error: BaseException, unread: list[dict]
+    ) -> None:
+        """``run_started`` + ``run_failed`` of a planned relay run that was never created."""
+        from bisheng.common.services.llm_error_classifier import classify_for_event
+        from bisheng.linsight.domain.services.run_event_stream import RunEventStream
+
+        from bisheng.common.services.failure_context import FailureContextAdapter
+
+        classified = classify_for_event(error)
+        # Same redaction as ``UnifiedEventOutput.run_failed``: this event is shown
+        # in the browser, and ``str(error)`` of a database error carries the SQL
+        # text, its parameters and the database host.
+        payload = FailureContextAdapter.public_payload(
+            {"error_code": classified.error_code, "error_type": classified.error_type}, exc=error
+        )
+        stream = RunEventStream(redis)
+        await stream.append(
+            conversation_id, {"type": "run_started", "run_id": run_id, "data": {"profile": "planned", "relay": True}}
+        )
+        await stream.append(
+            conversation_id,
+            {
+                "type": "run_failed",
+                "run_id": run_id,
+                "data": {
+                    "code": payload.get("error_code") or 11091,
+                    "reason": payload.get("error_type") or "task_aborted",
+                    "detail": payload.get("detail"),
+                    "reference_id": payload.get("reference_id") or run_id,
+                    "failure_info": payload.get("failure_info"),
+                    "unread_messages": unread,
+                },
+            },
+        )
+
+    async def _pending_sweep_loop(self) -> None:
+        """Start runs that wait for a conversation nobody frees through the finish script (design §7 item 4).
+
+        The normal hand-over is atomic and needs no sweep. This loop covers a
+        holder whose process died (its lease lapses and nobody opens the
+        conversation) and the few paths that release without finishing. Every
+        worker process runs it; the hand-over itself is one Redis script, so two
+        sweepers cannot start the same run twice.
+        """
+        from bisheng.linsight.domain.task_exec import build_run_dispatch
+
+        while True:
+            await asyncio.sleep(PENDING_SWEEP_SECONDS)
+            try:
+                started = await (await build_run_dispatch()).sweep_pending()
+                if started:
+                    logger.info("pending sweep started %d waiting run(s)", started)
+            except Exception as e:
+                logger.exception("pending sweep failed: %s", e)
 
     async def async_run(self):
         """
@@ -476,6 +810,7 @@ class ScheduleCenterProcess(Process):
                 get_department_projection_scope,
                 register_department_projection_runtime_context,
             )
+            from bisheng.llm.application.model_provider_projection import get_model_provider_projection_scope
             from bisheng.permission.application.process_runtime import (
                 register_f048_permission_runtime_context,
             )
@@ -487,11 +822,19 @@ class ScheduleCenterProcess(Process):
                     client,
                     external_scopes={
                         "department": get_department_projection_scope(),
+                        "llm_model_deletion": get_model_provider_projection_scope(),
                     },
                 )
 
             register_f048_permission_runtime_context(initialize)
             register_department_projection_runtime_context()
+
+        loop.run_until_complete(_prepare_reference_runtime())
+
+        # F004: a direct run executed by this worker hands its relay run to this queue.
+        from bisheng.workstation.domain.services.direct_run import set_default_enqueue_relay
+
+        set_default_enqueue_relay(enqueue_relay_run)
 
         # 启动心跳
         self.node_manager = NodeManager.get_instance(
@@ -499,6 +842,8 @@ class ScheduleCenterProcess(Process):
             fga_manager=None,
         )
         self.heartbeat_task = loop.create_task(self.node_manager.start_heartbeat())
+        # F004: runs waiting for a conversation whose holder died are started from here.
+        self.pending_sweep_task = loop.create_task(self._pending_sweep_loop())
 
         # Disk-side counterpart of the incomplete-task sweep: run dirs and uids a
         # crashed worker of this host left behind. Sibling workers keep theirs.

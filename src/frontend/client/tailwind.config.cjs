@@ -18,6 +18,7 @@ module.exports = {
     '../packages/ui/src/**/*.{ts,tsx}',
     '../packages/file-viewers/src/**/*.{ts,tsx}',
     '../packages/chat/src/**/*.{ts,tsx}',
+    '../packages/knowledge/src/**/*.{ts,tsx}',
   ],
   theme: {
     // fontFamily: {
@@ -189,6 +190,10 @@ module.exports = {
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
         },
       },
       borderRadius: {

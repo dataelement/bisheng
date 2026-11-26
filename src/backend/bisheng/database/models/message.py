@@ -24,6 +24,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.core.database.retry import retry_on_transient_db_conflict
+from bisheng.core.database.tenant_filter import apply_strict_tenant_filter
 
 
 class LikedType(Enum):
@@ -204,7 +205,9 @@ class ChatMessageDao(MessageBase):
                 return None
 
     @classmethod
-    def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str = None, exclude_category: str = None):
+    def get_latest_message_by_chat_ids(
+        cls, chat_ids: list[str], category: str | None = None, exclude_category: str | None = None
+    ):
         """
         Get the most recent message content for each session
         """
@@ -223,7 +226,9 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_messages_by_chat_id(cls, chat_id: str, category_list: list = None, limit: int = 10) -> list[ChatMessage]:
+    def get_messages_by_chat_id(
+        cls, chat_id: str, category_list: list | None = None, limit: int = 10
+    ) -> list[ChatMessage]:
         with get_sync_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
@@ -233,10 +238,10 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     async def aget_messages_by_chat_id(
-        cls, chat_id: str, category_list: list = None, limit: int = 10
+        cls, chat_id: str, category_list: list | None = None, limit: int = 10, offset: int = 0
     ) -> list[ChatMessage]:
         """Return the MOST RECENT `limit` messages for a chat, in chronological
-        order (oldest → newest).
+        order (oldest → newest). ``offset`` pages backward from the newest row.
 
         Previous implementation used ``ORDER BY create_time ASC LIMIT N`` which
         always returned the OLDEST N rows, so long conversations saw only the
@@ -255,7 +260,9 @@ class ChatMessageDao(MessageBase):
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            statement = statement.order_by(ChatMessage.create_time.desc(), ChatMessage.id.desc()).limit(limit)
+            statement = (
+                statement.order_by(ChatMessage.create_time.desc(), ChatMessage.id.desc()).limit(limit).offset(offset)
+            )
             result = await session.exec(statement)
             rows = list(result.all())
             rows.reverse()
@@ -297,7 +304,9 @@ class ChatMessageDao(MessageBase):
             logger.info("delete_param_error user_id={} chat_id={}", user_id, chat_id)
             return False
 
-        statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id, ChatMessage.user_id == user_id)
+        statement = apply_strict_tenant_filter(delete(ChatMessage), ChatMessage.tenant_id).where(
+            ChatMessage.chat_id == chat_id, ChatMessage.user_id == user_id
+        )
 
         with get_sync_db_session() as session:
             session.exec(statement)
@@ -309,7 +318,9 @@ class ChatMessageDao(MessageBase):
         if user_id is None or chat_id is None:
             logger.info("delete_param_error user_id={} chat_id={}", user_id, chat_id)
             return False
-        statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id, ChatMessage.user_id == user_id)
+        statement = apply_strict_tenant_filter(delete(ChatMessage), ChatMessage.tenant_id).where(
+            ChatMessage.chat_id == chat_id, ChatMessage.user_id == user_id
+        )
         async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
@@ -321,7 +332,9 @@ class ChatMessageDao(MessageBase):
             logger.info("delete_param_error user_id={} chat_id={}", user_id, message_id)
             return False
 
-        statement = delete(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.user_id == user_id)
+        statement = apply_strict_tenant_filter(delete(ChatMessage), ChatMessage.tenant_id).where(
+            ChatMessage.id == message_id, ChatMessage.user_id == user_id
+        )
 
         with get_sync_db_session() as session:
             session.exec(statement)
@@ -409,7 +422,7 @@ class ChatMessageDao(MessageBase):
     def update_message(cls, message_id: int, user_id: int, message: str):
         with get_sync_db_session() as session:
             statement = (
-                update(ChatMessage)
+                apply_strict_tenant_filter(update(ChatMessage), ChatMessage.tenant_id)
                 .where(ChatMessage.id == message_id)
                 .where(ChatMessage.user_id == user_id)
                 .values(message=message)
@@ -434,16 +447,44 @@ class ChatMessageDao(MessageBase):
         return message
 
     @classmethod
+    async def update_fields_by_id(cls, message_id: int, **fields) -> None:
+        """Write the given columns of one row with a single UPDATE, without loading the row."""
+        if not fields:
+            return
+        async with get_async_db_session() as session:
+            await session.exec(update(ChatMessage).where(ChatMessage.id == message_id).values(**fields))
+            await session.commit()
+
+    @classmethod
+    async def adelete_by_id_in_chat(cls, message_id: int, chat_id: str) -> None:
+        """Delete one row of one conversation with a single DELETE.
+
+        A bulk DELETE gets no tenant filter, so the row is addressed by its id
+        AND its conversation id (a uuid that belongs to one tenant).
+        """
+        async with get_async_db_session() as session:
+            await session.exec(delete(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.chat_id == chat_id))
+            await session.commit()
+
+    @classmethod
     def update_message_copied(cls, message_id: int, copied: int):
         with get_sync_db_session() as session:
-            statement = update(ChatMessage).where(ChatMessage.id == message_id).values(copied=copied)
+            statement = (
+                apply_strict_tenant_filter(update(ChatMessage), ChatMessage.tenant_id)
+                .where(ChatMessage.id == message_id)
+                .values(copied=copied)
+            )
             session.exec(statement)
             session.commit()
 
     @classmethod
     def update_message_mark(cls, chat_id: str, status: int):
         with get_sync_db_session() as session:
-            statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(mark_status=status)
+            statement = (
+                apply_strict_tenant_filter(update(ChatMessage), ChatMessage.tenant_id)
+                .where(ChatMessage.chat_id == chat_id)
+                .values(mark_status=status)
+            )
             session.exec(statement)
             session.commit()
 
@@ -456,7 +497,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     async def afilter_message_by_chat_id(
-        cls, chat_id: str, flow_id: str, message_id: int = None, page_size: int = 20
+        cls, chat_id: str, flow_id: str, message_id: int | None = None, page_size: int = 20
     ) -> list[ChatMessage]:
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).where(ChatMessage.flow_id == flow_id)
         if message_id:

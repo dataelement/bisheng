@@ -58,6 +58,7 @@ class ApprovalScenarioAdminService:
                 target_id=str(row.id),
                 metadata={"scenario_code": row.scenario_code, "enabled": row.enabled},
                 operator_name=operator_user_name,
+                note=row.scenario_name,
             )
         return row.model_dump()
 
@@ -99,6 +100,7 @@ class ApprovalScenarioAdminService:
                 },
                 operator_name=operator_user_name,
                 object_name=updated.scenario_name,
+                note=updated.scenario_name,
                 ip_address=ip_address,
             )
         return updated.model_dump()
@@ -335,11 +337,15 @@ class ApprovalScenarioAdminService:
             created.append(row.model_dump())
         if operator_user_id is not None:
             scenario_code: str | None = None
+            scenario_name: str | None = None
             try:
                 scenario = await ApprovalScenarioRepository.get_scenario(flow.scenario_id)
-                scenario_code = scenario.scenario_code if scenario else None
+                if scenario is not None:
+                    scenario_code = scenario.scenario_code
+                    scenario_name = scenario.scenario_name
             except Exception:
                 scenario_code = None
+                scenario_name = None
             await AuditLogDao.ainsert_v2(
                 tenant_id=tenant_id,
                 operator_id=operator_user_id,
@@ -355,6 +361,7 @@ class ApprovalScenarioAdminService:
                 },
                 operator_name=operator_user_name,
                 object_name=flow.flow_name,
+                note=scenario_name,
                 ip_address=ip_address,
             )
         return {"flow_version_id": new_version.id, "version_no": new_version_no, "nodes": created}

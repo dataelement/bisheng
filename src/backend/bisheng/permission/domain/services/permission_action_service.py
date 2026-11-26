@@ -35,6 +35,14 @@ HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
 MAX_BATCH_CHECKS = 100
 
 
+def validate_permission_action(action: str) -> str:
+    """Accept current actions and the visibility relation at every boundary."""
+
+    if action != action.strip() or (action != "visible" and action not in REGISTERED_ACTION_CODES):
+        raise InvalidCatalogActionError(msg=f"Unknown permission action: {action}")
+    return action
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class PermissionActor:
     subject_type: Literal["user", "service_account"]
@@ -220,7 +228,9 @@ class F048PermissionService:
         action: str,
     ) -> bool:
         started = perf_counter()
-        action = self._normalize_action(action)
+        action = validate_permission_action(action)
+        if action == "visible":
+            return await self.check_visible(actor, target)
         # F066: the tenant data-scope narrowing is an export control and must
         # win over every identity shortcut, so it is evaluated first.
         await self._enforce_data_scope_single(actor, target, action=action, started=started)
@@ -321,7 +331,9 @@ class F048PermissionService:
         targets: tuple[VerifiedPermissionTarget, ...],
         action: str,
     ) -> tuple[bool, ...]:
-        action = self._normalize_action(action)
+        action = validate_permission_action(action)
+        if action == "visible":
+            return await self.batch_check_visible(actor, targets)
         if len(targets) > MAX_BATCH_CHECKS:
             raise ValueError(f"BatchCheck accepts at most {MAX_BATCH_CHECKS} targets")
         results: list[bool | None] = [None] * len(targets)
@@ -661,7 +673,10 @@ class F048PermissionService:
         action: str,
         max_results: int,
     ) -> tuple[str, ...] | None:
-        action = self._normalize_action(action)
+        action = validate_permission_action(action)
+        if action == "visible":
+            result = await self.list_visible_objects(actor, resource_type=resource_type, max_results=max_results)
+            return result.object_ids
         if actor.super_admin or actor.current_tenant_id in (actor.tenant_admin_tenant_ids):
             return None
         await self._catalog.ensure_runtime_ready()
@@ -702,7 +717,7 @@ class F048PermissionService:
         """
 
         await self._catalog.ensure_runtime_ready()
-        return await self._catalog.effective_actions(resource_type)
+        return tuple(validate_permission_action(code) for code in await self._catalog.effective_actions(resource_type))
 
     @staticmethod
     def _handle_stale_projection(
@@ -788,13 +803,6 @@ class F048PermissionService:
             )
             denied.update(index for index, rid in items if rid not in owned)
         return frozenset(denied)
-
-    @staticmethod
-    def _normalize_action(action: str) -> str:
-        normalized = action.strip()
-        if normalized != action or normalized == "visible" or normalized not in REGISTERED_ACTION_CODES:
-            raise InvalidCatalogActionError(msg=f"Unknown permission action: {action}")
-        return normalized
 
     async def _identity_shortcut(
         self,

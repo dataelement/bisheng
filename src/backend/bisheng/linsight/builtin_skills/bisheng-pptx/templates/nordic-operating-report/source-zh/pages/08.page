@@ -1,0 +1,557 @@
+pageType: process
+background:
+  type: solid
+  color: $mist
+notes: |
+  下一阶段竞争能力是一套跨职能经营系统：需求信号选择国家和品类，商品毛利管理供给，内容与客户资产推动复购，仓配售后兑现体验，合规与现金约束扩张节奏。
+elements:
+  - elementId: cap-navy-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 10
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $navy
+    border:
+      color: $navy
+      width: 0
+  - elementId: cap-title-rule
+    elementType: line
+    bounds:
+      - 46
+      - 118
+      - 868
+      - 1
+    viewBox:
+      - 868
+      - 1
+    points: 0,0 868,0
+    border:
+      color: $rule
+      width: 0.9
+  - elementId: cap-header-field
+    elementType: shape
+    bounds:
+      - 46
+      - 144
+      - 868
+      - 34
+    shapeName: rect
+    fill:
+      type: solid
+      color: $navy
+    border:
+      color: $navy
+      width: 0
+  - elementId: cap-row-1
+    elementType: line
+    bounds:
+      - 46
+      - 226
+      - 868
+      - 1
+    viewBox:
+      - 868
+      - 1
+    points: 0,0 868,0
+    border:
+      color: $rule
+      width: 0.7
+  - elementId: cap-row-2
+    elementType: line
+    bounds:
+      - 46
+      - 286
+      - 868
+      - 1
+    viewBox:
+      - 868
+      - 1
+    points: 0,0 868,0
+    border:
+      color: $rule
+      width: 0.7
+  - elementId: cap-row-3
+    elementType: line
+    bounds:
+      - 46
+      - 346
+      - 868
+      - 1
+    viewBox:
+      - 868
+      - 1
+    points: 0,0 868,0
+    border:
+      color: $rule
+      width: 0.7
+  - elementId: cap-row-4
+    elementType: line
+    bounds:
+      - 46
+      - 406
+      - 868
+      - 1
+    viewBox:
+      - 868
+      - 1
+    points: 0,0 868,0
+    border:
+      color: $rule
+      width: 0.7
+  - elementId: cap-mark-1
+    elementType: shape
+    bounds:
+      - 46
+      - 190
+      - 8
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: cap-mark-2
+    elementType: shape
+    bounds:
+      - 46
+      - 250
+      - 8
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $navy
+    border:
+      color: $navy
+      width: 0
+  - elementId: cap-mark-3
+    elementType: shape
+    bounds:
+      - 46
+      - 310
+      - 8
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: cap-mark-4
+    elementType: shape
+    bounds:
+      - 46
+      - 370
+      - 8
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $clay
+    border:
+      color: $clay
+      width: 0
+  - elementId: cap-mark-5
+    elementType: shape
+    bounds:
+      - 46
+      - 430
+      - 8
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $navy
+    border:
+      color: $navy
+      width: 0
+  - elementId: cap-kicker
+    elementType: text
+    bounds:
+      - 46
+      - 24
+      - 520
+      - 16
+    content:
+      text: NEXT-STAGE CAPABILITY SYSTEM
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8
+      bold: true
+      letterSpacing: 1.05
+      color: $muted
+  - elementId: cap-title
+    elementType: text
+    bounds:
+      - 46
+      - 52
+      - 850
+      - 42
+    content:
+      style: $title
+      text: 下一阶段竞争，比拼跨职能经营系统而非单点效率
+  - elementId: cap-h1
+    elementType: text
+    bounds:
+      - 66
+      - 153
+      - 180
+      - 18
+    content:
+      text: 经营模块
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $white
+  - elementId: cap-h2
+    elementType: text
+    bounds:
+      - 250
+      - 153
+      - 400
+      - 18
+    content:
+      text: 必须联通的决策对象
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $white
+  - elementId: cap-h3
+    elementType: text
+    bounds:
+      - 660
+      - 153
+      - 120
+      - 18
+    content:
+      text: 核心输出
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $white
+  - elementId: cap-h4
+    elementType: text
+    bounds:
+      - 798
+      - 153
+      - 100
+      - 18
+    content:
+      text: 管理频率
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $white
+      align:
+        - right
+        - top
+  - elementId: cap-r1-a
+    elementType: text
+    bounds:
+      - 66
+      - 190
+      - 164
+      - 26
+    content:
+      text: 01　需求信号
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $ink
+  - elementId: cap-r1-b
+    elementType: text
+    bounds:
+      - 250
+      - 190
+      - 392
+      - 28
+    content:
+      text: 国家 × 品类 × 转化 × 复购 × 退货
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $ink
+  - elementId: cap-r1-c
+    elementType: text
+    bounds:
+      - 660
+      - 190
+      - 120
+      - 28
+    content:
+      text: 进入优先级
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: cap-r1-d
+    elementType: text
+    bounds:
+      - 806
+      - 190
+      - 92
+      - 28
+    content:
+      text: 周
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - top
+  - elementId: cap-r2-a
+    elementType: text
+    bounds:
+      - 66
+      - 250
+      - 164
+      - 26
+    content:
+      text: 02　商品毛利
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $ink
+  - elementId: cap-r2-b
+    elementType: text
+    bounds:
+      - 250
+      - 250
+      - 392
+      - 28
+    content:
+      text: 到岸成本 × 价格带 × 组合 × 补货
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $ink
+  - elementId: cap-r2-c
+    elementType: text
+    bounds:
+      - 660
+      - 250
+      - 120
+      - 28
+    content:
+      text: 可持续单品
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: cap-r2-d
+    elementType: text
+    bounds:
+      - 806
+      - 250
+      - 92
+      - 28
+    content:
+      text: 月
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - top
+  - elementId: cap-r3-a
+    elementType: text
+    bounds:
+      - 66
+      - 310
+      - 164
+      - 26
+    content:
+      text: 03　客户资产
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $ink
+  - elementId: cap-r3-b
+    elementType: text
+    bounds:
+      - 250
+      - 310
+      - 392
+      - 28
+    content:
+      text: 本地表达 × 会员数据 × 复购 × 口碑
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $ink
+  - elementId: cap-r3-c
+    elementType: text
+    bounds:
+      - 660
+      - 310
+      - 120
+      - 28
+    content:
+      text: 客户终身价值
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: cap-r3-d
+    elementType: text
+    bounds:
+      - 806
+      - 310
+      - 92
+      - 28
+    content:
+      text: 月
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - top
+  - elementId: cap-r4-a
+    elementType: text
+    bounds:
+      - 66
+      - 370
+      - 164
+      - 26
+    content:
+      text: 04　履约体验
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $ink
+  - elementId: cap-r4-b
+    elementType: text
+    bounds:
+      - 250
+      - 370
+      - 392
+      - 28
+    content:
+      text: 库存可用率 × 时效承诺 × 退换货 × 售后
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $ink
+  - elementId: cap-r4-c
+    elementType: text
+    bounds:
+      - 660
+      - 370
+      - 120
+      - 28
+    content:
+      text: 体验确定性
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: cap-r4-d
+    elementType: text
+    bounds:
+      - 806
+      - 370
+      - 92
+      - 28
+    content:
+      text: 周
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - top
+  - elementId: cap-r5-a
+    elementType: text
+    bounds:
+      - 66
+      - 430
+      - 164
+      - 26
+    content:
+      text: 05　合规现金
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $ink
+  - elementId: cap-r5-b
+    elementType: text
+    bounds:
+      - 250
+      - 430
+      - 392
+      - 28
+    content:
+      text: 税务认证 × 数据责任 × 库存资金 × 审计
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $ink
+  - elementId: cap-r5-c
+    elementType: text
+    bounds:
+      - 660
+      - 430
+      - 120
+      - 28
+    content:
+      text: 扩张边界
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: cap-r5-d
+    elementType: text
+    bounds:
+      - 806
+      - 430
+      - 92
+      - 28
+    content:
+      text: 月 / 季
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - top
+  - elementId: cap-close
+    elementType: text
+    bounds:
+      - 46
+      - 482
+      - 790
+      - 22
+    content:
+      text: 经营系统｜同一套节奏联通前台、中台和后台，才能把单市场经验复制到下一市场。
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      color: $navy
+  - elementId: cap-page
+    elementType: text
+    bounds:
+      - 868
+      - 506
+      - 46
+      - 14
+    content:
+      text: 16—08
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $ink
+      align:
+        - right
+        - bottom

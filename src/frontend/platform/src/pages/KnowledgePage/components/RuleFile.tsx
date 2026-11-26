@@ -11,7 +11,6 @@ import { KnowledgeHint } from "./KnowledgeTooltip";
 
 import { cn } from "@/utils";
 
-
 // Utility function: Convert 1/0 or boolean values to standard boolean
 const toBoolean = (value) => {
     if (value === undefined || value === null) return false;
@@ -309,7 +308,11 @@ export default function RuleFile({
                                     </div>
                                 </div>
                                 <div className="pt-2">
-                                    <FileUploadSplitStrategy data={strategies} onChange={handleStrategiesChange} />
+                                    <FileUploadSplitStrategy
+                                        data={strategies}
+                                        onChange={handleStrategiesChange}
+                                        compact={showPreview}
+                                    />
                                 </div>
                             </div>
                         )}

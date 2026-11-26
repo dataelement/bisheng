@@ -11,6 +11,7 @@ import { Switch } from '@bisheng/ui';
 import { getGuestLinkApi, GuestLinkKind, GuestLinkSettings, patchGuestLinkApi } from '@/controllers/API/guestLink';
 import { showApiError } from '@/controllers/request';
 import { copyText } from '@/utils';
+import { buildEmbedCode } from './embedCode';
 import { Outlined } from 'bisheng-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -282,26 +283,12 @@ const NoLoginLink = ({ type, noLogin = false }) => {
     return noLogin ? noLoginUrl : loginUrl;
   }, [type, noLogin, id])
 
-  const embedCode = useMemo(() => {
-    if (embed) return `<script
-  src="${location.origin}/iframe.js"
-  id="chatbot-iframe-script"
-  data-bot-src="${url}"
-  data-drag="true"
-  data-open-icon="${location.origin}/assets/user.png"
-  data-close-icon="${location.origin}/logo-small-dark.png"
-  defer
-></script>
-<script>console.log("chat ready")</script>
-`
-
-    return `<iframe
-  src="${url}"
-  style="width: 100%; height: 100%; min-height: 700px"
-  frameborder="0"
-  allow="fullscreen;clipboard-write">
-</iframe>`
-  }, [embed, url])
+  const embedCode = useMemo(() => buildEmbedCode({
+    style: embed ? 'script' : 'iframe',
+    chatUrl: url,
+    origin: location.origin,
+    baseUrl: __APP_ENV__.BASE_URL,
+  }), [embed, url])
 
   return (
     <section className='pb-20 max-w-[1600px]'>

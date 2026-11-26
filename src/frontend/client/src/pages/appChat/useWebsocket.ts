@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 "use client";
 import { useEffect, useRef } from "react";
+import { referenceErrorMessage } from "@bisheng/api-client";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { NotificationSeverity } from "~/common";
 import { useLocalize, useToast } from "~/hooks";
@@ -19,6 +20,7 @@ import {
   syncWorkflowActivation,
 } from "./workflowAutoRerun";
 import type { WorkflowCloseAction } from "./workflowAutoRerun";
+import { isMemoryFrame, readMemoryFrame, takeQueuedMemoryFlags } from "./appMemory";
 
 export const AppLostMessage = "11111";
 const unavailableCodes = new Set(["10421", "13002", "13010", AppLostMessage]);
@@ -229,6 +231,14 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
   const handleMessages = (data, _ws) => {
     // Keep terminal availability errors stable across queued close/input frames.
     if (isUnavailable()) return;
+    // F132: memory signal — pin it on the answer (assistant only); never a chat row itself.
+    if (isMemoryFrame(data)) {
+      const memory = readMemoryFrame(data);
+      if (memory && helpers.flow.flow_type !== 10) {
+        helpers.message.attachMemory(helpers.chatId, memory.flags, memory.messageId);
+      }
+      return;
+    }
     // 过滤无效数据
     if (data.category === "end_cover" && data.type !== "end_cover") {
       return;
@@ -273,33 +283,26 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
 
     // messages
     if (data.category === "error" || data.type === "error") {
-      let code = 0,
-        message = "";
-      if (typeof data.message === "string") {
-        // 兼容助手错误信息
-        const _data = JSON.parse(data.message);
-        code = _data.status_code;
-        message = _data.status_message;
-      } else {
-        code = data.message.status_code;
-        message = data.message.status_message;
-      }
+      const envelope = typeof data.message === "string" ? JSON.parse(data.message) : data.message;
+      const code = envelope.status_code;
+      const message = envelope.status_message;
+      const referenceMessage = referenceErrorMessage(envelope, (key, values) => localize(`api_errors.${key}`, values));
       if (unavailableCodes.has(String(code))) {
         unavailableRef.current[helpers.chatId] = String(code);
         restartCallbacks.delete(helpers.chatId);
         sessionInfoMap.delete(helpers.chatId);
-        helpers.handleMsgError({ code: String(code), data: data.message?.data });
+        helpers.handleMsgError({ code: String(code), data: envelope?.data });
         helpers.message.closeAllLogMsg(helpers.chatId);
       }
       if (![10421, 13002].includes(code)) {
         showToast({
           message:
-            code === 500
+            referenceMessage || (code === 500
               ? message
               : localize(`api_errors.${String(code)}`, {
-                  ...(data.message?.data || {}),
+                  ...(envelope?.data || {}),
                   defaultValue: localize("api_errors.fallback"),
-                }),
+                })),
           severity: NotificationSeverity.WARNING,
         });
       }
@@ -347,6 +350,11 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
         helpers.message.skillCloseMsg();
         // Generate title for new conversations after first round completes
         // triggerGenTitle()
+      }
+      // F132: a memory signal that beat its answer row lands once the round ends.
+      if (["end", "end_cover", "close"].includes(data.type)) {
+        const queued = takeQueuedMemoryFlags(helpers.chatId);
+        if (queued) helpers.message.attachMemory(helpers.chatId, queued);
       }
 
       return;

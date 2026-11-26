@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
@@ -83,10 +84,17 @@ export function DshLogin() {
                         <p className="break-all text-sm text-muted-foreground">{base}</p>
                     </>
                 )}
-                {invalid || failed ? (
+                {invalid ? (
+                    <p role="alert">{t("dsh.unavailable")}</p>
+                ) : authId && !user?.user_id ? (
+                    <>
+                        <p role="status">{t("dsh.loginRequired")}</p>
+                        <Button variant="link" onClick={handleLogin}>{t("dsh.login")}</Button>
+                    </>
+                ) : failed ? (
                     <p role="alert">{t("dsh.unavailable")}</p>
                 ) : !config ? (
-                    <p role="status">{t("dsh.loading")}</p>
+                    <LoadingState size="panel" label={t("dsh.loading")} />
                 ) : !config.enabled ? (
                     <p role="status">{t("dsh.disabled")}</p>
                 ) : (
@@ -110,8 +118,6 @@ export function DshLogin() {
                                     {t("dsh.copyServer")}
                                 </Button>
                             </>
-                        ) : !user?.user_id ? (
-                            <Button onClick={handleLogin}>{t("dsh.login")}</Button>
                         ) : (
                             <>
                                 {!completed && (

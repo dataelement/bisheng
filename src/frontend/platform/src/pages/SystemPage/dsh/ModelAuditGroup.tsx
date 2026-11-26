@@ -1,9 +1,12 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import "@/style/dsh-content-safety.css";
 import { Badge, Tag } from "@bisheng/ui";
 import type {
   AuditConversation,
+  AuditMessageFeedback,
   AuditQueryReadiness,
+  ModelAuditPage,
   ModelAuditQuery,
 } from "@/types/dshModelAudit";
 import { useId, useState } from "react";
@@ -11,6 +14,37 @@ import { useTranslation } from "react-i18next";
 import { DshPager, dshTime } from "./common";
 import { ModelAuditCard } from "./ModelAuditCard";
 import { useModelAudit } from "./useModelAudit";
+
+const feedbackCategories = [
+  "task-result",
+  "instruction-following",
+  "product-interaction",
+  "service-stability",
+  "resource-cost",
+  "security-privacy-permission",
+  "other",
+];
+
+export function ModelAuditFeedbackCounts({
+  likeCount,
+  dislikeCount,
+}: {
+  likeCount?: number;
+  dislikeCount?: number;
+}) {
+  const { t } = useTranslation();
+  if (!knownSafetyCount(likeCount) || !knownSafetyCount(dislikeCount)) return null;
+  return (
+    <>
+      {likeCount > 0 && (
+        <span>{t("dsh.modelAuditView.group_likes", { count: likeCount })}</span>
+      )}
+      {dislikeCount > 0 && (
+        <span>{t("dsh.modelAuditView.group_dislikes", { count: dislikeCount })}</span>
+      )}
+    </>
+  );
+}
 
 interface ModelAuditGroupProps {
   group: AuditConversation;
@@ -56,6 +90,10 @@ export function ModelAuditGroup({
             <span>
               {t("dsh.modelAuditView.group_count", { count: group.request_count })}
             </span>
+            <ModelAuditFeedbackCounts
+              likeCount={group.like_count}
+              dislikeCount={group.dislike_count}
+            />
             <span className={group.abnormal_count ? "text-destructive" : "text-success-foreground"}>
               {group.abnormal_count
                 ? t("dsh.modelAuditView.group_abnormal", { count: group.abnormal_count })
@@ -196,12 +234,40 @@ export function ModelAuditGroupRequests({
     setCursor(next);
     setRequestQuery({ ...query, cursor: next });
   };
+  const feedback = messageFeedback(page ?? undefined);
   return (
     <>
+      {feedback.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium">
+            {t("dsh.modelAuditView.feedback_heading")}
+          </h3>
+          <ul className="space-y-2">
+            {feedback.map((item) => (
+              <li key={item.message_id} className="break-all text-xs text-muted-foreground">
+                <span>{item.message_id}</span>
+                {item.rating && (
+                  <span>
+                    {" "}
+                    {t("dsh.modelAuditView.feedback.rating." + item.rating)}
+                  </span>
+                )}
+                {item.category && feedbackCategories.includes(item.category) && (
+                  <span>
+                    {" "}
+                    {t("dsh.modelAuditView.feedback.category." + item.category)}
+                  </span>
+                )}
+                {item.note && <p className="mt-1 whitespace-pre-wrap break-all">{item.note}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {failed ? (
         <p role="alert">{t("dsh.modelAuditView.loadError")}</p>
       ) : loading ? (
-        <p role="status">{t("dsh.loading")}</p>
+        <LoadingState size="panel" label={t("dsh.loading")} />
       ) : !page?.items.length ? (
         <p>{t("dsh.modelAuditView.empty")}</p>
       ) : (
@@ -235,5 +301,13 @@ export function ModelAuditGroupRequests({
         }}
       />
     </>
+  );
+}
+
+function messageFeedback(page?: ModelAuditPage): AuditMessageFeedback[] {
+  if (!Array.isArray(page?.message_feedback)) return [];
+  return page.message_feedback.filter(
+    (item): item is AuditMessageFeedback & { message_id: string } =>
+      typeof item?.message_id === "string" && item.message_id.length > 0,
   );
 }

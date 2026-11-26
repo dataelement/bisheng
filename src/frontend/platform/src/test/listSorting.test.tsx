@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({ templates: vi.fn(), saveTemplate: vi.fn() }));
 vi.mock('@/contexts/userContext', async () => ({
   userContext: (await import('react')).createContext({ user: { is_child_admin: true } }),
 }));
+vi.mock('@/components/bs-comp/selectComponent/useKnowledgeCandidates', () => ({ useKnowledgeCandidates: () => ({ items: [], loaded: false, scopeKey: 'sorting', error: null, loading: false, hasMore: false, search: () => {} }) }));
 vi.mock('@/controllers/API', () => ({
   readFileLibDatabase: vi.fn(async () => ({ data: [] })),
   readTempsDatabase: api.templates,
@@ -55,10 +56,10 @@ it('preserves tool identities, children and default selection when sorting', asy
   expect(onChange).toHaveBeenCalledWith([tools[1], tools[0]]);
 });
 
-it('normalises knowledge base sort positions without changing default flags', async () => {
+it('normalises knowledge base sort positions without changing composer visibility', async () => {
   const orgKbs = [
-    { id: 1, name: 'Knowledge One', default_checked: true, sort_order: 0 },
-    { id: 2, name: 'Knowledge Two', default_checked: false, sort_order: 1 },
+    { id: 1, name: 'Knowledge One', show_in_composer: true, sort_order: 0 },
+    { id: 2, name: 'Knowledge Two', show_in_composer: false, sort_order: 1 },
   ];
   const onChange = vi.fn();
   render(<StrictMode><OrgKbConfig orgKbs={orgKbs} onChange={onChange} /></StrictMode>);
@@ -78,8 +79,8 @@ it('emits recommended app IDs in the dragged order after details load', async ()
 
 it('preserves split rule regex, position and ID after sorting', async () => {
   const rules = [
-    { id: 'a', regex: '\\n', position: 'after', rule: 'Newline' },
-    { id: 'b', regex: 'HEADER', position: 'before', rule: 'Heading' },
+    { id: 'a', regex: '\\n', position: 'after' as const, rule: 'Newline' },
+    { id: 'b', regex: 'HEADER', position: 'before' as const, rule: 'Heading' },
   ];
   const onChange = vi.fn();
   render(<StrictMode><FileUploadSplitStrategy data={rules} onChange={onChange} /></StrictMode>);
@@ -91,8 +92,8 @@ it('preserves split rule regex, position and ID after sorting', async () => {
 it('does not persist a split rule order when dropped in place', async () => {
   const onChange = vi.fn();
   render(<StrictMode><FileUploadSplitStrategy data={[
-    { id: 'a', regex: '\\n', position: 'after', rule: 'Newline' },
-    { id: 'b', regex: 'HEADER', position: 'before', rule: 'Heading' },
+    { id: 'a', regex: '\\n', position: 'after' as const, rule: 'Newline' },
+    { id: 'b', regex: 'HEADER', position: 'before' as const, rule: 'Heading' },
   ]} onChange={onChange} /></StrictMode>);
   await keyboardDrag(0, false, false);
   expect(onChange).not.toHaveBeenCalled();

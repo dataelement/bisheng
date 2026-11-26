@@ -1,0 +1,145 @@
+pageType: content
+background:
+  type: solid
+  color: '#F1E6CB'
+notes: Native PPTD adaptation of Zara Zhang / Sakura Chroma. MIT. Example figures are illustrative.
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 280
+      - 99
+      - 625
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E54489'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 280
+      - 159
+      - 625
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F09131'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s3
+    elementType: shape
+    bounds:
+      - 280
+      - 219
+      - 625
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F0BC2A'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s4
+    elementType: shape
+    bounds:
+      - 280
+      - 279
+      - 625
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#3D9F47'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s5
+    elementType: shape
+    bounds:
+      - 280
+      - 339
+      - 625
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#3F8BC4'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s6
+    elementType: shape
+    bounds:
+      - 48
+      - 235
+      - 776
+      - 119
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F1E6CB'
+    border:
+      width: 1
+      color: '#3A2516'
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 66
+      - 251
+      - 740
+      - 87
+    content:
+      text: 做出来，再学习。
+      fontFamily:
+        latin: Arial Narrow
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 51
+      color: '#3A2516'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      color: '#3A2516'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '12'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#3A2516'
+      lineHeight: 1.12
+      bold: false

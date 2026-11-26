@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Shared deployment helpers. Only this checked-in file is sourced, never .env.
 
+# Credentials stay outside the code tree. Tests may redefine this function.
+credential_store_path() {
+  printf '%s\n' /opt/bisheng/.credential-security
+}
+
 env_get() { awk -v MODE=get -v KEY="$2" -f "${SCRIPT_DIR}/lib/env.awk" "$1"; }
 
 env_set() {
@@ -20,14 +25,18 @@ env_set() {
 }
 
 set_gateway_profile() {
-  local profiles="$1" enabled="$2"
-  awk -v profiles="$profiles" -v enabled="$enabled" 'BEGIN {
+  set_optional_profile "$1" "$2" gateway
+}
+
+set_optional_profile() {
+  local profiles="$1" enabled="$2" profile="$3"
+  awk -v profiles="$profiles" -v enabled="$enabled" -v profile="$profile" 'BEGIN {
     count = split(profiles, items, /[[:space:],]+/)
     for (i = 1; i <= count; i++) {
       item = items[i]
-      if (item != "" && item != "gateway" && !seen[item]++) result = result (result ? "," : "") item
+      if (item != "" && item != profile && !seen[item]++) result = result (result ? "," : "") item
     }
-    if (enabled == "true") result = result (result ? "," : "") "gateway"
+    if (enabled == "true") result = result (result ? "," : "") profile
     printf "%s", result
   }'
 }

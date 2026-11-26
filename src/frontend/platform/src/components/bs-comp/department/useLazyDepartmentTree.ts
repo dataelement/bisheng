@@ -4,10 +4,11 @@ import {
   getDepartmentPathTreeApi,
   searchDepartmentsApi,
 } from "@/controllers/API/department"
+import { managementRequestScope } from "@/controllers/managementScope"
 import { showApiError } from "@/controllers/request"
 import { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useEffect, useRef, useState, type InputHTMLAttributes } from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { isCancelledError, useQueryClient } from "@tanstack/react-query"
 
 /**
  * F038: per-layer lazy department tree (browse / server search / locate), shared
@@ -49,6 +50,8 @@ export interface LazyDepartmentTree {
   expanded: Set<number>
   loadingIds: Set<number>
   initialLoading: boolean
+  hasLayerError: (parentId: number | null) => boolean
+  retryLayer: (parentId: number | null) => void
   /** Expand/collapse a node, loading its child layer on first expand. */
   toggle: (node: DepartmentTreeNode) => void
   /** Invalidate + refetch one layer after a create/move/archive (AC-05). Pass
@@ -71,7 +74,7 @@ export interface LazyDepartmentTree {
   truncated: boolean
   matchedIds: Set<number>
   // locate / echo a deep value
-  reveal: (deptInternalId: number) => Promise<number[]>
+  reveal: (deptInternalId: number, options?: { refresh?: boolean }) => Promise<number[]>
 }
 
 function collectMatched(roots: DepartmentTreeNode[], out: Set<number>) {
@@ -106,7 +109,15 @@ export function useLazyDepartmentTree(
 ): LazyDepartmentTree {
   const { includeArchived = false, autoLoad = true, autoExpandRoots = false, excludeSubtreePath } = options
   const queryClient = useQueryClient()
-  const cacheKey = options.cacheKey ?? `dept:${includeArchived}`
+  const [managementTenant, setManagementTenant] = useState<number | null>(() => managementRequestScope())
+  useEffect(() => {
+    const syncTenant = () => setManagementTenant(managementRequestScope())
+    window.addEventListener("bisheng:management-scope-changed", syncTenant)
+    return () => window.removeEventListener("bisheng:management-scope-changed", syncTenant)
+  }, [])
+  // The department APIs follow the selected management view. A shared cache key
+  // would keep showing the previous tenant's departments after switching to Root.
+  const cacheKey = options.cacheKey ?? `dept:${includeArchived}:${managementTenant ?? "home"}`
 
   // Effective data source, kept in a ref so the fetch callbacks stay stable even
   // if the caller passes inline (non-memoized) fetchers. Defaults to the platform
@@ -127,6 +138,7 @@ export function useLazyDepartmentTree(
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set())
   const [initialLoading, setInitialLoading] = useState(autoLoad)
+  const [rootRetry, setRootRetry] = useState(0)
 
   const search = useSubjectSearch<DepartmentSearchResult>({
     emptyByDefault: true,
@@ -141,6 +153,10 @@ export function useLazyDepartmentTree(
   // Refs so callbacks stay stable yet read live state (avoids re-fetch storms).
   const childIdsRef = useRef(childIds)
   childIdsRef.current = childIds
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+  const activeKeyRef = useRef(cacheKey)
+  activeKeyRef.current = cacheKey
   // The cacheKey (data source) the current normalized state belongs to, so a
   // source switch on a still-mounted hook drops the previous scope's tree.
   const loadedKeyRef = useRef<string | null>(null)
@@ -151,7 +167,10 @@ export function useLazyDepartmentTree(
           [cacheKey, "children", parentId],
           () => sourceRef.current.children(parentId),
           { staleTime: 30_000 }
-        )
+        ).catch((error: unknown) => {
+          if (isCancelledError(error)) return null
+          throw error
+        })
       return (res as DepartmentTreeNode[] | null) ?? null
     },
     [queryClient, cacheKey]
@@ -159,6 +178,7 @@ export function useLazyDepartmentTree(
 
   const storeLayer = useCallback(
     (parentId: number | null, layer: DepartmentTreeNode[]) => {
+      if (activeKeyRef.current !== cacheKey) return
       const key = parentId ?? ROOT_KEY
       const visible = excludeSubtreePath
         ? layer.filter((n) => !(n.path && n.path.startsWith(excludeSubtreePath)))
@@ -170,52 +190,72 @@ export function useLazyDepartmentTree(
       })
       setChildIds((prev) => ({ ...prev, [key]: visible.map((n) => n.id) }))
     },
-    [excludeSubtreePath]
+    [cacheKey, excludeSubtreePath]
   )
 
   const loadChildren = useCallback(
-    async (parentId: number): Promise<void> => {
-      if (childIdsRef.current[parentId]) return // already loaded
+    async (parentId: number, retry = false): Promise<void> => {
+      if (activeKeyRef.current !== cacheKey || (!retry && childIdsRef.current[parentId])) return
       setLoadingIds((prev) => new Set(prev).add(parentId))
       try {
-      const layer = await fetchLayer(parentId)
-      if (layer) storeLayer(parentId, layer)
+        if (retry) await queryClient.invalidateQueries([cacheKey, "children", parentId])
+        if (activeKeyRef.current !== cacheKey) return
+        const layer = await fetchLayer(parentId)
+        if (layer) storeLayer(parentId, layer)
       } finally {
-      setLoadingIds((prev) => {
-        const next = new Set(prev)
-        next.delete(parentId)
-        return next
-      })
+        if (activeKeyRef.current === cacheKey) {
+          setLoadingIds((prev) => {
+            const next = new Set(prev)
+            next.delete(parentId)
+            return next
+          })
+        }
       }
     },
-    [fetchLayer, storeLayer]
+    [cacheKey, fetchLayer, queryClient, storeLayer]
   )
 
   const toggle = useCallback(
     (node: DepartmentTreeNode) => {
       if (!node.has_children) return
-      setExpanded((prev) => {
-        const next = new Set(prev)
-        if (next.has(node.id)) {
-          next.delete(node.id)
-        } else {
-          next.add(node.id)
-          void loadChildren(node.id).catch(showApiError)
-        }
-        return next
-      })
+      const next = new Set(expandedRef.current)
+      if (next.has(node.id)) next.delete(node.id)
+      else {
+        next.add(node.id)
+        void loadChildren(node.id).catch(showApiError)
+      }
+      expandedRef.current = next
+      setExpanded(next)
     },
     [loadChildren]
   )
 
   const reloadLayer = useCallback(
     async (parentId: number | null) => {
-      await queryClient.invalidateQueries([cacheKey, "children", parentId])
+      const queryKey = [cacheKey, "children", parentId]
+      await queryClient.cancelQueries({ queryKey, exact: true })
+      await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" })
+      if (activeKeyRef.current !== cacheKey) return
       const layer = await fetchLayer(parentId)
       if (layer) storeLayer(parentId, layer)
     },
     [queryClient, cacheKey, fetchLayer, storeLayer]
   )
+
+  const retryLayer = (parentId: number | null) => {
+    if (parentId !== null) {
+      void loadChildren(parentId, true).catch(showApiError)
+      return
+    }
+    if (!childIdsRef.current[ROOT_KEY]) {
+      setRootRetry((value) => value + 1)
+      return
+    }
+    setInitialLoading(true)
+    void reloadLayer(null).catch(showApiError).finally(() => {
+      if (activeKeyRef.current === cacheKey) setInitialLoading(false)
+    })
+  }
 
   const refreshAll = useCallback(async () => {
     await queryClient.invalidateQueries([cacheKey, "children"])
@@ -243,52 +283,53 @@ export function useLazyDepartmentTree(
       setNodeMap({})
       setChildIds({})
       setExpanded(new Set())
+      setLoadingIds(new Set())
     }
     loadedKeyRef.current = cacheKey
     let cancelled = false
     setInitialLoading(true)
     ;(async () => {
       const roots = await fetchLayer(null)
-      if (cancelled || !roots) {
-        setInitialLoading(false)
-        return
-      }
+      if (cancelled || !roots) return
       storeLayer(null, roots)
       if (autoExpandRoots) {
         setExpanded(new Set(roots.filter((n) => n.has_children).map((n) => n.id)))
         await Promise.all(roots.filter((n) => n.has_children).map((n) => loadChildren(n.id)))
       }
-      setInitialLoading(false)
     })().catch(showApiError).finally(() => { if (!cancelled) setInitialLoading(false) })
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLoad, cacheKey])
+  }, [autoLoad, cacheKey, rootRetry])
 
   const reveal = useCallback(
-    async (deptInternalId: number): Promise<number[]> => {
+    async (deptInternalId: number, { refresh = false } = {}): Promise<number[]> => {
+      if (activeKeyRef.current !== cacheKey) return []
       const res = await sourceRef.current.pathTree(deptInternalId)
       const tree = (res as DepartmentSearchResult | null) ?? null
-      if (!tree || !tree.roots.length) return []
+      if (activeKeyRef.current !== cacheKey || !tree?.roots.length) return []
       const chain = chainOf(tree.roots)
+      const ancestors = chain.slice(0, -1)
       // Ensure the root layer + every ancestor's FULL child layer is loaded, then
       // expand the chain so the target is reachable with its real siblings.
-      if (!childIdsRef.current[ROOT_KEY]) {
+      // After a create, refresh both the parent row and its child list. The row
+      // may still be cached as a leaf until its containing layer is refreshed.
+      if (refresh && ancestors.length < 2) {
+        await reloadLayer(null)
+      } else if (!childIdsRef.current[ROOT_KEY]) {
         const roots = await fetchLayer(null)
         if (roots) storeLayer(null, roots)
       }
-      for (let i = 0; i < chain.length - 1; i++) {
-        await loadChildren(chain[i])
+      for (const [index, parentId] of ancestors.entries()) {
+        if (refresh && index >= ancestors.length - 2) await reloadLayer(parentId)
+        else await loadChildren(parentId)
       }
-      setExpanded((prev) => {
-        const next = new Set(prev)
-        for (let i = 0; i < chain.length - 1; i++) next.add(chain[i])
-        return next
-      })
+      if (activeKeyRef.current !== cacheKey) return []
+      setExpanded((prev) => new Set([...prev, ...ancestors]))
       return chain
     },
-    [fetchLayer, storeLayer, loadChildren]
+    [cacheKey, fetchLayer, storeLayer, loadChildren, reloadLayer]
   )
 
   const matchedIds = new Set<number>()
@@ -301,6 +342,8 @@ export function useLazyDepartmentTree(
     expanded,
     loadingIds,
     initialLoading,
+    hasLayerError: (parentId) => queryClient.getQueryState([cacheKey, "children", parentId])?.status === "error",
+    retryLayer,
     toggle,
     reloadLayer,
     refreshAll,

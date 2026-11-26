@@ -15,6 +15,12 @@ export interface MarketPlugin {
     current_version_id: string | null; revision: number; disabled: boolean;
     updated_at: string; versions: MarketVersion[];
 }
+export type MarketPluginRow = MarketPlugin | (
+    Pick<MarketPlugin, "id" | "display_name" | "description" | "updated_at" | "current_version_id"> & {
+        versions: (Pick<MarketVersion, "id" | "version"> & { manifest: Pick<MarketVersion["manifest"], "targets"> })[];
+    }
+);
+export interface MarketPage<Row> { data: Row[]; total: number; read_only?: boolean }
 export interface MarketImport { id: string; status: "validating" | "completed" | "pending" | "failed"; error: string; created_at: string }
 const tenantHeaders = (tenant: number) => ({ "x-dsh-market-tenant": String(tenant) });
 const base = "/api/v1/dsh/market/admin";
@@ -29,7 +35,7 @@ export const getMarketInstallPolicy = (tenant: number, signal?: AbortSignal) =>
 export const setMarketInstallPolicy = (tenant: number, field: InstallPolicyField, allowed: boolean) =>
     request.patch<unknown, MarketInstallPolicy>(`${base}/install-policy`, { field, allowed }, { headers: tenantHeaders(tenant) });
 export const listMarketPlugins = (params: { page: number }, tenant: number, signal?: AbortSignal) =>
-    request.get<unknown, { data: MarketPlugin[]; total: number }>(`${base}/plugins`, { params, signal, headers: tenantHeaders(tenant) });
+    request.get<unknown, MarketPage<MarketPluginRow>>(`${base}/plugins`, { params, signal, headers: tenantHeaders(tenant) });
 export const getMarketContext = () => request.get<unknown, { tenant_id: number }>(`${base}/context`);
 export const getMarketPlugin = (id: string, tenant: number) => request.get<unknown, MarketPlugin>(`${base}/plugins/${id}`, { headers: tenantHeaders(tenant) });
 export const deleteMarketPlugin = (plugin: MarketPlugin) =>
@@ -46,7 +52,7 @@ export const importMarketBundle = (file: File, tenant: number, signal: AbortSign
 
 export interface MarketPreview {
     name: string; display_name: string; current_version: string | null; incoming_version: string;
-    allowed: boolean; reason: string; duplicate: boolean;
+    allowed: boolean; reason: string; duplicate: boolean; overwrite?: boolean;
 }
 export const previewMarketBundle = (file: File, tenant: number, signal: AbortSignal) => {
     const body = new FormData(); body.append("file", file);

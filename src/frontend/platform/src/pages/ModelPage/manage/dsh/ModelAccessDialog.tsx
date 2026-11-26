@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { Button } from "@bisheng/ui";
 import { Switch } from "@bisheng/ui";
@@ -26,6 +27,8 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
     const [error, setError] = useState<string | null>(null)
     const [revision, setRevision] = useState(0)
     const modelId = model?.id
+    // An empty grant is allowed: it hides the model from every member of the tenant, administrators included.
+    const emptyGrant = !!value && !value.everyone && value.subjects.length === 0
 
     useEffect(() => {
         setValue(null)
@@ -69,11 +72,12 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
             <DialogHeader className="mb-4"><DialogTitle>{t('dsh.unified.visibility')} · {model?.name}</DialogTitle><DialogDescription className="sr-only">{t('dsh.unified.visibilityHelp')}</DialogDescription></DialogHeader>
             {error && <p role="alert">{t(error)}</p>}
             {!value ? <Button variant="outlined" onClick={() => setRevision(old => old + 1)}>
-                {t(error ? 'dsh.refresh' : 'dsh.loading')}
+                {error ? t('dsh.refresh') : <LoadingState size="inline" label={t('dsh.loading')} />}
             </Button> : <>
+                <p className="text-xs text-muted-foreground">{t('model:model.visibilityTenantHelp')}</p>
                 <div className="flex shrink-0 items-center justify-between gap-4 rounded-lg border px-4 py-3">
                     <div className="min-w-0 space-y-1">
-                        <label htmlFor="model-visible-to-everyone" className="cursor-pointer text-sm font-medium">{t('dsh.unified.everyoneVisible')}</label>
+                        <label htmlFor="model-visible-to-everyone" className="cursor-pointer text-sm font-medium">{t('model:model.currentTenantEveryone')}</label>
                         <p id="model-visibility-description" className="text-xs text-muted-foreground">
                             {t(value.everyone ? 'dsh.unified.everyoneVisibleHelp' : 'dsh.unified.selectedVisibleHelp')}
                         </p>
@@ -88,6 +92,7 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
                         options={options} disabled={saving}
                         onChange={next => { setValue(next); setDirty(true) }} />
                 </section>}
+                {emptyGrant && <p role="note" className="mt-3 text-xs text-muted-foreground">{t('dsh.unified.selectedVisibleEmpty')}</p>}
                 <div className="mt-4 flex shrink-0 justify-end gap-2">
                     <Button variant="outlined" onClick={close} disabled={saving}>{t('dsh.unified.cancel')}</Button>
                     <Button onClick={save} disabled={saving || !dirty}>

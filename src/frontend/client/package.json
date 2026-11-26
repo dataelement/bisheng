@@ -1,6 +1,6 @@
 {
   "name": "bishengchat",
-  "version": "3.0.2",
+  "version": "3.1.0-beta2",
   "description": "",
   "type": "module",
   "scripts": {
@@ -33,6 +33,8 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@bisheng/identity": "workspace:*",
+    "@bisheng/knowledge": "workspace:*",
     "@hello-pangea/dnd": "catalog:",
     "@ariakit/react": "^0.4.15",
     "@ariakit/react-core": "^0.4.15",
@@ -69,7 +71,7 @@
     "@tanstack/react-table": "^8.11.7",
     "@tanstack/react-virtual": "^3",
     "axios": "catalog:",
-    "bisheng-icons": "^0.2.36",
+    "bisheng-icons": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "copy-to-clipboard": "^3.3.3",
@@ -139,6 +141,7 @@
     "xlsx": "catalog:",
     "xlsx-populate": "^1.21.0",
     "zod": "^3.22.4",
+    "zustand": "^4.5.7",
     "@bisheng/chat": "workspace:*",
     "@bisheng/api-client": "workspace:*"
   },

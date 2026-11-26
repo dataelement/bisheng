@@ -155,6 +155,10 @@ function Tabs({
   const [innerKey, setInnerKey] = React.useState(defaultActiveKey ?? items.find((i) => !i.disabled)?.key);
   const current = activeKey !== undefined ? activeKey : innerKey;
 
+  // Radix focuses triggers from mousedown. Browsers can preserve :focus-visible
+  // across that scripted focus, so suppress the ring for pointer selection.
+  const [pointerFocusKey, setPointerFocusKey] = React.useState<string | null>(null);
+
   // §5 — the indicator is ONE absolute element that slides (200ms) to the
   // selected tab; per-tab border-bottoms cannot slide. Measured relative to
   // the list, so it scrolls together with the tabs.
@@ -200,8 +204,15 @@ function Tabs({
     onChange?.(next);
   };
 
+  const handleKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!event.altKey && !event.ctrlKey && !event.metaKey &&
+      ['Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' '].includes(event.key)) {
+      setPointerFocusKey(null);
+    }
+  };
+
   return (
-    <TabsPrimitive.Root value={current} onValueChange={handleChange} activationMode="automatic" className={className}>
+    <TabsPrimitive.Root value={current} onValueChange={handleChange} activationMode="automatic" onKeyDownCapture={handleKeyDownCapture} className={className}>
       <div className="flex items-end">
         {/* §2 — the divider fits the tabs and stops before the extra area.
             The wrapper shrinks with the viewport so the list can still scroll. */}
@@ -231,6 +242,14 @@ function Tabs({
                 key={item.key}
                 value={item.key}
                 disabled={item.disabled}
+                data-pointer-focus={pointerFocusKey === item.key}
+                onPointerDownCapture={(event) => {
+                  if (!item.disabled && event.button === 0) setPointerFocusKey(item.key);
+                }}
+                onBlur={() => {
+                  // An outgoing tab must not clear a different tab's pointer focus.
+                  setPointerFocusKey((key) => key === item.key ? null : key);
+                }}
                 ref={(el) => {
                   if (el) tabRefs.current.set(item.key, el);
                   else tabRefs.current.delete(item.key);
@@ -238,7 +257,7 @@ function Tabs({
                 className={cn(
                   // relative anchors the ≥44px touch hot zone (§6). The inset
                   // focus ring stays inside the scroll viewport instead of clipping.
-                  'btn-touch-hit relative inline-flex h-full shrink-0 cursor-pointer items-center whitespace-nowrap rounded px-1 font-normal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:rgb(var(--shadow-focus-ring))]',
+                  'btn-touch-hit relative inline-flex h-full shrink-0 cursor-pointer items-center whitespace-nowrap rounded px-1 font-normal outline-none transition-colors focus-visible:data-[pointer-focus=false]:ring-2 focus-visible:ring-inset focus-visible:ring-[color:rgb(var(--shadow-focus-ring))]',
                   // §5 — unselected text-2, hover deepens to text-1, selected
                   // speaks per variant (brand color or ink — see VARIANT), one
                   // weight step up (the label box already reserves this width).

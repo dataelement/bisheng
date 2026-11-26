@@ -1,0 +1,259 @@
+pageType: cover
+background:
+  type: solid
+  color: $paper
+elements:
+  - elementId: cover-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 64
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: cover-signal-block
+    elementType: shape
+    bounds:
+      - 716
+      - 332
+      - 204
+      - 168
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: cover-grid-v1
+    elementType: line
+    bounds:
+      - 128
+      - 0
+      - 1
+      - 540
+    viewBox:
+      - 1
+      - 540
+    points: 0,0 0,540
+    border:
+      color: $grid
+      width: 0.5
+  - elementId: cover-grid-v2
+    elementType: line
+    bounds:
+      - 296
+      - 0
+      - 1
+      - 540
+    viewBox:
+      - 1
+      - 540
+    points: 0,0 0,540
+    border:
+      color: $grid
+      width: 0.5
+  - elementId: cover-grid-v3
+    elementType: line
+    bounds:
+      - 464
+      - 0
+      - 1
+      - 540
+    viewBox:
+      - 1
+      - 540
+    points: 0,0 0,540
+    border:
+      color: $grid
+      width: 0.5
+  - elementId: cover-grid-v4
+    elementType: line
+    bounds:
+      - 632
+      - 0
+      - 1
+      - 540
+    viewBox:
+      - 1
+      - 540
+    points: 0,0 0,540
+    border:
+      color: $grid
+      width: 0.5
+  - elementId: cover-grid-v5
+    elementType: line
+    bounds:
+      - 800
+      - 0
+      - 1
+      - 540
+    viewBox:
+      - 1
+      - 540
+    points: 0,0 0,540
+    border:
+      color: $grid
+      width: 0.5
+  - elementId: cover-rule-top
+    elementType: line
+    bounds:
+      - 88
+      - 52
+      - 832
+      - 1
+    viewBox:
+      - 832
+      - 1
+    points: 0,0 832,0
+    border:
+      color: $black
+      width: 1.2
+  - elementId: cover-index
+    elementType: text
+    bounds:
+      - 16
+      - 438
+      - 32
+      - 76
+    rotation: 270
+    content:
+      text: T07 / CN
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 10
+      bold: true
+      letterSpacing: 1.4
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: cover-kicker
+    elementType: text
+    bounds:
+      - 88
+      - 66
+      - 420
+      - 22
+    content:
+      text: CHINA CROSS-BORDER E-COMMERCE / 2025
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      letterSpacing: 1.25
+      color: $red
+  - elementId: cover-title
+    elementType: text
+    bounds:
+      - 84
+      - 112
+      - 776
+      - 170
+    content:
+      text: 从流量出海<br>到本地经营
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 70
+      bold: true
+      lineHeight: 0.95
+      letterSpacing: -1.6
+      color: $black
+  - elementId: cover-subtitle
+    elementType: text
+    bounds:
+      - 88
+      - 332
+      - 540
+      - 54
+    content:
+      text: 中国跨境电商的规模、结构与下一阶段竞争能力
+      fontFamily: *ref_0
+      fontSize: 19
+      bold: true
+      lineHeight: 1.15
+      color: $black
+  - elementId: cover-context
+    elementType: text
+    bounds:
+      - 88
+      - 416
+      - 420
+      - 42
+    content:
+      text: 管理层研判 / 实验稿<br>数据口径：2020—2024
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.3
+      color: $gray
+  - elementId: cover-signal-label
+    elementType: text
+    bounds:
+      - 734
+      - 350
+      - 164
+      - 20
+    content:
+      text: THE SHIFT
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      letterSpacing: 1.5
+      color: $white
+  - elementId: cover-signal-main
+    elementType: text
+    bounds:
+      - 734
+      - 390
+      - 164
+      - 76
+    content:
+      text: 67%
+      fontFamily: *ref_1
+      fontSize: 58
+      bold: true
+      letterSpacing: -1.8
+      color: $white
+      align:
+        - left
+        - middle
+  - elementId: cover-signal-caption
+    elementType: text
+    bounds:
+      - 734
+      - 470
+      - 164
+      - 18
+    content:
+      text: 2024 较 2020 规模增幅
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $white
+  - elementId: cover-page
+    elementType: text
+    bounds:
+      - 888
+      - 510
+      - 32
+      - 12
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $black
+      align:
+        - right
+        - bottom

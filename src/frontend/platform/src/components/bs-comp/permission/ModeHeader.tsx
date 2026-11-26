@@ -1,4 +1,5 @@
 import { Alert, Button } from '@bisheng/ui';
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 
 import {
   Dialog,
@@ -16,7 +17,7 @@ import {
   type ResourcePermissionContext,
   type ResourcePermissionMode,
 } from "@/controllers/API/permission"
-import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react"
+import { AlertTriangle, ShieldCheck } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { ResourceType } from "./types"
@@ -142,10 +143,7 @@ export function ModeHeader({
                   onClick={() => void handlePreview(mode)}
                 >
                   {previewing && !active && draft?.target_mode !== mode ? (
-                    <Loader2
-                      aria-hidden="true"
-                      className="mr-1 inline size-3.5 animate-spin"
-                    />
+                    <LoadingState size="inline" className="mr-1" />
                   ) : null}
                   {t(`mode.${key}`)}
                 </button>
@@ -190,14 +188,16 @@ export function ModeHeader({
           {draft && (
             <div className="space-y-3">
               <div className="rounded-lg border bg-muted/30 p-3">
-                <p className="text-xs text-muted-foreground">
-                  {t("mode.affectedAssignees")}
-                </p>
                 <p
                   data-testid="mode-affected-assignees"
-                  className="mt-1 text-xl font-semibold tabular-nums"
+                  className="flex items-baseline gap-2"
                 >
-                  {draft.affected_assignees}
+                  <span className="text-xs text-muted-foreground">
+                    {t("mode.affectedAssignees")}
+                  </span>
+                  <span className="text-xl font-semibold tabular-nums">
+                    {draft.affected_assignees}
+                  </span>
                 </p>
               </div>
               {expired && (

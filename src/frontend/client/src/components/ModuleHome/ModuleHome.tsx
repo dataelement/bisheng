@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
-import { cn } from '~/utils';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
+import cn from '~/utils/cn';
+import styles from './ModuleHome.module.css';
 
 /**
  * Shared frame of the workbench module homes (知识空间 / 频道 / 应用 / 技能). A module home is
@@ -15,10 +17,18 @@ import { cn } from '~/utils';
  * Mobile is out of scope: each module keeps its own mobile navigation (and its own square).
  */
 
-/** Page padding + centered column every module home shares (see pages/apps). */
+/** Browser geometry is the default; the desktop host uses the plugin-page geometry. */
 export const MODULE_HOME_FRAME =
-  'flex h-full min-h-0 w-full flex-col items-center overflow-hidden bg-white px-3 py-5';
-export const MODULE_HOME_COLUMN = 'w-full max-w-[1000px]';
+  `${styles.frame} ${styles.home} flex h-full min-h-0 min-w-0 w-full flex-col items-center overflow-hidden bg-white px-3 py-5 min-[768px]:p-8`;
+export const MODULE_HOME_COLUMN = `${styles.column} w-full max-w-[1000px]`;
+/** Desktop-only geometry hooks shared with a module's detail page. */
+export const MODULE_PAGE_DESKTOP_FRAME = styles.frame;
+export const MODULE_PAGE_DESKTOP_COLUMN = styles.column;
+export const MODULE_HOME_TOOLBAR = styles.toolbar;
+export const MODULE_HOME_BODY = styles.body;
+export const MODULE_HOME_INTRO = styles.intro;
+export const MODULE_HOME_GROUPS = styles.groups;
+export const MODULE_HOME_SEARCH = styles.search;
 
 /** A pill-shaped Segmented: track and thumb fully rounded (the thumb has no class hook of
  *  its own, hence the child selector). Used by 广场's module tabs. */
@@ -26,20 +36,21 @@ export const MODULE_HOME_PILL = 'rounded-full [&>span[aria-hidden]]:rounded-full
 
 interface ModuleHomeHeaderProps {
   title: string;
+  /** The narrow shell already displays the title; this row holds its tools only. */
+  mobileTitleInShell?: boolean;
   /** The page's tools, right-aligned: search and sort where the page has them, then the
    *  create button LAST. All medium (32px) controls, so they sit on this row's height. */
   children?: ReactNode;
 }
 
-/** Header row of a module home: 32px tall, 16px above the content. The title takes the
- *  sidebar wordmark's voice — same semibold, same neutral text-1, one step up the
- *  ladder (text-h2, 20/28) so the page still outranks the shell — and leaves the brand
- *  color to what the user acts on: the create button on this same row. */
-export function ModuleHomeHeader({ title, children }: ModuleHomeHeaderProps) {
+/** A 32px header with a compact title (20/28, medium), aligned to the content. */
+export function ModuleHomeHeader({ title, children, mobileTitleInShell = false }: ModuleHomeHeaderProps) {
+  const isNarrowViewport = usePrefersMobileLayout();
+  const compactHeader = mobileTitleInShell && isNarrowViewport;
   return (
-    <header className={cn(MODULE_HOME_COLUMN, 'flex h-8 shrink-0 items-center gap-4')}>
-      <h1 className="min-w-0 flex-1 truncate text-h2 font-semibold text-text-1">{title}</h1>
-      {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
+    <header className={cn(MODULE_HOME_COLUMN, styles.header, 'flex min-w-0 h-8 shrink-0 items-center gap-4', compactHeader && 'h-auto')}>
+      <h1 className={cn('min-w-0 flex-1 truncate text-h2 font-medium text-text-1', compactHeader && 'sr-only')}>{title}</h1>
+      {children ? <div className={cn(styles.actions, 'flex shrink-0 items-center gap-2', compactHeader && 'min-w-0 flex-1')}>{children}</div> : null}
     </header>
   );
 }

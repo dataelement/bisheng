@@ -124,13 +124,13 @@ def test_concrete_action_check_returns_true_and_normal_false_as_200() -> None:
         assert coordinator.targets[0].context_version == "business-v7"
 
 
-def test_super_admin_visible_check_short_circuits_only_the_http_decision() -> None:
+def test_super_admin_visible_check_short_circuits_http_decision() -> None:
     decision, business, coordinator = _decision(allowed=False)
     with TestClient(_app(decision, super_admin=True)) as client:
         visible = client.post(
             "/api/v1/permissions/check",
             json={
-                "resource_type": "knowledge_library",
+                "resource_type": "workflow",
                 "resource_id": "4192",
                 "action": "visible",
             },
@@ -150,6 +150,20 @@ def test_super_admin_visible_check_short_circuits_only_the_http_decision() -> No
     assert edit.json()["data"] == {"allowed": False}
     assert [call["action"] for call in business.calls] == ["edit"]
     assert len(coordinator.targets) == 1
+
+
+@pytest.mark.parametrize("action", ["use", "use_kb", "use_app", "use_tool"])
+@pytest.mark.parametrize("super_admin", [False, True])
+def test_retired_actions_are_rejected_before_resource_resolution(action, super_admin) -> None:
+    decision, business, coordinator = _decision(allowed=True)
+    with TestClient(_app(decision, super_admin=super_admin)) as client:
+        response = client.post(
+            "/api/v1/permissions/check",
+            json={"resource_type": "knowledge_file", "resource_id": "file-1", "action": action},
+        )
+    assert response.json()["status_code"] == 25001
+    assert business.calls == []
+    assert coordinator.targets == []
 
 
 def test_client_cannot_forge_verified_target_fields_or_legacy_aliases() -> None:

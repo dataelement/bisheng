@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 
@@ -16,10 +15,9 @@ from bisheng.database.models.template import Template
 from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsType
 from bisheng.user.domain.models.user import User
-from bisheng.user.domain.models.user_role import UserRoleDao
 
 
-async def init_default_data():
+async def init_default_data(*, reference_bootstrap=None):
     """Initialize Database"""
     redis_client = await get_redis_client()
     if await redis_client.asetNx("init_default_data", "1"):
@@ -96,32 +94,9 @@ async def init_default_data():
                     )
                     await session.commit()
                 # Initialize default tenant (F001)
-                await _init_default_tenant(session)
+                await _init_default_tenant(session, reference_bootstrap=reference_bootstrap)
                 # Initialize default root department (F002)
                 await _init_default_root_department(session)
-
-                user = await session.exec(select(User).limit(1))
-                user = user.all()
-                if not user and settings.admin:
-                    md5 = hashlib.md5()
-                    md5.update(settings.admin.get("password").encode("utf-8"))
-                    user = User(
-                        user_id=1,
-                        user_name=settings.admin.get("user_name"),
-                        password=md5.hexdigest(),
-                    )
-                    session.add(user)
-                    await session.commit()
-                    await session.refresh(user)
-                    await UserRoleDao.set_admin_user(user.user_id)
-                    from bisheng.permission.domain.services.legacy_rbac_sync_service import (
-                        LegacyRBACSyncService,
-                    )
-
-                    await LegacyRBACSyncService.sync_user_auth_created(
-                        user.user_id,
-                        [AdminRole],
-                    )
 
                 await _backfill_guest_department_membership(session)
 
@@ -235,7 +210,7 @@ def read_from_conf(file_path: str) -> str:
     return content
 
 
-async def _init_default_tenant(session):
+async def _init_default_tenant(session, *, reference_bootstrap=None):
     """Idempotently create the default tenant (id=1).
 
     Called during init_default_data() to keep startup lean: it only guarantees
@@ -263,6 +238,8 @@ async def _init_default_tenant(session):
                 status="active",
             )
             session.add(tenant)
+            if reference_bootstrap is not None:
+                await reference_bootstrap(session, tenant)
             await session.commit()
 
     logger.info(f"Default tenant ready (id={DEFAULT_TENANT_ID})")

@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from bisheng.permission.application.catalog_api import F048CatalogApi
+from bisheng.permission.domain.services.catalog_policy import REGISTERED_ACTION_CODES
 from bisheng.permission.migration.f048_model_mapper import INITIAL_ACTION_LEVELS
 
 _PRESETS = {preset["key"]: tuple(preset["action_codes"]) for preset in F048CatalogApi.PRESETS}
@@ -41,7 +42,9 @@ def test_a_preset_holds_every_action_of_the_levels_it_claims(key):
     claimed = _levels(selected)
     top = max(claimed)
     for level in range(1, top + 1):
-        of_level = {code for code, value in INITIAL_ACTION_LEVELS.items() if value == level}
+        of_level = {
+            code for code, value in INITIAL_ACTION_LEVELS.items() if value == level and code in REGISTERED_ACTION_CODES
+        }
         assert of_level <= selected, f"{key} is missing {sorted(of_level - selected)} from level {level}"
 
 

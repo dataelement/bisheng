@@ -36,7 +36,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.websockets import WebSocket
 
-from app_proxy import clients
+from app_proxy import __version__, clients
 from app_proxy.authz import (
     DECISION_ALLOW,
     DECISION_FORBIDDEN,
@@ -340,7 +340,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="BiSheng app-proxy",
         description="Hosted-app entry: session check, header strip/inject, fallback pages, reverse proxy",
-        version="3.0.0",
+        version=__version__,
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -362,6 +362,8 @@ def create_app() -> FastAPI:
     application.add_route(
         f"{prefix}/{PREVIEW_SEGMENT}/{{session}}/{{tail:path}}", handle_preview_entry, methods=ENTRY_METHODS
     )
+    from app_proxy.desktop import handle_desktop_launch
+    application.add_route(f"{prefix}/{{slug}}/_desktop", handle_desktop_launch, methods=["POST"])
     # Two routes, because ``{tail:path}`` does not match the empty string:
     # ``/apps/foo`` and ``/apps/foo/x`` are both entry points (AC-25).
     application.add_route(f"{prefix}/{{slug}}", handle_entry, methods=ENTRY_METHODS)

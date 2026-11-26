@@ -13,10 +13,13 @@ spec:
       {{- include "bisheng-sandbox.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        deployment.bisheng.io/config-revision: {{ default "" (get (default (dict) .Values.global) "configRevision") | quote }}
       labels:
         {{- include "bisheng-sandbox.labels" . | nindent 8 }}
     spec:
-      {{- with .Values.imagePullSecrets }}
+      automountServiceAccountToken: false
+      {{- with (concat (default (list) (get (default (dict) .Values.global) "imagePullSecrets")) .Values.imagePullSecrets) }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -25,7 +28,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: code-runner
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "bisheng-sandbox.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
@@ -39,7 +42,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ default (include "bisheng-sandbox.fullname" .) .Values.token.existingSecret }}
-                  key: {{ .Values.token.existingSecretKey }}
+                  key: {{ if .Values.token.existingSecret }}{{ .Values.token.existingSecretKey }}{{ else }}token{{ end }}
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
@@ -47,6 +50,9 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+{{- with .Values.startupProbe }}
+          startupProbe: {{ toYaml . | nindent 12 }}
+{{- end }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:

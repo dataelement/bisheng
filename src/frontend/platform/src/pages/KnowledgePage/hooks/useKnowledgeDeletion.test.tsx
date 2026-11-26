@@ -1,0 +1,257 @@
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { isSpaceDeletionActive, useKnowledgeSpaceDeletion } from "@/store/knowledgeSpaceDeletion";
+import { useKnowledgeDeletion } from "./useKnowledgeDeletion";
+import * as api from "@/controllers/API/knowledgeDeletion";
+vi.mock("@/controllers/API/knowledgeDeletion");
+vi.mock("@/controllers/managementScope", () => ({ managementRequestScope: () => 2 }));
+const command = { spaceId: 3, kind: "delete" } as const;
+const page = { data: [], page_size: 50, has_more: false, next_cursor: null };
+const plan = (digest = "digest", executable = true): api.DeletePrecheck => ({
+  confirmation_id: "plan-1",
+  plan_digest: digest,
+  expires_at: "2030-01-01T00:00:00Z",
+  check_complete: true,
+  can_execute: executable,
+  valid_items: [{ id: 3, type: "space", name: "Space" }],
+  invalid_items: [],
+  requires_skip_confirmation: false,
+  impact: { source_counts: {}, restricted_counts: {}, source_page: page, file_count: 2 },
+});
+const precheck = vi.mocked(api.precheckDeletion),
+  confirm = vi.mocked(api.confirmDeletion),
+  status = vi.mocked(api.getDeletionStatus),
+  references = vi.mocked(api.inspectReferences);
+beforeEach(() => {
+  vi.clearAllMocks();
+  precheck.mockResolvedValue(plan());
+  confirm.mockResolvedValue({ job_id: "plan-1", state: "succeeded" });
+});
+async function ready(result: { current: ReturnType<typeof useKnowledgeDeletion> }) {
+  await waitFor(() => expect(result.current.view?.result).toBeDefined());
+}
+it("keeps the immutable three-field plan through a lost ACK and completes only on succeeded", async () => {
+  confirm
+    .mockRejectedValueOnce(new Error("connection lost"))
+    .mockResolvedValueOnce({ job_id: "plan-1", state: "running" });
+  status.mockResolvedValue({ job_id: "plan-1", state: "succeeded" });
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  let done!: Promise<boolean>;
+  act(() => {
+    done = result.current.open(command);
+  });
+  await ready(result);
+  await act(async () => {
+    await result.current.confirm(false, false);
+  });
+  expect(result.current.view?.dispatched).toBe(true);
+  expect(precheck).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    await result.current.confirm(false, false);
+  });
+  expect(confirm.mock.calls[0]).toEqual(confirm.mock.calls[1]);
+  expect(confirm.mock.calls[0][1]).toEqual({
+    confirmation_id: "plan-1",
+    plan_digest: "digest",
+    idempotency_key: "delete:plan-1",
+  });
+  expect(result.current.view?.status?.state).toBe("running");
+  act(() => result.current.refresh());
+  expect(precheck).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    await result.current.status();
+  });
+  expect(await done).toBe(true);
+  expect(result.current.view).toBeNull();
+});
+it("cancels before dispatch without deleting", async () => {
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  let done!: Promise<boolean>;
+  act(() => {
+    done = result.current.open(command);
+  });
+  await ready(result);
+  act(() => result.current.cancel());
+  expect(await done).toBe(false);
+  expect(confirm).not.toHaveBeenCalled();
+});
+it("requires the exact partial selection acknowledgement", async () => {
+  precheck.mockResolvedValue({
+    ...plan(),
+    requires_skip_confirmation: true,
+    invalid_items: [{ reason: "referenced", error_code: null }],
+  });
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  act(() => {
+    void result.current.open({ spaceId: 3, kind: "files", items: [{ id: 5, type: "folder" }] });
+  });
+  await ready(result);
+  await act(async () => {
+    await result.current.confirm(false, false);
+  });
+  expect(confirm).not.toHaveBeenCalled();
+  await act(async () => {
+    await result.current.confirm(true, false);
+  });
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(Object.keys(confirm.mock.calls[0][1]).sort()).toEqual([
+    "confirmation_id",
+    "idempotency_key",
+    "plan_digest",
+  ]);
+});
+it("rechecks force as a new signed plan and requires danger acknowledgement", async () => {
+  precheck.mockResolvedValueOnce(plan("ordinary", false)).mockResolvedValueOnce(plan("force"));
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  act(() => {
+    void result.current.open(command);
+  });
+  await ready(result);
+  await act(async () => {
+    result.current.force();
+  });
+  await waitFor(() => expect(result.current.view?.result?.plan_digest).toBe("force"));
+  expect(precheck.mock.calls[1]).toEqual([command, true]);
+  await act(async () => {
+    await result.current.confirm(false, false);
+  });
+  expect(confirm).not.toHaveBeenCalled();
+  await act(async () => {
+    await result.current.confirm(false, true);
+  });
+  expect(confirm.mock.calls[0][1].plan_digest).toBe("force");
+});
+it("has no force path for files or clear", async () => {
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  act(() => {
+    void result.current.open({ spaceId: 3, kind: "clear" });
+  });
+  await ready(result);
+  act(() => result.current.force());
+  expect(precheck).toHaveBeenCalledTimes(1);
+});
+it("rejects incomplete checking without creating a confirmation", async () => {
+  precheck.mockResolvedValue({ ...plan(), check_complete: false });
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  act(() => {
+    void result.current.open(command);
+  });
+  await ready(result);
+  await act(async () => {
+    await result.current.confirm(true, true);
+    result.current.force();
+  });
+  expect(confirm).not.toHaveBeenCalled();
+  expect(precheck).toHaveBeenCalledTimes(1);
+});
+it("retires permission or scope changes even while precheck is pending", async () => {
+  let resolve!: (value: api.DeletePrecheck) => void;
+  precheck.mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const { result, rerender } = renderHook(({ scope }) => useKnowledgeDeletion(scope), {
+    initialProps: { scope: "a" },
+  });
+  let done!: Promise<boolean>;
+  act(() => {
+    done = result.current.open(command);
+  });
+  rerender({ scope: "b" });
+  expect(await done).toBe(false);
+  await act(async () => {
+    resolve(plan());
+  });
+  expect(result.current.view).toBeNull();
+  expect(confirm).not.toHaveBeenCalled();
+});
+it("pages references without issuing a deletion plan", async () => {
+  references.mockResolvedValue({
+    check_complete: true,
+    blocked: true,
+    source_counts: {},
+    restricted_counts: { assistant: 2 },
+    slot_counts: { assistant: 3 },
+    source_page: { ...page, has_more: true, next_cursor: "cursor" },
+  });
+  vi.mocked(api.pageReferences).mockResolvedValue(page);
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  act(() => {
+    void result.current.open(command, true);
+  });
+  await waitFor(() => expect(result.current.view?.inspection).toBeDefined());
+  await act(async () => {
+    await result.current.more();
+  });
+  expect(api.pageReferences).toHaveBeenCalledWith(command, "cursor");
+  expect(precheck).not.toHaveBeenCalled();
+  expect(confirm).not.toHaveBeenCalled();
+});
+
+it("preserves a source-task conflict reason for the deletion explanation", async () => {
+  const { ApiError } = await import("@bisheng/api-client");
+  precheck.mockRejectedValueOnce(new ApiError({ status_code: 10999, data: { reason: "source_space_move_input_required" } }, { message: "Resource conflict" }));
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  act(() => { void result.current.open(command); });
+  await waitFor(() => expect(result.current.view?.reason).toBe("source_space_move_input_required"));
+  expect(result.current.view?.code).toBe(10999);
+  expect(result.current.view?.result).toBeUndefined();
+  act(() => result.current.cancel());
+});
+
+const spaceScope = { identityKey: "user:7", tenantId: 101, managementTenantId: 101, view: "ordinary" as const };
+afterEach(() => { vi.useRealTimers(); useKnowledgeSpaceDeletion.setState({ entries: {} }); });
+
+it("keeps the target paused after a lost ACK and polls the original task to completion", async () => {
+  confirm.mockRejectedValueOnce(new Error("lost ACK"));
+  status.mockResolvedValueOnce({ job_id: "plan-1", state: "running" }).mockResolvedValueOnce({ job_id: "plan-1", state: "succeeded" });
+  const { result } = renderHook(() => useKnowledgeDeletion("scope", spaceScope));
+  let done!: Promise<boolean>;
+  act(() => { done = result.current.open(command); });
+  await ready(result);
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  await act(async () => { await result.current.confirm(false, false); });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(true);
+  expect(isSpaceDeletionActive({ ...spaceScope, tenantId: 202 }, 3)).toBe(false);
+  expect(isSpaceDeletionActive({ ...spaceScope, identityKey: "user:8" }, 3)).toBe(false);
+  expect(isSpaceDeletionActive({ ...spaceScope, managementTenantId: 202 }, 3)).toBe(false);
+  expect(isSpaceDeletionActive({ ...spaceScope, view: "admin" }, 3)).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(status).toHaveBeenLastCalledWith(3, "plan-1");
+  expect(result.current.view?.status?.state).toBe("running");
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(await done).toBe(true);
+  expect(result.current.view).toBeNull();
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(true);
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+  expect(status).toHaveBeenCalledTimes(2);
+  expect(confirm).toHaveBeenCalledTimes(1);
+});
+
+it("releases an unfinished UI pause when its scope retires and ignores a late ACK", async () => {
+  let resolve!: (value: api.DeletionStatus) => void;
+  confirm.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  const { result, rerender } = renderHook(({ key }) => useKnowledgeDeletion(key, spaceScope), { initialProps: { key: "a" } });
+  act(() => { void result.current.open(command); });
+  await ready(result);
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.confirm(false, false); });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(true);
+  rerender({ key: "b" });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(false);
+  await act(async () => { resolve({ job_id: "plan-1", state: "succeeded" }); await pending; });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(false);
+  expect(result.current.view).toBeNull();
+});
+
+it("does not pause an entire space when deleting individual files", async () => {
+  confirm.mockResolvedValueOnce({ job_id: "plan-1", state: "running" });
+  const { result, unmount } = renderHook(() => useKnowledgeDeletion("scope", spaceScope));
+  act(() => { void result.current.open({ spaceId: 3, kind: "files", items: [{ id: 5, type: "file" }] }); });
+  await ready(result);
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  await act(async () => { await result.current.confirm(false, false); });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(false);
+  unmount();
+});

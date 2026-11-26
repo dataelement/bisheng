@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, field_validator
 
+from bisheng.core.storage.browser_object_path import rewrite_current_browser_object_text
 from bisheng.database.models.message import ChatMessage, ChatMessageQuery
 from bisheng.database.models.session import MessageSession
 from bisheng.user.domain.models.user import User
@@ -35,6 +36,10 @@ class AppChatList(BaseModel):
     mark_status: int | None = None
     mark_id: int | None = None
     messages: list[dict] | None = None  # All message list data for the session
+    # F003: organisation snapshot (sentinels in ``database/models/org_snapshot.py``) and usage type
+    operator_dept_id: int | None = None
+    operator_dept_path: str | None = None
+    usage_type: str | None = None  # daily | assistant | workflow | task
 
     @field_validator("user_name", mode="before")
     @classmethod
@@ -77,6 +82,8 @@ class ChatMessageHistoryResponse(ChatMessageQuery):
                     "user_name": user_model.user_name,
                     "flow_name": message_session.flow_name,
                     "name": message_session.name,
+                    "message": rewrite_current_browser_object_text(obj.message),
+                    "files": rewrite_current_browser_object_text(obj.files),
                 }
             )
             for obj in chat_messages

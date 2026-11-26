@@ -1,10 +1,13 @@
 """Per-turn citation source table and one-shot "add [Sn]" reminder (F069 P1).
 
 ``LinsightCitationSourceMiddleware`` gives the model, on EVERY model call, the
-session's handle table (``S1 知识库·<title>（<loc>）`` ...) as an ephemeral
-HumanMessage at the tail of the request — the strongest position and the one
-that survives deepagents' summarization truncating old tool arguments (design
-§5 #8). When the previous turn wrote an ``output/*.md`` deliverable that carries
+session's handle table (``S1 知识库·<title>（<loc>）`` ...) at the tail of the
+request — the strongest position and the one that survives deepagents'
+summarization truncating old tool arguments (design §5 #8). The table is
+labelled as a system note and, whenever the request ends in a tool result, is
+appended to a request-only copy of that ToolMessage instead of being sent as a
+new HumanMessage: a trailing user message on the final call made the model
+answer the table rather than finish the task (see ``_with_source_table``). When the previous turn wrote an ``output/*.md`` deliverable that carries
 zero ``[Sn]`` runs, the main-graph instance appends a second ephemeral message
 asking the model to patch the handles in with ``edit_file`` — at most once per
 file per session (AC-15), deduplicated through the session handle table in
@@ -41,15 +44,27 @@ from bisheng.citation.domain.services.citation_handle_service import (
 )
 from bisheng.core.cache.redis_manager import get_redis_client
 
-SOURCE_TABLE_HEADER = "【本轮可用来源编号】（写正文时在句末标 [Sn]）"
+# One line, and no literal "[Sn]": a model once repeated the placeholder to the
+# user ("文中数字均带 [Sn] 来源标注"), which the converter cannot resolve. The
+# header also says who is speaking, because this arrives as a user-role message.
+SOURCE_TABLE_HEADER = (
+    "【系统提供的来源编号表，不是用户发言，不要向用户提及这张表】写正文时在句末标编号，例如：……市占率为 31%。[S3]"
+)
 SOURCE_TABLE_OVERFLOW_LINE = "其余编号见检索结果。"
 _TITLE_MAX_CHARS = 40
 _TYPE_LABEL_WEB = "网页"
 _TYPE_LABEL_KB = "知识库"
 
+# Labels every injected text as a system note. Without it the source table,
+# appended on EVERY call, was read as the newest user turn: on 120 (qwen-max,
+# 2026-11-17) 2 of 3 identical runs ended with a reply to the table ("了解了，本轮
+# 可用的来源编号为 S1 和 S2……请告知我具体的任务目标") instead of the task summary.
+SYSTEM_NOTE_PREFIX = "【系统附注：以下由系统自动附加，不是用户的新消息，无需回复；继续完成用户最初交代的任务】"
+
 NUDGE_TEMPLATE = (
-    "output/{basename} 已写入成功，但正文没有来源编号。"
-    "请用 edit_file 在依据检索资料的句子末尾补上 [Sn]（编号见上方来源表），不要重写整份文件。"
+    "【系统提醒，不是用户的新消息】output/{basename} 已写入成功，但正文没有来源编号。"
+    "请用 edit_file 在依据检索资料的句子末尾补上来源编号，例如 [S3]（编号见来源表），不要重写整份文件；"
+    "补完后按用户最初的任务正常收尾。"
 )
 NUDGE_LOG_PREFIX = "[linsight-citation-nudge]"
 
@@ -124,7 +139,7 @@ class LinsightCitationSourceMiddleware(AgentMiddleware):
     async def _prepare(self, request, *, use_redis: bool):
         if not self._active():
             return request
-        extra = [HumanMessage(content=self._render_source_table())]
+        messages = self._with_source_table(list(request.messages))
         for path in self._nudge_candidates(request):
             if await self._was_nudged(path, use_redis=use_redis):
                 continue
@@ -132,20 +147,39 @@ class LinsightCitationSourceMiddleware(AgentMiddleware):
             if use_redis:
                 await self._mark_nudged(path)
             logger.info(f"{NUDGE_LOG_PREFIX} session={self._svid()} file={path}")
-            extra.append(HumanMessage(content=NUDGE_TEMPLATE.format(basename=posixpath.basename(path))))
-        return request.override(messages=[*request.messages, *extra])
+            messages.append(HumanMessage(content=NUDGE_TEMPLATE.format(basename=posixpath.basename(path))))
+        return request.override(messages=messages)
 
     def _prepare_sync(self, request):
         if not self._active():
             return request
-        extra = [HumanMessage(content=self._render_source_table())]
+        messages = self._with_source_table(list(request.messages))
         for path in self._nudge_candidates(request):
             if path in self._nudged_paths:
                 continue
             self._nudged_paths.add(path)
             logger.info(f"{NUDGE_LOG_PREFIX} session={self._svid()} file={path}")
-            extra.append(HumanMessage(content=NUDGE_TEMPLATE.format(basename=posixpath.basename(path))))
-        return request.override(messages=[*request.messages, *extra])
+            messages.append(HumanMessage(content=NUDGE_TEMPLATE.format(basename=posixpath.basename(path))))
+        return request.override(messages=messages)
+
+    def _with_source_table(self, messages: list) -> list:
+        """Place the labelled source table at the tail without faking a user turn.
+
+        When the request ends in a ToolMessage with text content (every call
+        after the first), the table goes at the end of a COPY of that message,
+        so the model still reads it last but the conversation does not end in
+        a user message it might answer. The copy lives in this request only:
+        graph state, and therefore FilesystemMiddleware's eviction, never see
+        it. Any other tail (the first call ends in the user's task; a tool
+        result with list content) falls back to a labelled HumanMessage.
+        """
+        note = f"{SYSTEM_NOTE_PREFIX}\n{self._render_source_table()}"
+        last = messages[-1] if messages else None
+        if isinstance(last, ToolMessage) and isinstance(last.content, str):
+            messages[-1] = last.model_copy(update={"content": f"{last.content}\n\n{note}"})
+            return messages
+        messages.append(HumanMessage(content=note))
+        return messages
 
     def _svid(self) -> str:
         return str(getattr(self._scope, "svid", "") or "")

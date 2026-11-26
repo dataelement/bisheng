@@ -40,6 +40,8 @@ start_min_worker(){
 }
 
 if [ "$start_mode" = "api" ]; then
+    echo "Preparing first-installation reference coverage..."
+    python scripts/initialize_installation.py --apply
     echo "Running database migrations..."
     # Fail fast on migration errors instead of starting the API on a stale,
     # half-migrated schema (which surfaces later as confusing "missing
@@ -54,6 +56,10 @@ if [ "$start_mode" = "api" ]; then
     fi
     echo "Starting API server..."
     uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --no-access-log --workers 2
+elif [ "$start_mode" = "api-managed" ]; then
+    # Standard Helm runs the same formal migration once in its initializer;
+    # the Pod's read-only initContainer waits for actual schema/model state.
+    exec uvicorn bisheng.main:app --host 0.0.0.0 --port "${BISHENG_API_PORT:-7860}" --no-access-log --workers "${BISHENG_API_WORKERS:-2}"
 elif [ "$start_mode" = "upgrade-work-knowledge" ]; then
     shift
     exec python scripts/register_work_knowledge_tool.py "$@"

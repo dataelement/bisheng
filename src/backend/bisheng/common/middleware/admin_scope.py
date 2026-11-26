@@ -57,11 +57,18 @@ MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     "/api/v1/user-groups",
     "/api/v1/tag",
     "/api/v1/evaluation",
+    "/api/v1/guest-link",
 )
 
 
 # Explicit mutating management routes only: shared reads and calls need no new header.
 _EXPECTED_SCOPE_WRITES = (
+    (frozenset({"PATCH"}), r"/api/v1/guest-link/(?:workflow|assistant)/[^/]+"),
+    (frozenset({"POST"}), r"/api/v1/knowledge/space/[^/]+/uploads(?:/[^/]+/previews)?"),
+    (
+        frozenset({"PUT", "DELETE"}),
+        r"/api/v1/knowledge/space/[^/]+/uploads/[^/]+/previews/[^/]+/chunks/[0-9]+",
+    ),
     (frozenset({"POST", "DELETE"}), r"/api/v1/skill/template/(?:create|[0-9]+)"),
     (frozenset({"PATCH", "DELETE"}), r"/api/v1/apps/[^/]+"),
     (frozenset({"POST"}), r"/api/v1/apps/[^/]+/actions/[^/]+"),
@@ -82,10 +89,30 @@ _EXPECTED_SCOPE_WRITES = (
     (frozenset({"POST"}), r"/api/v1/assistant/(?:delete|status|flow|tool)"),
     # Bare /knowledge/upload only stages a temporary file for shared chat/workflow callers.
     (frozenset({"POST"}), r"/api/v1/knowledge/(?:create|copy|qa/copy|upload/[^/]+|tags|file/tags(?:/batch)?)"),
+    # F118 advanced browser commands pin the selected tenant. Ordinary space
+    # file writes and machine-credential v2 calls retain their existing gate.
+    (frozenset({"POST"}), r"/api/v1/knowledge/space/[^/]+/copy/(?:precheck|confirm)"),
+    (frozenset({"PUT"}), r"/api/v1/knowledge/space/[^/]+/processing-settings"),
+    (
+        frozenset({"POST"}),
+        r"/api/v1/knowledge/space/[^/]+/processing-jobs(?:/precheck|/[^/]+/retry)?",
+    ),
+)
+
+
+# A person's own workbench conversations and deep-research runs, under management
+# prefixes: they run as the caller in the caller's own tenant, never in the browser
+# management view (a cross-tenant super admin would fail its own policy with 24006
+# and store the conversation in a tenant its conversation list never reads).
+_PERSONAL_WORKBENCH_RUN = re.compile(
+    r"/api/v1/workstation/(?:chat/completions(?:/abort)?|gen_title|messages/.+|conversations/.+)"
+    r"|/api/v1/linsight/workbench/.+"
 )
 
 
 def _is_management_api_path(path: str, prefixes: Iterable[str] = MANAGEMENT_API_PREFIXES) -> bool:
+    if _PERSONAL_WORKBENCH_RUN.fullmatch(path.rstrip("/")):
+        return False
     return any(path == value or path.startswith(value + "/") for value in prefixes)
 
 
@@ -131,7 +158,18 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
         writing = requires_expected_management_tenant(request.method, path)
         scope = None
         try:
-            is_super = await _check_is_global_super(user_id)
+            current_identity = (
+                writing
+                or path.startswith("/api/v1/guest-link/")
+                or path == "/api/v1/llm/workbench"
+                or (path == "/api/v1/workstation/config" and request.query_params.get("purpose") != "navigation")
+            )
+            request.state.require_current_super = current_identity
+            is_super = (
+                await _check_is_global_super(user_id, force_refresh=True)
+                if current_identity
+                else await _check_is_global_super(user_id)
+            )
             scope = await resolve_management_scope(user_id, is_super=is_super, for_write=writing)
             if writing:
                 require_expected_management_tenant(request.headers.get("X-Management-Tenant"), scope)

@@ -100,3 +100,45 @@ test('sizes the trigger from the selected label and keeps its sizing text while 
   await user.type(input, 'vision');
   expect(sizer).toHaveAttribute('data-label', 'Gamma');
 });
+
+test('F016: shows the server credit ratio after model names, with the base model as a plain 1.00x', async () => {
+  const priced = [
+    { ...options[0], pricing_hint: { ratio: '3.00', base: false, free: false } },
+    { ...options[1], pricing_hint: { ratio: '1.00', base: true, free: false } },
+    { ...options[2], pricing_hint: { ratio: null, base: false, free: true } },
+    { id: '4', key: 'd', name: 'delta', displayName: 'Delta', provider_id: '10', provider_name: 'Provider A', pricing_hint: { ratio: null, base: false, free: false } },
+    { id: '5', key: 'e', name: 'epsilon', displayName: 'Epsilon', provider_id: '10', provider_name: 'Provider A' },
+  ];
+  render(<AiModelSelect options={priced} value={1} disabled={false} onChange={jest.fn()} />);
+  const user = userEvent.setup();
+  const trigger = screen.getByRole('combobox', { name: 'com_ui_select_model' });
+  expect(trigger.parentElement).toHaveTextContent('Alpha · 3.00x');
+  await user.click(trigger);
+  await user.click(screen.getByRole('treeitem', { name: 'Provider A' }));
+  expect(screen.getByRole('treeitem', { name: 'Gamma · modelPicker.ratioFree' })).toBeInTheDocument();
+  // No ratio can be shown (unpriced base or older server): the plain name stays.
+  expect(screen.getByRole('treeitem', { name: 'Delta' })).toBeInTheDocument();
+  expect(screen.getByRole('treeitem', { name: 'Epsilon' })).toBeInTheDocument();
+  await user.click(screen.getByRole('treeitem', { name: 'Provider B' }));
+  expect(screen.getByRole('treeitem', { name: 'Beta · 1.00x' })).toBeInTheDocument();
+});
+
+// F004 design §7 item 7: the selector is off while a run is in progress.
+test('a disabled selector explains itself on hover when a reason is given', async () => {
+  const view = render(<AiModelSelect options={options} value={1} disabled disabledReason="after the answer" onChange={jest.fn()} />);
+  const user = userEvent.setup();
+  const trigger = screen.getByRole('combobox', { name: 'com_ui_select_model' });
+  expect(trigger).toBeDisabled();
+  expect(screen.queryByRole('tooltip')).toBeNull();
+  await user.hover(trigger.closest('span[tabindex="0"]')!);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('after the answer');
+  // Enabled again: no hover zone is left around the selector.
+  view.rerender(<AiModelSelect options={options} value={1} disabled={false} disabledReason="after the answer" onChange={jest.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'com_ui_select_model' }).closest('span[tabindex="0"]')).toBeNull();
+  await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+});
+
+test('a disabled selector without a reason gets no hover zone', () => {
+  render(<AiModelSelect options={options} value={1} disabled onChange={jest.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'com_ui_select_model' }).closest('span[tabindex="0"]')).toBeNull();
+});

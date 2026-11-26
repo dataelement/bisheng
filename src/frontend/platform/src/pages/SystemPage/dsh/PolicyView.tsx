@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect";
 
@@ -8,10 +9,12 @@ import {
 } from "@/controllers/API/dshUsagePresentation";
 import type { DshUsageOverviewUser, DshUsageTimeSummary } from "@/types/dsh";
 import { Segmented } from "@bisheng/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { UsageRangeSelect } from "./UsageRangeSelect";
 import { UsageSummaryView } from "./UsageSummaryView";
+import { USER_CREDITS_QUERY_KEY, UserCreditsCard } from "./UserCreditsCard";
 import { UsageUserSelect } from "./UsageUserSelect";
 import { usageGranularity, usagePresetRange, type UsagePreset, type UsageRange } from "./usageRange";
 
@@ -20,6 +23,7 @@ type Dimension = "user" | "department";
 export function PolicyView() {
   const { t } = useTranslation();
   const { user: currentUser } = useContext(userContext);
+  const queryClient = useQueryClient();
   const [dimension, setDimension] = useState<Dimension>("user");
   const [department, setDepartment] = useState<{ id: number; name: string } | null>(null);
   const [user, setUser] = useState<DshUsageOverviewUser | null>(null);
@@ -100,6 +104,10 @@ export function PolicyView() {
     setUser(next);
     setDimension("user");
   };
+  const handleRefresh = () => {
+    setRange(usagePresetRange(preset));
+    void queryClient.invalidateQueries({ queryKey: [USER_CREDITS_QUERY_KEY] });
+  };
   const handleRange = (next: UsagePreset, nextRange: UsageRange) => {
     setPreset(next);
     setRange(nextRange);
@@ -140,7 +148,7 @@ export function PolicyView() {
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {toolbar}
-        <Button size="medium" variant="outlined" onClick={() => setRange(usagePresetRange(preset))} color="default">
+        <Button size="medium" variant="outlined" onClick={handleRefresh} color="default">
           {t("dsh.refresh")}
         </Button>
       </div>
@@ -149,15 +157,16 @@ export function PolicyView() {
           role={defaultUserError ? "alert" : "status"}
           className="rounded-lg border p-10 text-center text-sm text-muted-foreground"
         >
-          {t(defaultUserError ? "dsh.unavailable" : defaultUserLoading ? "dsh.loading" : "dsh.empty")}
+          {defaultUserLoading && !defaultUserError ? <LoadingState label={t("dsh.loading")} /> : t(defaultUserError ? "dsh.unavailable" : "dsh.empty")}
         </div>
       ) : (
         <>
+          {dimension === "user" && user && <UserCreditsCard userId={user.user_id} />}
           {summary ? (
             <UsageSummaryView summary={summary} />
           ) : (
             <p role={error ? "alert" : "status"} className="py-8 text-sm text-muted-foreground">
-              {t(error ? "dsh.usageRangeUnavailable" : "dsh.loading")}
+              {error ? t("dsh.usageRangeUnavailable") : <LoadingState label={t("dsh.loading")} />}
             </p>
           )}
         </>

@@ -101,9 +101,9 @@ function CommandSkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
         <SharedTooltip
             disabled={!(nameClipped || descClipped)}
             content={<SkillTooltipContent skill={skill} />}
-            side="top"
+            side="right"
             align="start"
-            contentClassName="max-w-[400px]"
+            contentClassName="max-w-[min(400px,calc(var(--radix-tooltip-content-available-width,152px)_-_8px))] [overflow-wrap:anywhere]"
         >
             <DropdownMenuItem
                 className="dsh-command-skill-row"

@@ -2,40 +2,13 @@
 
 > **完整方法论指南**: [`docs/SDD-Guide.md`](../docs/SDD-Guide.md)
 >
-> 本目录存放 SDD 产物——版本契约、Feature 规格和任务清单。
+> 本目录存放 SDD 产物——版本契约、Feature 规格、设计、任务清单和测试参考用例。
 
 ---
 
-## 工作流（9 步）
+## 工作流
 
-```
-0. release-contract.md          版本开始时，一次性
-   ↓
-1. Spec Discovery               架构师提问，识别 PRD 不确定性
-   ↓ ★ 手动暂停点：用户确认
-2. 编写 spec.md                 合并需求规范 + 技术设计
-   ↓
-3. /sdd-review <dir> spec       审查 spec（11 项检查）
-   ↓ ★ 手动暂停点：用户确认
-4. 编写 tasks.md                拆解为原子任务
-   ↓
-5. /sdd-review <dir> tasks      审查 tasks（17 项，自动推进）
-   ↓
-6. 创建 Feature 分支            feat/v2.5.0/{NNN}-{name}，基于 2.5.0-PM
-   ↓
-7. 逐任务执行                   实现 → 测试 → /task-review → 打勾
-   ↓
-7.5. /e2e-test <dir>            E2E 测试（强制）
-   ↓
-8. /sdd-code-review --base <目标分支> 多维度代码审查（自动）
-   ↓
-9. 合并回 2.5.0-PM
-```
-
-**核心约束**:
-- 每步只产出该步骤的文件，不提前执行后续步骤
-- 两个 ★ 手动暂停点必须等待用户确认
-- 实现偏差必须记录在 tasks.md §实际偏差记录
+完整流程和人工确认节点见 [SDD 指南 §2–3](../docs/SDD-Guide.md#2-full-pipeline)。测试工程师参考用例的生成时机和规则见 [SDD 指南 §2.1](../docs/SDD-Guide.md#21-qa-reference-cases-after-design-confirmation)。
 
 ---
 
@@ -47,6 +20,7 @@ features/
 ├── _templates/                  # 可复用模板
 │   ├── release-contract.md      # 版本契约模板
 │   ├── spec.md                  # 规格文档模板（BiSheng 适配版）
+│   ├── test-cases.md            # 测试工程师参考用例模板
 │   └── tasks.md                 # 任务清单模板（BiSheng 适配版）
 └── v2.5.0/                      # v2.5.0 版本产物
     ├── release-contract.md      # 版本契约（预填）

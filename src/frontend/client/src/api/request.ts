@@ -1,13 +1,19 @@
 // @ts-strict-ignore
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  BrowserScopeSession,
+  needsBrowserScope,
+  hasIndependentScope,
+  isScopeReconfirmationChange,
   decodeErrorEnvelope,
   isApiError,
   isErrorEnvelope,
   normalizeApiError,
   resolveErrorMessageTemplate,
+  referenceErrorMessage,
   type ErrorPresentation,
 } from "@bisheng/api-client";
+import { knowledgeProcessingConflictVariant } from "@bisheng/knowledge/processing-conflicts";
 import axios, { AxiosRequestConfig } from "axios";
 import i18next from "i18next";
 import { redirectToLogin } from "~/utils/loginRedirect";
@@ -16,15 +22,92 @@ import type * as t from "~/types/chat/types";
 
 // Controls automatic error notifications.
 type ErrorOptions = {
+  /** Explicit independent protocol; server authorization is unchanged. */
+  managementContext?: 'independent';
   showError?: boolean;
   /** When true, the interceptor will NOT auto-redirect on 403. The caller handles it. */
   skip403Redirect?: boolean;
-  /** When true, a 500 on this call does not cover the app with the maintenance overlay. */
+  /** When true, failures on this call do not trigger a service availability check. */
   skipMaintenance?: boolean;
 };
 
 const customAxios = axios.create({
   baseURL: import.meta.env.BASE_URL,
+});
+
+export const SERVICE_MAINTENANCE_EVENT = "bs:service-maintenance";
+
+// Keep the public probe on the same gateway without auth redirects or recursive failure checks.
+const SERVICE_PROBE_PATH = "/api/v1/env";
+const serviceProbeTransport = axios.create({
+  baseURL: customAxios.defaults.baseURL,
+  timeout: 8000,
+  validateStatus: () => true,
+});
+let serviceProbe: Promise<boolean> | null = null;
+
+function isServerFailure(status: unknown): boolean {
+  return typeof status === "number" && status >= 500 && status < 600;
+}
+
+/** Confirm an outage with one shared probe across concurrent request failures and retries. */
+export function checkServiceAvailability(): Promise<boolean> {
+  serviceProbe ??= serviceProbeTransport
+    .get(SERVICE_PROBE_PATH)
+    .then(
+      ({ status, data }) => status === 401 || status === 403 || (
+        status === 200 && isErrorEnvelope(data) && data.status_code === 200
+      ),
+      () => false,
+    )
+    .then((reachable) => {
+      if (!reachable) window.dispatchEvent(new Event(SERVICE_MAINTENANCE_EVENT));
+      return reachable;
+    })
+    .finally(() => {
+      serviceProbe = null;
+    });
+  return serviceProbe;
+}
+
+/** Resolves once the in-flight service probe, if any, has settled. */
+export async function serviceProbeSettled(): Promise<void> {
+  await serviceProbe;
+}
+
+const browserScope = new BrowserScopeSession();
+const scopeSnapshots = new WeakMap<object, number>();
+window.addEventListener('storage', event => {
+  if (event.key === 'bs:management-scope' && event.oldValue !== event.newValue && browserScope.source !== 'credential') window.location.reload();
+});
+window.addEventListener('bisheng:management-scope-changed', () => window.location.reload());
+
+export async function prepareBrowserHeaders(method: string, url: string, headers?: object, baseURL?: string): Promise<Record<string, string>> {
+  if (hasIndependentScope(headers) || !needsBrowserScope(method, url, window.location.origin, baseURL)) return {};
+  if (browserScope.isPaused) {
+    try {
+      await browserScope.reconfirm(async () => {
+        const response = await customAxios.get('/api/v1/admin/request-scope');
+        return response.data.data;
+      });
+    } catch (error) {
+      if (isScopeReconfirmationChange(error)) window.dispatchEvent(new Event('bisheng:management-scope-changed'));
+      throw error;
+    }
+  }
+  else await browserScope.ensure(async () => {
+    const response = await customAxios.post('/api/v1/admin/request-scope/bootstrap');
+    return response.data.data;
+  });
+  return browserScope.tenant === null ? {} : {'X-Management-Tenant': String(browserScope.tenant)};
+}
+
+customAxios.interceptors.request.use(async config => {
+  const independent = (config as typeof config & ErrorOptions).managementContext === 'independent';
+  const headers = independent ? {} : await prepareBrowserHeaders(config.method || 'GET', config.url || '', config.headers, config.baseURL);
+  for (const [name, value] of Object.entries(headers)) config.headers.set(name, value);
+  if (headers['X-Management-Tenant'] && browserScope.tenant !== null) scopeSnapshots.set(config, browserScope.tenant);
+  return config;
 });
 
 async function _get<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
@@ -108,6 +191,14 @@ const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefi
   _post(endpoints.refreshToken(retry));
 
 export const translateApiErrorMessage = (data: any) => {
+  const referenceMessage = referenceErrorMessage(data, (key, values) => String(i18next.t(`api_errors.${key}`, values)));
+  if (referenceMessage) return referenceMessage;
+  const variant = knowledgeProcessingConflictVariant(data);
+  const conflictKey = variant ? `knowledgeProcessing.conflict.${variant}` : '';
+  if (conflictKey && i18next.exists(conflictKey)) {
+    const message = i18next.t(conflictKey);
+    if (typeof message === 'string' && message && message !== conflictKey) return message;
+  }
   const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : "";
   const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
   const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";
@@ -198,6 +289,12 @@ const responsePresentation = new WeakMap<object, ErrorPresentation>();
 
 customAxios.interceptors.response.use(
   async (response) => {
+    const snapshot = scopeSnapshots.get(response.config);
+    const confirmed = response.headers?.['x-management-tenant'];
+    if (snapshot !== undefined && (snapshot !== browserScope.tenant || (confirmed !== undefined && Number(confirmed) !== snapshot))) {
+      throw await normalizeRequestFailure({status_code: 19704, status_message: 'management_scope_changed'}, response);
+    }
+    if ((response.config.url || '').includes('/user/login')) browserScope.reset();
     const envelope = (await decodeErrorEnvelope(response.data)) ?? response.data;
     const url = response.config?.url || "";
     if (
@@ -234,14 +331,10 @@ customAxios.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    // Backend service exception surfaced as HTTP 200 + business code 500:
-    // gateways often wrap upstream 5xx into a 200 envelope, so mirror the
-    // HTTP-500 branch below and raise the global maintenance overlay here too.
-    // Return early — the overlay covers the screen, no toast needed underneath.
-    if (envelope?.status_code === 500 && !response.config.skipMaintenance) {
-      responsePresentation.set(response, "global");
-      window.dispatchEvent(new CustomEvent("bs:service-maintenance"));
-      return response;
+    // Gateways can wrap upstream 5xx in HTTP 200. Confirm availability separately
+    // so an endpoint failure keeps its existing caller-level handling.
+    if (isServerFailure(envelope?.status_code) && !response.config.skipMaintenance) {
+      void checkServiceAvailability();
     }
 
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
@@ -279,15 +372,15 @@ customAxios.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
-    if (!error.response) {
-      return Promise.reject(error);
+    const transportFailed = !error.response && (
+      error.code === "ERR_NETWORK" || error.code === "ECONNABORTED" || error.code === "ETIMEDOUT"
+    );
+    if (!originalRequest?.skipMaintenance && (isServerFailure(error.response?.status) || transportFailed)) {
+      void checkServiceAvailability();
     }
 
-    // Gateway/backend service exception → surface the global maintenance overlay.
-    // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
-    if (error.response.status === 500 && !originalRequest?.skipMaintenance) {
-      responsePresentation.set(error.response, "global");
-      window.dispatchEvent(new CustomEvent("bs:service-maintenance"));
+    if (!error.response) {
+      return Promise.reject(error);
     }
 
     if (originalRequest.url?.includes("/api/auth/2fa") === true) {
@@ -375,6 +468,9 @@ async function normalizeRequestFailure(cause, response?) {
     envelope,
     message: translateApiErrorMessage(envelope),
   });
+  const snapshot = scopeSnapshots.get(original?.config ?? cause?.config ?? {});
+  if ([19703, 19704, 19705].includes(error.status_code ?? 0) && snapshot !== undefined && snapshot === browserScope.tenant)
+    browserScope.pause();
   if (original && responsePresentation.has(original))
     error.presentation = responsePresentation.get(original)!;
   return error;

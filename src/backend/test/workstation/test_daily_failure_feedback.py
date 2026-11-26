@@ -1,0 +1,181 @@
+"""Execute real daily boundaries with isolated infrastructure dependencies.
+
+The AST loader avoids application startup and the root conftest's worker imports;
+only external collaborators are replaced. The function bodies are production code.
+"""
+
+import ast
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+from langchain_core.documents import Document
+from langchain_core.messages import ToolMessage
+from loguru import logger
+from redis.exceptions import ConnectionError as RedisConnectionError
+
+ROOT = Path(__file__).resolve().parents[2] / "bisheng"
+SECRET = "redis://:private-password@internal-host:6379/0"
+
+
+def _load(path, names, namespace):
+    tree = ast.parse((ROOT / path).read_text())
+    nodes = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
+    future = ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0)
+    module = ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[]))
+    exec(compile(module, str(ROOT / path), "exec"), namespace)
+    return SimpleNamespace(**{name: namespace[name] for name in names})
+
+
+def _namespace():
+    from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
+
+    namespace = {"json": json, "logger": logger, "ThinkBlockStreamFilter": ThinkBlockStreamFilter}
+    # Before the production adapter exists, old bodies execute without it.
+    try:
+        from bisheng.common.services.failure_context import FailureContextAdapter
+    except ModuleNotFoundError:
+        return namespace
+    namespace["FailureContextAdapter"] = FailureContextAdapter
+    return namespace
+
+
+def _chat(names, namespace=None):
+    return _load("workstation/domain/services/chat_service.py", names, namespace or _namespace())
+
+
+def _method(path, cls_name, name, namespace):
+    tree = ast.parse((ROOT / path).read_text())
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls_name)
+    method = next(n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name)
+    method.decorator_list = []
+    module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
+    exec(compile(module, str(ROOT / path), "exec"), namespace)
+    return namespace[name]
+
+
+def test_daily_tool_error_is_safe_structured_soft_failure():
+    chat = _chat({"_handle_agent_tool_error", "_extract_tool_error", "_parse_tool_results", "_json_safe"})
+    content = chat._handle_agent_tool_error(RedisConnectionError(SECRET))
+    assert SECRET not in content
+    payload = json.loads(content)
+    assert payload["failure_info"]["category"] == "database"
+    message = ToolMessage(content=content, status="error", tool_call_id="one")
+    assert chat._extract_tool_error(message) == payload["error"]
+
+
+async def test_partial_knowledge_failure_preserves_docs_and_safe_source():
+    namespace = _namespace()
+    vectorstore = {"milvus": object(), "es": None, "knowledge": SimpleNamespace(name="visible")}
+    namespace.update(
+        KnowledgeRag=SimpleNamespace(
+            get_multi_knowledge_vectorstore=AsyncMock(side_effect=[RedisConnectionError(SECRET), {2: vectorstore}])
+        ),
+        MultiRetriever=MagicMock(),
+        UseKnowledgeBaseParam=object,
+        UserPayload=object,
+    )
+    doc = Document(page_content="useful answer", metadata={"source": "public.pdf"})
+    namespace["KnowledgeRetrieverTool"] = MagicMock(return_value=SimpleNamespace(ainvoke=AsyncMock(return_value=[doc])))
+    cls = SimpleNamespace(
+        _filter_visible_space_kb_ids=AsyncMock(return_value={"space_kb_ids": [], "org_kb_ids": [1, 2]}),
+        _post_filter_kb_docs_by_view_file=AsyncMock(return_value=[doc]),
+    )
+    method = _method(
+        "workstation/domain/services/workstation_service.py", "WorkStationService", "queryChunksFromDB", namespace
+    )
+    user = SimpleNamespace(user_id=7, is_admin=lambda: True)
+    formatted, docs, failures = await method(
+        cls,
+        "policy",
+        SimpleNamespace(organization_knowledge_ids=[1, 2], knowledge_space_ids=[], knowledge_space_tag_filters={}),
+        1000,
+        user,
+    )
+    assert docs == [doc]
+    assert "useful answer" in formatted[0]
+    assert failures[0]["failure_info"]["category"] == "database"
+    assert SECRET not in json.dumps(failures)
+
+
+async def test_task_knowledge_technical_failure_remains_soft_but_not_no_hit():
+    method = _method("tool/domain/langchain/linsight_knowledge.py", "SearchKnowledgeBase", "_arun", _namespace())
+    tool = SimpleNamespace(
+        allowed_knowledge_ids=None, search_knowledge=AsyncMock(side_effect=RedisConnectionError(SECRET))
+    )
+    result = json.loads(await method(tool, "policy", "101"))
+    assert result["状态"] == "失败"
+    assert result["failure_info"]["category"] == "database"
+    assert SECRET not in json.dumps(result)
+
+
+def test_daily_history_sanitizes_old_provider_errors_and_keeps_partial_answer():
+    namespace = _namespace()
+    namespace["_message_base_fields"] = lambda row: {"id": row.id}
+    helpers = _load(
+        "workstation/domain/services/chat_helpers.py",
+        {"_format_new_message", "_normalise_agent_message_content"},
+        namespace,
+    )
+    secret = "password=secret https://internal"
+    row = SimpleNamespace(
+        id=1,
+        category="agent_answer",
+        type="end",
+        extra=json.dumps({"error": True, "error_msg": secret, "detail": secret, "error_code": 12045}),
+        message=json.dumps(
+            {"msg": "partial answer", "events": [{"type": "tool_call", "error": secret, "results": secret}]}
+        ),
+    )
+    public = helpers._format_new_message(row)
+    assert "secret" not in json.dumps(public)
+    assert public["message"]["msg"] == "partial answer"
+    assert public["extra"]["error_code"] == 12045
+    # The placeholder that replaced ``error_msg`` said nothing and is not sent.
+    assert "error_msg" not in public["extra"]
+
+
+def test_daily_history_returns_the_redacted_detail_of_a_failed_answer():
+    """A reloaded failure shows what the live one showed (114, 2026-11-18: the
+    detail section of a reloaded failure only said "Request failed.")."""
+    namespace = _namespace()
+    namespace["_message_base_fields"] = lambda row: {"id": row.id}
+    helpers = _load(
+        "workstation/domain/services/chat_helpers.py",
+        {"_format_new_message", "_normalise_agent_message_content"},
+        namespace,
+    )
+
+    def _public_extra(extra: dict) -> dict:
+        row = SimpleNamespace(
+            id=1,
+            category="agent_answer",
+            type="end",
+            extra=json.dumps(extra),
+            message=json.dumps({"msg": "", "events": []}),
+        )
+        return helpers._format_new_message(row)["extra"]
+
+    detail = 'ValueError: "ToolExecutor" object has no field "executor"'
+    public = _public_extra(
+        {
+            "error": True,
+            "error_msg": detail,
+            "error_code": 11091,
+            "error_type": "chat_unknown",
+            "detail": detail,
+            "reference_id": "fdec5972c50d4238a5fe4e2599b4e561",
+            "run_id": "fdec5972c50d4238a5fe4e2599b4e561",
+        }
+    )
+    assert public["detail"] == detail
+    assert public["error_type"] == "chat_unknown"
+    assert public["reference_id"] == "fdec5972c50d4238a5fe4e2599b4e561"
+    assert "Request failed." not in json.dumps(public)
+
+    # A row without a detail gets none, and a detail on a clean row is not sent.
+    assert "detail" not in _public_extra({"error": True, "error_msg": "stream interrupted"})
+    assert "detail" not in _public_extra({"detail": "left over"})
+    leaked = _public_extra({"error": True, "detail": "open /opt/bisheng/conf/config.yaml token=abc at 10.0.0.8:3306"})
+    assert leaked["detail"] == "open <path> token=*** at <host>"

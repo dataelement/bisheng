@@ -58,6 +58,7 @@ The 10 RULEs (RULE-1 … RULE-10) are the machine-enforcement arm of constitutio
 1. Spec Discovery                          → ★ user confirms
 2. spec.md   → /sdd-review <dir> spec       → ★ user confirms
 3. design.md → /sdd-review <dir> design     → ★ user confirms (Constitution Check)
+             → read QA template, generate and check eight-column test-cases.md (SDD Guide §2.1)
 4. tasks.md  → /sdd-review <dir> tasks
 5. branch feat/<version>/{NNN}-{name}  (create early; docs + code on the branch)
 6. implement wave-by-wave → /task-review <dir> <id> → check off
@@ -66,7 +67,7 @@ The 10 RULEs (RULE-1 … RULE-10) are the machine-enforcement arm of constitutio
 9. merge
 ```
 
-Artifacts: `features/v{X.Y.Z}/{NNN}-{name}/{spec,design,tasks}.md`. Templates: `features/_templates/` (incl. `release-contract.md`).
+Artifacts: `features/v{X.Y.Z}/{NNN}-{name}/{spec,design,test-cases,tasks}.md`. Templates: `features/_templates/` (incl. `release-contract.md`).
 **★ cannot be skipped.** Trivial/hotfix changes use a lighter track — see SDD-Guide §1.
 
 Tests: new backend tests under `test/<module>/` (e.g., `test/approval/`), not `test/` root. `asyncio_mode=auto`.

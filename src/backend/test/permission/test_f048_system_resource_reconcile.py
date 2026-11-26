@@ -108,8 +108,11 @@ async def test_non_current_resource_is_never_reinterpreted_as_missing(monkeypatc
     )
     monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", inspect)
     runtime = _runtime()
+    runtime.resume_system_owned.side_effect = PermissionPublishNotReadyError(
+        msg="System creation no longer owns this resource"
+    )
 
-    with pytest.raises(PermissionPublishNotReadyError, match="non-current"):
+    with pytest.raises(PermissionPublishNotReadyError, match="no longer owns"):
         await reconcile_system_owned_resources(
             runtime,
             (spec,),
@@ -118,10 +121,49 @@ async def test_non_current_resource_is_never_reinterpreted_as_missing(monkeypatc
         )
 
     runtime.authorize_system_owned.assert_not_awaited()
+    runtime.resume_system_owned.assert_awaited_once()
+    assert runtime.resume_system_owned.await_args.kwargs["apply"] is False
+    assert runtime.resume_system_owned.await_args.kwargs["idempotency_key"] == "f048:system-bootstrap:1:tool:6"
+    inspect.assert_awaited_once()
+
+
+async def test_non_current_original_bootstrap_validates_then_resumes_same_operation(monkeypatch):
+    from dataclasses import replace
+
+    spec = _spec()
+    original = SystemOwnedResourceState(
+        resource=spec,
+        state="NON_CURRENT",
+        mode="CUSTOM",
+        version=0,
+        projection_state="FAILED_CLOSED",
+        operation_id=9,
+    )
+    completed = replace(original, state="CURRENT", version=1, projection_state="CURRENT")
+    monkeypatch.setattr(
+        reconcile_module, "inspect_system_owned_resources", AsyncMock(side_effect=[(original,), (completed,)])
+    )
+    runtime = _runtime()
+
+    report = await reconcile_system_owned_resources(runtime, (spec,), apply=True, operator_id=1)
+
+    assert report.current_count == 1
+    assert report.after[0].operation_id == original.operation_id
+    runtime.authorize_system_owned.assert_not_awaited()
+    calls = runtime.resume_system_owned.await_args_list
+    assert len(calls) == 2
+    assert [call.kwargs.get("apply", True) for call in calls] == [False, True]
+    for call in calls:
+        assert call.kwargs["idempotency_key"] == "f048:system-bootstrap:1:tool:6"
+        assert call.kwargs["target"].tenant_id == spec.tenant_id
+        assert call.kwargs["target"].resource_id == spec.resource_id
+        assert call.kwargs["target"].resource_version == 0
+        assert "action_codes" not in call.kwargs
 
 
 @pytest.mark.parametrize("fail", [False, True])
-async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypatch, fail):
+@pytest.mark.parametrize("caller_tenant", [None, 99])
+async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypatch, fail, caller_tenant):
     from dataclasses import replace
 
     from bisheng.core.context import tenant
@@ -131,7 +173,7 @@ async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypa
     current = tuple(SystemOwnedResourceState(resource=one, state="CURRENT") for one in resources)
     monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", AsyncMock(side_effect=[missing, current]))
     initial = [
-        (tenant.current_tenant_id, None),
+        (tenant.current_tenant_id, caller_tenant),
         (tenant.visible_tenant_ids, frozenset({99})),
         (tenant._admin_scope_tenant_id, 99),
         (tenant._bypass_tenant_filter, False),
@@ -157,9 +199,10 @@ async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypa
         else:
             await reconcile_system_owned_resources(runtime, resources, apply=True, operator_id=1)
             assert observed == [1, 2]
-        assert tenant.get_current_tenant_id() == 99
-        assert tenant.current_tenant_id.get() is None
+        assert tenant.get_current_tenant_id() == caller_tenant
+        assert tenant.current_tenant_id.get() == caller_tenant
         assert tenant.get_visible_tenant_ids() == frozenset({99})
+        assert tenant._admin_scope_tenant_id.get() == 99
         assert not tenant.is_tenant_filter_bypassed()
     finally:
         for variable, token in reversed(tokens):

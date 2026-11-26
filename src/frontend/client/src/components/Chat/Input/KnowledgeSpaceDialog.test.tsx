@@ -13,19 +13,36 @@ jest.mock('~/hooks/useKnowledgeSpaceAccess', () => ({
 const mockRetry = jest.fn();
 jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string, args?: { count: number }) => args ? `${key}:${args.count}` : key,
-  useCategorizedKnowledgeSpaces: ({ keyword }) => ({
-    groups: [{ key: 'created', label: 'Mine', spaces: spaces.filter((item) => item.name.toLowerCase().includes(keyword.toLowerCase())) }],
+
+}));
+let mockHasMore = false;
+const mockLoadMore = jest.fn();
+jest.mock('~/hooks/useVisibleKnowledgeSpaces', () => ({
+  useVisibleKnowledgeSpaces: ({ keyword }) => ({
+    spaces: spaces.filter((item) => item.name.toLowerCase().includes(keyword.toLowerCase())),
     isFetching: false, isError: mockError, retry: mockRetry,
+    hasMore: mockHasMore, loadMore: mockLoadMore,
   }),
 }));
 jest.mock('@bisheng/ui', () => ({
   Modal: ({ children, footer, onOpenChange }) => <div role="dialog" onKeyDown={(event) => { if (event.key === 'Escape') onOpenChange(false); }}>{children}{footer}</div>,
-  SearchInput: (props) => <input {...props} />,
-  Button: ({ color, variant, ...props }) => { void color; void variant; return <button {...props} />; },
+  SearchInput: ({ clearLabel, ...props }) => { void clearLabel; return <input {...props} />; },
+  Button: ({ color, variant, loading, ...props }) => { void color; void variant; void loading; return <button {...props} />; },
   Checkbox: ({ onCheckedChange, ...props }) => <input type="checkbox" {...props} onChange={onCheckedChange} />,
 }));
 const original = [{ id: 'org', name: 'Enterprise', type: 'org' as const }, { id: '1', name: 'Policy', type: 'space' as const }];
-beforeEach(() => { mockRevoked = false; mockError = false; mockRetry.mockClear(); });
+beforeEach(() => { mockRevoked = false; mockError = false; mockHasMore = false; mockRetry.mockClear(); mockLoadMore.mockClear(); });
+
+test('an empty initial selection enables confirmation only after selecting a space', () => {
+  const onConfirm = jest.fn();
+  render(<KnowledgeSpaceDialog value={[original[0]]} onConfirm={onConfirm} onClose={jest.fn()} />);
+  expect(screen.getByRole('button', { name: 'dshChat.confirmKnowledge' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Product' }));
+  expect(screen.getByRole('button', { name: 'dshChat.confirmKnowledge' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Product' }));
+  expect(screen.getByRole('button', { name: 'dshChat.confirmKnowledge' })).toBeDisabled();
+  expect(onConfirm).not.toHaveBeenCalled();
+});
 
 test('selection is a draft across search and commits once, preserving organization knowledge', () => {
   const onConfirm = jest.fn(); const onClose = jest.fn();
@@ -74,4 +91,17 @@ test('revoked draft counts zero and confirmation explicitly removes the old bind
   expect(screen.getByText('knowledgeAccess.revoked')).toBeInTheDocument();
   fireEvent.click(screen.getByText('dshChat.confirmKnowledge'));
   expect(onConfirm).toHaveBeenCalledWith([]);
+});
+
+test('blank candidate page continues and preserves a saved selection absent from that page', () => {
+  mockHasMore = true;
+  const onConfirm = jest.fn();
+  const saved = { id: '999', name: 'Saved direct grant', type: 'space' as const };
+  render(<KnowledgeSpaceDialog value={[saved]} onConfirm={onConfirm} onClose={jest.fn()} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'no match yet' } });
+  fireEvent.click(screen.getByText('dshChat.loadMoreKnowledge'));
+  expect(mockLoadMore).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText('dshChat.noKnowledgeMatch')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText('dshChat.confirmKnowledge'));
+  expect(onConfirm).toHaveBeenCalledWith([saved]);
 });

@@ -169,8 +169,10 @@ export function getUser(): Promise<t.TUser> {
     // Management-only users are handled by WorkbenchAccessGuard with history fallback.
     return {
       "_id": user_id,
+      tenant_id: res.data.leaf_tenant_id ?? res.data.tenant_id ?? 1,
       "name": user_name,
       "username": user_name,
+      external_id: res.data.external_id ?? null,
       "email": user_name,
       "emailVerified": true,
       // Backend avatar is usually a path like "/bisheng/avatar/..jpg?...".
@@ -1094,5 +1096,25 @@ export function getLinsightFilePreviewApi(
     { file_url: fileUrl, session_version_id: vid },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- skip403Redirect is an ErrorOptions extra, not on AxiosRequestConfig
     { headers, skip403Redirect: true } as any,
+  );
+}
+
+/**
+ * PDF preview of a .ppt/.pptx kept on a conversation (a deck of a direct answer,
+ * which has no task version for getLinsightFilePreviewApi). Same `ready` /
+ * `converting` contract. The share token lets a share-page reader in; errors
+ * reject without a toast, the preview panel shows the failure itself.
+ */
+export function getConversationSlidesPreviewApi(
+  conversationId: string,
+  fileId: string,
+  shareToken?: string,
+): Promise<{ data: LinsightFilePreviewResult }> {
+  const headers = shareToken ? { 'share-token': shareToken } : {};
+  return request.post(
+    `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/files/${encodeURIComponent(fileId)}/slides-preview`,
+    {},
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- skip403Redirect / showError are ErrorOptions extras, not on AxiosRequestConfig
+    { headers, skip403Redirect: true, showError: false } as any,
   );
 }

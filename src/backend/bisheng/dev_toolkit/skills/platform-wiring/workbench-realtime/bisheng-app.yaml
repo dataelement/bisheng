@@ -1,0 +1,6 @@
+manifest_version: 1
+name: 团队共享记录
+slug: shared-records-demo
+description: 验证本人身份、记录冲突、断线补偿与持久化的工作台样例
+runtime: python3.11
+port: 8080

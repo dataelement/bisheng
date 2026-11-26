@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 
@@ -25,12 +26,12 @@ class ContentSafetyTransformer(BaseDocumentTransformer):
         documents: Sequence[Document],
         **kwargs: Any,
     ) -> Sequence[Document]:
-        text = '\n'.join(document.page_content or '' for document in documents)
+        text = "\n".join(document.page_content or "" for document in documents)
         result = SensitiveWordPolicyService.check_text(
             tenant_id=self.tenant_id,
             business_type=self.business_type,
             text=text,
         )
         if result.enabled and result.hits:
-            raise ContentSafetyViolation(result)
+            raise ContentSafetyViolation(result, documents)
         return documents

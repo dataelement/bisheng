@@ -1,13 +1,8 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Outlined } from 'bisheng-icons';
 import type { ClipboardEvent, CompositionEvent, KeyboardEvent, UIEvent } from 'react';
-
-export interface ComposerReference {
-    key: string;
-    kind: 'skill' | 'tool' | 'space';
-    label: string;
-}
+import { InlineChatReference } from '../InlineChatReference';
+import type { ComposerReference, SentComposerReference } from './composerReferences';
 
 interface ComposerEditorProps {
     value: string;
@@ -26,42 +21,66 @@ interface ComposerEditorProps {
 
 const tokenSelector = '[data-composer-reference]';
 
-/** Read the editable document while keeping reference identity separate from prompt text. */
-export function readComposerDocument(root: HTMLElement) {
-    const keys: string[] = [];
-    const visit = (node: Node): string => {
-        if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
-        if (!(node instanceof HTMLElement)) return '';
+function readComposerParts(root: HTMLElement) {
+    let text = '';
+    const positions: { key: string; offset: number }[] = [];
+    const visit = (node: Node): void => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            text += node.textContent || '';
+            return;
+        }
+        if (!(node instanceof HTMLElement)) return;
         const key = node.dataset.composerReference;
-        if (key) { keys.push(key); return ''; }
-        if (node.tagName === 'BR') return node.nextSibling ? '\n' : '';
-        const content = Array.from(node.childNodes).map(visit).join('');
-        return /^(DIV|P)$/.test(node.tagName) && node !== root && node.previousSibling
-            ? `\n${content}` : content;
+        if (key) {
+            positions.push({ key, offset: text.length });
+            return;
+        }
+        if (node.tagName === 'BR') {
+            if (node.nextSibling) text += '\n';
+            return;
+        }
+        if (/^(DIV|P)$/.test(node.tagName) && node !== root && node.previousSibling) text += '\n';
+        node.childNodes.forEach(visit);
     };
-    return { text: visit(root), keys };
+    visit(root);
+    return { text, positions };
 }
 
-const referenceIcons = { skill: Outlined.Skill, tool: Outlined.Hammer, space: Outlined.FolderClose };
-const iconMarkup = new Map<ComposerReference['kind'], string>();
+/** Read the editable document while keeping reference identity separate from prompt text. */
+export function readComposerDocument(root: HTMLElement) {
+    const { text, positions } = readComposerParts(root);
+    return { text, keys: positions.map(({ key }) => key) };
+}
+
+export function readSentComposerReferences(
+    root: HTMLElement,
+    references: ComposerReference[],
+): SentComposerReference[] {
+    if (!references.length) return [];
+    const { text, positions } = readComposerParts(root);
+    const start = text.length - text.trimStart().length;
+    const length = text.trim().length;
+    const byKey = new Map(references.map((reference) => [reference.key, reference]));
+    return positions.flatMap(({ key, offset }) => {
+        const reference = byKey.get(key);
+        if (!reference) return [];
+        return [{
+            kind: reference.kind,
+            label: reference.label,
+            offset: Math.max(0, Math.min(offset - start, length)),
+            ...(reference.is_tag ? { is_tag: reference.is_tag } : {}),
+        }];
+    });
+}
 
 function createReference(reference: ComposerReference) {
-    const token = document.createElement('span');
+    const template = document.createElement('template');
+    template.innerHTML = renderToStaticMarkup(
+        <InlineChatReference kind={reference.is_tag ? 'tag' : reference.kind} label={reference.label} />,
+    );
+    const token = template.content.firstElementChild as HTMLSpanElement;
     token.dataset.composerReference = reference.key;
     token.setAttribute('contenteditable', 'false');
-    token.className = 'dsh-inline-reference';
-    token.dataset.referenceKind = reference.kind;
-    token.title = reference.label;
-    // Only trusted icon components produce markup; resource names stay text nodes.
-    if (!iconMarkup.has(reference.kind)) {
-        const Icon = referenceIcons[reference.kind];
-        iconMarkup.set(reference.kind, renderToStaticMarkup(<Icon size={14} aria-hidden="true" focusable="false" />));
-    }
-    token.innerHTML = iconMarkup.get(reference.kind)!;
-    const label = document.createElement('span');
-    label.className = 'dsh-inline-reference-label';
-    label.textContent = reference.label;
-    token.append(label);
     return token;
 }
 
@@ -126,8 +145,15 @@ export const ComposerEditor = forwardRef<HTMLDivElement, ComposerEditorProps>(fu
             bookmark.current = null;
         }
         const wanted = new Set(references.map((reference) => reference.key));
+        const byKey = new Map(references.map((reference) => [reference.key, reference]));
         for (const token of root.querySelectorAll<HTMLElement>(tokenSelector)) {
             if (!wanted.has(token.dataset.composerReference!)) token.remove();
+            else {
+                const reference = byKey.get(token.dataset.composerReference!)!;
+                const label = token.querySelector('.dsh-inline-reference-label');
+                if (label && label.textContent !== reference.label) label.textContent = reference.label;
+                token.title = reference.label;
+            }
         }
         const present = new Set(readComposerDocument(root).keys);
         const added = references.filter((reference) => !present.has(reference.key));

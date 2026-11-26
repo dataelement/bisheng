@@ -1,8 +1,28 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 import { bsConfirm } from './useConfirm'
+import userEvent from '@testing-library/user-event'
 
 vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
+
+it('uses the configured loading asset in the independent confirmation root', async () => {
+    const originalBrand = window.BRAND_CONFIG
+    let finish: () => void = () => undefined
+    try {
+        window.BRAND_CONFIG = { ...originalBrand, URLLoadingIcon: 'https://assets.test/confirm-loading.svg' }
+        await act(async () => { bsConfirm({ desc: 'Save fixture?', okTxt: 'Save fixture', onOk: next => new Promise<void>(resolve => {
+            finish = () => { next(); resolve() }
+        }) }) })
+        fireEvent.click(await screen.findByRole('button', { name: 'Save fixture' }))
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save fixture' }).querySelector('img'))
+            .toHaveAttribute('src', 'https://assets.test/confirm-loading.svg'))
+        expect(screen.getByRole('button', { name: 'Save fixture' })).toBeDisabled()
+        await act(async () => { finish() })
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    } finally {
+        window.BRAND_CONFIG = originalBrand
+    }
+})
 
 it('keeps failed async confirmations open and permits retry after releasing the lock', async () => {
     let reject: (reason: unknown) => void = () => undefined
@@ -23,6 +43,103 @@ it('keeps failed async confirmations open and permits retry after releasing the 
     expect(onOk).toHaveBeenCalledTimes(2)
 })
 
+it('releases an owner lock on Escape and lets the confirmation reopen', async () => {
+    let locked = false
+    const onOk = vi.fn()
+    const onClose = vi.fn(() => { locked = false })
+    const open = () => {
+        if (locked) return
+        locked = true
+        bsConfirm({ desc: 'Delete workbench?', okTxt: 'Delete workbench', onOk, onClose })
+    }
+    await act(async () => { open() })
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    await userEvent.setup().keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onOk).not.toHaveBeenCalled()
+    await act(async () => { open() })
+    expect(await screen.findByRole('button', { name: 'Delete workbench' })).toBeInTheDocument()
+    await userEvent.setup().keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(2)
+})
+
+it('calls onClose exactly once when successful completion aborts its owner signal', async () => {
+    const scope = new AbortController()
+    const onClose = vi.fn(() => scope.abort())
+    const onCancel = vi.fn()
+    await act(async () => { bsConfirm({ desc: 'Delete completed workbench?', okTxt: 'Complete delete', signal: scope.signal,
+        onClose, onCancel, onOk: next => next() }) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Complete delete' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(scope.signal.aborted).toBe(true)
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onCancel).not.toHaveBeenCalled()
+})
+
+it('calls onClose once when cancellation also triggers Radix dismissal and owner abort', async () => {
+    const scope = new AbortController()
+    const onClose = vi.fn(() => scope.abort())
+    const onCancel = vi.fn()
+    const onOk = vi.fn()
+    await act(async () => { bsConfirm({ desc: 'Cancel delete?', canelTxt: 'Cancel delete', signal: scope.signal, onClose, onCancel, onOk }) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel delete' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(onOk).not.toHaveBeenCalled()
+})
+
+it('does not run an old deferred submit against a replacement confirmation', async () => {
+    const oldOk = vi.fn()
+    const newOk = vi.fn()
+    await act(async () => { bsConfirm({ desc: 'Old dialog', okTxt: 'Old submit', onOk: oldOk }) })
+    act(() => {
+        fireEvent.click(screen.getByRole('button', { name: 'Old submit' }))
+        bsConfirm({ desc: 'New dialog', okTxt: 'New submit', onOk: newOk })
+    })
+    await act(async () => { await Promise.resolve() })
+    expect(oldOk).not.toHaveBeenCalled()
+    expect(newOk).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'New submit' })).toBeEnabled()
+    await userEvent.setup().keyboard('{Escape}')
+})
+
+it('does not close or unlock a replacement while an old pending submit completes', async () => {
+    let finishOld: () => void = () => undefined
+    let finishNew: () => void = () => undefined
+    let closeNew: () => void = () => undefined
+    const oldClose = vi.fn()
+    const newClose = vi.fn()
+    const oldOk = vi.fn((next: () => void) => new Promise<void>(resolve => { finishOld = () => { next(); resolve() } }))
+    const newOk = vi.fn((next: () => void) => new Promise<void>(resolve => { finishNew = resolve; closeNew = next }))
+    await act(async () => { bsConfirm({ desc: 'Old pending', okTxt: 'Old pending submit', onOk: oldOk, onClose: oldClose }) })
+    fireEvent.click(screen.getByRole('button', { name: 'Old pending submit' }))
+    await waitFor(() => expect(oldOk).toHaveBeenCalledOnce())
+    await act(async () => { bsConfirm({ desc: 'New pending', okTxt: 'New pending submit', onOk: newOk, onClose: newClose }) })
+    fireEvent.click(screen.getByRole('button', { name: 'New pending submit' }))
+    await waitFor(() => expect(newOk).toHaveBeenCalledOnce())
+    await act(async () => { finishOld() })
+    expect(screen.getByRole('button', { name: 'New pending submit' })).toBeDisabled()
+    expect(newClose).not.toHaveBeenCalled()
+    expect(oldClose).not.toHaveBeenCalled()
+    await act(async () => { closeNew(); finishNew() })
+    expect(newClose).toHaveBeenCalledOnce()
+})
+
+it('treats Escape as acknowledgement for a hideCancel confirmation', async () => {
+    const onCancel = vi.fn()
+    const onClose = vi.fn()
+    const onOk = vi.fn((next: () => void) => next())
+    await act(async () => { bsConfirm({ desc: 'Acknowledge notice', hideCancel: true, onOk, onCancel, onClose }) })
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    await userEvent.setup().keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(onOk).toHaveBeenCalledOnce()
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onCancel).not.toHaveBeenCalled()
+})
+
 it('closes an invalidated form confirmation without submitting it', async () => {
     const scope = new AbortController()
     const onOk = vi.fn()
@@ -31,4 +148,39 @@ it('closes an invalidated form confirmation without submitting it', async () => 
     act(() => scope.abort())
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     expect(onOk).not.toHaveBeenCalled()
+})
+
+it('offers explicit decisions and returns focus to the opener after cancellation', async () => {
+    const user = userEvent.setup()
+    render(<button onClick={() => bsConfirm({
+        variant: 'default',
+        title: 'Discard changes?',
+        desc: 'Unsaved changes will be lost.',
+        canelTxt: 'Keep editing',
+        okTxt: 'Discard changes',
+    })}>Open draft confirmation</button>)
+    const opener = screen.getByRole('button', { name: 'Open draft confirmation' })
+    await user.click(opener)
+    const dialog = await screen.findByRole('alertdialog', { name: 'Discard changes?' })
+    expect(within(dialog).getAllByRole('button')).toHaveLength(2)
+    const cancel = within(dialog).getByRole('button', { name: 'Keep editing' })
+    await waitFor(() => expect(cancel).toHaveFocus())
+    await user.click(cancel)
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(opener).toHaveFocus())
+})
+
+it('blocks Escape and cancellation while the confirmation is submitting', async () => {
+    let finish: () => void = () => undefined
+    const onOk = vi.fn((next: () => void) => new Promise<void>(resolve => {
+        finish = () => { next(); resolve() }
+    }))
+    await act(async () => { bsConfirm({ desc: 'Pending confirmation', okTxt: 'Submit pending', canelTxt: 'Cancel pending', onOk }) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Submit pending' }))
+    await waitFor(() => expect(onOk).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: 'Cancel pending' })).toBeDisabled()
+    await userEvent.setup().keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    await act(async () => finish())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
 })

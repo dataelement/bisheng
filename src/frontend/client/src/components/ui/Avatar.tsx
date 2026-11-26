@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Filled } from "bisheng-icons"
 import cn from "~/utils/cn"
 
 const Avatar = React.forwardRef<
@@ -32,11 +33,10 @@ interface AvatarNameProps extends React.HTMLAttributes<HTMLDivElement> {
 const AvatarName = React.forwardRef<HTMLDivElement, AvatarNameProps>(
   ({ className, name, ...props }, ref) => {
 
-    // 与频道/知识空间成员管理一致：仅取首字符（拉丁字母大写）
-    const getInitials = (str?: string) => {
-      const trimmed = (str || "").trim();
-      return (trimmed[0] || "?").toUpperCase();
-    };
+    // Read one Unicode code point, preserving supplementary CJK characters.
+    // Without a name (e.g. a guest-link visitor) show a generic person icon
+    // instead of a "?" glyph.
+    const initial = Array.from((name || "").trim())[0]?.toUpperCase();
 
     // 默认灰底白字，与频道/知识空间成员管理列表一致（避免与 bg-primary 蓝色兜底混用）
     return (
@@ -48,7 +48,7 @@ const AvatarName = React.forwardRef<HTMLDivElement, AvatarNameProps>(
         )}
         {...props}
       >
-        {getInitials(name)}
+        {initial ?? <Filled.Person className="h-3/5 w-3/5" aria-hidden />}
       </div>
     );
   }

@@ -16,26 +16,24 @@ from sqlmodel import col, select
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import CreateUserReq, resp_200
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
-from bisheng.common.errcode.user import UserForbiddenError, UserNotPasswordError, UserPasswordError, UserValidateError
+from bisheng.common.errcode.user import UserNotPasswordError, UserPasswordError, UserValidateError
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import DepartmentDao, UserDepartment
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
-from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+from bisheng.user.api.current_tenant import (
+    get_current_tenant_handler as _get_current_tenant_handler,
+)
+from bisheng.user.api.endpoints.profile import router as profile_router
 from bisheng.utils import generate_uuid, get_request_ip
-from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_CURRENT_SESSION, USER_PASSWORD_ERROR
+from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR
 
-from ...common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from ...common.schemas.telemetry.event_data_schema import UserLoginEventData
-from ...common.services import telemetry_service
-from ...core.logger import trace_id_var
 from ..domain.models.user import User, UserCreate, UserDao, UserLogin, UserUpdate
 from ..domain.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from ..domain.services.auth import AuthJwt, LoginUser
@@ -43,6 +41,7 @@ from ..domain.services.user import UserService
 
 # build router
 router = APIRouter(prefix="", tags=["User"])
+router.include_router(profile_router)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -55,86 +54,17 @@ async def regist(*, user: UserCreate):
 
 
 @router.post("/user/sso", deprecated=True)
-async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends()):
-    """Legacy SSO login endpoint kept for backward compatibility only.
+async def sso():
+    """Refuse the unsigned legacy identity-assertion protocol.
 
-    New third-party login flows should use the HMAC-authenticated
-    ``/api/v1/internal/sso/login-sync`` family instead so department/member
-    sync, tenant mapping, and source-aware binding stay consistent.
+    A deployment flag is not caller authentication. Gateway integrations must
+    migrate to the existing HMAC-authenticated login-sync endpoint; this tombstone
+    deliberately has no token-signing dependency and never loads user records.
     """
-    if settings.get_system_login_method().bisheng_pro:  # Judgingsso Open or not
-        account_name = user.user_name
-        user_exist = UserDao.get_unique_user_by_name(account_name)
-        if not user_exist:
-            # Determine if there is a user under the platform
-            user_all = UserDao.get_all_users(page=1, limit=1)
-            # Automatically create users
-            user_exist = User.model_validate(user)
-            logger.info("act=create_user account={}", account_name)
-            default_admin = settings.get_system_login_method().admin_username
-            # Insert as Super Admin if there is no user on the platform or if the username matches the configured admin username
-            if len(user_all) == 0 or (default_admin and default_admin == account_name):
-                # Create as Super Admin
-                user_exist = await UserDao.add_user_and_admin_role(user_exist)
-                await LegacyRBACSyncService.sync_user_auth_created(
-                    user_exist.user_id,
-                    [AdminRole],
-                )
-                await UserService.areconcile_first_user_dashboard_permissions(user_exist.user_id)
-            else:
-                # Create as Normal User
-                user_exist = await UserDao.add_user_and_configured_default_auth(
-                    user_exist,
-                    default_groupid=user.default_groupid,
-                    default_roleid=user.default_roleid,
-                )
-                await LegacyRBACSyncService.sync_user_auth_created(
-                    user_exist.user_id,
-                    [user.default_roleid or DefaultRole],
-                    member_group_ids=[user.default_groupid] if user.default_groupid else None,
-                )
-        if 1 == user_exist.delete:
-            raise UserForbiddenError.http_exception()
-        guard = await UserService._reject_login_if_user_has_no_usable_access(user_exist)
-        if guard is not None:
-            return guard
-        # Resolve the user's active leaf tenant so the JWT carries the right
-        # tenant_id. Without this, ``create_access_token`` falls back to
-        # ``DEFAULT_TENANT_ID`` (root) — every Child Admin coming through SSO
-        # would be tagged as root in ``current_tenant_id``, causing tenant-aware
-        # writes (e.g. ``LLMServerDao.ainsert_server_with_models``) to land in
-        # tenant 1 instead of their own leaf tenant.
-        active_user_tenant = await UserTenantDao.aget_active_user_tenant(user_exist.user_id)
-        leaf_tenant_id = active_user_tenant.tenant_id if active_user_tenant is not None else DEFAULT_TENANT_ID
-        access_token = LoginUser.create_access_token(
-            user_exist,
-            auth_jwt=auth_jwt,
-            tenant_id=leaf_tenant_id,
-        )
-
-        # Set the logged in user's currentcookie, .jwtValid for an additional hour
-        redis_client = await get_redis_client()
-        await redis_client.aset(
-            USER_CURRENT_SESSION.format(user_exist.user_id),
-            access_token,
-            settings.cookie_conf.jwt_token_expire_time + 3600,
-        )
-
-        # Log Audit Logs
-        login_user = await LoginUser.init_login_user(user_id=user_exist.user_id, user_name=user_exist.user_name)
-        AuditLogService.user_login(login_user, get_request_ip(request))
-
-        # RecordTelemetryJournal
-        await telemetry_service.log_event(
-            user_id=login_user.user_id,
-            event_type=BaseTelemetryTypeEnum.USER_LOGIN,
-            trace_id=trace_id_var.get(),
-            event_data=UserLoginEventData(method="oss"),
-        )
-
-        return resp_200({"access_token": access_token, "refresh_token": access_token})
-    else:
-        raise ValueError("Interface not supported")
+    raise HTTPException(
+        status_code=410,
+        detail="Legacy unsigned SSO is disabled; use /api/v1/internal/sso/login-sync with HMAC authentication.",
+    )
 
 
 def get_error_password_key(user_id: int) -> str:
@@ -177,8 +107,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     if not db_user:
         raise NotFoundError()
 
-    db_user_roles = await UserRoleDao.aget_user_roles(user_id)
-    role_ids = [user_role.role_id for user_role in db_user_roles]
+    role_ids = list(login_user.user_role)
     admin_group = await UserGroupDao.aget_user_admin_group(user_id)
     admin_group = [one.group_id for one in admin_group]
     dept_admin_depts = await DepartmentDao.aget_user_admin_departments(user_id)
@@ -187,10 +116,12 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         db_user,
         is_department_admin=is_department_admin,
         role_ids=role_ids,
+        policy=login_user._role_policy,
     )
     menu_approval_mode_workbench, menu_approval_mode_admin = await login_user.compute_menu_approval_modes(
         db_user,
         role_ids=role_ids,
+        policy=login_user._role_policy,
     )
     # Legacy union flag, kept for back-compat clients during transition.
     menu_approval_mode = menu_approval_mode_workbench or menu_approval_mode_admin
@@ -237,6 +168,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     entry = await LoginUser.user_entry_payload_for_read(
         db_user,
         role_ids=role_ids,
+        policy=login_user._role_policy,
         is_department_admin=is_department_admin,
     )
     return resp_200(
@@ -279,7 +211,7 @@ async def logout(auth_jwt: AuthJwt = Depends()):
 
 
 async def _department_admin_scoped_user_ids(user_id: int) -> list[int] | None:
-    """部门管理员：返回其管辖部门子树内出现过的 user_id；非部门管理员返回 None。"""
+    """部门管理员:返回其管辖部门子树内出现过的 user_id;非部门管理员返回 None。"""
     admin_depts = await DepartmentDao.aget_user_admin_departments(user_id)
     if not admin_depts:
         return None
@@ -305,9 +237,9 @@ async def _department_admin_scoped_user_ids(user_id: int) -> list[int] | None:
 async def _tenant_admin_scoped_user_ids(
     login_user: LoginUser,
 ) -> list[int] | None:
-    """子租户管理员：返回其挂载子树（含下挂子子租户）内全部 user_id；非子租户管理员返回 None。
+    """子租户管理员:返回其挂载子树(含下挂子子租户)内全部 user_id;非子租户管理员返回 None。
 
-    Root 租户由 super_admin 负责（``is_admin()`` 已短路），此 helper 直接返回 None。
+    Root 租户由 super_admin 负责(``is_admin()`` 已短路),此 helper 直接返回 None。
     """
     from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
     from bisheng.permission.application import is_tenant_admin
@@ -338,7 +270,7 @@ async def _tenant_admin_scoped_user_ids(
         return []
     internal_ids: set[int] = set()
     for row in subtree:
-        if isinstance(row, (list, tuple)):
+        if isinstance(row, list | tuple):
             internal_ids.add(int(row[0]))
         else:
             internal_ids.add(int(row))
@@ -354,9 +286,9 @@ async def _tenant_admin_scoped_user_ids(
 
 
 def _primary_department_id_map_for_user_ids(user_ids: list[int]) -> dict[int, int | None]:
-    """user_id -> ``department.id``（主部门），供前端组织树挂载。
+    """user_id -> ``department.id``(主部门),供前端组织树挂载。
 
-    ``user.dept_id`` 字段为历史/业务侧字符串，与 ``department.id`` 不一定一致；
+    ``user.dept_id`` 字段为历史/业务侧字符串,与 ``department.id`` 不一定一致;
     选人组件应按 ``user_department`` 关系挂载到树节点。
     """
     ids = [int(x) for x in user_ids if x is not None]
@@ -421,8 +353,8 @@ async def list_user(
     name: str | None = None,
     page_size: int | None = 10,
     page_num: int | None = 1,
-    group_id: Annotated[list[int], Query()] = None,
-    role_id: Annotated[list[int], Query()] = None,
+    group_id: Annotated[list[int] | None, Query()] = None,
+    role_id: Annotated[list[int] | None, Query()] = None,
     simple: bool = False,
     with_department_path: bool = False,
     login_user: LoginUser = Depends(LoginUser.get_login_user),
@@ -433,18 +365,18 @@ async def list_user(
     user_ids: list[int] = []
 
     if not login_user.is_admin():
-        # 用户组管理员：可管理哪些用户组
+        # 用户组管理员:可管理哪些用户组
         user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
         user_admin_groups = [one.group_id for one in user_admin_groups]
         managed_groups = user_admin_groups
-        # 部门管理员：管辖部门子树内用户（与是否同时为用户组管理员无关，均需纳入可选列表）
+        # 部门管理员:管辖部门子树内用户(与是否同时为用户组管理员无关,均需纳入可选列表)
         dept_scoped_ids = await _department_admin_scoped_user_ids(login_user.user_id)
-        # 子租户管理员：挂载子树内全部用户（PRD §4.5）。tenant#admin 不会派生
-        # department#admin 元组，必须独立合并，否则筛选/选人/资源授权弹窗皆 500。
+        # 子租户管理员:挂载子树内全部用户(PRD §4.5)。tenant#admin 不会派生
+        # department#admin 元组,必须独立合并,否则筛选/选人/资源授权弹窗皆 500。
         tenant_scoped_ids = await _tenant_admin_scoped_user_ids(login_user)
 
-        # 「组织管辖范围」= 部门子树 ∪ 子租户挂载子树。两个 helper 均返回 None
-        # 才视为「无组织管辖范围」（既非部门管理员也非子租户管理员）。
+        # 「组织管辖范围」= 部门子树 union 子租户挂载子树。两个 helper 均返回 None
+        # 才视为「无组织管辖范围」(既非部门管理员也非子租户管理员)。
         org_scoped_ids: set[int] | None = None
         if dept_scoped_ids is not None or tenant_scoped_ids is not None:
             org_scoped_ids = set()
@@ -454,16 +386,16 @@ async def list_user(
                 org_scoped_ids.update(tenant_scoped_ids)
 
         if not managed_groups:
-            # 仅部门 / 子租户管理员：仅能看其管辖范围内用户。
+            # 仅部门 / 子租户管理员:仅能看其管辖范围内用户。
             # 「没有组织管辖范围」和「管辖范围为空」对调用方是同一件事——通过这个
-            # 接口你看不到任何人——所以同样返回空页，而不是 500。原先前者报错，
+            # 接口你看不到任何人——所以同样返回空页,而不是 500。原先前者报错,
             # 让持有资源 manage_permission 但不属于任何组织管理员角色的用户
-            # （例如知识空间管理员）在授权选人时直接拿到 500，对话框整个用不了。
+            # (例如知识空间管理员)在授权选人时直接拿到 500,对话框整个用不了。
             if not org_scoped_ids:
                 return resp_200({"data": [], "total": 0})
             user_ids = list(org_scoped_ids)
         else:
-            # 同时为用户组管理员时：「组成员 ∪ 部门子树用户 ∪ 租户子树用户」
+            # 同时为用户组管理员时:「组成员 union 部门子树用户 union 租户子树用户」
             groups = managed_groups
             if group_id:
                 groups = list(set(groups) & set(group_id))
@@ -471,7 +403,7 @@ async def list_user(
                     raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
             group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
             if role_id:
-                roles = list(set(role_id) & set([one.id for one in group_roles]))
+                roles = list(set(role_id) & {one.id for one in group_roles})
 
             groups_user_ids = UserGroupDao.get_groups_user(groups)
             gids = {one.user_id for one in groups_user_ids} if groups_user_ids else set()
@@ -504,13 +436,18 @@ async def list_user(
         return resp_200({"data": res, "total": total_count})
 
     uid_list = [int(one.user_id) for one in users if getattr(one, "user_id", None) is not None]
-    primary_dept_by_user = _primary_department_id_map_for_user_ids(uid_list)
-    # F038: resolve each primary department's full path once (batched) so the
-    # picker needn't fire a path-tree call per distinct department. Gated so the
-    # general user list pays nothing unless the caller opts in.
-    dept_path_by_id: dict[int, str] = {}
-    if with_department_path:
-        dept_path_by_id = await _department_path_label_map([d for d in primary_dept_by_user.values() if d is not None])
+    from bisheng.common.request_scope import get_admitted_request_scope
+
+    admitted = get_admitted_request_scope()
+    if admitted is not None and admitted.kind == "tenant":
+        primary_dept_by_user, dept_path_by_id = UserService.management_department_hints(uid_list)
+    else:
+        primary_dept_by_user = _primary_department_id_map_for_user_ids(uid_list)
+        dept_path_by_id = {}
+        if with_department_path:
+            dept_path_by_id = await _department_path_label_map(
+                [d for d in primary_dept_by_user.values() if d is not None]
+            )
 
     # Parallelize avatar presigned-URL generation to avoid N serial MinIO round-trips
     import asyncio as _asyncio
@@ -522,7 +459,7 @@ async def list_user(
     res = []
     role_dict = {}
     group_dict = {}
-    for one, avatar_url in zip(users, avatar_urls):
+    for one, avatar_url in zip(users, avatar_urls, strict=False):
         one_data = one.model_dump()
         # Never expose sensitive/internal User columns in the list response — the
         # ORM dump carries the full row; the frontend uses none of these fields.
@@ -590,7 +527,7 @@ async def _dept_admin_can_manage_member_account_status(
     login_user: LoginUser,
     target_user_id: int,
 ) -> bool:
-    """部门管理员（FGA）是否管辖目标用户所在任一部门；用于启禁用等账号状态操作。"""
+    """部门管理员(FGA)是否管辖目标用户所在任一部门;用于启禁用等账号状态操作。"""
     admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
     if not admin_depts:
         return False
@@ -608,8 +545,8 @@ async def _tenant_admin_can_manage_member_account_status(
     login_user: LoginUser,
     target_user_id: int,
 ) -> bool:
-    """子租户管理员是否管辖目标用户：操作者持有 tenant#admin，且目标用户的任一部门
-    位于操作者租户挂载子树内。Root 租户由 super_admin 走 ``is_admin()`` 快速通过，
+    """子租户管理员是否管辖目标用户:操作者持有 tenant#admin,且目标用户的任一部门
+    位于操作者租户挂载子树内。Root 租户由 super_admin 走 ``is_admin()`` 快速通过,
     不进入此路径。
     """
     from bisheng.database.models.department import Department
@@ -653,7 +590,7 @@ async def _can_manage_member_account_status(
     login_user: LoginUser,
     target_user_id: int,
 ) -> bool:
-    """启/禁用账号状态的统一权限闸门：部门管理员或子租户管理员任一通过即放行。"""
+    """启/禁用账号状态的统一权限闸门:部门管理员或子租户管理员任一通过即放行。"""
     if await _dept_admin_can_manage_member_account_status(login_user, target_user_id):
         return True
     if await _tenant_admin_can_manage_member_account_status(login_user, target_user_id):
@@ -663,6 +600,9 @@ async def _can_manage_member_account_status(
 
 @router.post("/user/update", status_code=201)
 async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = Depends(LoginUser.get_login_user)):
+    from bisheng.user.application.management_subject import require_management_subject
+
+    await require_management_subject(user.user_id)
     db_user = UserDao.get_user(user.user_id)
     if not db_user:
         raise HTTPException(status_code=500, detail="Pengguna tidak ada")
@@ -672,7 +612,7 @@ async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = 
         user_group = UserGroupDao.get_user_group(db_user.user_id)
         user_group = [one.group_id for one in user_group]
         if not login_user.check_groups_admin(user_group):
-            # 组织与成员：部门/子租户管理员对用户组无管理权，但应对其管辖范围内成员可启/禁用账号
+            # 组织与成员:部门/子租户管理员对用户组无管理权,但应对其管辖范围内成员可启/禁用账号
             allow_org_admin = (
                 user.delete is not None
                 and not user.avatar
@@ -753,29 +693,6 @@ async def create_role(*, request: Request, role: RoleCreate, login_user: LoginUs
         return resp_200(db_role)
     except (RoleNameDuplicateError, RolePermissionDeniedError, QuotaConfigInvalidError) as e:
         return e.return_resp_instance()
-    except ImportError:
-        logger.warning("RoleService import failed, falling back to legacy create_role")
-    except Exception:
-        logger.exception("RoleService.create_role failed, falling back to legacy path")
-
-    # Fallback to legacy path for group_id-based creation
-    if not role.group_id:
-        raise HTTPException(status_code=500, detail="User GroupsIDTidak boleh kosong.")
-    if not login_user.check_group_admin(role.group_id):
-        return UnAuthorizedError.return_resp()
-
-    db_role = Role.model_validate(role)
-    db_role.create_user = login_user.user_id
-    try:
-        with get_sync_db_session() as session:
-            session.add(db_role)
-            session.commit()
-            session.refresh(db_role)
-        create_role_hook(request, login_user, db_role)
-        return resp_200(db_role)
-    except Exception:
-        logger.exception("add role error")
-        raise HTTPException(status_code=500, detail="Failed to add, check if it is added repeatedly")
 
 
 def create_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> bool:
@@ -812,39 +729,25 @@ def update_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> 
 
 @router.get("/role/list", status_code=200)
 async def get_role(
-    *, role_name: str = None, page: int = 0, limit: int = 0, login_user: LoginUser = Depends(LoginUser.get_login_user)
+    *,
+    role_name: str | None = None,
+    page: int = 0,
+    limit: int = 0,
+    login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     """Legacy role list endpoint (AC-25). Delegates to RoleService."""
     if role_name:
         role_name = role_name.strip()
 
-    try:
-        from bisheng.role.domain.services.role_service import RoleService
+    from bisheng.role.domain.services.role_service import RoleService
 
-        result = await RoleService.list_roles(
-            keyword=role_name,
-            page=page or 1,
-            limit=limit or 10,
-            login_user=login_user,
-        )
-        return resp_200(data=result)
-    except ImportError:
-        logger.warning("RoleService import failed, falling back to legacy get_role")
-    except Exception:
-        logger.exception("RoleService.list_roles failed, falling back to legacy path")
-
-    # Fallback to legacy path
-    if login_user.is_admin():
-        group_ids = []
-    else:
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-        group_ids = [one.group_id for one in user_groups if one.is_group_admin]
-        if not group_ids:
-            raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
-
-    res = RoleDao.get_role_by_groups(group_ids, role_name, page, limit)
-    total = RoleDao.count_role_by_groups(group_ids, role_name)
-    return resp_200(data={"data": res, "total": total})
+    result = await RoleService.list_roles(
+        keyword=role_name,
+        page=page or 1,
+        limit=limit or 10,
+        login_user=login_user,
+    )
+    return resp_200(data=result)
 
 
 @router.delete("/role/{role_id}", status_code=200)
@@ -858,7 +761,9 @@ async def delete_role(*, request: Request, role_id: int, login_user: LoginUser =
 
     if db_role.group_id and login_user.check_group_admin(db_role.group_id):
         await LegacyRBACSyncService.sync_role_deleted(role_id)
-        RoleDao.delete_role(role_id)
+        from bisheng.role.domain.services.role_service import RoleService
+
+        await RoleService.delete_legacy_group_role(db_role, login_user)
         AuditLogService.delete_role(login_user, get_request_ip(request), db_role)
         return resp_200()
 
@@ -876,15 +781,21 @@ async def user_addrole(
     """
     Resets the role of the user. The scope of the data varies depending on the permissions
     """
-    # Get a list of the user's previous roles
-    all_old_roles = [one.role_id for one in UserRoleDao.get_user_roles(user_role.user_id)]
+    from bisheng.common.errcode.role import RolePermissionDeniedError
+    from bisheng.user.application.policy_bindings import read_policy_subject, replace_policy_bindings
+
+    subject = await read_policy_subject(user_role.user_id)
+    from bisheng.common.request_scope import get_admitted_request_scope
+
+    admitted = get_admitted_request_scope()
+    if admitted is not None and subject.home_tenant_id != admitted.tenant_id:
+        raise RolePermissionDeniedError(msg="The subject's Home does not match this management target")
+    all_old_roles = sorted({row.role_id for row in subject.bindings})
     old_roles = all_old_roles.copy()
-    # Determine if the role being edited is Super Admin, Super Admin does not allow editing
-    user_role_list = UserRoleDao.get_user_roles(user_role.user_id)
-    if any(one.role_id == AdminRole for one in user_role_list):
-        raise HTTPException(status_code=500, detail="Editing is not allowed by the system administrator")
-    if any(one == AdminRole for one in user_role.role_id):
-        raise HTTPException(status_code=500, detail="Setting as system administrator is not allowed")
+    if any(row.role_id == AdminRole for row in subject.bindings) or AdminRole in user_role.role_id:
+        raise RolePermissionDeniedError(msg="Platform administrator identity is independent of ordinary roles")
+    if not login_user.is_admin() and login_user.tenant_id != subject.home_tenant_id:
+        raise RolePermissionDeniedError(msg="Cross-tenant secondary membership does not allow policy grants")
 
     if not login_user.is_admin():
         from bisheng.database.models.department import DepartmentDao
@@ -922,9 +833,12 @@ async def user_addrole(
                 page=1,
                 limit=0,
                 login_user=login_user,
-                include_global_for_binding=True,
             )
             admin_roles.update(one.id for one in visible_roles["data"])
+        if tenant_admin:
+            # Managing this Home includes revoking its members' original role
+            # grants, even when those bindings are still stored in Root.
+            admin_roles.update(all_old_roles)
 
         if not admin_roles:
             raise HTTPException(status_code=500, detail="No rights")
@@ -937,26 +851,16 @@ async def user_addrole(
             if user_role.role_id[i] not in admin_roles:
                 raise HTTPException(status_code=500, detail=f"No permission to add roles{user_role.role_id[i]}")
 
-    need_add_role = []
-    need_delete_role = old_roles.copy()
-    for one in user_role.role_id:
-        if one not in old_roles:
-            # Role needs to be added
-            need_add_role.append(one)
-        else:
-            # All that remains is the list of roles that need to be deleted
-            need_delete_role.remove(one)
-    if need_add_role:
-        UserRoleDao.add_user_roles(user_role.user_id, need_add_role)
-    if need_delete_role:
-        # Delete the corresponding role list
-        UserRoleDao.delete_user_roles(user_role.user_id, need_delete_role)
-    new_roles = [one.role_id for one in UserRoleDao.get_user_roles(user_role.user_id)]
-    await LegacyRBACSyncService.sync_user_role_change(
+    await replace_policy_bindings(
         user_role.user_id,
-        all_old_roles,
-        new_roles,
+        subject.home_tenant_id,
+        set(old_roles),
+        set(user_role.role_id),
+        operator_id=login_user.user_id,
     )
+    new_subject = await read_policy_subject(user_role.user_id)
+    new_roles = sorted({row.role_id for row in new_subject.bindings})
+    await LegacyRBACSyncService.sync_user_role_change(user_role.user_id, all_old_roles, new_roles)
     update_user_role_hook(request, login_user, user_role.user_id, old_roles, user_role.role_id)
     return resp_200()
 
@@ -967,7 +871,7 @@ def update_user_role_hook(
     logger.info(f"update_user_role_hook, user_id: {user_id}, old_roles: {old_roles}, new_roles: {new_roles}")
     # Write Audit Log
     role_info = RoleDao.get_role_by_ids(old_roles + new_roles)
-    group_ids = list(set([role.group_id for role in role_info]))
+    group_ids = list({role.group_id for role in role_info})
     role_dict = {one.id: one.role_name for one in role_info}
     note = "Pre-edit role:"
     for one in old_roles:
@@ -992,14 +896,14 @@ async def get_captcha():
 
     capthca_b64 = b64encode(buffered.getvalue()).decode()
     logger.info("get_captcha captcha_char={}", chr_4)
-    # generate key, Generate Simple Uniqueid，
+    # generate key, Generate Simple Uniqueid,
     key = CAPTCHA_PREFIX + generate_uuid()[:8]
     redis_client = await get_redis_client()
     await redis_client.aset(key, chr_4, expiration=300)
 
-    # 与 ``UserService.user_login`` 中 ``if await settings.aget_from_db('use_captcha'):`` 同源同判：
-    # 曾用同步 ``get_from_db`` 时，在部分环境/事件循环下与异步登录读取不一致，导致前端 ``user_capthca=false``
-    # 不渲染验证码，但登录仍走验证码校验并报「验证码错误」。
+    # 与 ``UserService.user_login`` 中 ``if await settings.aget_from_db('use_captcha'):`` 同源同判:
+    # 曾用同步 ``get_from_db`` 时,在部分环境/事件循环下与异步登录读取不一致,导致前端 ``user_capthca=false``
+    # 不渲染验证码,但登录仍走验证码校验并报「验证码错误」。
     use_raw = await settings.aget_from_db("use_captcha")
     user_captcha_required = True if use_raw else False
     return resp_200(
@@ -1013,15 +917,28 @@ async def get_captcha():
 
 @router.get("/user/public_key", status_code=200)
 def get_rsa_publish_key():
-    """同步 Redis：避免 Windows 上 redis.asyncio 连接池与当前请求事件循环不一致（different event loop）。"""
+    """同步 Redis:避免 Windows 上 redis.asyncio 连接池与当前请求事件循环不一致(different event loop)。"""
     key = RSA_KEY
     redis_client = get_redis_client_sync()
-    if redis_client.setNx(key, 1):
-        (pubkey, privkey) = rsa.newkeys(512)
-        redis_client.set(key, (pubkey, privkey), 3600)
-    else:
-        pubkey, privkey = redis_client.get(key)
-
+    pair = redis_client.get(key)
+    if pair is None:
+        candidate = rsa.newkeys(2048)
+        # Publish only a complete pair with its TTL, never an intermediate sentinel.
+        if redis_client.setNx(key, candidate, expiration=3600):
+            pair = candidate
+        else:
+            pair = redis_client.get(key)
+    if (
+        not isinstance(pair, tuple)
+        or len(pair) != 2
+        or not isinstance(pair[0], rsa.PublicKey)
+        or not isinstance(pair[1], rsa.PrivateKey)
+        or pair[0].n.bit_length() < 2048
+        or pair[0].n != pair[1].n
+        or pair[0].e != pair[1].e
+    ):
+        raise HTTPException(status_code=503, detail="Login encryption key is temporarily unavailable; retry")
+    pubkey, _privkey = pair
     pubkey_str = pubkey.save_pkcs1().decode()
 
     return resp_200({"public_key": pubkey_str})
@@ -1037,6 +954,9 @@ async def reset_password(
     """
     Admin Reset User Password
     """
+    from bisheng.user.application.management_subject import require_management_subject
+
+    await require_management_subject(user_id)
     # Get user information to change password
     user_info = UserDao.get_user(user_id)
     if not user_info:
@@ -1059,6 +979,18 @@ async def reset_password(
     UserDao.update_user(user_info)
 
     clear_error_password_key(user_info.user_id)
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=login_user.user_id,
+        operator_name=login_user.user_name,
+        system_id="system",
+        event_type="reset_user_password",
+        object_type="user_conf",
+        object_id=str(user_info.user_id),
+        object_name=user_info.user_name,
+        note="来源=管理员重置;结果=成功",
+    )
     return resp_200()
 
 
@@ -1087,6 +1019,18 @@ async def change_password(
     UserDao.update_user(user_info)
 
     clear_error_password_key(user_info.user_id)
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=login_user.user_id,
+        operator_name=login_user.user_name,
+        system_id="system",
+        event_type="change_own_password",
+        object_type="user_conf",
+        object_id=str(user_info.user_id),
+        object_name=user_info.user_name,
+        note="来源=已登录修改;结果=成功",
+    )
     return resp_200()
 
 
@@ -1110,6 +1054,18 @@ async def change_password_public(
     UserDao.update_user(user_info)
 
     clear_error_password_key(user_info.user_id)
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=user_info.user_id,
+        operator_name=user_info.user_name,
+        system_id="system",
+        event_type="change_own_password",
+        object_type="user_conf",
+        object_id=str(user_info.user_id),
+        object_name=user_info.user_name,
+        note="来源=公共修改密码;结果=成功",
+    )
     return resp_200()
 
 
@@ -1118,6 +1074,10 @@ async def has_mark_access(*, request: Request, login_user: LoginUser = Depends(L
     """
     Get whether the current user has annotation permission,Determine if the current user isadmin Or a user group administrator
     """
+    from bisheng.permission.application.identity import is_current_tenant_administrator
+
+    if await is_current_tenant_administrator(login_user):
+        return resp_200(data=True)
     has_mark_access = False
     # Check if there are administrative permissions for the group
     task = MarkTaskDao.get_task(login_user.user_id)
@@ -1135,7 +1095,7 @@ async def create_user(
     Super Admin Create User
     """
     logger.info(f"create_user username={admin_user.user_name}, username={req.user_name}")
-    data = UserService.create_user(request, admin_user, req)
+    data = await UserService.create_user(request, admin_user, req)
     group_ids = []
     role_ids = []
     for one in req.group_roles or []:
@@ -1177,10 +1137,6 @@ def md5_hash(string):
 # Handler lives in a sibling module so it's importable from unit tests that
 # cannot pull in the full ``user/api/user.py`` dependency chain.
 # ---------------------------------------------------------------------------
-
-from bisheng.user.api.current_tenant import (
-    get_current_tenant_handler as _get_current_tenant_handler,
-)
 
 
 @router.get("/user/current-tenant")

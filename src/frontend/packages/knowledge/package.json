@@ -1,0 +1,35 @@
+{
+  "name": "@bisheng/knowledge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared knowledge-space interactions with host-owned API services.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts", "./processing-conflicts": "./src/processingConflicts.ts" },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --maxWorkers=1 --minWorkers=1"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-i18next": ">=13"
+  },
+  "dependencies": {
+    "@bisheng/ui": "workspace:*",
+    "@radix-ui/react-alert-dialog": "catalog:",
+    "@radix-ui/react-dialog": "catalog:",
+    "bisheng-icons": "catalog:",
+    "lucide-react": "^0.544.0"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@testing-library/react": "^16.0.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "jsdom": "^25.0.0"
+  }
+}

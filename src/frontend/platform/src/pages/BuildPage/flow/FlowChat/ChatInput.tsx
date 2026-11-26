@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { ConversationComposer } from '@bisheng/chat';
+import { workflowReferenceErrorMessage } from '@/controllers/workflowReferenceErrors';
 import { notification } from '@bisheng/ui';
 
 
@@ -241,16 +242,18 @@ export default function ChatInput({ autoRun, wsUrl, onBeforSend, onLoad }) {
     // 接受 ws 消息
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
-            const { status_code, status_message, data: params } = data.message
+            const envelope = typeof data.message === 'string' ? JSON.parse(data.message) : data.message
+            const { status_code, status_message, data: params } = envelope
+            const referenceMessage = workflowReferenceErrorMessage(envelope)
             if (status_code === 500) {
-                setInputLock({ locked: true, reason: data.message.message })
+                setInputLock({ locked: true, reason: envelope.message })
             } else {
                 // 特殊状态吗支持输入框展示reason
                 const reason = [10421, 13002, 13010].includes(status_code) ? t(`api_errors:${status_code}`, params) : ' '
                 setInputLock({ locked: true, reason })
             }
             // 记录
-            const errorMsg = status_code == 500 ? status_message || data.message.message : t(`api_errors:${status_code}`, { ...(params || {}), defaultValue: status_message || t('api_errors:fallback') })
+            const errorMsg = referenceMessage || (status_code == 500 ? status_message || envelope.message : t(`api_errors:${status_code}`, { ...(params || {}), defaultValue: status_message || t('api_errors:fallback') }))
             addNotification({
                 type: 'error',
                 title: 'runtime error',

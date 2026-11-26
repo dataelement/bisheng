@@ -10,6 +10,8 @@ export interface SkillBrief {
   enabled: boolean;
   // Preselected in the end-user picker of every new conversation
   default_checked: boolean;
+  /** F005: hidden from users and loaded in every chat while the skill is enabled. */
+  auto_enabled?: boolean;
   source: 'manual' | 'sop_migrated';
   create_time?: string;
   update_time?: string;
@@ -75,24 +77,29 @@ export const skillApi = {
   createSkillForm: (data: SkillFormPayload): Promise<SkillDetail> => {
     const form = new FormData();
     Object.entries(data).forEach(([k, v]) => form.append(k, v));
-    return axios.post(SKILL_BASE, form, { silent: true } as any);
+    return axios.post(SKILL_BASE, form, { silent: true });
   },
 
   createSkillUpload: (file: File): Promise<SkillDetail> => {
     const form = new FormData();
     form.append('file', file);
-    return axios.post(SKILL_BASE, form, { silent: true } as any);
+    return axios.post(SKILL_BASE, form, { silent: true });
   },
 
   // Import a skill from a public GitHub directory URL (must contain SKILL.md at root).
   importSkillFromGithub: (url: string): Promise<SkillDetail> => {
-    return axios.post(`${SKILL_BASE}/import-github`, { url }, { silent: true } as any);
+    return axios.post(`${SKILL_BASE}/import-github`, { url }, { silent: true });
+  },
+
+  // Import a skill from a public Gitee directory URL (must contain SKILL.md at root).
+  importSkillFromGitee: (url: string): Promise<SkillDetail> => {
+    return axios.post(`${SKILL_BASE}/import-gitee`, { url }, { silent: true });
   },
 
   updateSkillForm: (name: string, data: SkillFormPayload): Promise<SkillDetail> => {
     const form = new FormData();
     Object.entries(data).forEach(([k, v]) => form.append(k, v));
-    return axios.put(`${SKILL_BASE}/${encodeURIComponent(name)}`, form, { silent: true } as any);
+    return axios.put(`${SKILL_BASE}/${encodeURIComponent(name)}`, form, { silent: true });
   },
 
   setSkillStatus: (name: string, enabled: boolean) => {
@@ -101,6 +108,10 @@ export const skillApi = {
 
   setSkillDefaultChecked: (name: string, defaultChecked: boolean) => {
     return axios.patch(`${SKILL_BASE}/${encodeURIComponent(name)}/default-checked`, { default_checked: defaultChecked });
+  },
+
+  setSkillAutoEnabled: (name: string, autoEnabled: boolean) => {
+    return axios.patch(`${SKILL_BASE}/${encodeURIComponent(name)}/auto-enabled`, { auto_enabled: autoEnabled });
   },
 
   deleteSkill: (name: string) => {

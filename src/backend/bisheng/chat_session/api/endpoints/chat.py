@@ -4,13 +4,19 @@ from fastapi import APIRouter, Body, Query, Request
 from fastapi.params import Depends
 
 from bisheng.api.v1.schemas import AddChatMessages, resp_200
+from bisheng.chat_session.application.conversation_persistence import conversation_read_scope
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.chat_session.domain.services.chat_message_service import ChatMessageService
+from bisheng.chat_session.domain.services.session_read_authorization import (
+    optional_session_reader,
+    require_session_read,
+)
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import bypass_tenant_filter_if
-from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.share_link.domain.services.share_token_dependencies import header_share_token_parser
 from bisheng.utils import get_request_ip
 
 router = APIRouter()
@@ -53,11 +59,20 @@ async def get_chat_message(
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ):
     with bypass_tenant_filter_if(share_link is not None):
-        history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
-
-    if history and login_user.user_id != history[0].user_id:
-        if not share_link or share_link.resource_id != chat_id:
-            return UnAuthorizedError.return_resp()
+        session = await MessageSessionDao.async_get_one(chat_id)
+    if session is None or session.is_delete:
+        return resp_200([])
+    await require_session_read(session, login_user, share_link)
+    if session.flow_id != flow_id:
+        raise UnAuthorizedError()
+    with bypass_tenant_filter_if(share_link is not None):
+        history = await ChatSessionService.get_chat_history(
+            chat_id,
+            flow_id,
+            id,
+            page_size,
+            read_scope=conversation_read_scope(login_user, chat_id, flow_id) if share_link is None else None,
+        )
     return resp_200(history)
 
 
@@ -65,6 +80,7 @@ async def get_chat_message(
 async def get_chat_info(
     chat_id: str = Query(..., description="Session Uniqueid, chat_id"),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
+    login_user: UserPayload | None = Depends(optional_session_reader),
 ):
     """Get session details by chat_id.
 
@@ -73,7 +89,14 @@ async def get_chat_info(
     conversation's real name.
     """
     with bypass_tenant_filter_if(share_link is not None):
-        res = await ChatSessionService.get_session_info(chat_id)
+        session = await MessageSessionDao.async_get_one(chat_id)
+    if session is None or session.is_delete:
+        return resp_200(None)
+    await require_session_read(session, login_user, share_link)
+    with bypass_tenant_filter_if(share_link is not None):
+        res = await ChatSessionService.get_session_info(
+            chat_id, read_scope=conversation_read_scope(login_user, chat_id) if share_link is None else None
+        )
     return resp_200(res)
 
 
@@ -83,7 +106,7 @@ async def rename(
     name: str = Body(..., description="Session name", embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    await ChatSessionService.rename_session(conversationId, name)
+    await ChatSessionService.rename_session(conversationId, name, login_user)
     return resp_200()
 
 

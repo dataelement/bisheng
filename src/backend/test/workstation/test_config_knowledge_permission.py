@@ -1,8 +1,11 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from bisheng.api.v1.schemas import OrgKbConfig, WorkstationConfig
 from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
+from bisheng.llm.domain.services.llm import LLMService
 from bisheng.workstation.api.endpoints import config as config_endpoint
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
@@ -11,13 +14,37 @@ def _login_user():
     return SimpleNamespace(user_id=840, user_name="regular-user")
 
 
+async def test_daily_config_can_skip_models_that_the_endpoint_replaces(monkeypatch):
+    monkeypatch.setattr(WorkStationService, "_aresolve_tenant_config", AsyncMock(return_value=("{}", False, 1, True)))
+    monkeypatch.setattr(WorkStationService, "sync_tool_info", lambda tools: tools)
+    picker = AsyncMock(side_effect=AssertionError("replaced model list must not be built"))
+    monkeypatch.setattr(LLMService, "get_workbench_llm_for_picker", picker)
+    config = await WorkStationService.get_daily_chat_config(for_picker=True, include_models=False)
+    assert config.models is None
+    picker.assert_not_awaited()
+
+
+@pytest.fixture(autouse=True)
+def _org_kbs_are_document_libraries(monkeypatch):
+    """These tests predate knowledge spaces in orgKbs; type every id as a library."""
+
+    async def resource_types(self, ids):
+        return dict.fromkeys(ids, "knowledge_library")
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.repositories.knowledge_compatibility_repository."
+        "KnowledgeCompatibilityRepository.aresource_types",
+        resource_types,
+    )
+
+
 async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
     login_user = _login_user()
     daily_config = WorkstationConfig(
         tools=[{"id": 362, "name": "curated", "default_checked": True, "children": [{"id": 2125}]}],
         orgKbs=[
-            OrgKbConfig(id=12, name="hidden", default_checked=True, sort_order=0),
-            OrgKbConfig(id=13, name="visible", default_checked=True, sort_order=1),
+            OrgKbConfig(id=12, name="hidden", sort_order=0),
+            OrgKbConfig(id=13, name="visible", show_in_composer=False, sort_order=1),
         ],
     )
 
@@ -53,6 +80,11 @@ async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
         "get_subscription_config",
         AsyncMock(return_value=None),
     )
+    # The model picker list is out of scope here (org knowledge-base visibility only).
+    monkeypatch.setattr(
+        "bisheng.dsh.domain.services.model_catalog.user_workbench_models",
+        AsyncMock(return_value=[]),
+    )
     monkeypatch.setattr(
         config_endpoint,
         "bisheng_settings",
@@ -68,10 +100,12 @@ async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
 
     response = await config_endpoint.get_config(request=None, login_user=login_user)
 
-    picker.assert_awaited_once_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
+    # F004: the protocol switch is gone; the client always speaks the run protocol.
+    assert "unified_runtime_enabled" not in response.data
+    picker.assert_awaited_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
     assert response.data["tools"][0]["default_checked"] is True
     assert [item["id"] for item in response.data["orgKbs"]] == [13]
-    assert response.data["orgKbs"][0]["default_checked"] is True
+    assert response.data["orgKbs"][0]["show_in_composer"] is False
 
 
 async def test_org_kb_visibility_filter_short_circuits_empty_input(monkeypatch):
@@ -85,3 +119,55 @@ async def test_org_kb_visibility_filter_short_circuits_empty_input(monkeypatch):
 
     assert await WorkStationService.afilter_org_kbs_by_visible_permission([], _login_user()) == []
     assert await WorkStationService.afilter_org_kbs_by_visible_permission(None, _login_user()) == []
+
+
+async def test_public_config_survives_a_deleted_org_kb_for_super_admin(monkeypatch):
+    """A deleted knowledge base left in orgKbs must not fail the whole config.
+
+    Runs the real batch authorization under an admin management scope: the
+    deleted id (20) is dropped, the surviving ones are still returned.
+    """
+
+    from bisheng.core.context.tenant import management_tenant_scope
+    from bisheng.permission.application import business_authorization as business
+
+    login_user = SimpleNamespace(user_id=1, user_name="admin", tenant_id=60)
+    daily_config = WorkstationConfig(
+        orgKbs=[
+            OrgKbConfig(id=19, name="alive", sort_order=0),
+            OrgKbConfig(id=20, name="deleted", sort_order=1),
+        ],
+    )
+
+    async def load_permission_record(*, resource_id):
+        return SimpleNamespace(tenant_id=60) if resource_id == "19" else None
+
+    registry = SimpleNamespace(port_for=lambda _: SimpleNamespace(load_permission_record=load_permission_record))
+    actor = SimpleNamespace(super_admin=True, data_scope=business.DATA_SCOPE_ALL)
+    monkeypatch.setattr(business, "get_f048_resource_registry", AsyncMock(return_value=registry))
+    monkeypatch.setattr(business, "_require_creation_ready", AsyncMock())
+    monkeypatch.setattr(business, "resolve_permission_actor", AsyncMock(return_value=actor))
+    monkeypatch.setattr(WorkStationService, "get_daily_chat_config", AsyncMock(return_value=daily_config))
+    monkeypatch.setattr(WorkStationService, "get_linsight_config", AsyncMock(return_value=None))
+    monkeypatch.setattr(WorkStationService, "get_knowledge_space_config", AsyncMock(return_value=None))
+    monkeypatch.setattr(WorkStationService, "get_subscription_config", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        "bisheng.dsh.domain.services.model_catalog.user_workbench_models",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        config_endpoint,
+        "bisheng_settings",
+        SimpleNamespace(
+            dsh=SimpleNamespace(enabled=False),
+            async_get_knowledge=AsyncMock(return_value=SimpleNamespace(image_parser_enabled=False)),
+            aget_all_config=AsyncMock(return_value={}),
+            aget_linsight_conf=AsyncMock(return_value=SimpleNamespace(waiting_list_url=None)),
+        ),
+    )
+    monkeypatch.setattr(CapabilityCatalogService, "picker_tools", AsyncMock(return_value=[]))
+
+    with management_tenant_scope(60):
+        response = await config_endpoint.get_config(request=None, login_user=login_user)
+
+    assert [item["id"] for item in response.data["orgKbs"]] == [19]

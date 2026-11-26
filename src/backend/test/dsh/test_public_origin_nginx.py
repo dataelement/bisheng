@@ -22,7 +22,13 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.routing import Route
 
-from bisheng.dsh.work_mcp import WorkMcpResponse, create_work_mcp_runtime, work_transport_security
+from bisheng.core.config.dsh import DshSettings
+from bisheng.dsh.work_mcp import (
+    RequestScopedWorkMcpRuntime,
+    WorkMcpResponse,
+    create_work_mcp_runtime,
+    work_transport_security,
+)
 
 
 def available_port():
@@ -33,14 +39,15 @@ def available_port():
 
 @pytest.mark.parametrize("template", ["default.conf", "websocket.conf"])
 @pytest.mark.parametrize("tls", [False, True], ids=["one-proxy-http", "two-proxies-https"])
-async def test_real_nginx_preserves_public_origin(template, tls, tmp_path, monkeypatch):
+@pytest.mark.parametrize("configured", [False, True], ids=["request-origin", "fixed-origin"])
+async def test_real_nginx_preserves_public_origin(template, tls, configured, tmp_path, monkeypatch):
     binary = os.environ.get("NGINX_BIN")
     if not binary:
         pytest.skip("Set NGINX_BIN to exercise the real proxy")
     root = Path(__file__).resolve().parents[4]
     template_root = Path(os.environ.get("BISHENG_NGINX_TEMPLATE_ROOT", root / "docker/nginx/conf.d"))
     source = (template_root / template).read_text()
-    maps = "\n".join(re.findall(r"map\s+[^{}]+\{[^{}]+\}", source))
+    maps = "\n".join(re.findall(r"(?:geo|map)\s+[^{}]+\{[^{}]+\}", source))
     directives = "\n".join(re.findall(r"proxy_set_header\s+[^;]+;", source))
     assert "proxy_set_header Host" in directives
     inner_port, outer_port = available_port(), available_port()
@@ -59,6 +66,8 @@ async def test_real_nginx_preserves_public_origin(template, tls, tmp_path, monke
     )
     monkeypatch.setattr("bisheng.dsh.work_mcp.WorkCapabilitiesService", lambda user: service)
     manager = create_work_mcp_runtime(work_transport_security(public_origin))
+    if not configured:
+        manager = RequestScopedWorkMcpRuntime(manager.app, DshSettings())
     observed = []
 
     async def endpoint(request: Request):
@@ -179,7 +188,7 @@ async def test_real_nginx_preserves_public_origin(template, tls, tmp_path, monke
                 assert response.status_code == 200, response.text
                 assert response.json()["result"]["tools"][0]["name"] == "bisheng_tool_7"
                 for extra, status in [
-                    ({"host": "other.example", "x-forwarded-host": authority}, 421),
+                    ({"host": "other.example", "x-forwarded-host": authority}, 421 if configured else 403),
                     ({"origin": "https://other.example"}, 403),
                 ]:
                     response = await client.post("/api/v1/dsh/work/mcp", json=message, headers=extra)

@@ -32,8 +32,7 @@ class ProspectiveGrantApplication:
         resource_type: str,
     ) -> dict[str, object]:
         self._require_tenant_scope(actor, tenant_id)
-        del resource_type
-        catalog, models = await self._runtime.prospective_owner_grantable_models()
+        catalog, models = await self._runtime.prospective_owner_grantable_models(resource_type=resource_type)
         return {
             "catalog_release_id": catalog.release_id,
             "can_configure_initial_permissions": bool(models),
@@ -43,6 +42,7 @@ class ProspectiveGrantApplication:
                     "name": model.name,
                     "level": model.snapshot.derived_level,
                     "active": model.snapshot.active,
+                    "visibility_only": model.snapshot.visibility_only,
                 }
                 for model in models
             ],

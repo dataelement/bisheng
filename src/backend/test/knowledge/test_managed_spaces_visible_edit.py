@@ -24,10 +24,11 @@ from bisheng.core.context.tenant import (
     set_visible_tenant_ids,
     visible_tenant_ids,
 )
+from bisheng.core.database import tenant_filter
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.models import knowledge as knowledge_module
-from bisheng.knowledge.domain.models.knowledge import KnowledgeState, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeContainerPermissionAdapter,
@@ -42,6 +43,14 @@ from test.knowledge.test_knowledge_space_service import _make_login_user, _make_
 
 MODULE = "bisheng.knowledge.domain.services.knowledge_space_service"
 BUSINESS = "bisheng.permission.application.business_authorization"
+
+
+@pytest.fixture(autouse=True)
+def knowledge_tenant_discovery(monkeypatch):
+    register_tenant_filter_events()
+    # Earlier native SQL fixtures may register discovery under a temporary
+    # model set. Keep this module's real SELECT fence independent of order.
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | {"knowledge"})
 
 
 @pytest.fixture
@@ -321,7 +330,7 @@ async def test_ac04_bulk_adapter_retains_status_tenant_kind_and_snapshot_guards(
     for row in rows:
         row.tenant_id = 1
         row.update_time = datetime(2026, 11, 2)
-    rows[1].state = KnowledgeState.FAILED.value
+    rows[1].state = -1
     rows[2].tenant_id = 2
     rows[3].type = KnowledgeTypeEnum.NORMAL.value
     case.versions.get_permission_snapshots.side_effect = None

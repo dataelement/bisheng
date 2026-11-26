@@ -150,13 +150,57 @@ def normalize_reasoning_content(payload: Any) -> Any:
     return payload
 
 
+def _daily_limit_ttl_seconds(now: datetime) -> int:
+    """Keep the dated counter through local midnight. The default Redis TTL is one hour."""
+    elapsed = now.hour * 3600 + now.minute * 60 + now.second
+    return max(86400 - elapsed, 1)
+
+
+def _copy_provider_daily_limit(server, fresh) -> None:
+    if fresh is None:
+        return
+    server.limit_flag = bool(fresh.limit_flag)
+    server.limit = int(fresh.limit or 0)
+
+
+def refresh_provider_daily_limit(self) -> None:
+    """Workflow workers keep their own provider copy. Read the saved limit before counting."""
+    server = getattr(self, "server_info", None)
+    server_id = getattr(server, "id", None)
+    if not server_id:
+        return
+    try:
+        from bisheng.llm.domain.share_fallback import get_server_by_id_with_share_fallback
+
+        fresh = get_server_by_id_with_share_fallback(server_id, cache=False)
+    except Exception:
+        logger.exception("refresh provider daily limit failed")
+        return
+    _copy_provider_daily_limit(server, fresh)
+
+
+async def refresh_provider_daily_limit_async(self) -> None:
+    server = getattr(self, "server_info", None)
+    server_id = getattr(server, "id", None)
+    if not server_id:
+        return
+    try:
+        from bisheng.llm.domain.share_fallback import aget_server_by_id_with_share_fallback
+
+        fresh = await aget_server_by_id_with_share_fallback(server_id, cache=False)
+    except Exception:
+        logger.exception("refresh provider daily limit failed")
+        return
+    _copy_provider_daily_limit(server, fresh)
+
+
 async def bisheng_model_limit_check(self: "BishengBase"):
-    now = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
     if self.server_info.limit_flag:
         # Number of calls checked
-        cache_key = f"model_limit:{now}:{self.server_info.id}"
+        cache_key = f"model_limit:{now.strftime('%Y-%m-%d')}:{self.server_info.id}"
         redis_client = await get_redis_client()
-        use_num = await redis_client.aincr(cache_key)
+        use_num = await redis_client.aincr(cache_key, expiration=_daily_limit_ttl_seconds(now))
         if use_num > self.server_info.limit:
             raise LlmProviderDailyLimitExceededError(
                 f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
@@ -164,11 +208,11 @@ async def bisheng_model_limit_check(self: "BishengBase"):
 
 
 def sync_bisheng_model_limit_check(self: "BishengBase"):
-    now = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
     if self.server_info.limit_flag:
         # Number of calls checked
-        cache_key = f"model_limit:{now}:{self.server_info.id}"
-        use_num = get_redis_client_sync().incr(cache_key)
+        cache_key = f"model_limit:{now.strftime('%Y-%m-%d')}:{self.server_info.id}"
+        use_num = get_redis_client_sync().incr(cache_key, expiration=_daily_limit_ttl_seconds(now))
         if use_num > self.server_info.limit:
             raise LlmProviderDailyLimitExceededError(
                 f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
@@ -359,6 +403,7 @@ def wrapper_bisheng_model_limit_check(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         self = args[0]
+        refresh_provider_daily_limit(self)
         sync_bisheng_model_limit_check(self)
         status = LLMModelStatus.NORMAL.value
         remark = ""
@@ -404,6 +449,7 @@ def wrapper_bisheng_model_limit_check_async(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         self = args[0]
+        await refresh_provider_daily_limit_async(self)
         await bisheng_model_limit_check(self)
         status = LLMModelStatus.NORMAL.value
         remark = ""
@@ -454,6 +500,7 @@ def wrapper_bisheng_model_generator(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         self = args[0]
+        refresh_provider_daily_limit(self)
         sync_bisheng_model_limit_check(self)
 
         status = LLMModelStatus.NORMAL.value
@@ -495,6 +542,7 @@ def wrapper_bisheng_model_generator_async(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         self = args[0]
+        await refresh_provider_daily_limit_async(self)
         await bisheng_model_limit_check(self)
         status = LLMModelStatus.NORMAL.value
         remark = ""

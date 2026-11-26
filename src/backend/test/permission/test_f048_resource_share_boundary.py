@@ -113,7 +113,7 @@ async def test_system_relation_is_checked_before_exact_id_cross_tenant_load() ->
         actor=_actor(),
         resource_type="knowledge_library",
         resource_id="lib-1",
-        action="use",
+        action="visible",
     )
 
     assert events == ["system-check", "load"]

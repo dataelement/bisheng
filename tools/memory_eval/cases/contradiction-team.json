@@ -1,0 +1,30 @@
+{
+  "id": "contradiction-team",
+  "acs": [
+    "AC-48"
+  ],
+  "turns": [
+    {
+      "user": "记一下我的上级是张总",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "组织调整了，我现在向李总汇报",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我向谁汇报？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "李总"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

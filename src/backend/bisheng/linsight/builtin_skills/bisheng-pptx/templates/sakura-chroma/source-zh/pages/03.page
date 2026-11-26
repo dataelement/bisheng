@@ -1,0 +1,450 @@
+pageType: content
+background:
+  type: solid
+  color: '#F1E6CB'
+notes: Authored storyboard composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. Three schematic frames with distinct content and intent
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 754
+      - 27
+      - 48
+      - 13
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E54489'
+    border:
+      width: 0
+      color: '#E54489'
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 807
+      - 27
+      - 48
+      - 13
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F09131'
+    border:
+      width: 0
+      color: '#F09131'
+  - elementId: s3
+    elementType: shape
+    bounds:
+      - 860
+      - 27
+      - 48
+      - 13
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#547A46'
+    border:
+      width: 0
+      color: '#547A46'
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 27
+      - 665
+      - 20
+    content:
+      text: SAKURA CHROMA
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: l5
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#baac95'
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 让每个时刻承担不同的目的
+      fontFamily: &ref_1
+        latin: Arial Narrow
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 02
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#715f4c'
+      bold: false
+      align: right
+  - elementId: s8
+    elementType: shape
+    bounds:
+      - 48
+      - 171
+      - 270
+      - 150
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E5D6B0'
+    border:
+      width: 0
+      color: '#E5D6B0'
+  - elementId: l9
+    elementType: line
+    bounds:
+      - 84
+      - 207
+      - 191
+      - 1
+    viewBox:
+      - 191
+      - 1
+    points: 0,0 191,0
+    border:
+      width: 2
+      color: '#181915'
+  - elementId: l10
+    elementType: line
+    bounds:
+      - 84
+      - 225
+      - 144
+      - 1
+    viewBox:
+      - 144
+      - 1
+    points: 0,0 144,0
+    border:
+      width: 1
+      color: '#181915'
+  - elementId: s11
+    elementType: shape
+    bounds:
+      - 84
+      - 253
+      - 88
+      - 31
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#181915'
+    border:
+      width: 0
+      color: '#181915'
+  - elementId: t12
+    elementType: text
+    bounds:
+      - 48
+      - 337
+      - 260
+      - 25
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t13
+    elementType: text
+    bounds:
+      - 48
+      - 376
+      - 263
+      - 79
+    content:
+      text: 有用的邀请
+      fontFamily: *ref_1
+      fontSize: 26
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: s14
+    elementType: shape
+    bounds:
+      - 342
+      - 171
+      - 270
+      - 150
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E54489'
+    border:
+      width: 0
+      color: '#E54489'
+  - elementId: s15
+    elementType: shape
+    bounds:
+      - 437
+      - 200
+      - 78
+      - 78
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#F8F6EE'
+    border:
+      width: 0
+      color: '#F8F6EE'
+  - elementId: t16
+    elementType: text
+    bounds:
+      - 453
+      - 214
+      - 52
+      - 58
+    content:
+      text: →
+      fontFamily: *ref_0
+      fontSize: 33
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+      align: center
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 342
+      - 337
+      - 260
+      - 25
+    content:
+      text: '02'
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t18
+    elementType: text
+    bounds:
+      - 342
+      - 376
+      - 263
+      - 79
+    content:
+      text: 轻量的互动
+      fontFamily: *ref_1
+      fontSize: 26
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: s19
+    elementType: shape
+    bounds:
+      - 636
+      - 171
+      - 270
+      - 150
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E5D6B0'
+    border:
+      width: 0
+      color: '#E5D6B0'
+  - elementId: s20
+    elementType: shape
+    bounds:
+      - 672
+      - 197
+      - 12
+      - 12
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#181915'
+    border:
+      width: 0
+      color: '#181915'
+  - elementId: l21
+    elementType: line
+    bounds:
+      - 699
+      - 203
+      - 169
+      - 1
+    viewBox:
+      - 169
+      - 1
+    points: 0,0 169,0
+    border:
+      width: 1.5
+      color: '#181915'
+  - elementId: s22
+    elementType: shape
+    bounds:
+      - 672
+      - 234
+      - 12
+      - 12
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#181915'
+    border:
+      width: 0
+      color: '#181915'
+  - elementId: l23
+    elementType: line
+    bounds:
+      - 699
+      - 240
+      - 151
+      - 1
+    viewBox:
+      - 151
+      - 1
+    points: 0,0 151,0
+    border:
+      width: 1.5
+      color: '#181915'
+  - elementId: s24
+    elementType: shape
+    bounds:
+      - 672
+      - 271
+      - 12
+      - 12
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#181915'
+    border:
+      width: 0
+      color: '#181915'
+  - elementId: l25
+    elementType: line
+    bounds:
+      - 699
+      - 277
+      - 133
+      - 1
+    viewBox:
+      - 133
+      - 1
+    points: 0,0 133,0
+    border:
+      width: 1.5
+      color: '#181915'
+  - elementId: t26
+    elementType: text
+    bounds:
+      - 636
+      - 337
+      - 260
+      - 25
+    content:
+      text: '03'
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t27
+    elementType: text
+    bounds:
+      - 636
+      - 376
+      - 263
+      - 79
+    content:
+      text: 再次参与的理由
+      fontFamily: *ref_1
+      fontSize: 26
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: l28
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c9bca3'
+  - elementId: t29
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 示意画框用于说明内容与意图，并非产品截图。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t30
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t31
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '03'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false

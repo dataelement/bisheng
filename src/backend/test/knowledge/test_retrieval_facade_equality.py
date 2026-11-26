@@ -490,7 +490,7 @@ async def _hosted_runtime_door(knowledge_ids, monkeypatch):
         knowledge=tuple(DeclaredKnowledge(label=str(one), knowledge_id=one) for one in knowledge_ids),
     )
 
-    async def require_declaration(_app_id):
+    async def require_declaration(_app_id, *, principal):
         return declaration
 
     async def record_retrieval(**_kwargs):

@@ -16,19 +16,21 @@ import DepartmentUsersSelect, {
 } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
 import { createDepartmentApi } from "@/controllers/API/department"
 import { showApiError } from "@/controllers/request"
-import { useCallback, useState } from "react"
+import { useCallback, useState, type ComponentProps } from "react"
 import { useTranslation } from "react-i18next"
 
 interface CreateDepartmentDialogProps {
   defaultParentId: number | null
-  onCreated: () => void
+  onCreated: (departmentId: number) => void
   onClose: () => void
+  onCloseAutoFocus?: ComponentProps<typeof DialogContent>["onCloseAutoFocus"]
 }
 
 export function CreateDepartmentDialog({
   defaultParentId,
   onCreated,
   onClose,
+  onCloseAutoFocus,
 }: CreateDepartmentDialogProps) {
   const { t } = useTranslation()
   const [name, setName] = useState("")
@@ -52,19 +54,19 @@ export function CreateDepartmentDialog({
         admin_user_ids: adminSelectValue.length
           ? adminSelectValue.map((o) => o.value)
           : undefined,
-      }).then(() => {
+      }).then((department) => {
       notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.create") ?? '') })
-      onCreated()
+      onCreated(department.id)
     }).catch(showApiError).finally(() => setLoading(false))
   }, [name, parentId, adminSelectValue, onCreated, t])
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="grid-cols-1" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{t("bs:department.create")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="min-w-0 space-y-4 py-4">
           {/* Parent department */}
           <div className="space-y-2">
             <Label>{t("bs:department.parentDept")} *</Label>

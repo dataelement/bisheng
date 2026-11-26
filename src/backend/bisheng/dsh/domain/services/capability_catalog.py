@@ -22,7 +22,7 @@ DEMO_TOOLS = {
 
 
 def demo_for(tool):
-    identity = tool.tool_key if tool.is_preset == 1 else tool.name
+    identity = WorkCapabilitiesService._tool_name(tool)
     return DEMO_TOOLS.get((tool.is_preset, identity))
 
 
@@ -34,16 +34,30 @@ class CapabilityCatalogService:
     async def list(self):
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
+        named = WorkCapabilitiesService._named_tools(
+            {
+                tool.id: tool
+                for group in groups
+                for tool in group.children or []
+                if not tool.is_delete and tool.id not in disabled
+            },
+        )
+        from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+        # F005: an auto-enabled workbench tool is always on, so the center does not list it.
+        auto_enabled = await WorkStationService.aauto_enabled_tool_ids()
         rows = []
         for group in groups:
             for tool in group.children or []:
-                if tool.is_delete:
+                if tool.is_delete or tool.id in auto_enabled:
                     continue
                 demo = demo_for(tool)
+                name = WorkCapabilitiesService._tool_name(tool)
+                callable_name = name if name and len(named.get(name, [])) == 1 else None
                 # Select fields explicitly. Group schemas and extras may contain credentials.
                 rows.append(
                     {
@@ -54,17 +68,20 @@ class CapabilityCatalogService:
                         "tool_key": tool.tool_key if tool.is_preset == 1 else None,
                         "description": tool.desc or "",
                         "provider": group.name,
-                        "ready": tool.id not in disabled,
+                        "ready": tool.id not in disabled and callable_name is not None,
                         "availability_enabled": tool.id not in disabled if manages_availability(tool) else None,
                         "demo": bool(demo and demo["scenario"] != "time"),
                         "trial": demo,
-                        "invocation_name": f"mcp__bisheng__bisheng_tool_{tool.id}",
+                        "invocation_name": f"mcp__bisheng__{callable_name}" if callable_name else None,
                     }
                 )
         usable_tool_ids = {row["resource_id"] for row in rows if row["ready"]}
         from bisheng.linsight.domain.services.user_skills import UserSkillsService
 
         for record, enabled in await UserSkillsService(self.user.user_id).records(False):
+            if getattr(record, "auto_enabled", False):
+                # F005: always available, so not listed in the capability center.
+                continue
             skill = self.work._skill_info(record)
             ready = enabled
             if ready:
@@ -96,7 +113,10 @@ class CapabilityCatalogService:
         if configured_tools is not None:
             from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
-            configured = await WorkStationService.afilter_tools_by_use_permission(configured_tools, self.user)
+            # F005: auto-enabled groups are always on, so the picker does not offer them.
+            configured = await WorkStationService.afilter_tools_by_use_permission(
+                [group for group in configured_tools if not group.get("auto_enabled")], self.user
+            )
             disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
                 [
                     SimpleNamespace(id=child["id"], is_preset=group.get("is_preset") or 0)
@@ -127,7 +147,7 @@ class CapabilityCatalogService:
             ]
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
@@ -155,14 +175,29 @@ class CapabilityCatalogService:
         ]
 
     async def set_availability(self, tool_id: int, enabled: bool):
-        from bisheng.tool.domain.services.tool import ToolServices
-
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
-        tool = next(
-            (tool for group in groups for tool in group.children or [] if tool.id == tool_id and not tool.is_delete),
-            None,
+        from bisheng.common.errcode.permission import (
+            InvalidCatalogActionError,
+            PermissionInvalidResourceError,
+            PermissionPublishNotReadyError,
         )
-        if tool is None or not manages_availability(tool):
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+        from bisheng.permission.application.business_authorization import check_business_action
+        from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+
+        tenant_id = get_current_tenant_id() or DEFAULT_TENANT_ID
+        tool = await GptsToolsDao.aget_one_tool(tool_id)
+        if tool is None or tool.is_delete or tool.tenant_id != tenant_id or not manages_availability(tool):
+            raise HTTPException(404, "Account availability is unavailable for this tool")
+        category = await GptsToolsDao.aget_one_tool_type(tool.type)
+        if category is None or category.is_delete or category.tenant_id != tenant_id:
+            raise HTTPException(404, "Account availability is unavailable for this tool")
+        try:
+            allowed = await check_business_action(
+                self.user, resource_type="tool", resource_id=category.id, action="visible"
+            )
+        except (InvalidCatalogActionError, PermissionInvalidResourceError, PermissionPublishNotReadyError) as exc:
+            raise HTTPException(404, "Account availability is unavailable for this tool") from exc
+        if not allowed:
             raise HTTPException(404, "Account availability is unavailable for this tool")
         await UserToolAvailabilityService(self.user.user_id).save(tool_id, enabled)
         await self.work.publications.audit(self.user, "availability", "tool", tool_id, {"enabled": enabled})
@@ -174,10 +209,13 @@ class CapabilityCatalogService:
         tool = (await self.work._tools()).get(tool_id)
         if tool is None or demo_for(tool) is None:
             raise HTTPException(404, "This capability has no read-only demonstration")
+        name = WorkCapabilitiesService._tool_name(tool)
+        if name is None:
+            raise HTTPException(409, "Tool has no stable invocation name")
         started = monotonic()
         try:
-            # The ordinary Work path rechecks tenant, use permission, schema and audit.
-            result = await self.work.call_tool(f"bisheng_tool_{tool_id}", arguments)
+            # The ordinary Work path rechecks tenant, visibility permission, schema and audit.
+            result = await self.work.call_tool(name, arguments)
         except jsonschema.ValidationError:
             raise HTTPException(422, "Demo arguments do not match the tool schema") from None
         if isinstance(result, str):

@@ -8,9 +8,8 @@ each test here pins one specific thing that must *not* appear.
 
 The two switches (``app_runtime.enabled``, F049's ``open_platform.enabled``) are
 siblings by design and never merged; the boot tests below assert all four
-combinations load, and that a config.yaml carrying a key the code does not know
-still refuses to boot — which is why the upgrade order is "code first, key
-second" (design pit 23).
+combinations load. Unknown top-level YAML keys now warn and are ignored; older
+images can still reject them, so upgrade code before enabling new features.
 """
 
 from __future__ import annotations
@@ -289,13 +288,8 @@ def test_two_switches_orthogonal_four_combinations_boot(tmp_path, app_runtime_en
     assert loaded.open_platform.enabled is open_platform_enabled
 
 
-def test_unknown_yaml_key_rejects_boot(tmp_path):
-    """An unknown top-level key refuses the boot — AC-60 / design pit 23.
-
-    This is why the upgrade order is code first, key second: add ``app_runtime:``
-    to a config.yaml in front of the code that declares it and the backend does
-    not start at all — an outage, not a degraded feature.
-    """
+def test_unknown_yaml_key_is_ignored_at_boot(tmp_path):
+    """An unknown key must not enable a feature or prevent startup."""
     from bisheng.common.services.config_service import ConfigService
 
     path = _write_yaml(
@@ -306,5 +300,6 @@ def test_unknown_yaml_key_rejects_boot(tmp_path):
         """,
     )
 
-    with pytest.raises(KeyError):
-        ConfigService.load_settings_from_yaml(path)
+    loaded = ConfigService.load_settings_from_yaml(path)
+    assert loaded.app_runtime.enabled is False
+    assert "app_runtime_typo" not in loaded.model_dump()

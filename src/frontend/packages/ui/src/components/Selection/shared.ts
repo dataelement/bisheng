@@ -14,7 +14,7 @@ export type SelectionSize = 'small' | 'medium' | 'large';
 
 /**
  * Row text sizes reference the PRIMITIVE type vars on purpose: the semantic
- * --text-body remaps 14→16 under 768px for reading text, while control rows
+ * reading typography has a reserved opt-in mobile remap, while control rows
  * keep the §3 ladder so the box stays aligned with its first line.
  */
 export const ROW_TEXT: Record<SelectionSize, string> = {

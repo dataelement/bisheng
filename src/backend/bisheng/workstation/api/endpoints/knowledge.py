@@ -1,16 +1,15 @@
 from datetime import datetime
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Request, UploadFile
 
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.core.cache.utils import save_download_file, save_uploaded_file
+from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
+from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.core.storage.browser_object_path import parse_browser_object_reference
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.role.domain.services.quota_service import QuotaService
-from bisheng.utils.util import sync_func_to_async
 from bisheng.workstation.domain.services import WorkStationService
 from bisheng.workstation.domain.services.media_cover_service import (
     MediaUploadStageTimer,
@@ -28,13 +27,10 @@ def _resolve_minio_object_from_filepath(filepath: str, minio_client) -> tuple[st
     if not normalized:
         raise ValueError("filepath is empty")
 
-    parsed = urlparse(normalized)
-    path = parsed.path if parsed.scheme in ("http", "https") or parsed.path else normalized.split("?", 1)[0]
-    path = path.lstrip("/")
-    bucket_name, _, object_name = path.partition("/")
-    allowed_buckets = {minio_client.bucket, minio_client.tmp_bucket}
-    if bucket_name not in allowed_buckets or not object_name:
+    parsed = parse_browser_object_reference(normalized, minio_client.bucket, minio_client.tmp_bucket)
+    if parsed is None:
         raise ValueError(f"invalid minio filepath: {filepath}")
+    bucket_name, object_name = parsed
 
     decoded_name = unquote(object_name)
     while decoded_name != unquote(decoded_name):
@@ -47,13 +43,15 @@ async def get_file_share_url(
     filepath: str = Query(..., description="Stored MinIO path, e.g. /tmp-dir/foo.mp4"),
     login_user=LoginUserDep,
 ):
-    del login_user  # auth gate only
+    from bisheng.workstation.domain.services.object_download_service import ObjectDownloadService
+
     minio_client = await get_minio_storage()
     try:
         bucket_name, object_name = _resolve_minio_object_from_filepath(filepath, minio_client)
     except ValueError as exc:
         raise ServerError(msg=str(exc), exception=exc) from exc
 
+    await ObjectDownloadService.require_owned(bucket_name, object_name, login_user, minio_client)
     if not await minio_client.object_exists(bucket_name, object_name):
         raise ServerError(msg="File not found in object storage")
 
@@ -69,20 +67,11 @@ async def knowledge_upload(
     login_user=LoginUserDep,
 ):
     try:
-        file_path = await sync_func_to_async(save_download_file)(file.file, "bisheng", file.filename)
-        upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-        res = await WorkStationService.uploadPersonalKnowledge(
-            request,
-            login_user,
-            file_path=file_path,
-            background_tasks=background_tasks,
-            upload_limit_bytes=upload_limit_bytes,
-        )
-        return resp_200(data=res[0])
-    except Exception as exc:
-        raise ServerError(msg=f"Knowledge base upload failed: {exc!s}", exception=exc)
+        # Reject before staging: this is the retired personal-KB endpoint,
+        # not the separate /files temporary conversation attachment endpoint.
+        raise KnowledgeTypeNotSupportedError()
     finally:
-        file.file.close()
+        await file.close()
 
 
 @router.get("/queryKnowledge")
@@ -92,8 +81,10 @@ async def query_knowledge_list(request: Request, page: int, size: int, login_use
 
 
 @router.delete("/deleteKnowledge")
-def delete_knowledge(request: Request, file_id: int, login_user=LoginUserDep):
-    res = KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
+async def delete_knowledge(request: Request, file_id: int, login_user=LoginUserDep):
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+
+    res = await delete_legacy_files(request=request, identity=login_user, file_ids=[file_id])
     return resp_200(data=res)
 
 
@@ -113,7 +104,18 @@ async def upload_file(
         minio_client = await get_minio_storage()
         timer.stage("minio_client_ready", endpoint=minio_client.minio_config.endpoint)
         timer.stage("file_read_start")
-        file_path = await save_uploaded_file(file, "bisheng", file_name)
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+        from bisheng.knowledge.domain.services.temp_upload_service import TempUploadService
+
+        tenant_id = get_current_tenant_id() or login_user.tenant_id
+        object_name = (
+            f"workstation/{tenant_id}/{login_user.user_id}/{uuid4().hex}{TempUploadService._safe_suffix(file_name)}"
+        )
+        file_path = await save_uploaded_file(file, "bisheng", object_name)
+        await PreviewSourceService.bind_owned_object(
+            bucket=minio_client.tmp_bucket, object_name=object_name, login_user=login_user
+        )
         timer.stage("file_minio_put", filepath=file_path)
         file_path = minio_client.clear_minio_share_host(file_path)
         timer.stage("file_clear_host", filepath=file_path)
@@ -133,6 +135,10 @@ async def upload_file(
             "parsing_status": "completed",
         }
         timer.finish(filepath=file_path)
+        # F004 决策 12: parsing starts now instead of when the message is sent.
+        from bisheng.workstation.domain.services import direct_attachments
+
+        await direct_attachments.start_upload_parsing(payload, user_id=login_user.user_id)
         return resp_200(data=payload)
     except Exception as exc:
         timer.fail(exc)

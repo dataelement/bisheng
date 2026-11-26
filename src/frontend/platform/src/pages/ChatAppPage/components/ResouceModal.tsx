@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Input } from '@bisheng/ui';
+import { Button, Input } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 
@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { downloadFile } from "../../../util/utils";
 import FileViewPanne from "./FileViewPanne";
+import { highlightSourceAnswer } from "./sourceAnswerHighlight";
 
 const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     const [html, setHtml] = useState("");
@@ -25,8 +26,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
         const loadData = () => {
             splitWordApi(msg, id)
                 .then((res) => {
-                    const reg = new RegExp(`(${res.join("|")})`, "g");
-                    setHtml(msg.replace(reg, "<span>$1</span>"));
+                    setHtml(highlightSourceAnswer(msg, res));
                     onInit(res);
                 })
                 .catch((e) => {
@@ -44,7 +44,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     useEffect(() => {
         const handleclick = (e) => {
             if (e.target.tagName === "SPAN") {
-                onAdd(e.target.innerText);
+                onAdd(e.target.textContent);
             }
         };
         pRef.current.addEventListener("click", handleclick);
@@ -53,7 +53,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
 
     return (
         <div
-            className="bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 mb-4 overflow-y-auto"
+            className="min-w-0 bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 mb-4 overflow-y-auto [overflow-wrap:anywhere]"
             style={{ display: fullScreen ? "none" : "block" }}
         >
             <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: html }}></p>
@@ -144,7 +144,7 @@ const ResultPanne = ({
 
     return (
         <div
-            className="flex gap-4 relative"
+            className="flex min-w-0 gap-4 relative"
             style={{ height: fullScreen ? "100vh" : !isMobile ? "calc(100vh - 10rem)" : "calc(100vh - 4rem)" }}
         >
             {isMobile && (
@@ -184,7 +184,7 @@ const ResultPanne = ({
             )}
             {/* left */}
             {(!isMobile || !collapse) && (
-                <div className="sm:w-[300px] bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar w-[200px] max-h-[100%] sm:max-h-full absolute sm:static z-20 sm:z-auto">
+                <div className="sm:w-[300px] shrink-0 bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar w-[200px] max-h-[100%] sm:max-h-full absolute sm:static z-20 sm:z-auto">
                     {/* label */}
                     <div className="mb-4 text-sm font-bold space-x-1 hidden sm:block">
                         <div className="flex">
@@ -290,12 +290,10 @@ const ResultPanne = ({
                             ) : (
                                 <div
                                     key={_file.id}
-                                    className={`msk group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && "bg-gray-200"}`}
+                                    className="group rounded-xl bg-[#fff] dark:bg-[#303134] flex items-center gap-2 px-4 mb-2 relative min-h-16 text-gray-500"
                                 >
-                                    <p className="text-sm blur-sm">{t("publicPages.maskedFile")}</p>
-                                    <span className="absolute right-1 bottom-1 text-blue-400 text-sm">
-                                        {_file.score}
-                                    </span>
+                                    <Outlined.Info className="text-red-300 shrink-0" />
+                                    <p className="text-sm">{t("publicPages.maskedFile")}</p>
                                 </div>
                             ),
                         )}
@@ -333,7 +331,7 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
     };
 
     return (
-        <div className="relative">
+        <div className="relative min-w-0">
             {loading && (
                 <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <LoadingIcon />

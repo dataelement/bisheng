@@ -18,6 +18,16 @@ from ..schemas.query_builder import AggregationExpression, AggsTypeEnum, FilterE
 
 TIMESTAMP_FIELD = "timestamp"
 
+# Older dashboard saves could persist a new dataset alongside the old metrics.
+_LEGACY_DATASET_BINDINGS = {
+    "mid_doc_parse_dtl": (
+        "mid_knowledge_increment",
+        {"total_document_knowledge_base_count", "total_qa_knowledge_base_count"},
+    ),
+    "mid_session_run_dtl": ("mid_user_increment", {"new_user_count"}),
+    "mid_sessions_increment": ("mid_user_increment", {"total_user_count"}),
+}
+
 
 class DataQueryService(BaseModel):
     dataset_code: str = Field(description="dataset code")
@@ -33,10 +43,21 @@ class DataQueryService(BaseModel):
         async with get_async_db_session() as session:
             repository = DashboardDatasetRepositoryImpl(session)
             dataset_config = await repository.find_one(dataset_code=self.dataset_code)
-        if not dataset_config:
-            raise QueryDatasetNotFoundError()
+            if not dataset_config:
+                raise QueryDatasetNotFoundError()
+            schema_config = SchemaConfig(**dataset_config.schema_config)
+            legacy_binding = _LEGACY_DATASET_BINDINGS.get(self.dataset_code)
+            if legacy_binding:
+                target_code, legacy_metrics = legacy_binding
+                requested = {metric.field_id for metric in self.data_config.metrics}
+                if requested <= legacy_metrics and requested.isdisjoint(metric.field for metric in schema_config.metrics):
+                    target = await repository.find_one(dataset_code=target_code)
+                    if target:
+                        target_schema = SchemaConfig(**target.schema_config)
+                        if requested <= {metric.field for metric in target_schema.metrics}:
+                            dataset_config = target
+                            schema_config = target_schema
 
-        schema_config = SchemaConfig(**dataset_config.schema_config)
         metric_map = {one.field: one for one in schema_config.metrics}
         dimension_map = {one.field: one for one in schema_config.dimensions}
 

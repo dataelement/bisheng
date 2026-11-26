@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { SpaceTagPermissionNotice } from "./SpaceTagPermissionNotice";
+import type { SpaceTagPermission } from "../../hooks/useSpaceTagPermission";
 import { notification } from '@bisheng/ui';
 import { Dialog,DialogContent,DialogHeader,DialogTitle,DialogTrigger } from "@/components/bs-ui/dialog";
 
@@ -21,10 +23,14 @@ interface KnowledgeTagSelectProps {
     knowledgeId: string | number;
     fileIds: number[];
     initialTags?: KnowledgeTagItem[];
-    children: React.ReactNode;
+    children?: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
     onUpdate: () => void;
     isEditable?: boolean;
     mode?: 'auto' | 'single' | 'batch';
+    isSpace?: boolean;
+    spaceTagPermission?: SpaceTagPermission;
 }
 
 const TAG_NAME_MAX_LENGTH = 100;
@@ -37,11 +43,18 @@ export default function KnowledgeTagSelect({
     children,
     onUpdate,
     isEditable = true,
-    mode = 'auto'
+    mode = 'auto',
+    isSpace = false,
+    spaceTagPermission,
+    open: controlledOpen,
+    onOpenChange
 }: KnowledgeTagSelectProps) {
 
     const { t } = useTranslation('knowledge');
-    const [open, setOpen] = useState(false);
+    const canManageTags = isEditable && (!isSpace || spaceTagPermission?.status === "allowed");
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen ?? internalOpen;
+    const setOpen = (value: boolean) => { setInternalOpen(value); onOpenChange?.(value); };
     const [tags, setTags] = useState<KnowledgeTagItem[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
     const [inputValue, setInputValue] = useState("");
@@ -64,7 +77,7 @@ export default function KnowledgeTagSelect({
         const response = await getKnowledgeTagsApi(numericKnowledgeId, {
                 page: 1,
                 limit: 100
-            });
+            }, isSpace);
 
         setTags(response.data ?? []);
     };
@@ -74,7 +87,7 @@ export default function KnowledgeTagSelect({
         setInputValue("");
         syncSelectedTags();
         void fetchTags().catch(showApiError);
-    }, [open, numericKnowledgeId]);
+    }, [open, numericKnowledgeId, isSpace]);
 
     useEffect(() => {
         if (!open || isBatch) return;
@@ -127,7 +140,8 @@ export default function KnowledgeTagSelect({
             return;
         }
 
-        const result = await createKnowledgeTagApi(numericKnowledgeId, tagName);
+        if (!canManageTags) return;
+        const result = await createKnowledgeTagApi(numericKnowledgeId, tagName, isSpace);
 
         const newTag = result as KnowledgeTagItem;
         setTags(prev => [newTag, ...prev.filter(tag => tag.id !== newTag.id)]);
@@ -136,10 +150,10 @@ export default function KnowledgeTagSelect({
     };
 
     const handleDeleteTag = async (tag: KnowledgeTagItem) => {
-        if (deletingTagId !== null) return;
+        if (!canManageTags || deletingTagId !== null) return;
         setDeletingTagId(tag.id);
         try {
-        await deleteKnowledgeTagApi(numericKnowledgeId, tag.id);
+        await deleteKnowledgeTagApi(numericKnowledgeId, tag.id, isSpace);
         setTags(prev => prev.filter(item => item.id !== tag.id));
         setSelectedTagIds(prev => prev.filter(id => id !== tag.id));
         notification.open({ type: 'success', description: String(t('tagDeleted') ?? '') });
@@ -169,7 +183,7 @@ export default function KnowledgeTagSelect({
                     knowledge_id: numericKnowledgeId,
                     file_id: fileIds[0],
                     tag_ids: payloadTagIds
-                })
+                }, isSpace)
         );
         onUpdate();
         handleOpenChange(false);
@@ -182,7 +196,7 @@ export default function KnowledgeTagSelect({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogTrigger asChild>{children}</DialogTrigger>
+            {children && <DialogTrigger asChild>{children}</DialogTrigger>}
             <DialogContent
                 close={false}
                 className="w-[600px] max-w-[calc(100vw-32px)] gap-0 rounded-xl border-none p-0"
@@ -193,6 +207,7 @@ export default function KnowledgeTagSelect({
                         {t('editTag')}
                     </DialogTitle>
                 </DialogHeader>
+                {isSpace && <SpaceTagPermissionNotice permission={spaceTagPermission} />}
                 <div className="flex flex-col gap-4 px-6 pb-3">
                     <div
                         className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors focus-within:border-primary"
@@ -223,6 +238,7 @@ export default function KnowledgeTagSelect({
                         ))}
                         <input
                             type="text"
+                            disabled={!canManageTags}
                             value={inputValue}
                             maxLength={TAG_NAME_MAX_LENGTH}
                             onChange={(event) => setInputValue(event.target.value)}
@@ -251,7 +267,9 @@ export default function KnowledgeTagSelect({
                                 return (
                                     <span
                                         key={tag.id}
-                                        onClick={() => toggleTag(tag.id)}
+                                        onClick={(event) => {
+                                            if (!(event.target as Element).closest("button")) toggleTag(tag.id);
+                                        }}
                                         className={`flex h-7 items-center justify-center gap-1 rounded-[4px] px-2 text-[12px] leading-[20px] transition-colors ${isSelected
                                             ? "cursor-default bg-primary/10 text-[#165dff]"
                                             : "cursor-pointer bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb]"
@@ -267,7 +285,9 @@ export default function KnowledgeTagSelect({
                                                 event.stopPropagation();
                                                 void handleDeleteTag(tag);
                                             }}
-                                            disabled={deletingTagId === tag.id}
+                                            disabled={!canManageTags || deletingTagId === tag.id}
+                                            aria-label={t("tagEditor.deleteTag", { name: tag.name })}
+                                            title={!canManageTags ? t("tagEditor.spacePermissionRequired") : undefined}
                                         >
                                             <Outlined.Delete className="size-3" />
                                         </button>

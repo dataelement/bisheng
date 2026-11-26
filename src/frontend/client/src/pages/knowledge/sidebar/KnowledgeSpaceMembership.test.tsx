@@ -10,7 +10,7 @@ jest.mock('react-router-dom', () => ({ useNavigate: () => jest.fn(), useParams: 
 jest.mock('bisheng-icons', () => ({ Outlined: new Proxy({}, { get: () => () => null }) }));
 jest.mock('@bisheng/ui', () => ({
   Dropdown: ({ menu, children, open }: { menu: React.ReactNode; children: React.ReactNode; open?: boolean }) => <>{children}{open === false ? null : menu}</>,
-  DropdownItem: ({ onSelect, children }: { onSelect: () => void; children: React.ReactNode }) => <button onClick={onSelect}>{children}</button>,
+  DropdownItem: ({ onSelect, children, danger }: { onSelect: () => void; children: React.ReactNode; danger?: boolean }) => <button data-danger={danger} onClick={onSelect}>{children}</button>,
   DropdownSeparator: () => null,
 }));
 jest.mock('./KnowledgeFolderTree', () => ({ KnowledgeFolderTree: () => null }));
@@ -40,8 +40,11 @@ it.each([KnowledgeSpaceItem, KnowledgeSpaceCardItem])('keeps real deletion destr
   const onLeave = jest.fn();
   render(<Component space={{ id: 'space', name: 'Created' } as never} type="created" isActive={false}
     canDeleteSpace onSelect={jest.fn()} onUpdate={jest.fn()} onDelete={onDelete} onLeave={onLeave} onPin={jest.fn()} />);
-  fireEvent.click(screen.getByText('com_knowledge.delete_space'));
+  const deleteAction = screen.getByText('com_knowledge.delete_space');
+  expect(deleteAction).toHaveAttribute('data-danger', 'true');
+  fireEvent.click(deleteAction);
   await waitFor(() => expect(onDelete).toHaveBeenCalledWith('space'));
   expect(onLeave).not.toHaveBeenCalled();
-  expect(mockConfirm).toHaveBeenLastCalledWith(expect.objectContaining({ variant: 'destructive' }));
+  // Reference-aware confirmation belongs to the deletion owner, not the menu item.
+  expect(mockConfirm).not.toHaveBeenCalled();
 });

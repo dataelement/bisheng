@@ -1,47 +1,55 @@
-import { Pagination, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
-import { Button, SearchInput } from '@bisheng/ui';
-import { Segmented, Select, Tooltip as SharedTooltip, Switch, Tag } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
-
-
-
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import {
+  Button,
+  Checkbox,
+  Dropdown,
+  DropdownItem,
+  Pagination,
+  Select,
+  Switch,
+  Tag,
+  Tooltip as SharedTooltip,
+  TooltipProvider as SharedTooltipProvider,
+  toast,
+} from "@bisheng/ui";
+import { Outlined } from 'bisheng-icons';
+import { copyText } from '@/utils';
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
-
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/bs-ui/table";
 import { ColumnResizeHandle } from "@/components/bs-ui/table/useResizableColumns";
-
 import { cname } from "@/components/bs-ui/utils";
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
-
+import type { DepartmentMember } from "@/types/api/department";
+import { MemberRoleSummary } from "./MemberRoleSummary";
 import { CreateLocalMemberDialog } from "./CreateLocalMemberDialog";
 import type { useMemberTableController } from "./MemberTable";
 import { OrganizationMemberEditDialog } from "./OrganizationMemberEditDialog";
+
 interface MemberTableViewProps {
   controller: ReturnType<typeof useMemberTableController>;
 }
 export function MemberTableView({ controller }: MemberTableViewProps) {
   const {
     memberLastCol,
-    memberScope,
-    setMemberScope,
     t,
-    keyword,
-    setKeyword,
     isPrimaryFilter,
     setIsPrimaryFilter,
     isArchived,
     setAddOpen,
     directAdmins,
     inheritedAdmins,
-    globalLoading,
-    globalRows,
-    onRequestLocateMember,
-    globalPage,
-    globalTotal,
-    handleGlobalPageChange,
     mrc,
     members,
+    loading,
     highlightUserId,
     memberDisplayNames,
     fmtTime,
@@ -51,287 +59,319 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
     userPwdModalRef,
     page,
     total,
+    directTotal,
+    directOnly,
+    onDirectOnlyChange,
     handlePageChange,
     addOpen,
     deptId,
+    departmentId,
     deptName,
     handleAdded,
     editMember,
     handleEditClose,
     handleEditSaved,
+    toolbarActions,
   } = controller;
   const paginationLocale = usePaginationLocale();
   const selectLabels = useSelectLabels();
+  const isArchivedMember = (member: DepartmentMember) =>
+    isArchived || member.department?.status === "archived";
+  const canEditMember = (member: DepartmentMember) =>
+    !isArchivedMember(member) && member.enabled &&
+    !member.roles.some(role => role.id === 1);
+  const canResetPassword = user?.role === "admin";
+  const memberTypeHeader = mrc.getThProps(2);
   return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Segmented
-          value={memberScope}
-          onChange={(value) => setMemberScope(value as "dept" | "org")}
-          options={[
-            { value: "dept", label: t("bs:department.memberSearchScopeCurrent") },
-            { value: "org", label: t("bs:department.memberSearchScopeOrg") },
-          ]}
-        />
-        <SearchInput placeholder={t("bs:department.searchMember")} value={keyword} onChange={(e) => setKeyword(e.target.value)} className={"w-[200px]"} />
-        {memberScope === "dept" && (
-          <Select
-            {...selectLabels}
-            className="w-[120px]"
-            aria-label={t("bs:department.memberType")}
-            value={isPrimaryFilter}
-            onChange={(v) => setIsPrimaryFilter(v == null ? "all" : String(v))}
-            options={[
-              { value: "all", label: t("bs:department.all") },
-              { value: "1", label: t("bs:department.primary") },
-              { value: "0", label: t("bs:department.secondary") },
-            ]}
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h3 className="text-base font-semibold">
+            {deptName}
+            {isArchived && t("bs:department.archivedTag")}
+          </h3>
+          <Checkbox
+            checked={directOnly}
+            onCheckedChange={(checked) => onDirectOnlyChange?.(checked === true)}
+            label={t("bs:organization.directMemberCount", { count: directTotal })}
           />
-        )}
-        <div className="flex-1" />
-        {memberScope === "dept" && (
-          <Button size="small" disabled={isArchived} className="disabled:cursor-not-allowed" onClick={() => {
-              if (!isArchived) setAddOpen(true);
-            }}>
-            {t("bs:department.createLocalUser")}
-          </Button>
+        </div>
+        {(directAdmins.length > 0 || inheritedAdmins.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{t("bs:department.admins")}:</span>
+            {directAdmins.map((admin) => (
+              <Tag key={admin.user_id} size="small" color="default">
+                {admin.user_name}
+              </Tag>
+            ))}
+            {inheritedAdmins.map((admin) => (
+              <SharedTooltip
+                key={admin.user_id}
+                content={t("bs:department.inheritedAdminSource", {
+                  department: admin.sourceDeptName,
+                })}
+              >
+                <span tabIndex={0}>
+                  <Tag size="small" color="default">
+                    {admin.user_name}
+                  </Tag>
+                </span>
+              </SharedTooltip>
+            ))}
+          </div>
         )}
       </div>
-      {memberScope === "org" && (
-        <p className="mb-3 text-xs text-muted-foreground">{t("bs:department.globalMemberSearchHint")}</p>
-      )}
-
-      {memberScope === "dept" && (directAdmins.length > 0 || inheritedAdmins.length > 0) && (
-        <div className="mb-3 rounded-md border bg-muted/20 px-3 py-2">
-          {directAdmins.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-xs font-medium text-muted-foreground">{t("bs:department.directAdmins")}</span>
-              {directAdmins.map((admin) => (
-                <Tag size="small" key={admin.user_id} color="default">
-                  {admin.user_name}
-                </Tag>
-              ))}
-            </div>
-          )}
-          {inheritedAdmins.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-xs font-medium text-muted-foreground">
-                {t("bs:department.inheritedAdmins")}
-              </span>
-              {inheritedAdmins.map((admin) => (
-                <SharedTooltipProvider delayDuration={200}><SharedTooltip
-                    content={t("bs:department.inheritedAdminSource", {
-                      department: admin.sourceDeptName,
-                    })}
-                  >
-                    <span tabIndex={0} className="inline-flex cursor-default">
-                      <Tag size="small" color="default">{admin.user_name}</Tag>
-                    </span>
-                  </SharedTooltip></SharedTooltipProvider>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {memberScope === "org" && (
-        <div className="mb-4 rounded-md border">
-          {globalLoading && globalRows.length === 0 ? (
-            <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-              <Outlined.Loading className="h-4 w-4 animate-spin" />
-              {t("bs:department.memberEditLoading")}
-            </div>
-          ) : !keyword.trim() ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              {t("bs:department.globalMemberEmptyKeyword")}
-            </div>
-          ) : globalRows.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              {t("bs:department.globalMemberNoResults")}
-            </div>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[160px]">{t("system.username")}</TableHead>
-                    <TableHead>{t("bs:department.globalMemberPrimaryPath")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {globalRows.map((r) => (
-                    <TableRow
-                      key={`${r.user_id}-${r.primary_department_dept_id}`}
-                      className={cname(
-                        onRequestLocateMember && "cursor-pointer hover:bg-accent/60",
-                        r.enabled === false && "opacity-90",
-                      )}
-                      onClick={() => {
-                        setMemberScope("dept");
-                        onRequestLocateMember?.({
-                          primaryDeptDeptId: r.primary_department_dept_id,
-                          userId: r.user_id,
-                        });
-                      }}
-                    >
-                      <TableCell className="font-medium">
-                        <span className="inline-flex flex-wrap items-center gap-1.5">
-                          {r.user_name}
-                          {r.enabled === false && (
-                            <Tag size="small" dot color="danger">
-                              {t("bs:department.disabled")}
-                            </Tag>
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell className="max-w-md truncate text-muted-foreground" title={r.primary_department_path}>
-                        {r.primary_department_path || "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="flex justify-end border-t px-2 py-2">
-                <Pagination locale={paginationLocale}
-                  current={globalPage}
-                  pageSize={20}
-                  total={globalTotal}
-                  showTotal
-                  onChange={handleGlobalPageChange}
-                />
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {memberScope === "dept" && (
-        <SharedTooltipProvider delayDuration={200}><Table noScroll className="!w-auto min-w-full" style={{ tableLayout: "fixed", width: mrc.totalWidth }}>
-            <TableHeader>
+      <div className="mb-4 flex shrink-0 flex-wrap items-center gap-2">
+        <Select
+          {...selectLabels}
+          className="w-[140px]"
+          aria-label={t("bs:department.memberType")}
+          value={isPrimaryFilter}
+          onChange={(value) =>
+            setIsPrimaryFilter(value == null ? "all" : String(value))
+          }
+          options={[
+            { value: "all", label: t("bs:organization.allRelations") },
+            { value: "1", label: t("bs:department.primary") },
+            { value: "0", label: t("bs:department.secondary") },
+          ]}
+        />
+        <div className="flex-1" />
+        {toolbarActions}
+        <Button disabled={isArchived} onClick={() => setAddOpen(true)}>
+          {t("bs:organization.addMember")}
+        </Button>
+      </div>
+        <SharedTooltipProvider delayDuration={200}>
+          <Table
+            containerClassName="min-h-0 flex-1 scroll-pt-11"
+            className="!w-auto min-w-full"
+            style={{ tableLayout: "fixed", width: mrc.totalWidth }}
+          >
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead {...mrc.getThProps(0)}>
-                  {t("system.username")}
-                  <ColumnResizeHandle columnIndex={0} lastColumn={0 === memberLastCol} startResize={mrc.startResize} />
+                  {t("accountIdentity.nickname")}
+                  <ColumnResizeHandle
+                    columnIndex={0}
+                    lastColumn={0 === memberLastCol}
+                    startResize={mrc.startResize}
+                  />
                 </TableHead>
                 <TableHead {...mrc.getThProps(1)}>
-                  {t("bs:department.memberType")}
+                  {t('accountIdentity.account')}
                   <ColumnResizeHandle columnIndex={1} lastColumn={1 === memberLastCol} startResize={mrc.startResize} />
                 </TableHead>
-                <TableHead {...mrc.getThProps(2)}>
-                  {t("bs:department.roles")}
-                  <ColumnResizeHandle columnIndex={2} lastColumn={2 === memberLastCol} startResize={mrc.startResize} />
+                <TableHead
+                  {...memberTypeHeader}
+                  style={{ ...memberTypeHeader.style, minWidth: memberTypeHeader.style?.width }}
+                >
+                  {t("bs:department.memberType")}
+                  <ColumnResizeHandle
+                    columnIndex={2}
+                    lastColumn={2 === memberLastCol}
+                    startResize={mrc.startResize}
+                  />
                 </TableHead>
                 <TableHead {...mrc.getThProps(3)}>
-                  {t("bs:department.userGroups")}
-                  <ColumnResizeHandle columnIndex={3} lastColumn={3 === memberLastCol} startResize={mrc.startResize} />
+                  {t("bs:department.roles")}
+                  <ColumnResizeHandle
+                    columnIndex={3}
+                    lastColumn={3 === memberLastCol}
+                    startResize={mrc.startResize}
+                  />
                 </TableHead>
                 <TableHead {...mrc.getThProps(4)}>
-                  {t("bs:department.updateTime")}
-                  <ColumnResizeHandle columnIndex={4} lastColumn={4 === memberLastCol} startResize={mrc.startResize} />
+                  {t("bs:department.userGroups")}
+                  <ColumnResizeHandle
+                    columnIndex={4}
+                    lastColumn={4 === memberLastCol}
+                    startResize={mrc.startResize}
+                  />
                 </TableHead>
                 <TableHead {...mrc.getThProps(5)}>
-                  {t("bs:department.enabled")}
-                  <ColumnResizeHandle columnIndex={5} lastColumn={5 === memberLastCol} startResize={mrc.startResize} />
+                  {t("bs:department.updateTime")}
+                  <ColumnResizeHandle
+                    columnIndex={5}
+                    lastColumn={5 === memberLastCol}
+                    startResize={mrc.startResize}
+                  />
                 </TableHead>
-                <TableHead style={mrc.getThProps(6).style} className={cname(mrc.getThProps(6).className, "text-right")}>
+                <TableHead
+                  style={mrc.getThProps(6).style}
+                  className={cname(mrc.getThProps(6).className, "px-1.5")}
+                >
+                  {t("bs:department.enabled")}
+                  <ColumnResizeHandle
+                    columnIndex={6}
+                    lastColumn={6 === memberLastCol}
+                    startResize={mrc.startResize}
+                  />
+                </TableHead>
+                <TableHead className="w-[1%] whitespace-nowrap">
                   {t("operations")}
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {members.length === 0 ? (
+              {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={8}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    <LoadingState label={t("loading")} />
+                  </TableCell>
+                </TableRow>
+              ) : members.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={8}
+                    className="text-center text-muted-foreground"
+                  >
                     {t("bs:department.noMembers")}
                   </TableCell>
                 </TableRow>
               ) : (
                 members.map((m) => (
                   <TableRow
-                    key={m.user_id}
+                    key={`${m.department_id}:${m.user_id}`}
                     data-member-row={m.user_id}
-                    className={cname(highlightUserId != null && m.user_id === highlightUserId ? "bg-accent/50" : "")}
+                    data-member-department={m.department_id ?? departmentId}
+                    onClick={event => {
+                      const target = event.target;
+                      if (!(target instanceof Element) || !event.currentTarget.contains(target)) return;
+                      if (target.closest('button,a,input,textarea,select,[role="switch"],[role="checkbox"]')) return;
+                      if (window.getSelection()?.toString()) return;
+                      if (canEditMember(m)) handleEditUser(m);
+                    }}
+                    className={cname(
+                      canEditMember(m) ? 'cursor-pointer' : '',
+                      highlightUserId === m.user_id && (m.department_id ?? departmentId) === departmentId
+                        ? "[&>td]:!bg-blue-50"
+                        : ""
+                    )}
                   >
-                    <TableCell {...mrc.getTdProps(0)} title={memberDisplayNames.get(m.user_id) ?? m.user_name}>
-                      {memberDisplayNames.get(m.user_id) ?? m.user_name}
+                    <TableCell
+                      {...mrc.getTdProps(0)}
+                      title={memberDisplayNames.get(m.user_id) ?? m.user_name}
+                    >
+                      <span className="block truncate">{m.user_name}</span>
                     </TableCell>
                     <TableCell {...mrc.getTdProps(1)}>
-                      <Tag size="small" color={m.is_primary === 1 ? "brand" : "default"}>
-                        {m.is_primary === 1 ? t("bs:department.primary") : t("bs:department.secondary")}
-                      </Tag>
+                      {(() => {
+                        const account = m.external_id === undefined ? m.person_id ?? '' : m.external_id ?? '';
+                        return <div className="flex min-w-0 items-center gap-1">
+                          <span className="min-w-0 flex-1 truncate" title={account}>{account || t('accountIdentity.noAccount')}</span>
+                          {account && <SharedTooltip content={t('accountIdentity.copyAccount')}>
+                            <Button type="button" size="small" variant="text" color="default" iconOnly
+                              aria-label={t('accountIdentity.copyAccount')}
+                              onClick={event => {
+                                event.stopPropagation();
+                                void copyText(account).then(() => toast.show({ type: 'success', message: t('accountIdentity.accountCopied') }))
+                                  .catch(() => toast.show({ type: 'error', message: t('accountIdentity.copyFailed') }));
+                              }}><Outlined.Copy aria-hidden /></Button>
+                          </SharedTooltip>}
+                        </div>;
+                      })()}
                     </TableCell>
                     <TableCell {...mrc.getTdProps(2)}>
-                      {(() => {
-                        const roleNames: string[] = [];
-                        if (m.is_department_admin) {
-                          roleNames.push(t("bs:department.deptAdminRoleName"));
-                        }
-                        roleNames.push(...m.roles.map((r) => r.role_name));
-                        const text = roleNames.join(", ") || "-";
-                        return (
-                          <SharedTooltip content={text}>
-                            <div className="cursor-default truncate">{text}</div>
-                          </SharedTooltip>
-                        );
-                      })()}
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Tag
+                          size="small"
+                          color={m.is_primary === 1 ? "brand" : "default"}
+                          className="shrink-0 whitespace-nowrap"
+                        >
+                          {m.is_primary === 1
+                            ? t("bs:department.primary")
+                            : t("bs:department.secondary")}
+                        </Tag>
+                        {m.department && (
+                          <span className="min-w-0 truncate text-xs text-muted-foreground" title={m.department.name}>
+                            {departmentDisplayName(m.department, t("bs:department.defaultOrganization"))}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell {...mrc.getTdProps(3)}>
+                      <MemberRoleSummary member={m} />
+                    </TableCell>
+                    <TableCell {...mrc.getTdProps(4)}>
                       {(() => {
-                        const text = m.user_groups.map((g) => g.group_name).join(", ") || "-";
+                        const text =
+                          m.user_groups.map((g) => g.group_name).join(", ") ||
+                          "-";
                         return (
                           <SharedTooltip content={text}>
-                            <div className="cursor-default truncate">{text}</div>
+                            <div className="cursor-default truncate">
+                              {text}
+                            </div>
                           </SharedTooltip>
                         );
                       })()}
                     </TableCell>
-                    <TableCell {...mrc.getTdProps(4)} className="whitespace-nowrap text-muted-foreground">
+                    <TableCell
+                      {...mrc.getTdProps(5)}
+                      className="whitespace-nowrap text-muted-foreground"
+                    >
                       {fmtTime(m.update_time ?? m.create_time)}
                     </TableCell>
-                    <TableCell {...mrc.getTdProps(5)}>
+                    <TableCell {...mrc.getTdProps(6)} className="px-1.5 text-right">
                       <Switch
                         checked={m.enabled}
-                        disabled={isArchived || (!m.enabled && !!m.disable_source && user?.role !== "admin")}
-                        onCheckedChange={(checked) => handleToggleEnabled(m, Boolean(checked))}
+                        disabled={
+                          isArchivedMember(m) ||
+                          (!m.enabled &&
+                            !!m.disable_source &&
+                            user?.role !== "admin")
+                        }
+                        onCheckedChange={(checked) =>
+                          handleToggleEnabled(m, Boolean(checked))
+                        }
                       />
                     </TableCell>
-                    <TableCell {...mrc.getTdProps(6)} className="text-right">
-                      {(() => {
-                        const isSuperAdmin = m.roles.some((role) => role.id === 1);
-                        const canResetPwd = user.role === "admin";
-                        return (
-                          <div className="flex flex-wrap items-center justify-end gap-x-2">
-                            {isSuperAdmin ? (
-                              <Button variant="link" size="small" disabled>
-                                {t("edit")}
-                              </Button>
-                            ) : (
-                              <Button variant="link" size="small" disabled={isArchived || user.user_id === m.user_id || !m.enabled} onClick={() => handleEditUser(m)}>
-                                {t("edit")}
-                              </Button>
-                            )}
-                            {canResetPwd && (
-                              <Button variant="link" size="small" disabled={isArchived} onClick={() => !isArchived && userPwdModalRef.current?.open(m.user_id)}>
+                    <TableCell className="w-[1%] whitespace-nowrap">
+                      <Dropdown
+                        align="end"
+                        menu={
+                          <>
+                            <DropdownItem disabled={!canEditMember(m)} onSelect={() => handleEditUser(m)}>
+                              {t("edit")}
+                            </DropdownItem>
+                            {canResetPassword && (
+                              <DropdownItem
+                                disabled={isArchivedMember(m)}
+                                onSelect={() => userPwdModalRef.current?.open(m.user_id)}
+                              >
                                 {t("system.resetPwd")}
-                              </Button>
+                              </DropdownItem>
                             )}
-                          </div>
-                        );
-                      })()}
+                          </>
+                        }
+                      >
+                        <Button type="button" color="default" variant="text" iconOnly aria-label={`${t("more")} ${m.user_name}`}>
+                          <Outlined.More aria-hidden />
+                        </Button>
+                      </Dropdown>
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
-          </Table></SharedTooltipProvider>
-      )}
-
-      {memberScope === "dept" && (
-        <div className="mt-4 flex justify-end">
-          <Pagination locale={paginationLocale} current={page} pageSize={20} total={total} showTotal={true} onChange={handlePageChange} />
-        </div>
-      )}
-
+          </Table>
+        </SharedTooltipProvider>
+      <div className="mt-4 flex min-h-8 shrink-0 justify-end">
+        {!loading && (
+          <Pagination
+            locale={paginationLocale}
+            current={page}
+            pageSize={20}
+            total={total}
+            showTotal
+            onChange={handlePageChange}
+          />
+        )}
+      </div>
       {addOpen && !isArchived && (
         <CreateLocalMemberDialog
           deptId={deptId}
@@ -343,7 +383,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
 
       <OrganizationMemberEditDialog
         open={Boolean(editMember)}
-        deptId={deptId}
+        deptId={editMember?.department?.dept_id ?? deptId}
         member={editMember}
         onClose={handleEditClose}
         onSaved={handleEditSaved}

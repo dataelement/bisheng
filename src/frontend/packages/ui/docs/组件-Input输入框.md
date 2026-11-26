@@ -39,8 +39,9 @@
 | `medium`（**默认**） | 32px | 14 / 22 | 6px | 12px | 绝大多数表单 |
 | `large` | 40px | 16 / 24 | 8px | 12px | 登录页、大表单 |
 
-- 字号跟《字体规范》、圆角跟《圆角与阴影规范》控件档，随档取值不单独定义。
+- 字号使用 [基础-字体规范.mdx](基础-字体规范.mdx) §2.2 的字段字阶，small / medium 用 `text-field`，large 用 `text-field-lg`；圆角跟控件档。
 - **Textarea 不分档**：字号 14 / 22、圆角 6px、内边距上下 4px 左右 12px；**手动拉伸的下限是 32px**（与 medium 控件同高）——再矮就不像一个能写字的框，像一条拉坏的行。上下 4px 是被这个下限倒推出来的：32 − 2（描边）− 22（行高）= 10，两边各 4px 多一点，那行字才能在拉到底时**完整且垂直居中**；若取 8px，一行字要 40px 的框才装得下，拉到底就成了上下都被切一刀的半行。（4px 也是 antd 5px / Arco 4px 的那一档。）开了字数统计的下限是 56px——得把计数那一格的位置留出来。
+- 上述 Textarea 下限按默认字号换算；用户放大文字后，下限随一行文字与内边距一起增长，不把较大的文字裁进固定高度。
 - **宽度不定档，跟随布局**：同一表单里同级字段等宽；只有内容长度天然固定的字段（验证码、端口号）才用短框暗示长度。
 
 | ✅ 推荐 | ❌ 不推荐 | 原因 |
@@ -118,7 +119,6 @@
 | 项 | 触屏 / 窄屏规则 |
 |---|---|
 | 悬停 hover | 触屏没有悬停，关掉 hover 态，从常态直接进聚焦 |
-| 字号 | 全档位升到 **16px**——iOS 上小于 16px 的输入框聚焦会触发页面自动放大 |
 | 尺寸 | 触屏高频场景 small 直接升 medium；高度不足 44px 的档位用透明热区扩到 ≥44px（同按钮口径） |
 | 一键清除 | 聚焦且有内容时常驻显示（触屏没有悬停可言），热区 ≥44×44px |
 | 只读 / 禁用 / 错误 | 与桌面一致，无额外规则 |
@@ -132,7 +132,7 @@
 2. ✅ 颜色全走 token，组件内无裸 hex：常态描边 `border-border-base`；disabled 复用按钮三 token；错误 / 警告取功能色 main 档，聚焦环取对应 tint。
 3. ✅ **聚焦取值**：hover / 聚焦描边 `border-border-deep`；聚焦环为 Tailwind 类 `shadow-focus`（`tailwind-preset.cjs` + client `tailwind.config.cjs`，SSOT 记在 `design-token.cjs` 的 `FOCUS_RING`，**刻意不并进两档 SHADOW**：它是聚焦指示不是高度，按《圆角与阴影规范》§4 例外条款）。**只有环的颜色是变量 `--shadow-focus-ring`（默认 `--fill-2`），2px 的几何写在类里**——原本想落成一个 `--shadow-focus: 0 0 0 2px rgb(var(--shadow-focus-ring))` 变量，实测不成立：自定义属性里的 `var()` 在**声明它的那一层**就被替换掉，写在 `:root` 就等于把环色钉死在 `:root` 的取值上，错误 / 警告态再怎么覆盖 `--shadow-focus-ring` 都换不动（落地当天踩到并改掉）。现在错误 / 警告态只覆盖 `--shadow-focus-ring` 为 danger-tint / warning-tint，环色在元素上解析。✅ `ExpandableSearchField` 的两个裸 hex 与 `rounded-lg` 已随 client 首批归并（2026-08-25，见落地区 6）。
 4. ✅ placeholder 走 `text-text-3`（hint 档）；字数统计常态 hint、**超出**上限转危险色，单行在后缀区、多行在框内右下角（`bg-inherit` 垫底，滚动的正文从它下面过）。`showCount` 必须配 `maxLength`，缺了就不渲染。**`maxLength` 刻意不透传给 DOM**——原生属性会静默吞掉按键；超限时组件另置 `aria-invalid`，读屏用户看不见计数变红，得有个等价信号。
-5. ✅ iOS 防缩放：`.input-no-zoom` 在 `@media (max-width: 768px), (hover: none) and (pointer: coarse)` 内把 input / textarea 提到 16px / 24，用 `input.input-no-zoom` 元素+类选择器写，确保压得住档位自己的 `text-[length:…]`。另补 `.input-touch-hit`：**上下各一条透明热区**把可点区域撑到 ≥44px，而不是像按钮那样盖一整块——盖在框上的覆盖层会吃掉「点到第几个字」的那一下，光标只能落到末尾。清除 / 明暗切换按钮仍用按钮那套 `btn-touch-hit`。
+5. ✅ 字段字号：外壳使用 `text-field` / `text-field-lg`，默认各屏宽均使用基准值。`.input-no-zoom` 仅保留挂点，输入下限与字段重映射统一由根节点显式开关控制，默认关闭；当前决策与入口见 [基础-多端适配原则.md](基础-多端适配原则.md) 的「字体适配暂停」隐藏区。`.input-touch-hit` 仍用**上下各一条透明热区**撑大可点范围，避免覆盖输入区、吃掉光标定位。清除 / 明暗切换按钮仍用 `btn-touch-hit`。
 6. 🟨 存量迁移进行中（2026-08-25 扫描 + 首批）：
    - **扫描口径**（client/src，grep 文本计数）：旧 `~/components/ui/Input` 的 `<Input>` 57 处 / 52 文件、`<SearchInput>` 3 处；手拼原生 `<input>` 77 处；`<textarea>` 13 处；裸 hex 聚焦对 `#DDDDDD` + `#F1F5F9` 17 处 / 16 文件。
    - **首批已落**（2026-08-25）：① 17 处裸 hex 聚焦对全部归并为 `border-border-deep` + `shadow-focus`（含规范点名的 `ExpandableSearchField`——其 32px 高配的 `rounded-lg` 同步归 md 档 6px、「蓝框」过时注释改写；文件重命名 rename 框 FileCard / FileListRow 三处属常亮环，静态类同步归并）；② 六个手拼搜索框换成 `@bisheng/ui` 的 `SearchInput`：ChannelSquare、KnowledgeSquare、ChannelMemberDialog、ChannelMemberManagementPanel、KnowledgeListPanel、SkillSelector——后两个在 Radix 菜单里，stopPropagation 从 `<input>` 上移到包一层的 wrapper（点放大镜、内边距、清除按钮也不能漏给菜单的 type-ahead / 关闭逻辑）；归并同时把 12px 字号收到档位 14px、28px 高收到 medium 32px；③ 旧 `components/ui/Input.tsx` 挂 `@deprecated` 指针（默认高 40 vs 32、className 落 input vs 落外壳两处语义差写明，不能盲替）。
@@ -159,6 +159,8 @@
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
+| 2026-11-02 | 暂停移动字号适配：各屏宽沿用基准字阶，公开说明移除自动放大规则；原方案与默认关闭入口保留在内部记录 | 待提交 |
+| 2026-11-02 | 字号归口字段语义 token，区分桌面尺寸表与移动字号；占位、输入、单位同步变化，输入下限保留用户较大字号；SearchInput、PasswordInput、Textarea、InputNumber 共同继承 | 待提交 |
 | 2026-08-20 | 建档 v1：形态五种（基础 / Textarea / Password / Search / addon）、尺寸三档 24/32/40 对齐按钮阶梯、内容形态四件套（placeholder / 前后缀 / 清除 / 字数）、状态七态含 readonly 与 warning；定稿「聚焦不用主题色，灰描边 + 灰阴影环」原则，具体取值待设计师输入（见待决策清单）；移动端 iOS 16px 防缩放规则 | 待 committer 窗口提交 |
 | 2026-08-20 | **聚焦取值定稿**：设计师拍板全取现有 token——hover / 聚焦描边 border-deep（gray-4），聚焦加 2px gray-2 阴影环，错误 / 警告环换对应 tint 档；归并自 ExpandableSearchField 现值（#DDDDDD→gray-4 按意图、#F1F5F9→gray-2 肉眼无差），口径见落地区第 3 条；待决策清单勾销聚焦两项，新记「灰底场景环色再议」 | 待 committer 窗口提交 |
 | 2026-08-20 | 站点接线（元规范 §5 上线清单）：`rspress.config.ts` 侧栏「组件规范」注册入口、00-总纲 §四 进度看板由「⬜ 待办 / 待建」改写为 v1 规范行、01-设计规范 §0 索引加行。**文档内容未改**；`components/input.mdx` demo 页未建——`Input.tsx` 尚未落地，照 Tooltip / Popover / Drawer 的先例规范先行，组件落地后再补 | 待 committer 窗口提交 |

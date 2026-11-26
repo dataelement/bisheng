@@ -1,0 +1,23 @@
+{
+  "id": "event-time-deadline",
+  "acs": [
+    "AC-15"
+  ],
+  "turns": [
+    {
+      "user": "记一下：本月 28 号前要交 3.1 版本的发布说明",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "发布说明的截止日期是哪天？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "regex": "28"
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

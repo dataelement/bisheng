@@ -1,8 +1,9 @@
 jest.mock('react-dom/server', () => jest.requireActual('react-dom/server.node'));
 import { fireEvent, render, screen } from '@testing-library/react';
+import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import zh from '~/locales/zh-Hans/translation.json';
-import { ComposerEditor, readComposerDocument } from './ComposerEditor';
+import { ComposerEditor, readComposerDocument, readSentComposerReferences } from './ComposerEditor';
 import { useComposerReferences } from './useComposerReferences';
 
 function Harness({ disabled = false }) {
@@ -144,6 +145,22 @@ test('browser paragraph and trailing caret markers serialize to prompt newlines'
     expect(readComposerDocument(editor).text).toBe('');
 });
 
+test('a send snapshot keeps inline UTF-16 offsets after trimming and ignores unknown references', () => {
+    const editor = document.createElement('div');
+    editor.innerHTML = ' <span data-composer-reference="skill">stale DOM label</span> 😀<div><span data-composer-reference="tool"></span><span data-composer-reference="unknown"></span>next   <span data-composer-reference="space"></span></div>';
+    const references = [
+        { key: 'space', kind: 'space' as const, label: 'Articles' },
+        { key: 'skill', kind: 'skill' as const, label: 'Report' },
+        { key: 'tool', kind: 'tool' as const, label: 'Calculator' },
+    ];
+    expect(readComposerDocument(editor).text.trim()).toBe('😀\nnext');
+    expect(readSentComposerReferences(editor, references)).toEqual([
+        { kind: 'skill', label: 'Report', offset: 0 },
+        { kind: 'tool', label: 'Calculator', offset: '😀\n'.length },
+        { kind: 'space', label: 'Articles', offset: '😀\nnext'.length },
+    ]);
+});
+
 
 test('empty focused editor keeps its hint until IME draft text arrives and restores it when cleared', () => {
     render(<Harness />);
@@ -238,7 +255,7 @@ test('resource icons, names and click selection form one atomic reference', () =
 
 function TaggedSpaceHarness() {
     const [text, setText] = useState('Question');
-    const [spaces, setSpaces] = useState([{ id: '12', name: 'Space', type: 'space', tag: { id: 7, name: 'Report' } }]);
+    const [spaces, setSpaces] = useState([{ id: '12', name: '#Space', type: 'space', tag: { id: 7, name: 'Report' } }]);
     const binding = useComposerReferences([], spaces, () => {}, setSpaces);
     return <>
         <ComposerEditor value={text} onChange={setText} {...binding} onKeyDown={() => {}} placeholder="Write" />
@@ -247,12 +264,46 @@ function TaggedSpaceHarness() {
 }
 
 test('deleting and restoring the tag DOM token preserves its space and tag metadata', () => {
-    render(<TaggedSpaceHarness />);
+    render(<><TaggedSpaceHarness /><Outlined.Book data-testid="navigation-book" /></>);
     const editor = screen.getByRole('textbox');
     const token = screen.getByText('#Report').closest('[data-composer-reference]')!;
+    expect(token).toHaveAttribute('data-reference-kind', 'tag');
+    expect(token).toHaveClass('dsh-inline-reference');
+    expect(token.querySelector('svg')).toBeNull();
+    const space = screen.getByText('#Space').closest('[data-composer-reference]')!;
+    expect(space).toHaveAttribute('data-reference-kind', 'space');
+    expect(space.querySelector('svg')?.innerHTML).toBe(screen.getByTestId('navigation-book').innerHTML);
     token.remove(); fireEvent.input(editor);
-    expect(JSON.parse(screen.getByTestId('spaces').textContent!)).toEqual([{ id: '12', name: 'Space', type: 'space' }]);
+    expect(JSON.parse(screen.getByTestId('spaces').textContent!)).toEqual([{ id: '12', name: '#Space', type: 'space' }]);
     editor.prepend(token); fireEvent.input(editor);
     expect(JSON.parse(screen.getByTestId('spaces').textContent!)[0].tag).toEqual({ id: 7, name: 'Report' });
     expect(readComposerDocument(editor).text).toBe('Question');
+});
+
+test('cached tool names use display labels without changing execution metadata', () => {
+    const cached = [{ id: 4, name: 'Dalle3 drawing', children: [{ id: 4, tool_key: 'dalle_image_generator' }] }];
+    const update = jest.fn();
+    function CachedToolHarness() {
+        const binding = useComposerReferences([], [], () => {}, undefined, cached, update, () => 'Image generation');
+        return <ComposerEditor value="Draw a cat" onChange={() => {}} {...binding} onKeyDown={() => {}} placeholder="Write" />;
+    }
+    render(<CachedToolHarness />);
+    const editor = screen.getByRole('textbox');
+    expect(editor).toContainElement(screen.getByText('Image generation'));
+    expect(screen.queryByText('Dalle3 drawing')).toBeNull();
+    expect(readComposerDocument(editor)).toEqual({ text: 'Draw a cat', keys: ['tool:4'] });
+    expect(cached[0].children[0].tool_key).toBe('dalle_image_generator');
+    expect(update).not.toHaveBeenCalled();
+});
+
+test('reference label changes update existing tokens without replacing them or prompt text', () => {
+    const props = { value: 'Draw a cat', onChange: jest.fn(), onReferencesChange: jest.fn(), onKeyDown: () => {}, placeholder: 'Write' };
+    const { rerender } = render(<ComposerEditor {...props} references={[{ key: 'tool:4', kind: 'tool', label: 'Dalle3 drawing' }]} />);
+    const token = screen.getByText('Dalle3 drawing').closest('[data-composer-reference]');
+    rerender(<ComposerEditor {...props} references={[{ key: 'tool:4', kind: 'tool', label: 'Image generation' }]} />);
+    expect(screen.getByText('Image generation').closest('[data-composer-reference]')).toBe(token);
+    expect(token).toHaveAttribute('title', 'Image generation');
+    expect(readComposerDocument(screen.getByRole('textbox'))).toEqual({ text: 'Draw a cat', keys: ['tool:4'] });
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.onReferencesChange).not.toHaveBeenCalled();
 });

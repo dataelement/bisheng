@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
+
+SkillProvider = Literal["personal", "platform"]
+
+
+def skill_provider(skill: LinsightSkill) -> SkillProvider:
+    """Whether a user uploaded the skill for themselves or the tenant provides it."""
+    return "personal" if skill.source == "personal" or skill.owner_user_id else "platform"
 
 
 class SkillBrief(BaseModel):
@@ -19,6 +27,8 @@ class SkillBrief(BaseModel):
     description: str
     enabled: bool
     default_checked: bool = False
+    # F005: hidden from end-user pickers and always available while enabled.
+    auto_enabled: bool = False
     source: str
     create_time: datetime | None = None
     update_time: datetime | None = None
@@ -32,6 +42,7 @@ class SkillBrief(BaseModel):
             description=skill.description,
             enabled=bool(skill.enabled),
             default_checked=bool(skill.default_checked),
+            auto_enabled=bool(getattr(skill, "auto_enabled", False)),
             source=skill.source,
             create_time=skill.create_time,
             # never-edited skills report their creation time as the modified time
@@ -54,6 +65,8 @@ class SkillRuntimeEntry(SkillSelectable):
 
     id: int
     content_hash: str
+    # Lets clients group a user's own uploads apart from the skills the tenant provides.
+    source: SkillProvider
 
 
 class SkillFileEntry(BaseModel):
@@ -87,6 +100,10 @@ class SkillDefaultCheckedUpdate(BaseModel):
     default_checked: bool
 
 
+class SkillAutoEnabledUpdate(BaseModel):
+    auto_enabled: bool
+
+
 class SkillCreateForm(BaseModel):
     """Form-create payload (the multipart upload path uses a file instead)."""
 
@@ -100,3 +117,9 @@ class SkillGitHubImportRequest(BaseModel):
     """Import-from-GitHub payload: a public github.com URL pointing at a skill directory."""
 
     url: str = Field(..., max_length=2048, description="https://github.com/{owner}/{repo}/tree/{branch}/{path}")
+
+
+class SkillGiteeImportRequest(BaseModel):
+    """Import-from-Gitee payload: a public gitee.com URL pointing at a skill directory."""
+
+    url: str = Field(..., max_length=2048, description="https://gitee.com/{owner}/{repo}/tree/{branch}/{path}")

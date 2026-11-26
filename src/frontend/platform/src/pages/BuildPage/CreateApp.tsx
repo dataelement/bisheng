@@ -1,7 +1,6 @@
 // @ts-strict-ignore
 import { Button, Input, Textarea } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
-import { Outlined } from "bisheng-icons";
 
 import { Accordion } from "@/components/bs-ui/accordion";
 
@@ -21,6 +20,7 @@ import { AppType,AppTypeToNum } from "@/types/app";
 import { forwardRef,useContext,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { applyNewWorkflowMemorySwitch } from "@/util/workflowMemory";
 import { assistantRoleExample } from "./assistant/editAssistant/roleExample";
 import { instantiateAssistantTemplate, type AssistantTemplateDraft } from './assistantTemplate';
 
@@ -228,6 +228,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                             )
                         }
                     })
+                    applyNewWorkflowMemorySwitch(template.data.nodes);
                     const res = await createWorkflowApi(formData.name, formData.desc, formData.url, template);
                     if (res && request === generation.current) navigate('/flow/' + res.id);
                 }
@@ -315,8 +316,8 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                                 {t('cancel')}
                             </Button>
                         </DialogClose>
-                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading || templateLoading)} type="submit" onClick={handleSubmit}>
-                            {(loading || templateLoading) && <Outlined.Loading className="animate-spin mr-2" />}
+                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading || templateLoading)} type="submit" onClick={handleSubmit} loading={(loading || templateLoading)}>
+
                             {t(isEditMode ? 'save' : 'create')}
                         </Button>
                     </DialogFooter>

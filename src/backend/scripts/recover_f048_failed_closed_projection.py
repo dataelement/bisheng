@@ -37,11 +37,6 @@ if _BACKEND_ROOT not in sys.path:
 from sqlmodel import select  # noqa: E402
 
 from bisheng.common.services.config_service import settings  # noqa: E402
-from bisheng.core.context.manager import (  # noqa: E402
-    app_context,
-    close_app_context,
-    initialize_app_context,
-)
 from bisheng.core.context.tenant import (  # noqa: E402
     bypass_tenant_filter,
     current_tenant_id,
@@ -51,18 +46,24 @@ from bisheng.core.database import get_async_db_session  # noqa: E402
 from bisheng.department.domain.services.department_projection_scope import (  # noqa: E402
     get_department_projection_scope,
 )
-from bisheng.permission.application.runtime import (  # noqa: E402
-    build_f048_permission_runtime,
-)
-from bisheng.permission.application.sql_runtime import (  # noqa: E402
-    SqlCatalogDecisionState,
-)
 from bisheng.permission.domain.models import (  # noqa: E402
     PermissionProjectionOperation,
     ResourcePermissionMode,
 )
 from bisheng.permission.domain.repositories.projection_repository import (  # noqa: E402
     ProjectionRepository,
+)
+from scripts.f048_maintenance_runtime import (  # noqa: E402
+    build_maintenance_projection as build_f048_permission_runtime,
+)
+from scripts.f048_maintenance_runtime import (  # noqa: E402
+    close_maintenance_context as close_app_context,
+)
+from scripts.f048_maintenance_runtime import (  # noqa: E402
+    initialize_maintenance_context as initialize_app_context,
+)
+from scripts.f048_maintenance_runtime import (  # noqa: E402
+    maintenance_client,
 )
 
 EXIT_OK = 0
@@ -134,11 +135,7 @@ def _require(condition: bool, message: str) -> None:
 
 
 async def _build_runtime() -> RecoveryRuntime:
-    client = await app_context.async_get_instance("openfga")
-    await SqlCatalogDecisionState(
-        expected_store_id=client.store_id,
-        expected_model_id=client.model_id,
-    ).ensure_runtime_ready()
+    client = await maintenance_client()
     components = await build_f048_permission_runtime(
         client,
         external_scopes={
@@ -207,15 +204,13 @@ async def inspect(
     _require(operation.scope_type == "resource", "only resource projection scopes are supported")
     _require(operation.scope_key == scope_key, "bound operation scope does not match the resource")
     _require(
-        operation.store_id == runtime.client.store_id
-        and operation.model_id == runtime.client.model_id,
+        operation.store_id == runtime.client.store_id and operation.model_id == runtime.client.model_id,
         "operation Store/model pin does not match the CURRENT runtime",
     )
 
     if operation.status == "FINALIZED":
         _require(
-            int(mode.version) >= int(operation.target_version)
-            and mode.projection_state == "CURRENT",
+            int(mode.version) >= int(operation.target_version) and mode.projection_state == "CURRENT",
             "FINALIZED operation has an inconsistent resource mirror",
         )
         return None, {
@@ -230,8 +225,7 @@ async def inspect(
         f"operation cannot be forward-recovered from status {operation.status}",
     )
     valid_mode = (
-        int(mode.version) == int(operation.expected_version)
-        and mode.projection_state == "FAILED_CLOSED"
+        int(mode.version) == int(operation.expected_version) and mode.projection_state == "FAILED_CLOSED"
     ) or (
         operation.status == "COMMITTED"
         and int(mode.version) == int(operation.target_version)
@@ -252,9 +246,7 @@ async def inspect(
             set(visible_source_summary) == {"PENDING"},
             "failed operation visible source after-state is incomplete or mixed",
         )
-    correction_summary = Counter(
-        f"{delta.action}:{delta.relation}" for delta in preview.correction_deltas
-    )
+    correction_summary = Counter(f"{delta.action}:{delta.relation}" for delta in preview.correction_deltas)
     payload = {
         "operation_id": preview.operation_id,
         "tenant_id": preview.tenant_id,

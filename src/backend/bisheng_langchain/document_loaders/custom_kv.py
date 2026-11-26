@@ -1,5 +1,6 @@
 # flake8: noqa
 """Loads PDF with semantic splilter."""
+
 import base64
 import json
 import logging
@@ -7,7 +8,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from time import sleep
+from time import monotonic, sleep
 from typing import List, Optional, Tuple, Union
 from urllib.parse import quote_plus, unquote, urlparse
 
@@ -23,14 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 def convert_base64(image):
-    image_binary = cv2.imencode('.jpg', image)[1].tobytes()
+    image_binary = cv2.imencode(".jpg", image)[1].tobytes()
     x = base64.b64encode(image_binary)
-    return x.decode('ascii').replace('\n', '')
+    return x.decode("ascii").replace("\n", "")
 
 
 def transpdf2png(pdf_file):
-    pdf_bytes = open(pdf_file, 'rb').read()
-    pdf = fitz.Document(stream=pdf_bytes, filetype='pdf')
+    pdf_bytes = open(pdf_file, "rb").read()
+    pdf = fitz.Document(stream=pdf_bytes, filetype="pdf")
     dpis = [72, 144, 200]
 
     pdf_images = dict()
@@ -38,40 +39,54 @@ def transpdf2png(pdf_file):
         pix = None
         for dpi in dpis:
             pix = page.get_pixmap(dpi=dpi)
-            if min(pix.width, pix.height) >= 1600: break
+            if min(pix.width, pix.height) >= 1600:
+                break
 
-        mode = 'RGBA' if pix.alpha else 'RGB'
+        mode = "RGBA" if pix.alpha else "RGB"
         img = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
         # RGB to BGR
         img = np.array(img)[:, :, ::-1]
-        img_name = 'page_{:03d}'.format(page.number)
+        img_name = "page_{:03d}".format(page.number)
         pdf_images[img_name] = img
 
     return pdf_images
 
 
 class CustomKVLoader(BaseLoader):
-    """Extract key-value from pdf or image.
-    """
+    """Extract key-value from pdf or image."""
 
-    def __init__(self,
-                 file_path: str,
-                 elm_api_base_url: str,
-                 elm_api_key: str,
-                 schemas: str,
-                 elem_server_id: str,
-                 task_type: str,
-                 request_timeout: Optional[Union[float, Tuple[float, float]]] = 30) -> None:
+    def __init__(
+        self,
+        file_path: str,
+        elm_api_base_url: str,
+        elm_api_key: str,
+        schemas: str,
+        elem_server_id: str,
+        task_type: str,
+        request_timeout: Optional[Union[float, Tuple[float, float]]] = 30,
+        max_poll_attempts: int = 60,
+        poll_timeout: float = 120,
+    ) -> None:
         """Initialize with a file path."""
+        if (
+            isinstance(max_poll_attempts, bool)
+            or not isinstance(max_poll_attempts, int)
+            or not 1 <= max_poll_attempts <= 300
+        ):
+            raise ValueError("max_poll_attempts must be between 1 and 300")
+        if isinstance(poll_timeout, bool) or not isinstance(poll_timeout, (int, float)) or not 0 < poll_timeout <= 600:
+            raise ValueError("poll_timeout must be between 0 and 600 seconds")
+        self.max_poll_attempts = max_poll_attempts
+        self.poll_timeout = poll_timeout
         self.file_path = file_path
         self.elm_api_base_url = elm_api_base_url
         self.elm_api_key = elm_api_key
         self.elem_server_id = elem_server_id
         self.task_type = task_type
-        self.schemas = set(schemas.split('|'))
-        self.headers = {'Authorization': f'Bearer {elm_api_key}'}
+        self.schemas = set(schemas.split("|"))
+        self.headers = {"Authorization": f"Bearer {elm_api_key}"}
         self.requests = Requests(headers=self.headers, request_timeout=request_timeout)
-        if '~' in self.file_path:
+        if "~" in self.file_path:
             self.file_path = os.path.expanduser(self.file_path)
 
         # If the file is a web path, download it to a temporary file, and use that
@@ -79,17 +94,15 @@ class CustomKVLoader(BaseLoader):
             r = self.requests.get(self.file_path)
 
             if r.status_code != 200:
-                raise ValueError('Check the url of your file; returned status code %s' %
-                                 r.status_code)
+                raise ValueError("Check the url of your file; returned status code %s" % r.status_code)
 
             self.temp_dir = tempfile.TemporaryDirectory()
-            temp_file = Path(self.temp_dir.name) / unquote(
-                urlparse(self.file_path).path.split('/')[-1])
-            with open(temp_file, mode='wb') as f:
+            temp_file = Path(self.temp_dir.name) / unquote(urlparse(self.file_path).path.split("/")[-1])
+            with open(temp_file, mode="wb") as f:
                 f.write(r.content)
             self.file_path = str(temp_file)
         elif not os.path.isfile(self.file_path):
-            raise ValueError('File path %s is not a valid file or url' % self.file_path)
+            raise ValueError("File path %s is not a valid file or url" % self.file_path)
         super().__init__()
 
     @staticmethod
@@ -97,6 +110,17 @@ class CustomKVLoader(BaseLoader):
         """Check if the url is valid."""
         parsed = urlparse(url)
         return bool(parsed.netloc) and bool(parsed.scheme)
+
+    def _requests_with_budget(self, remaining: float):
+        requests = self.requests
+        if not isinstance(requests, Requests):
+            return requests
+        timeout = requests.request_timeout
+        if isinstance(timeout, tuple):
+            timeout = tuple(min(value, remaining / 2) for value in timeout)
+        else:
+            timeout = min(timeout, remaining / 2)
+        return requests.model_copy(update={"request_timeout": timeout})
 
     def load(self) -> List[Document]:
         """Load given path as pages."""
@@ -108,63 +132,82 @@ class CustomKVLoader(BaseLoader):
 
         # else:
         #     raise ValueError(f'file type {file_type} is not support.')
-        with open(self.file_path, 'rb') as file:
-            file = {'file': open(self.file_path, 'rb')}
+        with open(self.file_path, "rb") as file:
+            files = {"file": file}
             result = {}
-            if self.task_type == 'extraction-job':
-                url = self.elm_api_base_url + '/task'
+            if self.task_type == "extraction-job":
+                url = self.elm_api_base_url + "/task"
                 # 创建task
-                body = {'scene_id': self.elem_server_id}
-            elif self.task_type == 'logic-job':
-                url = self.elm_api_base_url + '/logic-job'
-                body = {'logic_service_id': self.elem_server_id}
+                body = {"scene_id": self.elem_server_id}
+            elif self.task_type == "logic-job":
+                url = self.elm_api_base_url + "/logic-job"
+                body = {"logic_service_id": self.elem_server_id}
 
-            resp = self.requests.post(url=url, json={}, data=body, files=file)
+            else:
+                raise ValueError("unknown CustomKV task type")
+            resp = self.requests.post(url=url, json={}, data=body, files=files)
         if resp.status_code == 200:
-            task_id = resp.json().get('data').get('task_id')
+            task_id = resp.json().get("data").get("task_id")
             if not task_id:
-                logger.error(f'task_create_fail res={resp.text}')
+                logger.error(f"task_create_fail res={resp.text}")
                 return
             # get status
-            status_url = url + f'/status?task_id={task_id}'
-            count = 0
-            while True:
-                status = self.requests.get(status_url).json()
-                if 1 == status.get('data').get('status'):
-                    count += 1
-                    sleep(2)
-                elif 3 == status.get('data').get('status'):
-                    # 失败
-                    logger.error(f'custom_kv type={self.task_type} resp={status}')
-                    return []
-                else:
+            status_url = url + f"/status?task_id={task_id}"
+            deadline = monotonic() + self.poll_timeout
+            for attempt in range(self.max_poll_attempts):
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("CustomKV polling deadline exceeded")
+                # Use a bounded copy so a stalled single request cannot evade
+                # the outer budget and other calls keep their original settings.
+                requests = self._requests_with_budget(remaining)
+                status = requests.get(status_url).json()
+                if monotonic() >= deadline:
+                    raise TimeoutError("CustomKV polling deadline exceeded")
+                data = status.get("data") if isinstance(status, dict) else None
+                state = data.get("status") if isinstance(data, dict) else None
+                if state == 1:
+                    if attempt + 1 < self.max_poll_attempts:
+                        sleep(min(2, max(0, deadline - monotonic())))
+                elif state == 2:
                     break
+                elif state == 3:
+                    raise RuntimeError("CustomKV task failed")
+                else:
+                    raise RuntimeError("CustomKV task returned unknown status")
+            else:
+                raise TimeoutError("CustomKV polling exceeded max_poll_attempts")
             # get result
-            job_id = 'job_id' if self.task_type == 'logic-job' else 'task_id'
-            match = re.match(r'^(?:https?:\/\/)?(?:www\.)?([^\/\n]+)', self.elm_api_base_url)
-            detail_url = quote_plus(match.group() + f'/logic-job-detail/{task_id}')
-            result_url = url + f'/result?{job_id}={task_id}&detail_url={detail_url}'
-            result = self.requests.get(result_url).json()
+            job_id = "job_id" if self.task_type == "logic-job" else "task_id"
+            match = re.match(r"^(?:https?:\/\/)?(?:www\.)?([^\/\n]+)", self.elm_api_base_url)
+            detail_url = quote_plus(match.group() + f"/logic-job-detail/{task_id}")
+            result_url = url + f"/result?{job_id}={task_id}&detail_url={detail_url}"
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError("CustomKV result deadline exceeded")
+            requests = self._requests_with_budget(remaining)
             # only for independent key
             document_result = {}
             try:
-                result = self.requests.get(result_url).json()
-                file_reuslt = result.get('data')
+                result = requests.get(result_url).json()
+                if monotonic() >= deadline:
+                    raise TimeoutError("CustomKV result deadline exceeded")
+                file_reuslt = result.get("data")
                 for result in file_reuslt:
-                    independent = result.get('result').get('independent_list')
+                    independent = result.get("result").get("independent_list")
                     for element in independent:
-                        if element.get('element_name') in self.schemas:
-                            document_result[element.get('element_name')] = [
-                                el.get('words') for el in element.get('entity_list')
+                        if element.get("element_name") in self.schemas:
+                            document_result[element.get("element_name")] = [
+                                el.get("words") for el in element.get("entity_list")
                             ]
+            except TimeoutError:
+                raise
             except Exception as e:
-                logger.error(
-                    f'task_result_error scene_id={self.elem_server_id} res={result} except={str(e)}'
-                )
-                raise Exception('custom_kv parse_error')
+                logger.error(f"task_result_error scene_id={self.elem_server_id} res={result} except={str(e)}")
+                raise Exception("custom_kv parse_error")
         else:
-            logger.error(f'custom_kv=create_task resp={resp.text}')
-            raise Exception('custom_kv create task fail')
+            logger.error(f"custom_kv=create_task resp={resp.text}")
+            raise Exception("custom_kv create task fail")
         content = json.dumps(document_result)
         doc = Document(page_content=content)
         return [doc]

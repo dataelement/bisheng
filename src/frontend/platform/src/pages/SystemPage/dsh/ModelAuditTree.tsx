@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import type {
   AuditQueryReadiness,
@@ -8,7 +9,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshPager, dshTime } from "./common";
-import { ModelAuditGroupRequests, ModelAuditSafetySummary } from "./ModelAuditGroup";
+import { ModelAuditFeedbackCounts, ModelAuditGroupRequests, ModelAuditSafetySummary } from "./ModelAuditGroup";
 import { useModelAuditTree } from "./useModelAuditTree";
 
 interface ModelAuditTreeProps {
@@ -67,6 +68,7 @@ export function ModelAuditTree({
         <span>
           {t("dsh.modelAuditView.group_last")}: {dshTime(node.last_request_at)}
         </span>
+        <ModelAuditFeedbackCounts likeCount={node.like_count} dislikeCount={node.dislike_count} />
         {node.own_summary.ready && (
           <span>{t(prefix + "own_count", { count: Number(node.own_summary.request_count) })}</span>
         )}
@@ -200,7 +202,7 @@ function TreeChildren({
           </Button>
         </div>
       ) : state.loading ? (
-        <p role="status">{t("dsh.loading")}</p>
+        <LoadingState size="panel" label={t("dsh.loading")} />
       ) : (
         <>
           {state.page?.scan_limited && (

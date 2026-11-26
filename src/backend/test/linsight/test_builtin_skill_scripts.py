@@ -1,7 +1,9 @@
-"""Regression guard for the three built-in skill bundles' checker scripts.
+"""Regression guard for the built-in skill bundles' checker scripts (xlsx, docx, html-report).
+
+The PPT skill's ``pptd.py`` is covered by ``test_pptx_pptd_skill.py``.
 
 These scripts are the only mechanical quality gate the Linsight model has when it
-builds a .pptx / .xlsx / .docx, and they were shipped with zero tests: a threshold
+builds a .xlsx / .docx, and they were shipped with zero tests: a threshold
 tweak, a regex edit, or an accidental non-zero exit could silently break them and
 nothing in CI would notice.
 
@@ -20,7 +22,7 @@ happened in this bundle family:
   ``soffice`` stripped from ``PATH``, asserting the documented Chinese fallback
   text rather than a crash. CI must never need LibreOffice installed.
 
-Samples are built with python-pptx / openpyxl / python-docx, which are backend
+Samples are built with openpyxl / python-docx, which are backend
 dependencies, and the .docx good sample is built with the bundle's own
 ``docx_helpers`` — "the helper's own output passes the bundle's own checker" is
 the contract that matters.
@@ -42,10 +44,6 @@ from docx.shared import Cm as DocxCm
 from docx.shared import Pt as DocxPt
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from pptx import Presentation
-from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import MSO_AUTO_SIZE
-from pptx.util import Inches, Pt
 
 from bisheng.linsight.domain.services.builtin_skill_seeder import BUILTIN_SKILLS_DIR
 
@@ -92,59 +90,6 @@ def assert_mentions(stdout: str, *needles: str) -> None:
 # --------------------------------------------------------------------------- #
 # sample builders
 # --------------------------------------------------------------------------- #
-def _textbox(slide, left, top, width, height, text, size_pt):
-    """A textbox with the two defaults python-pptx gets wrong for us made explicit:
-    ``add_textbox`` writes ``wrap="none"`` + ``<a:spAutoFit/>``, both of which the
-    checker (correctly) treats as suspicious."""
-    box = slide.shapes.add_textbox(Pt(left), Pt(top), Pt(width), Pt(height))
-    frame = box.text_frame
-    frame.word_wrap = True
-    frame.auto_size = MSO_AUTO_SIZE.NONE
-    frame.text = text
-    frame.paragraphs[0].runs[0].font.size = Pt(size_pt)
-    return box
-
-
-def _new_deck():
-    prs = Presentation()
-    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)  # 960x540pt
-    return prs, prs.slide_layouts[6]  # blank
-
-
-def build_good_pptx(path: Path) -> Path:
-    prs, blank = _new_deck()
-
-    cover = prs.slides.add_slide(blank)
-    _textbox(cover, 72, 200, 816, 90, "二零二五年度电力工程经营复盘", 40)
-    _textbox(cover, 72, 310, 816, 40, "规划发展部 · 二零二五年十二月", 18)
-
-    body = prs.slides.add_slide(blank)
-    _textbox(body, 72, 48, 816, 50, "全年营收与毛利", 28)
-    _textbox(body, 72, 150, 380, 240, "营收同比增长两成\n毛利率提升一点四个百分点\n应收账款周转天数下降九天", 18)
-    # A slide with no picture/chart/table/shape earns an INFO; a big rounded
-    # rectangle is a visual and is too large to count as a decorative rule.
-    body.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Pt(520), Pt(150), Pt(360), Pt(240))
-
-    prs.save(path)
-    return path
-
-
-def build_bad_pptx(path: Path) -> Path:
-    prs, blank = _new_deck()
-
-    one = prs.slides.add_slide(blank)
-    _textbox(one, 72, 60, 300, 30, "这一段文字远远超出了它的容器高度" * 4, 20)  # overflow -> ERROR
-    _textbox(one, 72, 300, 300, 40, "本季度增长率待填", 18)  # placeholder copy -> ERROR
-
-    two = prs.slides.add_slide(blank)
-    _textbox(two, 900, 100, 300, 60, "跑到画布外面去的文字", 18)  # off-canvas -> ERROR
-    _textbox(two, 10, 300, 300, 60, "贴着画布左边缘的文字", 18)  # hugs the edge -> WARN
-    _textbox(two, 400, 300, 300, 60, "极小字号的注释", 6)  # 6pt -> ERROR
-
-    prs.save(path)
-    return path
-
-
 def build_good_xlsx(path: Path) -> Path:
     """No formulas on purpose: openpyxl writes formulas with no cached value, and
     that is (correctly) an ERROR until LibreOffice recalculates — which CI has no
@@ -317,8 +262,6 @@ def build_east_asia_only_docx(path: Path) -> Path:
 def samples(tmp_path_factory) -> dict[str, Path]:
     root = tmp_path_factory.mktemp("builtin_skill_samples")
     built = {
-        "good.pptx": build_good_pptx,
-        "bad.pptx": build_bad_pptx,
         "good.xlsx": build_good_xlsx,
         "bad.xlsx": build_bad_xlsx,
         "cjk.xlsx": build_cjk_xlsx,
@@ -330,7 +273,7 @@ def samples(tmp_path_factory) -> dict[str, Path]:
 
     # Truncated files: a half-written deliverable is the realistic corruption, and
     # every reader below must survive it with a readable stdout report.
-    for stem in ("pptx", "xlsx", "docx"):
+    for stem in ("xlsx", "docx"):
         broken = root / f"corrupt.{stem}"
         broken.write_bytes((root / f"good.{stem}").read_bytes()[:3000])
         paths[f"corrupt.{stem}"] = broken
@@ -343,45 +286,6 @@ def samples(tmp_path_factory) -> dict[str, Path]:
 def no_soffice_path(tmp_path_factory) -> str:
     """An empty PATH entry, so shutil.which() finds no LibreOffice on any host."""
     return str(tmp_path_factory.mktemp("empty_bin"))
-
-
-# --------------------------------------------------------------------------- #
-# pptx
-# --------------------------------------------------------------------------- #
-def test_pptx_bad_deck_is_rejected_with_the_reason(samples):
-    out = run_script("bisheng-pptx", "inspect_deck.py", samples["bad.pptx"], "--checks-only").stdout
-
-    assert FAIL in out
-    assert_mentions(
-        out,
-        "ERROR",
-        "文字预计需要",  # overflow
-        "残留",  # leftover placeholder copy
-        "超出画布",  # off-canvas
-        "字号 6.0pt 低于可读下限",  # the ERROR branch, not the softer WARN one
-        "WARN",
-        "离画布边缘",  # hugs the canvas edge
-    )
-
-
-def test_pptx_good_deck_passes(samples):
-    """The checker must be satisfiable — otherwise the model learns to ignore it."""
-    out = run_script("bisheng-pptx", "inspect_deck.py", samples["good.pptx"], "--checks-only").stdout
-
-    assert PASS in out, out
-    assert "合计: 0 ERROR" in out
-
-
-def test_pptx_content_dump_prints_slide_text(samples):
-    out = run_script("bisheng-pptx", "inspect_deck.py", samples["good.pptx"]).stdout
-
-    assert_mentions(out, "=== 内容 ===", "二零二五年度电力工程经营复盘", "=== 体检 ===")
-
-
-def test_pptx_probe_template_reads_a_deck(samples):
-    out = run_script("bisheng-pptx", "probe_template.py", samples["good.pptx"]).stdout
-
-    assert_mentions(out, "=== 画布 ===", "13.33", "16:9", "版式清单")
 
 
 # --------------------------------------------------------------------------- #
@@ -588,6 +492,93 @@ def test_docx_reference_mode_passes_a_cloned_build(tmp_path):
     assert "合计: 0 ERROR / 0 WARN" in out, out  # incl. no table-overflow ERROR: copy_table fitted it
 
 
+def build_info_bar_template(path: Path) -> Path:
+    """106 template shape (2026-11-06): the info bar is pushed right with leading
+    spaces that share a run with the label, and a wide table runs into the
+    margins with its first row merged across all three grid columns."""
+    helpers = _docx_helpers()
+    doc = Document()
+    section = doc.sections[0]
+    section.left_margin = section.right_margin = DocxCm(3.17)  # 版心 14.7cm
+    for runs in (
+        ["      ", "主办部门：", "需求部门"],
+        ["         核 稿 人：", " "],
+        ["         完成日期：", "202X年X月X日"],
+    ):
+        paragraph = doc.add_paragraph()
+        for text in runs:
+            helpers.set_run_font(paragraph.add_run(text), "仿宋", 15)
+    table = doc.add_table(rows=2, cols=3)
+    for row in table.rows:
+        for cell in row.cells:
+            cell.width = DocxCm(18.5 / 3)  # 18.5cm, wider than 版心 on purpose
+    merged = table.rows[0].cells[0].merge(table.rows[0].cells[2])
+    merged.width = DocxCm(18.5)
+    helpers.set_run_font(merged.paragraphs[0].add_run("履约验收方案"), "仿宋", 15, bold=True)
+    doc.save(path)
+    return path
+
+
+def test_docx_merged_first_row_is_measured_once(tmp_path):
+    """python-docx returns a gridSpan cell once per grid column; summing them read
+    an 18.5cm template table as 55.5cm and sent the model into ~30 repair rounds."""
+    template = build_info_bar_template(tmp_path / "template.docx")
+    out = run_script("bisheng-docx", "inspect_docx.py", template, "--check-only").stdout
+    assert "总宽 18.5cm" in out, out
+    assert "55.5" not in out, out
+
+
+def test_docx_reference_tables_are_not_overflow_errors(tmp_path):
+    """A table no wider than the reference's own is the template's layout — even
+    after the build inserts tables before it and its index shifts."""
+    helpers = _docx_helpers()
+    template = build_info_bar_template(tmp_path / "template.docx")
+    doc = Document(template)
+    narrow = doc.add_table(rows=1, cols=2)
+    for cell in narrow.rows[0].cells:
+        cell.width = DocxCm(7)
+        helpers.set_run_font(cell.paragraphs[0].add_run("表头"), "仿宋", 15, bold=True)
+    doc.paragraphs[0]._p.addnext(narrow._tbl)  # now table 1; the template's table becomes table 2
+    out_path = tmp_path / "out.docx"
+    doc.save(out_path)
+
+    out = run_script("bisheng-docx", "inspect_docx.py", out_path, "--check-only", "--reference", template).stdout
+    assert "超过" not in out, out
+    assert "合计: 0 ERROR" in out, out
+
+
+def test_docx_fill_label_value_keeps_leading_spaces(tmp_path):
+    helpers = _docx_helpers()
+    template = build_info_bar_template(tmp_path / "template.docx")
+    doc = Document(template)
+    bar = doc.paragraphs
+    helpers.fill_label_value(bar[0], "信息技术部")
+    helpers.fill_label_value(bar[1], "部门负责人")
+    helpers.fill_label_value(bar[2], "2026年10月19日")
+    assert [p.text for p in bar] == [
+        "      主办部门：信息技术部",
+        "         核 稿 人：部门负责人",
+        "         完成日期：2026年10月19日",
+    ]
+    out_path = tmp_path / "out.docx"
+    doc.save(out_path)
+    out = run_script("bisheng-docx", "inspect_docx.py", out_path, "--check-only", "--reference", template).stdout
+    assert PASS in out, out
+
+
+def test_docx_reference_mode_flags_an_info_bar_that_lost_its_spaces(tmp_path):
+    """What 106 shipped: ``run.text = "核 稿 人：…"`` dropped the spaces sharing the
+    label's run, and the font/size/spacing comparison could not see it."""
+    template = build_info_bar_template(tmp_path / "template.docx")
+    doc = Document(template)
+    doc.paragraphs[1].runs[0].text = "核 稿 人：部门负责人"
+    out_path = tmp_path / "out.docx"
+    doc.save(out_path)
+
+    out = run_script("bisheng-docx", "inspect_docx.py", out_path, "--check-only", "--reference", template).stdout
+    assert_mentions(out, "[ERROR]", "「核稿人」参照 行首9个空格", "当前 行首0个空格", "fill_label_value")
+
+
 def test_docx_reference_mode_flags_a_profile_rebuild(tmp_path):
     """What the 106 sessions shipped: Document() + the 公文 profile."""
     helpers = _docx_helpers()
@@ -775,27 +766,12 @@ def test_docx_render_degrades_without_libreoffice(samples, no_soffice_path):
     assert_mentions(out, "[跳过]", "没有 LibreOffice", "inspect_docx.py")
 
 
-def test_pptx_render_degrades_without_libreoffice(samples, no_soffice_path):
-    out = run_script(
-        "bisheng-pptx",
-        "render_deck.py",
-        samples["good.pptx"],
-        "--outdir",
-        samples["_root"] / "preview_pptx",
-        path_env=no_soffice_path,
-    ).stdout
-
-    assert_mentions(out, "找不到 soffice", "inspect_deck.py")
-
-
 # --------------------------------------------------------------------------- #
 # broken input — the report must survive, because a crash means an empty report
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     ("bundle", "script", "sample"),
     [
-        ("bisheng-pptx", "inspect_deck.py", "corrupt.pptx"),
-        ("bisheng-pptx", "probe_template.py", "corrupt.pptx"),
         ("bisheng-xlsx", "inspect_workbook.py", "corrupt.xlsx"),
         ("bisheng-docx", "inspect_docx.py", "corrupt.docx"),
     ],
@@ -823,9 +799,6 @@ def test_recalc_on_a_corrupt_file_never_crashes(samples, no_soffice_path):
 @pytest.mark.parametrize(
     ("bundle", "script"),
     [
-        ("bisheng-pptx", "inspect_deck.py"),
-        ("bisheng-pptx", "probe_template.py"),
-        ("bisheng-pptx", "render_deck.py"),
         ("bisheng-xlsx", "inspect_workbook.py"),
         ("bisheng-xlsx", "recalc_check.py"),
         ("bisheng-docx", "inspect_docx.py"),

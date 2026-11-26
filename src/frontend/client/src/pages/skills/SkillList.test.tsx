@@ -52,3 +52,19 @@ it('keeps the later row first when two updates share a time', () => {
   render(<SkillList skills={tied} sort="recent" onSelect={() => undefined} onToggle={() => undefined} />);
   expect(names()).toEqual(['Newer id', 'Older id']);
 });
+
+it('keeps the other switches usable while one toggle is saving', () => {
+  render(<SkillList skills={rows} sort="name" pendingIds={new Set([2])} onSelect={() => undefined} onToggle={() => undefined} />);
+  const switches = screen.getAllByRole('switch');
+  expect(switches).toHaveLength(3);
+  // Alpha (id 2) is saving; Middle and Zebra stay clickable.
+  expect(switches[0]).toBeDisabled();
+  expect(switches[1]).toBeEnabled();
+  expect(switches[2]).toBeEnabled();
+});
+
+it('counts the rows the caller appends to the enterprise group', () => {
+  const provided = rows.map((row) => ({ ...row, source: 'platform' as const }));
+  render(<SkillList skills={provided} sort="name" providedCount={3} extraProvidedCount={41} onSelect={() => undefined} onToggle={() => undefined} />);
+  expect(screen.getByRole('heading', { level: 2, name: /com_skill_center_group_platform/ })).toHaveTextContent('· 44');
+});

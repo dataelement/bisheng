@@ -7,6 +7,61 @@ from bisheng.api.v1.schemas import WSModel
 from bisheng.dsh.domain.services.model_display import configured_display_names, model_display_name
 
 
+@pytest.mark.parametrize("dsh_enabled", [False, True])
+@pytest.mark.parametrize("target", [1, 60])
+async def test_super_catalog_includes_online_models_absent_from_inherited_metadata(monkeypatch, dsh_enabled, target):
+    from bisheng.common.services import config_service
+    from bisheng.core.context.tenant import get_current_tenant_id, management_tenant_scope, tenant_execution_scope
+    from bisheng.dsh import runtime
+    from bisheng.dsh.domain.services import model_catalog, vision
+    from bisheng.llm.domain.schemas import WorkbenchModelConfig
+    from bisheng.llm.domain.services.llm import LLMService
+
+    monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=dsh_enabled)))
+    operator = SimpleNamespace(user_id=191, tenant_id=1, is_global_super=True)
+    # The system settings table enumerates online models independently of this inherited metadata.
+    verified = WorkbenchModelConfig(models=[WSModel(id="42", displayName="Root label")])
+    monkeypatch.setattr(model_catalog, "read_workbench_metadata", AsyncMock(return_value=verified))
+    candidates = [
+        (
+            SimpleNamespace(id=42, model_name="same-name", name="root"),
+            SimpleNamespace(id=7, name="Root", type="openai"),
+        ),
+        (
+            SimpleNamespace(id=43, model_name="same-name", name="child"),
+            SimpleNamespace(id=8, name="Own", type="openai"),
+        ),
+    ]
+    reader = AsyncMock(return_value=candidates)
+    monkeypatch.setattr(LLMService, "aget_online_chat_models", reader)
+    personal = AsyncMock(side_effect=AssertionError("super catalog must not read personal visibility or credits"))
+    monkeypatch.setattr(runtime, "read_policy", personal)
+    monkeypatch.setattr(model_catalog, "read_visible_model_ids", personal)
+    monkeypatch.setattr(vision, "read_catalog_vision", AsyncMock(return_value={42: False, 43: True}))
+    with tenant_execution_scope(1), management_tenant_scope(target):
+        result = await model_catalog.project_workbench_config(verified, operator.user_id, operator=operator)
+        assert get_current_tenant_id() == target
+    assert [(m.id, m.displayName, m.provider_id) for m in result.models] == [
+        ("42", "Root label", "7"),
+        ("43", "same-name", "8"),
+    ]
+    assert result.models[1].visual
+    assert [m.id for m in verified.models] == ["42"]
+    assert operator.tenant_id == 1
+    personal.assert_not_awaited()
+    reader.assert_awaited_once()
+
+
+async def test_cross_home_display_denies_non_super_instead_of_faking_policy():
+    """AC-42: a scope value is not an administrator grant."""
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
+    from bisheng.core.context.tenant import management_tenant_scope
+    from bisheng.dsh.domain.services.model_catalog import workbench_models_for_display
+
+    with management_tenant_scope(60), pytest.raises(DshModelNotAllowedError):
+        await workbench_models_for_display(SimpleNamespace(user_id=9, tenant_id=1, is_global_super=False))
+
+
 def test_display_names_preserve_provider_and_fall_back_for_blank_labels():
     config = SimpleNamespace(
         models=[WSModel(id="42", displayName="  Custom label  "), WSModel(id="43", displayName=" ")]
@@ -29,9 +84,8 @@ def test_display_names_preserve_provider_and_fall_back_for_blank_labels():
 async def test_chat_projection_uses_stored_labels_and_keeps_permission_filter(monkeypatch):
     from bisheng.common.services import config_service
     from bisheng.dsh import runtime
-    from bisheng.dsh.domain.schemas.chat import ChatCapabilities
+    from bisheng.dsh.domain.services import vision
     from bisheng.dsh.domain.services.model_catalog import project_workbench_config
-    from bisheng.dsh.infrastructure import model_capabilities
     from bisheng.llm.domain.schemas import WorkbenchModelConfig
     from bisheng.llm.domain.services.llm import LLMService
 
@@ -43,18 +97,27 @@ async def test_chat_projection_uses_stored_labels_and_keeps_permission_filter(mo
         chat_default_model_id="42",
     )
     monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=True)))
-    monkeypatch.setattr(runtime, "read_policy", AsyncMock(return_value=SimpleNamespace(allowed_model_ids=[42])))
+    from bisheng.dsh.domain.services import model_catalog
+
+    monkeypatch.setattr(runtime, "read_policy", AsyncMock(side_effect=AssertionError("catalog read a credit policy")))
+    monkeypatch.setattr(model_catalog, "read_visible_model_ids", AsyncMock(return_value={42}))
     monkeypatch.setattr(
         LLMService,
-        "get_dsh_model_snapshot",
+        "aget_online_chat_models",
         AsyncMock(
-            return_value=(
-                SimpleNamespace(id=42, model_name="vendor-id", name="alias"),
-                SimpleNamespace(id=7, name="Provider", type="openai"),
-            )
+            return_value=[
+                (
+                    SimpleNamespace(id=42, model_name="vendor-id", name="alias"),
+                    SimpleNamespace(id=7, name="Provider", type="openai"),
+                ),
+                (
+                    SimpleNamespace(id=99, model_name="private", name="private"),
+                    SimpleNamespace(id=7, name="Provider", type="openai"),
+                ),
+            ]
         ),
     )
-    monkeypatch.setattr(model_capabilities, "desktop_model_capabilities", AsyncMock(return_value=ChatCapabilities()))
+    monkeypatch.setattr(vision, "read_catalog_vision", AsyncMock(return_value={42: False}))
     result = await project_workbench_config(config, 20)
     assert [(model.id, model.displayName) for model in result.models] == [("42", "Custom label")]
     assert result.models[0].provider_id == "7"
@@ -83,11 +146,11 @@ async def test_admin_settings_preserve_raw_metadata_and_check_tenant_scope(monke
     reader = AsyncMock(return_value=(config, False, False))
     monkeypatch.setattr(api, "_resolve_write_target", lambda user: 7)
     monkeypatch.setattr(api, "_assert_can_write_system_config", guard)
-    monkeypatch.setattr(api.LLMService, "aget_workbench_llm_with_meta", reader)
+    monkeypatch.setattr(api, "_read_default_metadata", reader)
     user = SimpleNamespace(user_id=20)
     response = await api.get_workbench_settings(user)
     guard.assert_awaited_once_with(user, 7)
-    reader.assert_awaited_once_with(tenant_id=7)
+    reader.assert_awaited_once_with("linsight_llm", user)
     payload = response["data"]["data"] if isinstance(response, dict) else response.data["data"]
     assert [row["displayName"] for row in payload["models"]] == ["Custom label", "Private"]
     assert payload["models"][0]["description"] == "Retain"
@@ -102,7 +165,25 @@ async def test_admin_settings_scope_denial_precedes_metadata_read(monkeypatch):
     reader = AsyncMock()
     monkeypatch.setattr(api, "_resolve_write_target", lambda user: 7)
     monkeypatch.setattr(api, "_assert_can_write_system_config", AsyncMock(side_effect=PermissionError("tenant")))
-    monkeypatch.setattr(api.LLMService, "aget_workbench_llm_with_meta", reader)
+    monkeypatch.setattr(api, "_read_default_metadata", reader)
     with pytest.raises(PermissionError):
         await api.get_workbench_settings(SimpleNamespace(user_id=20))
     reader.assert_not_awaited()
+
+
+async def test_ordinary_display_keeps_personal_visibility_filter(monkeypatch):
+    from bisheng.dsh.domain.services import model_catalog
+
+    expected = [WSModel(id="42")]
+    reader = AsyncMock(return_value=expected)
+    monkeypatch.setattr(model_catalog, "user_workbench_models", reader)
+    operator = SimpleNamespace(user_id=191, tenant_id=1, is_global_super=False)
+    assert await model_catalog.workbench_models_for_display(operator) == expected
+    reader.assert_awaited_once_with(191, None)
+
+
+@pytest.fixture(autouse=True)
+def ordinary_model_operator(monkeypatch):
+    from bisheng.dsh.domain.services import model_access
+
+    monkeypatch.setattr(model_access, "require_model_operator", AsyncMock(return_value=False))

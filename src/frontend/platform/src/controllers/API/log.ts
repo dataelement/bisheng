@@ -1,7 +1,72 @@
 // @ts-strict-ignore
 import { paramsSerializer } from ".";
 import axios from "../request";
-import type { AuditAppOption, AuditRow } from "@/types/api/audit";
+import type { AuditAppOption, AuditDeptCandidates, AuditRow, OrgSelection } from "@/types/api/audit";
+
+export const EMPTY_ORG_SELECTION: OrgSelection = {
+    deptIds: [],
+    includeDescendants: true,
+    includeNone: false,
+    includeUnrecorded: false,
+}
+
+export const isOrgSelectionEmpty = (selection: OrgSelection): boolean =>
+    !selection.deptIds.length && !selection.includeNone && !selection.includeUnrecorded
+
+/**
+ * Organisation params of the audit endpoints. An empty selection sends nothing,
+ * so the request stays identical to the pre-F003 one. `/audit*` takes
+ * `dept_ids` as a repeated key; runtime records take a comma string and
+ * `"true"` / `"false"` flags (design §6.1).
+ */
+export const toDeptParams = (selection: OrgSelection | undefined, style: 'repeat' | 'csv' = 'repeat') => {
+    if (!selection || isOrgSelectionEmpty(selection)) return {}
+    const flag = (value: boolean) => (style === 'csv' ? String(value) : value)
+    return {
+        ...(selection.deptIds.length
+            ? {
+                dept_ids: style === 'csv' ? selection.deptIds.join(',') : selection.deptIds,
+                include_descendants: flag(selection.includeDescendants),
+            }
+            : {}),
+        ...(selection.includeNone ? { include_none: flag(true) } : {}),
+        ...(selection.includeUnrecorded ? { include_unrecorded: flag(true) } : {}),
+    }
+}
+
+export interface AuditScopeOrganization {
+    name: string
+    includes_descendants: boolean
+}
+
+export interface AuditScope {
+    tenant_id: number | null
+    tenant_name: string | null
+    unrestricted_organization: boolean
+    organizations: AuditScopeOrganization[]
+}
+
+/** Authorization boundary of the audit page. Filters can only narrow it. */
+export async function getAuditScopeApi(): Promise<AuditScope> {
+    return await axios.get('/api/v1/audit/scope')
+}
+
+// F003: organisation candidates inside the caller's audit scope.
+export async function getAuditDepartmentsApi(params: {
+    parentId?: number
+    keyword?: string
+    tenantId?: number | null
+    limit?: number
+}): Promise<AuditDeptCandidates> {
+    return await axios.get('/api/v1/audit/departments', {
+        params: {
+            parent_id: params.parentId,
+            keyword: params.keyword || undefined,
+            tenant_id: params.tenantId ?? undefined,
+            limit: params.limit ?? 100,
+        },
+    })
+}
 
 // Fetch users who operated on resources in the selected group.
 export async function getOperatorsApi(): Promise<[]> {
@@ -24,6 +89,10 @@ export interface AuditLogFilters {
     targetAppId?: string
     /** F056 AC-30: global super narrowing to one tenant; anyone else may only name their own. */
     tenantId?: number | null
+    /** F003: organisation the operator belonged to when the row was written. */
+    org?: OrgSelection
+    /** Substring of the stored remark. Empty means no filter. */
+    note?: string
 }
 
 // Empty strings / empty arrays are "no filter", not a filter for the empty
@@ -39,6 +108,8 @@ const buildAuditParams = (filters: AuditLogFilters): Record<string, unknown> => 
         event_type: filters.action,
         target_app_id: filters.targetAppId,
         tenant_id: filters.tenantId,
+        note: filters.note?.trim(),
+        ...toDeptParams(filters.org),
     }
     return Object.fromEntries(
         Object.entries(raw).filter(([, value]) =>
@@ -179,7 +250,76 @@ const legacyActions = [
     { name: 'log.eventTypeEnum.delete_channel', value: 'delete_channel' },
     { name: 'log.eventTypeEnum.create_knowledge_space', value: 'create_knowledge_space' },
     { name: 'log.eventTypeEnum.delete_knowledge_space', value: 'delete_knowledge_space' },
+    { name: 'log.eventTypeEnum.update_sandbox_conf', value: 'update_sandbox_conf' },
+    { name: 'log.eventTypeEnum.link_file_version', value: 'link_file_version' },
+    { name: 'log.eventTypeEnum.set_primary_version', value: 'set_primary_version' },
+    { name: 'log.eventTypeEnum.delete_file_version', value: 'delete_file_version' },
+    { name: 'log.eventTypeEnum.dismiss_similar_file', value: 'dismiss_similar_file' },
+    { name: 'log.eventTypeEnum.download_file', value: 'download_file' },
+    { name: 'log.eventTypeEnum.export_qa', value: 'export_qa' },
+    { name: 'log.eventTypeEnum.create_qa', value: 'create_qa' },
+    { name: 'log.eventTypeEnum.update_qa', value: 'update_qa' },
+    { name: 'log.eventTypeEnum.delete_qa', value: 'delete_qa' },
+    { name: 'log.eventTypeEnum.enable_qa', value: 'enable_qa' },
+    { name: 'log.eventTypeEnum.disable_qa', value: 'disable_qa' },
+    { name: 'log.eventTypeEnum.create_local_user', value: 'create_local_user' },
+    { name: 'log.eventTypeEnum.reset_user_password', value: 'reset_user_password' },
+    { name: 'log.eventTypeEnum.change_own_password', value: 'change_own_password' },
+    { name: 'log.eventTypeEnum.update_dept_admin', value: 'update_dept_admin' },
+    { name: 'log.eventTypeEnum.update_dept_default_role', value: 'update_dept_default_role' },
+    { name: 'log.eventTypeEnum.update_sensitive_policy', value: 'update_sensitive_policy' },
+    { name: 'log.eventTypeEnum.move_department', value: 'move_department' },
+    { name: 'log.eventTypeEnum.change_member_dept', value: 'change_member_dept' },
+    { name: 'log.eventTypeEnum.grant_resource', value: 'grant_resource' },
+    { name: 'log.eventTypeEnum.revoke_resource', value: 'revoke_resource' },
+    { name: 'log.eventTypeEnum.update_resource_mode', value: 'update_resource_mode' },
+    { name: 'log.eventTypeEnum.personal_skill_create', value: 'personal_skill_create' },
+    { name: 'log.eventTypeEnum.personal_skill_status', value: 'personal_skill_status' },
+    { name: 'log.eventTypeEnum.personal_skill_delete', value: 'personal_skill_delete' },
+    { name: 'log.eventTypeEnum.personal_skill_overwrite', value: 'personal_skill_overwrite' },
 ];
+
+/**
+ * Module → legacy actions, written out instead of matched by substring: a
+ * substring rule put `knowledge_space` actions under 知识库 and left the tool
+ * and sandbox actions out of 系统. Must agree with the `system_id` each
+ * backend writer records (api/services/audit_log.py). Personal Skill actions
+ * stay under `system`: older rows were stored as `system_id=linsight`, and
+ * the list query folds those four event types back in. There is no linsight
+ * module to pick.
+ */
+const LEGACY_MODULE_ACTIONS: Record<string, string[]> = {
+    chat: ['create_chat', 'delete_chat'],
+    build: ['create_build', 'update_build', 'delete_build'],
+    knowledge: [
+        'create_knowledge', 'delete_knowledge', 'upload_file', 'delete_file', 'download_file',
+        'link_file_version', 'set_primary_version', 'delete_file_version', 'dismiss_similar_file',
+        'export_qa', 'create_qa', 'update_qa', 'delete_qa', 'enable_qa', 'disable_qa',
+    ],
+    system: [
+        'update_user', 'forbid_user', 'recover_user',
+        'create_user_group', 'delete_user_group', 'update_user_group',
+        'create_role', 'delete_role', 'update_role', 'user_login',
+        'add_tool', 'update_tool', 'delete_tool', 'update_sandbox_conf',
+        'create_local_user', 'reset_user_password', 'change_own_password',
+        'update_dept_admin', 'update_dept_default_role', 'update_sensitive_policy',
+        'move_department', 'change_member_dept',
+        'grant_resource', 'revoke_resource', 'update_resource_mode',
+        'personal_skill_create', 'personal_skill_status', 'personal_skill_delete', 'personal_skill_overwrite',
+    ],
+    dashboard: ['create_dashboard', 'update_dashboard', 'delete_dashboard'],
+    subscription: ['create_channel', 'delete_channel'],
+    knowledge_space: ['create_knowledge_space', 'delete_knowledge_space', 'upload_file', 'delete_file', 'download_file'],
+}
+
+// Synthetic v2 modules own every structured action under their prefix.
+const V2_MODULE_PREFIX: Record<string, string> = {
+    tenant: 'tenant.',
+    llm: 'llm.',
+    approval: 'approval.',
+    open_api: 'open_api.',
+    app: 'app.',
+}
 
 /**
  * Structured v2 actions, in dropdown order.
@@ -217,9 +357,8 @@ export const V2_ACTIONS: string[] = [
     'approval.scenario.create',
     'approval.exception.skip_node',
     'approval.menu_access.revoke_grant',
-    // F049 open API auth. The grant / share_link / ws families get their first
-    // writers in later waves; registered in one go so the filter is touched
-    // exactly once per feature.
+    // F049 open API auth. Only actions with a writer are listed; an action
+    // without one would be a filter option that can never match.
     'open_api.service_account.create',
     'open_api.service_account.update',
     'open_api.service_account.enable',
@@ -228,18 +367,6 @@ export const V2_ACTIONS: string[] = [
     'open_api.api_key.issue',
     'open_api.api_key.update',
     'open_api.api_key.revoke',
-    'open_api.api_key.revoke_all',
-    'open_api.api_key.expire',
-    'open_api.api_key.invalidate_by_subject',
-    'open_api.grant.add',
-    'open_api.grant.update',
-    'open_api.grant.remove',
-    'open_api.grant.remove_all',
-    'open_api.share_link.revoke',
-    'open_api.share_link.expire',
-    'open_api.ws.connect',
-    // F052 MCP face: one row per tools/call, plus door refusals.
-    'open_api.mcp.tool_call',
     // F054 hosted applications — the state machine, meta updates and the
     // data-tab row edit / export.
     'app.publish',
@@ -284,6 +411,14 @@ export const V2_ACTIONS: string[] = [
     'app.secret.set',
     'app.secret.delete',
     'app.secret.rebuild',
+    'open_api.pat.create',
+    'open_api.pat.regenerate',
+    'open_api.pat.revoke',
+    'open_api.pat.delete',
+    'open_api.pat.revoke_holder',
+    'open_api.pat.tenant_migrate',
+    'open_api.pat.settings.update',
+    'llm.system_config.update',
 ];
 
 const actions = [
@@ -301,21 +436,11 @@ export async function getActionsApi({ multiTenantEnabled = true }: AuditFilterOp
 }
 
 // 系统模块下操作行为
-export async function getActionsByModuleApi(moduleId) {
-    switch (moduleId) {
-        case 'chat': return actions.filter(a => a.value.includes('chat'))
-        case 'build': return actions.filter(a => a.value.includes('build'))
-        case 'knowledge': return actions.filter(a => a.value.includes('knowledge') || a.value.includes('file'))
-        case 'system': return actions.filter(a => a.value.includes('user') || a.value.includes('role'))
-        case 'dashboard': return actions.filter(a => a.value.includes('dashboard'))
-        case 'subscription': return actions.filter(a => a.value.includes('channel'))
-        case 'knowledge_space': return actions.filter(a => a.value.includes('knowledge_space'))
-        case 'tenant': return actions.filter(a => a.value.startsWith('tenant.'))
-        case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
-        case 'approval': return actions.filter(a => a.value.startsWith('approval.'))
-        case 'open_api': return actions.filter(a => a.value.startsWith('open_api.'))
-        case 'app': return actions.filter(a => a.value.startsWith('app.'))
-    }
+export async function getActionsByModuleApi(moduleId: string) {
+    const legacy = LEGACY_MODULE_ACTIONS[moduleId]
+    if (legacy) return actions.filter(a => legacy.includes(a.value))
+    const prefix = V2_MODULE_PREFIX[moduleId]
+    return prefix ? actions.filter(a => a.value.startsWith(prefix)) : []
 }
 
 // 应用数据标记列表
@@ -379,6 +504,13 @@ export async function updateMarkStatusApi(data: { session_id: string, task_id: n
     return await axios.post('/api/v1/mark/mark', data)
 }
 
+/** Fresh link to a file the code interpreter attached to an answer, for an auditor in scope. */
+export async function getAuditChatFileUrlApi(chatId: string, fileId: string): Promise<{ url: string }> {
+    return await axios.get(
+        `/api/v1/session/chat/${encodeURIComponent(chatId)}/files/${encodeURIComponent(fileId)}/url`,
+    )
+}
+
 // 获取下一个标注会话
 export async function getNextMarkChatApi({ action, chat_id, task_id }) {
     return await axios.get('/api/v1/mark/next', {
@@ -416,6 +548,20 @@ export async function getGroupsApi(
 }
 
 
+export type AuditUsageType = 'daily' | 'assistant' | 'workflow' | 'task'
+
+/** F003 additions shared by the app-usage list and its export. */
+type SessionAuditExtras = {
+    org?: OrgSelection
+    usage_type?: AuditUsageType
+}
+
+const withSessionExtras = <T extends SessionAuditExtras>({ org, usage_type, ...rest }: T) => ({
+    ...rest,
+    usage_type: usage_type || undefined,
+    ...toDeptParams(org),
+})
+
 // 获取审计应用列表
 export async function getAuditAppListApi(params: {
     flow_ids,
@@ -427,10 +573,15 @@ export async function getAuditAppListApi(params: {
     sensitive_status,
     page,
     page_size
-}) {
+} & SessionAuditExtras) {
     return await axios.get('/api/v1/audit/session', {
-        params, paramsSerializer
+        params: withSessionExtras(params), paramsSerializer
     })
+}
+
+// F003: user candidates of the app-usage tab, inside the caller's audit scope.
+export async function getAuditSessionUsersApi(keyword = '', limit = 50): Promise<{ user_id: number, user_name: string }[]> {
+    return await axios.get('/api/v1/audit/session/users', { params: { keyword: keyword || undefined, limit } })
 }
 
 // 导出csv
@@ -458,8 +609,8 @@ export async function exportCsvDataApi(params: {
     end_date,
     feedback,
     sensitive_status
-}) {
+} & SessionAuditExtras) {
     return await axios.get('/api/v1/audit/session/export/data', {
-        params, paramsSerializer
+        params: withSessionExtras(params), paramsSerializer
     })
 }

@@ -1,5 +1,5 @@
 import json
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, Request
 from pydantic import BaseModel, Field
@@ -12,20 +12,69 @@ from bisheng.mcp_manage.manager import ClientManager
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.tool.domain.models.gpts_tools import GptsToolsTypeRead
 from bisheng.tool.domain.schemas import TestToolReq
+from bisheng.tool.domain.services.egress import map_tool_egress_error
 from bisheng.tool.domain.services.openapi import OpenApiSchema
 from bisheng.tool.domain.services.sandbox_conf_service import SandboxConfService
+from bisheng.tool.domain.services.test_openapi import TestOpenApiTools, run_saved_openapi_test
 from bisheng.tool.domain.services.tool import ToolServices
+from bisheng.tool.domain.services.web_search import SettingsWrite
 from bisheng.utils import get_request_ip
-from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from bisheng_langchain.utils.egress_policy import DestinationDenied
+from bisheng_langchain.utils.safe_http_errors import RequestFailed, RequestTimeout, ResponseTooLarge
 
 router = APIRouter(prefix="/tool", tags=["Tool"])
+
+
+@router.get("/{tool_type_id}/web-search/settings")
+async def get_web_search_settings(tool_type_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    from bisheng.tool.domain.services.web_search import get_settings
+
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
+    return resp_200(data=await get_settings(tool_type_id))
+
+
+@router.put("/{tool_type_id}/web-search/settings")
+async def put_web_search_settings(
+    tool_type_id: int, req: Any = Body(...), login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+
+    from bisheng.tool.domain.services.web_search import put_settings
+
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
+    try:
+        validated = SettingsWrite.model_validate(req)
+    except ValidationError:
+        raise HTTPException(status_code=422, detail="Invalid search settings") from None
+    return resp_200(data=await put_settings(tool_type_id, validated, login_user.user_id))
+
+
+@router.post("/{tool_type_id}/web-search/schema")
+async def import_web_search_schema(
+    tool_type_id: int, req: Any = Body(...), login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    from bisheng.tool.domain.services.web_search import schema_preview
+
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
+    return resp_200(data=await schema_preview(tool_type_id, req))
+
+
+@router.post("/{tool_type_id}/web-search/test")
+async def test_web_search(
+    tool_type_id: int, req: Any = Body(...), login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    from bisheng.tool.domain.services.web_search import search_preview
+
+    await ToolServices(login_user=login_user).require_preset_tool_edit(tool_type_id)
+    return resp_200(data=await search_preview(tool_type_id, req))
 
 
 @router.get("")
 async def get_tool_list(
     *,
     is_preset: int | None = None,
-    action: Literal["visible", "use"] = "use",
+    action: Literal["visible"] = "visible",
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Query all visibletool Vertical"""
@@ -93,6 +142,9 @@ async def get_tool_schema(
     file_content: str | None = Body(default=None, description="files uploaded"),
 ):
     """Download or parseopenapi schemaThe contents of the Convert to Assistant Customizer Format"""
+    # Temporary SSRF admission: content-only parsing does not need network access.
+    if download_url and not login_user.is_global_super:
+        raise UnAuthorizedError()
     services = ToolServices(request=request, login_user=login_user)
     tool_type = await services.parse_openapi_schema(download_url, file_content)
     return resp_200(data=tool_type)
@@ -113,15 +165,34 @@ async def get_mcp_tool_schema(
 @router.post("/test")
 async def tool_run(*, login_user: UserPayload = Depends(UserPayload.get_login_user), req: TestToolReq):
     """Test custom tool"""
+    # Restrict arbitrary temporary requests before parsing or constructing a tool.
+    if not login_user.is_global_super:
+        raise UnAuthorizedError()
     extra = json.loads(req.extra)
     extra.update({"api_location": req.api_location, "parameter_name": req.parameter_name})
     tool_params = OpenApiSchema.parse_openapi_tool_params(
         "test", "test", json.dumps(extra), req.server_host, req.auth_method, req.auth_type, req.api_key
     )
 
-    openapi_tool = OpenApiTools.get_api_tool("test", **tool_params)
-    resp = await openapi_tool.arun(req.request_params)
+    openapi_tool = TestOpenApiTools.get_api_tool("test", **tool_params)
+    try:
+        resp = await openapi_tool.arun(req.request_params)
+    except (DestinationDenied, RequestFailed, RequestTimeout, ResponseTooLarge) as exc:
+        raise map_tool_egress_error(exc) from None
     return resp_200(data=resp)
+
+
+@router.post("/{tool_type_id}/operations/{operation_id}/test")
+async def saved_tool_run(
+    tool_type_id: int,
+    operation_id: int,
+    request_params: dict[str, Any] = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    if not login_user.is_global_super:
+        raise UnAuthorizedError()
+    result = await run_saved_openapi_test(login_user, tool_type_id, operation_id, request_params)
+    return resp_200(data=result)
 
 
 @router.post("/mcp/test")

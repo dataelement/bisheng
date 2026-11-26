@@ -328,3 +328,6 @@ src/backend/migration_reports
 .cursor/
 config-106120.yaml
 values-106120.yaml
+
+# PPTD engine is vendored as compiled JS (F014, src/backend/pptd_runtime/README.md)
+!src/backend/pptd_runtime/dsh-ppt/lib/

@@ -27,6 +27,7 @@ import {
     getFileExtension,
     isAbsoluteImageSrc,
     matchArtifactByRelPath,
+    resolveArtifactFileUrl,
     resolveArtifactUrl,
     resolveDeliverableLink,
     stripEmptyHtmlPlaceholders,
@@ -120,7 +121,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
         setLoading(true);
         (async () => {
             try {
-                const url = file.directUrl || await resolveArtifactUrl(file.file_url, artifactVersionId(file, versionId));
+                const url = await resolveArtifactFileUrl(file, versionId);
                 if (cancelled) return;
                 if (kind === 'image') {
                     previewCache.set(key, { imageUrl: url });

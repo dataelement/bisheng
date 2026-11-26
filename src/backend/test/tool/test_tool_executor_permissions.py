@@ -10,7 +10,7 @@ from bisheng.tool.domain.services.executor import ToolExecutor, ToolInitializati
 
 
 @pytest.mark.asyncio
-async def test_preset_tool_execution_still_checks_exact_use_action(monkeypatch):
+async def test_preset_tool_execution_still_checks_visibility(monkeypatch):
     check_action = AsyncMock(return_value=True)
     check_global_super = AsyncMock(return_value=True)
     monkeypatch.setattr(
@@ -37,7 +37,7 @@ async def test_preset_tool_execution_still_checks_exact_use_action(monkeypatch):
     assert check_action.await_args.kwargs == {
         "resource_type": "tool",
         "resource_id": 10,
-        "action": "use",
+        "action": "visible",
     }
 
 
@@ -71,8 +71,8 @@ async def test_preset_tool_execution_never_falls_back_when_fga_fails(
 async def test_init_by_tool_ids_can_skip_unauthorized_tools(monkeypatch):
     tool_one = SimpleNamespace(id=1, type=10)
     tool_two = SimpleNamespace(id=2, type=20)
-    type_one = SimpleNamespace(id=10)
-    type_two = SimpleNamespace(id=20)
+    type_one = SimpleNamespace(id=10, is_preset=ToolPresetType.API.value, creation_state="READY")
+    type_two = SimpleNamespace(id=20, is_preset=ToolPresetType.API.value, creation_state="READY")
 
     monkeypatch.setattr(
         "bisheng.tool.domain.services.executor.GptsToolsDao.aget_list_by_ids",
@@ -109,7 +109,7 @@ async def test_init_by_tool_ids_can_skip_unauthorized_tools(monkeypatch):
 @pytest.mark.asyncio
 async def test_init_by_tool_ids_still_raises_by_default(monkeypatch):
     tool = SimpleNamespace(id=2, type=20)
-    tool_type = SimpleNamespace(id=20)
+    tool_type = SimpleNamespace(id=20, is_preset=ToolPresetType.API.value, creation_state="READY")
 
     monkeypatch.setattr(
         "bisheng.tool.domain.services.executor.GptsToolsDao.aget_list_by_ids",
@@ -138,7 +138,7 @@ async def test_init_by_tool_ids_still_raises_by_default(monkeypatch):
 @pytest.mark.asyncio
 async def test_init_by_tool_ids_error_includes_tool_identity(monkeypatch):
     tool = SimpleNamespace(id=3, type=30, name="broken-api-tool")
-    tool_type = SimpleNamespace(id=30)
+    tool_type = SimpleNamespace(id=30, is_preset=ToolPresetType.API.value, creation_state="READY")
 
     monkeypatch.setattr(
         "bisheng.tool.domain.services.executor.GptsToolsDao.aget_list_by_ids",

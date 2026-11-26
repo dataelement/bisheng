@@ -106,6 +106,10 @@ def publication(monkeypatch):
 
     monkeypatch.setattr(flow.FlowService, "get_one_flow", flow_info)
     monkeypatch.setattr(assistant.PublishedAssistantService, "get_info", assistant_info)
+    # This fixture returns an identity probe, not an application DTO. Preserve
+    # that probe at the response boundary; projection has separate endpoint tests.
+    monkeypatch.setattr(flow, "public_workflow_view", lambda data: {**data, "can_share": False})
+    monkeypatch.setattr(assistant, "public_assistant_view", lambda data: {**data.model_dump(), "can_share": False})
     monkeypatch.setattr(workflow.chat_manager, "dispatch_client", dispatch)
     state.decode = Mock(side_effect=AssertionError("v3 must not decode caller JWTs"))
     monkeypatch.setattr(http_middleware, "_decode_jwt_subject", state.decode)

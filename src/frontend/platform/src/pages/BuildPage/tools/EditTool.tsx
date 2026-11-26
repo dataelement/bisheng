@@ -1,22 +1,23 @@
 // @ts-strict-ignore
-import { Button, Dropdown, DropdownChevron, DropdownItem, Input, Textarea, toast } from '@bisheng/ui';
+import { Button, Input, Textarea, toast } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
-import { Label } from "@/components/bs-ui/label";
-import { Popover,PopoverClose,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
 import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
-import { createTool,deleteTool,downloadToolSchema,testToolApi,updateTool } from "@/controllers/API/tools";
+import { createTool,deleteTool,downloadToolSchema,testSavedToolApi,testToolApi,updateTool } from "@/controllers/API/tools";
 import { showApiError } from "@/controllers/request";
-import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
+import { OpenApiAuthentication } from "./OpenApiAuthentication";
 import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AppHint } from "../components/AppHint";
-import { Example,formData } from "./toolSchemaExamples";
+import { formData } from "./toolSchemaExamples";
+import { OpenApiSchemaInput } from "./OpenApiSchemaInput";
+import type { OpenApiSchemaSource } from "@/controllers/API/tools";
+
+const MASKED_API_KEY = '********';
+
 interface TestDialogProps {
     tool: any;
     formState: any;
@@ -68,19 +69,35 @@ export const TestDialog = forwardRef<{
         if (errors.length > 0) {
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
+        const tool = toolRef.current
+        const { server_host, children, parameter_name } = tool
+        const { apiKey, apiLocation, authMethod, authType, parameter, schemaContent } = formRef.current.state
+        const usesSavedKey = authMethod === 'apikey' && apiKey === MASKED_API_KEY
+        if (usesSavedKey && (
+            !tool.id || !apiData.id || schemaContent !== tool.openapi_schema || tool.auth_method !== 1
+            || authType !== tool.auth_type
+            || (apiLocation || 'query') !== (tool.api_location || 'query')
+            || (parameter || '') !== (parameter_name || '')
+        )) {
+            return toast.show({ type: 'warning', message: t('test.enterKeyForChangedConfiguration') })
+        }
         setLoading(true)
-        const { server_host, children, auth_method, parameter_name } = toolRef.current
-        const { apiKey, apiLocation, authMethod, authType, parameter } = formRef.current.state
-        await testToolApi({
+        // Leave unfilled parameters out of the request so the API applies its own defaults;
+        // sending "" breaks typed fields (e.g. an integer `count`) and length-checked strings.
+        const requestParams = Object.fromEntries(
+            Object.entries(formRef.current.values).filter(([, value]) => value !== '')
+        )
+        const request = usesSavedKey ? testSavedToolApi(tool.id, apiData.id, requestParams) : testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
             auth_method: authMethod === 'apikey' ? 1 : 0,
             auth_type: authType,
-            api_key: apiKey,
-            request_params: formRef.current.values,
+            api_key: authMethod === 'apikey' ? apiKey : '',
+            request_params: requestParams,
             api_location: apiLocation || 'query',
             parameter_name: parameter || parameter_name
-        }).then(setResult).catch(showApiError).finally(() => setLoading(false))
+        })
+        await request.then(setResult).catch(showApiError).finally(() => setLoading(false))
     }
     return <Dialog open={testShow} onOpenChange={setTestShow}>
         <DialogContent className="sm:max-w-[625px]">
@@ -138,13 +155,13 @@ const EditTool = forwardRef((props: any, ref) => {
         setShow(bln)
     }
     const [delShow, setDelShow] = useState(false)
-    const schemaUrl = useRef('')
     const [formState, setFormState] = useState({ ...formData });
     const fromDataRef = useRef<any>({}) // same as formState
     const [tableData, setTableData] = useApiTableData()
     const [canDelete, setCanDelete] = useState(false)
     useImperativeHandle(ref, () => ({
         open: () => {
+            fromDataRef.current = {}
             setEditShow(true)
             setDelShow(false)
         }, edit: (tool) => {
@@ -172,44 +189,19 @@ const EditTool = forwardRef((props: any, ref) => {
             [name]: value
         }));
     };
-    // sendRequest to backend to get Schema
-    const handleImportSchema = () => {
-        // http://192.168.106.120:3002/openapi-test.json
-        downloadToolSchema({ download_url: schemaUrl.current }).then(res => {
-            schemaUrl.current = ''
-            if (!res) return
-            fromDataRef.current = { ...res, id: fromDataRef.current.id }
-            const fetchedSchema = res.openapi_schema; // replace with the template
-            setFormState(prevState => ({
-                ...prevState,
-                schemaContent: fetchedSchema,
-                authMethod: res.auth_method === 1 ? 'apikey' : 'none',
-                authType: res.auth_type,
-                apiLocation: res.api_location,
-                parameter: res.parameter_name
-            }))
-            setTableData(res.children)
-        }).catch(showApiError)
-    };
-    // set schemaContent
-    const handleSelectTemplate = (key = '') => {
-        if (!editShow) return
-        const file_content = key ? Example[key] : formState.schemaContent
-        file_content && downloadToolSchema({ file_content }).then(res => {
-            schemaUrl.current = ''
-            if (!res) return
-            fromDataRef.current = { ...res, id: fromDataRef.current.id }
-            const fetchedSchema = res.openapi_schema; // replace with the template
-            setFormState(prevState => ({
-                ...prevState,
-                schemaContent: fetchedSchema,
-                authMethod: res.auth_method === 1 ? 'apikey' : 'none',
-                authType: res.auth_type,
-                apiLocation: res.api_location,
-                parameter: res.parameter_name
-            }));
-            setTableData(res.children)
-        }).catch(showApiError)
+    const handleImportSchema = async (source: OpenApiSchemaSource) => {
+        const res = await downloadToolSchema(source);
+        if (!res) return;
+        fromDataRef.current = { ...res, id: fromDataRef.current.id };
+        setFormState(prevState => ({
+            ...prevState,
+            schemaContent: res.openapi_schema,
+            authMethod: res.auth_method === 1 ? 'apikey' : 'none',
+            authType: res.auth_type,
+            apiLocation: res.api_location,
+            parameter: res.parameter_name
+        }));
+        setTableData(res.children);
     };
 
     const [saveLoading, setSaveLoading] = useState(false)
@@ -280,9 +272,6 @@ const EditTool = forwardRef((props: any, ref) => {
     }
     // test
     const testDialogRef = useRef(null)
-    const handleTest = (obj) => {
-        testDialogRef.current.open(obj)
-    }
     const { t } = useTranslation()
     return <div>
         <Sheet open={editShow} onOpenChange={setEditShow}>
@@ -296,134 +285,11 @@ const EditTool = forwardRef((props: any, ref) => {
                     <div className="px-6 mb-4" >
                         <Input id="toolName" name="toolName" placeholder={t('tools.enterToolName')} value={formState.toolName} onChange={handleInputChange} className={"mt-2"} />
                     </div>
-                    {/* schema */}
-                    <div className="px-6 flex items-center justify-between">
-                        <label htmlFor="open">OpenAPI Schema</label>
-                        <div className="flex gap-2">
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button variant="outlined" color="default"><Outlined.Plus /> {t('tools.importFromUrl')}</Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-80" align="end">
-                                    <div className="flex items-center gap-4">
-                                        <Input id="schemaUrl" name="schemaUrl" placeholder="https://" onChange={(e) => schemaUrl.current = e.target.value} />
-                                        <PopoverClose>
-                                            <Button size="small" onClick={handleImportSchema}>{t('skills.import')}</Button>
-                                        </PopoverClose>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-                            {/* Inserting an example is an action (the trigger never shows a value), so this is a menu, not a Select. */}
-                            <Dropdown
-                                align="end"
-                                menu={<>
-                                    <DropdownItem onSelect={() => handleSelectTemplate('json')}>{t('tools.weatherJson')}</DropdownItem>
-                                    <DropdownItem onSelect={() => handleSelectTemplate('yaml')}>{t('tools.petShopYaml')}</DropdownItem>
-                                </>}
-                            >
-                                <Button type="button" variant="outlined" color="default">
-                                    {t('tools.examples')}
-                                    <DropdownChevron />
-                                </Button>
-                            </Dropdown>
-                        </div>
+                    <div className="px-6 mb-4">
+                        <OpenApiSchemaInput value={formState.schemaContent} onChange={(schemaContent) => setFormState(prev => ({ ...prev, schemaContent }))} onParse={handleImportSchema} />
                     </div>
-                    <div className="px-6 mb-4" >
-                        <Textarea id="schemaContent" name="schemaContent" placeholder={t('tools.enterOpenAPISchema')} value={formState.schemaContent} onChange={handleInputChange} onBlur={() => handleSelectTemplate()} textareaClassName={"mt-2 min-h-52"} />
-                    </div>
-                    <label htmlFor="open" className="px-6">{t('tools.authenticationType')}</label>
-                    <div className="px-6">
-                        <div className="px-6 mb-4" >
-                            <label htmlFor="open" className="bisheng-label">{t('tools.authType')}</label>
-                            <RadioGroup
-                                id="authMethod"
-                                name="authMethod"
-                                value={formState.authMethod}
-                                className="flex mt-2 gap-4"
-                                onValueChange={(value) => setFormState(prevState => ({ ...prevState, authMethod: value }))}
-                            >
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="none" id="r1" />
-                                    <Label htmlFor="r1">{t('tools.none')}</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="apikey" id="r2" />
-                                    <Label htmlFor="r2">{t('tools.apiKey')}</Label>
-                                </div>
-                            </RadioGroup>
-                        </div>
-                        {formState.authMethod === "apikey" && (<>
-                            <div className="px-6 mb-4" >
-                                <Label htmlFor="open" className="bisheng-label flex items-center gap-1">
-                                    {t('tools.authTypeLabel')}
-                                    <AppHint content={<div>
-                                        <p>{t('tools.basicBearerDescription')}</p>
-                                        <p>{t('tools.customDescription')}</p>
-                                    </div>} />
-                                </Label>
-                                <RadioGroup
-                                    id="authType"
-                                    name="authType"
-                                    value={formState.authType}
-                                    className="flex mt-2 gap-4"
-                                    onValueChange={(value) => setFormState(prevState => ({ ...prevState, authType: value }))}
-                                >
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="basic" id="r4" />
-                                        <Label htmlFor="r4">{t('tools.basic')}</Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="bearer" id="r5" />
-                                        <Label htmlFor="r5">{t('tools.bearer')}</Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="custom" id="r6" />
-                                        <Label htmlFor="r6">{t('tools.custom')}</Label>
-                                    </div>
-                                </RadioGroup>
-                            </div>
-                            {formState.authType === "custom" && <>
-                                <div className="px-6 mb-4" >
-                                    <Label htmlFor="apiLocation" className="bisheng-label flex items-center gap-1">
-                                        {t('tools.apiLocationLabel')}
-                                        <AppHint content={<div>
-                                            <p>{t('tools.headerDescription')}</p>
-                                            <p>{t('tools.queryDescription')}</p>
-                                        </div>} />
-                                    </Label>
-                                    <RadioGroup
-                                        id="apiLocation"
-                                        name="apiLocation"
-                                        value={formState.apiLocation}
-                                        className="flex mt-2 gap-4"
-                                        onValueChange={(value) => setFormState(prevState => ({
-                                            ...prevState, apiLocation: value
-                                        }))}
-                                    >
-                                        <div className="flex items-center space-x-2">
-                                            <RadioGroupItem value="header" id="r7" />
-                                            <Label htmlFor="r7">{t('tools.header')}</Label>
-                                        </div>
-                                        <div className="flex items-center space-x-2">
-                                            <RadioGroupItem value="query" id="r8" />
-                                            <Label htmlFor="r8">{t('tools.query')}</Label>
-                                        </div>
-                                    </RadioGroup>
-                                </div>
-                                <div className="px-6 mb-4">
-                                    <Label className="bisheng-label" htmlFor="parameter">
-                                        <span className="text-red-500">*</span> {t('tools.parameterName')}
-                                    </Label>
-                                    <Input id="parameter" name="parameter" placeholder={t('tools.parameterPlaceholder')} value={formState.parameter} onChange={handleInputChange} className={"mt-2"} />
-                                </div>
-                            </>}
-                            <div className="px-6 mb-4">
-                                <Label className="bisheng-label" htmlFor="apiKey">
-                                    <span className="text-red-500">*</span> {t('tools.apiKeyLabel')}
-                                </Label>
-                                <Input id="apiKey" name="apiKey" placeholder={t('tools.apiKeyPlaceholder')} value={formState.apiKey} onChange={handleInputChange} className={"mt-2"} />
-                            </div>
-                        </>)}
+                    <div className="px-6 mb-4">
+                        <OpenApiAuthentication id="tool-auth" value={formState} onChange={auth => setFormState(prev => ({ ...prev, ...auth }))} />
                     </div>
                     <label htmlFor="open" className="px-6">{t('tools.availableTools')}</label>
                     <div className="px-6 mb-4" >
@@ -460,34 +326,6 @@ const EditTool = forwardRef((props: any, ref) => {
                             </TableBody>
                         </Table>
                     </div>
-                </div>
-                <label htmlFor="open" className="px-6">{t('tools.authenticationType')}</label>
-                <div className="px-6">
-                    <div className="px-6 mb-4" >
-                        <label htmlFor="open" className="bisheng-label">{t('tools.authType')}</label>
-                        <RadioGroup
-                            id="authMethod"
-                            name="authMethod"
-                            defaultValue="none"
-                            className="flex mt-2 gap-4"
-                            onValueChange={(value) => setFormState(prevState => ({ ...prevState, authMethod: value }))}
-                        >
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="none" id="r1" />
-                                <Label htmlFor="r1">{t('tools.none')}</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="apikey" id="r2" />
-                                <Label htmlFor="r2">{t('tools.apiKey')}</Label>
-                            </div>
-                        </RadioGroup>
-                    </div>
-                    {formState.authMethod === "apikey" && (
-                        <div className="px-6 mb-4">
-                            <label htmlFor="apiKey">{t('tools.apiKey')}</label>
-                            <Input id="apiKey" name="apiKey" value={formState.apiKey} onChange={handleInputChange} className={"mt-2"} />
-                        </div>
-                    )}
                 </div>
                 <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
                     {delShow && canDelete && (

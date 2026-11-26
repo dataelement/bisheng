@@ -1,5 +1,4 @@
 import asyncio
-import pickle
 from enum import StrEnum
 from typing import Any
 
@@ -7,7 +6,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.cache.serialization import RedisSerializationError, decode_redis_value, encode_redis_value
 from bisheng.linsight.domain.models.linsight_execute_task import (
     ExecuteTaskStatusEnum,
     LinsightExecuteTask,
@@ -55,6 +55,8 @@ class MessageEventType(StrEnum):
     FINAL_RESULT = "final_result"
     # Mission terminated
     TASK_TERMINATED = "task_terminated"
+    # F132 long-term memory signal: {turn_id, has_write, has_attribution}, never item text
+    MEMORY = "memory"
 
 
 class MessageData(BaseModel):
@@ -94,6 +96,8 @@ class LinsightStateMessageManager:
             "session_version_info": f"{self._key_prefix}session_version_info",
             "messages": f"{self._key_prefix}messages",
             "execution_tasks": f"{self._key_prefix}execution_tasks:",
+            "task_ids": f"{self._key_prefix}task_ids",
+            "task_index_ready": f"{self._key_prefix}task_index_ready",
         }
         # task_id -> event-loop monotonic time of its last `history` DB flush;
         # drives THINKING_DB_FLUSH_INTERVAL coalescing in add_execution_task_step.
@@ -108,9 +112,26 @@ class LinsightStateMessageManager:
         """Log Redis failures and propagate them to the caller."""
         try:
             return await operation(*args, **kwargs)
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Redis operation failed: {e}")
             raise
+
+    async def _cache_execution_tasks(self, tasks: list[dict]) -> None:
+        """Commit cached payloads and their session-local membership together."""
+        if not tasks:
+            return
+        async with self._redis_client.async_pipeline(transaction=True) as pipe:
+            for task in tasks:
+                await pipe.set(
+                    self._keys["execution_tasks"] + task["id"],
+                    encode_redis_value(self._keys["execution_tasks"] + task["id"], task),
+                    ex=self.DEFAULT_EXPIRATION,
+                )
+                await pipe.sadd(self._keys["task_ids"], task["id"])
+            await pipe.expire(self._keys["task_ids"], self.DEFAULT_EXPIRATION)
+            await pipe.execute()
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def push_message(self, message: MessageData) -> None:
@@ -151,7 +172,7 @@ class LinsightStateMessageManager:
                 # Write AgainRedis
                 await pipe.set(
                     self._keys["session_version_info"],
-                    pickle.dumps(session_version_model.model_dump()),
+                    encode_redis_value(self._keys["session_version_info"], session_version_model.model_dump()),
                     ex=self.DEFAULT_EXPIRATION,
                 )
                 await pipe.execute()
@@ -189,6 +210,8 @@ class LinsightStateMessageManager:
                 return session_version_model
 
             return LinsightSessionVersion.model_validate(info)
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to get session version info: {e}")
             session_version_model = await LinsightSessionVersionDao.get_by_id(self._session_version_id)
@@ -209,10 +232,10 @@ class LinsightStateMessageManager:
 
         try:
             # Batch WriteRedis
-            tasks_mapping = {f"{self._keys['execution_tasks']}{task.id}": task.model_dump() for task in tasks}
+            await self._cache_execution_tasks([task.model_dump() for task in tasks])
 
-            await self._redis_client.amset(tasks_mapping, expiration=self.DEFAULT_EXPIRATION)
-
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to set execution tasks: {e}")
             raise
@@ -248,14 +271,15 @@ class LinsightStateMessageManager:
                 return {}
 
             # Update againRedis
-            task_key = f"{self._keys['execution_tasks']}{task_id}"
             task_data = task_model.model_dump()
 
-            await self._redis_client.aset(task_key, task_data, expiration=self.DEFAULT_EXPIRATION)
+            await self._cache_execution_tasks([task_data])
 
             self._logger.info(f"Updated task {task_id} status to {status}")
             return task_data
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to update task {task_id} status: {e}")
             raise
@@ -270,7 +294,6 @@ class LinsightStateMessageManager:
             user_input: User input
             files: Related Documents List
         """
-        task_key = f"{self._keys['execution_tasks']}{task_id}"
 
         try:
             task_model = await self.get_execution_task(task_id)
@@ -312,9 +335,7 @@ class LinsightStateMessageManager:
             task_model.task_data = {**(task_model.task_data or {}), "clarify_answers": clarify_answers}
 
             # Using Transactions to Ensure Data Consistency
-            async with self._redis_client.async_pipeline() as pipe:
-                await pipe.set(task_key, pickle.dumps(task_model.model_dump()), ex=self.DEFAULT_EXPIRATION)
-                await pipe.execute()
+            await self._cache_execution_tasks([task_model.model_dump()])
 
             # Database updating
             await LinsightExecuteTaskDao.update_fields_by_id(
@@ -326,6 +347,8 @@ class LinsightStateMessageManager:
 
             self._logger.info(f"Set user input for task {task_id}")
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to set user input for task {task_id}: {e}")
             raise ServerError.http_exception()
@@ -372,10 +395,11 @@ class LinsightStateMessageManager:
             if not changed:
                 return
 
-            task_key = f"{self._keys['execution_tasks']}{task_id}"
-            await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)
+            await self._cache_execution_tasks([task_model.model_dump()])
             await LinsightExecuteTaskDao.update_fields_by_id(task_id, history=task_model.history)
             self._logger.info(f"Re-stamped {answer_idx} clarify answer(s) onto task {task_id} history")
+        except RedisSerializationError:
+            raise
         except Exception as e:
             # Non-critical: live rendering is unaffected; only the refreshed view
             # of an answered clarify degrades. Don't fail the resumed turn for it.
@@ -410,6 +434,8 @@ class LinsightStateMessageManager:
             await self.set_execution_tasks([task_model])
             return task_model
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to get execution task {task_id}: {e}")
             return None
@@ -423,7 +449,6 @@ class LinsightStateMessageManager:
             task_id: TaskID
             step: Execution Steps
         """
-        task_key = f"{self._keys['execution_tasks']}{task_id}"
 
         try:
             task_data = await self.get_execution_task(task_id)
@@ -457,6 +482,10 @@ class LinsightStateMessageManager:
                 for i in range(len(task_model.history) - 1, -1, -1):
                     prev = task_model.history[i]
                     if isinstance(prev, dict) and prev.get("call_id") == call_id:
+                        step_dump["extra_info"] = {
+                            **(prev.get("extra_info") or {}),
+                            **(step_dump.get("extra_info") or {}),
+                        }
                         if step_dump.get("step_type") == "thinking":
                             step_dump["output"] = (prev.get("output") or "") + (step_dump.get("output") or "")
                         task_model.history[i] = step_dump
@@ -468,7 +497,7 @@ class LinsightStateMessageManager:
             # Redis always carries the freshest history: get_execution_task reads
             # it back to accumulate the next step, and the live WS view derives from
             # push_message — so it is written every step (no -7120 risk on Redis).
-            await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)
+            await self._cache_execution_tasks([task_model.model_dump()])
 
             # DB write-amplification guard (DM8 -7120 incident, 2026-06): a thinking
             # segment streams as many token-delta frames that all merge into ONE
@@ -508,6 +537,8 @@ class LinsightStateMessageManager:
             else:
                 self._logger.info(f"Added step to task {task_id}")
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to add step to task {task_id}: {e}")
             raise
@@ -520,21 +551,40 @@ class LinsightStateMessageManager:
             Execute Task List
         """
         try:
-            pattern = f"{self._keys['execution_tasks']}*"
-            task_keys = await self._redis_client.akeys(pattern)
-
-            if not task_keys:
-                return []
-
-            tasks_data = await self._redis_client.amget(task_keys)
-            tasks = [LinsightExecuteTask.model_validate(task) for task in tasks_data if task]
-
-            if not tasks:
-                tasks = await LinsightExecuteTaskDao.get_by_session_version_id(
-                    session_version_id=self._session_version_id
+            rc = self._redis_client.async_connection
+            ids = {value.decode() for value in await rc.smembers(self._keys["task_ids"])}
+            stored = {}
+            if not ids or not await rc.exists(self._keys["task_index_ready"]):
+                # SQL identifies legacy tasks without enumerating Redis keys. Read
+                # their cached values below to preserve unflushed thinking history.
+                rows = await LinsightExecuteTaskDao.get_by_session_version_id(self._session_version_id)
+                stored = {row.id: row for row in rows}
+                ids.update(stored)
+                async with self._redis_client.async_pipeline(transaction=True) as pipe:
+                    if ids:
+                        await pipe.sadd(self._keys["task_ids"], *sorted(ids))
+                        await pipe.expire(self._keys["task_ids"], self.DEFAULT_EXPIRATION)
+                    await pipe.set(self._keys["task_index_ready"], "1", ex=self.DEFAULT_EXPIRATION)
+                    await pipe.execute()
+            tasks = []
+            ordered_ids = sorted(ids)
+            values = await rc.mget([self._keys["execution_tasks"] + task_id for task_id in ordered_ids]) if ids else []
+            for task_id, value in zip(ordered_ids, values, strict=True):
+                task = (
+                    LinsightExecuteTask.model_validate(
+                        decode_redis_value(self._keys["execution_tasks"] + task_id, value)
+                    )
+                    if value is not None
+                    else stored.get(task_id)
                 )
+                if task is None:
+                    task = await LinsightExecuteTaskDao.get_by_id(task_id)
+                if task is not None:
+                    tasks.append(task)
             return tasks
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to get execution tasks: {e}")
             return []
@@ -544,13 +594,14 @@ class LinsightStateMessageManager:
         Cleanup Session RelatedRedisDATA
         """
         try:
-            pattern = f"{self._key_prefix}*"
-            keys = await self._redis_client.akeys(pattern)
+            tasks = await self.get_execution_tasks()
+            keys = [self._keys["execution_tasks"] + task.id for task in tasks]
+            keys.extend(value for name, value in self._keys.items() if name != "execution_tasks")
+            await self._redis_client.adelete(*keys)
+            self._logger.info(f"Cleaned up {len(keys)} keys for session {self._session_version_id}")
 
-            if keys:
-                await self._redis_client.adelete(*keys)
-                self._logger.info(f"Cleaned up {len(keys)} keys for session {self._session_version_id}")
-
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to cleanup session data: {e}")
             raise
@@ -571,30 +622,12 @@ class LinsightStateMessageManager:
             }
 
             # Calculate number of tasks
-            pattern = f"{self._keys['execution_tasks']}*"
-            task_keys = await self._redis_client.akeys(pattern)
-            stats["task_count"] = len(task_keys)
+            stats["task_count"] = len(await self.get_execution_tasks())
 
             return stats
 
+        except RedisSerializationError:
+            raise
         except Exception as e:
             self._logger.error(f"Failed to get session stats: {e}")
             return {"error": str(e)}
-
-    # Clean up all session-relatedRedisDATA
-    @classmethod
-    async def cleanup_all_sessions(cls) -> None:
-        """
-        Clean up all session-relatedRedisDATA
-        """
-        try:
-            redis_client = await get_redis_client()
-            pattern = f"{cls.KEY_PREFIX}*"
-            keys = await redis_client.async_connection.keys(pattern)
-
-            if keys:
-                await redis_client.async_connection.delete(*keys)
-                logger.info(f"Cleaned up {len(keys)} keys for all sessions")
-        except Exception as e:
-            logger.error(f"Failed to cleanup all session data: {e}")
-            return

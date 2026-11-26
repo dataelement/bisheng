@@ -13,10 +13,13 @@ import { Outlined } from 'bisheng-icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Textarea } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
+import { useRunStore } from '~/store/runStore';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
-import { composeClarifyAnswer, parseClarifyRequest } from './stepUtils';
+import { composeClarifyAnswer, parseClarifyRequest, runQuestionToClarifyData } from './stepUtils';
 import { ClarifyFallbackCard } from './ClarifyFallbackCard';
+
+export { runQuestionToClarifyData };
 
 interface ClarifyCardProps {
     data: ExecStepEventData;
@@ -34,6 +37,41 @@ interface ClarifyCardProps {
 export function ClarifyCard(props: ClarifyCardProps) {
     const hasQuestions = useMemo(() => parseClarifyRequest(props.data).questions.length > 0, [props.data]);
     return hasQuestions ? <ClarifyCardInteractive {...props} /> : <ClarifyFallbackCard {...props} />;
+}
+
+interface RunClarifyCardProps {
+    /** Conversation shown on the page; the run store is keyed by it. */
+    conversationId: string;
+    /** The send entry of the page. `false` means the message was not accepted. */
+    onSend: (text: string) => Promise<boolean | void> | boolean | void;
+}
+
+/**
+ * F004 (T050): the question the conversation's run is waiting on (AC-20).
+ * It reads the run store only and submits the answer through the send entry,
+ * the same way as typing it in the input box (AC-21): the backend takes the
+ * next message of a waiting run as the answer.
+ */
+export function RunClarifyCard({ conversationId, onSend }: RunClarifyCardProps) {
+    const pending = useRunStore((state) => {
+        if (!conversationId) return null;
+        const run = state.conversations[conversationId]?.run;
+        return run?.status === 'waiting' ? run.pendingQuestion : null;
+    });
+    const data = useMemo(() => (pending ? runQuestionToClarifyData(pending) : null), [pending]);
+    // A rejected send re-mounts the card, so the user can answer again.
+    const [attempt, setAttempt] = useState(0);
+    if (!data) return null;
+    const handleSubmit = async (_taskId: string, answer: string) => {
+        let accepted: boolean | void = false;
+        try {
+            accepted = await onSend(answer);
+        } catch {
+            accepted = false;
+        }
+        if (accepted === false) setAttempt((n) => n + 1);
+    };
+    return <ClarifyCard key={`${data.call_id}:${attempt}`} data={data} onSubmit={handleSubmit} />;
 }
 
 const CUSTOM_KEY = '__custom__';

@@ -5,7 +5,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import UploadFileExtError
 from bisheng.core.cache.utils import convert_encoding_cchardet
 from bisheng.core.database import get_sync_db_session
-from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.evaluation.domain.models.evaluation import Evaluation
 from bisheng.evaluation.domain.schemas.evaluation import EvaluationCreate
 from bisheng.evaluation.domain.services.evaluation_service import EvaluationService, add_evaluation_task
@@ -37,6 +36,7 @@ def create_evaluation(
 ):
     """Create Assessment Task."""
     try:
+        EvaluationService.require_jwt_identity(login_user)
         user_id = login_user.user_id
         if not version:
             version = 0
@@ -67,7 +67,8 @@ def create_evaluation(
             session.commit()
             session.refresh(db_evaluation)
 
-        background_tasks.add_task(add_evaluation_task, evaluation_id=db_evaluation.id)
+        EvaluationService.require_evaluation_owner(db_evaluation.id, login_user)
+        background_tasks.add_task(add_evaluation_task, evaluation_id=db_evaluation.id, login_user=login_user)
         return resp_200(db_evaluation.copy())
     finally:
         file.file.close()
@@ -82,8 +83,7 @@ def delete_evaluation(*, evaluation_id: int, login_user: UserPayload = Depends(U
 @router.get("/result/file/download")
 async def get_download_url(*, file_url: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get file download address."""
-    minio_client = await get_minio_storage()
-    download_url = await minio_client.get_share_link(file_url)
+    download_url = await EvaluationService.get_download_url(file_url, login_user)
     return resp_200(data={"url": download_url})
 
 
@@ -95,4 +95,5 @@ def process_evaluation(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Perform assessment tasks manually."""
-    background_tasks.add_task(add_evaluation_task, evaluation_id=evaluation_id)
+    EvaluationService.require_evaluation_owner(evaluation_id, login_user)
+    background_tasks.add_task(add_evaluation_task, evaluation_id=evaluation_id, login_user=login_user)

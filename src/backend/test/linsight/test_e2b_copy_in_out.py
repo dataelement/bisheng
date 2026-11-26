@@ -69,7 +69,7 @@ class FakeFiles:
             self.store[path] = data if isinstance(data, bytes) else bytes(data)
             self.mtime[path] = time.time()
 
-    def list(self, path):
+    def list(self, path, depth=1):
         entries = []
         for p in sorted(self.store):
             entries.append(FakeEntry(name=p.split("/")[-1], path=p, type="file", modified_time=self.mtime.get(p, 0.0)))

@@ -5,13 +5,17 @@
 // with `t` returning the key so the assertions read as keys, not prose.
 
 import { describe, expect, it } from "vitest";
+import auditCopy from "./fixtures/auditCopy.json";
 
 import { actionToI18nKey, exportSystemLogDataApi, getAuditAppsApi, getLogsApi } from "@/controllers/API/log";
 import {
   AuditRow,
   buildAuditCsv,
+  renderEventType,
   renderObjectName,
+  renderObjectType,
   renderOperator,
+  renderSystemId,
   toAppOptions,
 } from "@/pages/LogPage/systemLog/auditRow";
 import { beforeEach, vi } from "vitest";
@@ -105,6 +109,37 @@ describe("application selector options", () => {
   });
 });
 
+describe("module and object captions", () => {
+  const dictionary = (messages: Record<string, string>) => (key: string, opts?: Record<string, unknown>) =>
+    Object.prototype.hasOwnProperty.call(messages, key)
+      ? messages[key]
+      : String(opts?.defaultValue ?? key);
+
+  const captions = dictionary({
+    "log.systemIdEnum.system": "System",
+    "log.systemIdEnum.unknown": "Unknown module",
+    "log.objectTypeEnum.work_flow": "Workflow",
+    "log.objectTypeEnum.linsight_skill": "Personal skill",
+    "log.objectTypeEnum.knowledge_library": "Knowledge library",
+    "log.objectTypeEnum.unknown": "Unknown object type",
+    "log.eventTypeEnum.unknown": "Unknown action",
+  });
+
+  it("folds historical aliases onto the existing captions", () => {
+    expect(renderSystemId({ ...base, system_id: "linsight" }, captions)).toBe("System");
+    expect(renderObjectType({ ...base, object_type: "workflow" }, captions)).toBe("Workflow");
+    expect(renderObjectType({ ...base, target_type: "workflow" }, captions)).toBe("Workflow");
+    expect(renderObjectType({ ...base, object_type: "linsight_skill" }, captions)).toBe("Personal skill");
+    expect(renderObjectType({ ...base, object_type: "knowledge_library" }, captions)).toBe("Knowledge library");
+  });
+
+  it("uses the unknown caption instead of an i18n key", () => {
+    expect(renderSystemId({ ...base, system_id: "not_a_module" }, captions)).toBe("Unknown module");
+    expect(renderObjectType({ ...base, object_type: "mystery" }, captions)).toBe("Unknown object type");
+    expect(renderEventType({ ...base, event_type: "not_an_action" }, captions, (action) => action)).toBe("Unknown action");
+  });
+});
+
 describe("csv export", () => {
   const row: AuditRow = {
     ...base,
@@ -123,6 +158,7 @@ describe("csv export", () => {
     expect(withTenant[0]).toEqual([
       "log.auditId",
       "log.username",
+      "log.org.column",
       "log.operationTime",
       "log.systemModule",
       "log.operationAction",
@@ -137,6 +173,7 @@ describe("csv export", () => {
     expect(withTenant[1]).toEqual([
       "row-1",
       "olga",
+      "log.org.unrecorded",
       "2026-09-16 10:00:00",
       "log.systemIdEnum.app",
       "log.eventTypeEnum.appPublish",
@@ -201,6 +238,13 @@ describe("audit API params", () => {
     expect(url).toBe("/api/v1/audit/export/data");
     expect(config.params).toEqual({ system_id: "app", event_type: "app.publish", target_app_id: "app-1" });
     expect(config.params).not.toHaveProperty("page");
+  });
+
+  it("sends a trimmed remark and drops a blank one", async () => {
+    await getLogsApi({ page: 1, pageSize: 20, note: `  ${auditCopy.noteFilter}  ` });
+    expect(requestMocks.get.mock.calls[0][1].params).toEqual({ page: 1, limit: 20, note: auditCopy.noteFilter });
+    await exportSystemLogDataApi({ note: "   " });
+    expect(requestMocks.get.mock.calls[1][1].params).not.toHaveProperty("note");
   });
 
   it("app selector searches by keyword", async () => {

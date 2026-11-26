@@ -17,7 +17,8 @@ from bisheng.permission.domain.services.permission_action_service import (
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 
-SYSTEM_TOOL_ACTIONS = frozenset({"visible", "use"})
+# Default system grant; delegated editing is authorized independently.
+SYSTEM_TOOL_ACTIONS = frozenset({"visible"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,8 @@ class ToolPermissionRecord:
     permission_version: int
     context_version: str
     preset: bool
+
+    creation_state: str = "READY"
 
 
 class ToolPermissionLoader(Protocol):
@@ -72,6 +75,7 @@ class ToolDaoPermissionLoader:
             owner_user_id=row.user_id,
             permission_version=version,
             context_version=context_version,
+            creation_state=getattr(row, "creation_state", "READY"),
             preset=preset,
         )
 
@@ -97,9 +101,11 @@ class ToolPermissionPort(Protocol):
 
     async def project_delete(self, **kwargs): ...
 
+    async def cleanup_deleted(self, **kwargs): ...
+
 
 class F048ToolPermissionAdapter:
-    """Reject invalid/preset tool facts before the sole permission facade."""
+    """Validate tool facts before the sole permission facade."""
 
     def __init__(
         self,
@@ -187,6 +193,9 @@ class F048ToolPermissionAdapter:
             target=self._record_target(record, actor),
         )
 
+    async def cleanup_deleted(self, *, record, actor):
+        return await self._permission.cleanup_deleted(actor=actor, target=self._record_target(record, actor))
+
     def _record_target(
         self,
         record: ToolPermissionRecord,
@@ -209,6 +218,10 @@ class F048ToolPermissionAdapter:
         *,
         action: str | None,
     ) -> VerifiedPermissionTarget:
+        if action is not None and record is not None and not record.preset and record.creation_state != "READY":
+            from bisheng.common.errcode.tool import ToolCreationPendingError
+
+            raise ToolCreationPendingError()
         if (
             record is None
             or record.resource_id != resource_id
@@ -217,7 +230,7 @@ class F048ToolPermissionAdapter:
             or (not record.preset and not record.owner_user_id)
         ):
             raise PermissionInvalidResourceError()
-        if record.preset and action is not None and action not in SYSTEM_TOOL_ACTIONS | {"manage_permission"}:
+        if record.preset and action is not None and action not in SYSTEM_TOOL_ACTIONS | {"edit", "manage_permission"}:
             raise InvalidCatalogActionError(msg=f"Preset tool does not support action: {action}")
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=record.tenant_id,

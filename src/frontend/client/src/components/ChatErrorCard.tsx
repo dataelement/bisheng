@@ -13,16 +13,21 @@
  * move and is kept — renaming ~20 keys across three locales would change nothing
  * a user sees.
  */
+import { ErrorDetailDisclosure, FailureInfoDetails } from '~/components/FailureInfoDetails';
+import { parseFailureInfo, localizedBusinessFailure } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
-import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { ServiceBusyNotice } from '~/components/ServiceBusyNotice';
 
 interface ChatErrorCardProps {
+    failureInfo?: unknown;
+    errorCode?: number;
     /** stable classification from the backend (error_message event / SSE error `data.error_type`) */
     errorType?: string;
-    /** raw provider text for the "view details" disclosure */
+    /** redacted exception text for the "view details" disclosure */
     detail?: string;
+    /** support reference when the failure has no dependency failure_id */
+    referenceId?: string;
     /** legacy/raw error string — fallback when `detail` is absent */
     fallbackMessage?: string;
     /** transient (retryable) errors only: re-run the turn. Wired on the /linsight
@@ -38,6 +43,11 @@ interface ChatErrorCardProps {
     /** Drops the per-type "建议…" line. Daily chat sets it when the card carries a
         plain backend message as its description — a hint would just repeat it. */
     hideHint?: boolean;
+    /** `chat`: the card stands for a direct answer of the chat (not a deep-research
+        task). An unclassified failure reads "the reply failed", and the types in
+        `CHAT_DESC_TYPES` use a description that also says what to do, because the
+        chat hides the hint line. */
+    surface?: 'chat';
 }
 
 // error_type values that have their own localized copy; anything else (or a
@@ -68,6 +78,25 @@ const KNOWN_TYPES = new Set([
     'chat_unknown',
 ]);
 
+// Types with a chat description (`com_linsight_error_desc_chat_<type>`): what
+// happened to the reply and what the user can do, without task wording.
+const CHAT_DESC_TYPES = new Set([
+    'content_filter',
+    'quota_exhausted',
+    'credit_exhausted',
+    'auth_error',
+    'context_overflow',
+    'context_compress_failed',
+    'output_truncated',
+]);
+
+/** The copy key of a failure type. On the chat surface a type without its own
+    copy (`unknown`, `lease_expired`, a type of a newer backend) is `chat_unknown`. */
+export function errorCopyKey(errorType?: string, surface?: 'chat'): string {
+    const key = errorType && KNOWN_TYPES.has(errorType) ? errorType : 'unknown';
+    return surface === 'chat' && key === 'unknown' ? 'chat_unknown' : key;
+}
+
 // Transient upstream hiccups (throttling / timeout / 5xx) recover on their own, so
 // they get the calm neutral ServiceBusyNotice (+ optional retry) rather than the red
 // failure card — a rate limit is the model vendor's availability blip, not a fault.
@@ -92,20 +121,28 @@ export function isTransientErrorType(errorType?: string): boolean {
 
 export function ChatErrorCard({
     errorType,
+    failureInfo,
+    errorCode,
     detail,
     fallbackMessage,
+    referenceId,
     onRetry,
     retrying,
     description,
     hideHint,
+    surface,
 }: ChatErrorCardProps) {
     const localize = useLocalize();
-    const [showDetail, setShowDetail] = useState(false);
+    const failure = parseFailureInfo(failureInfo);
+    // Preserve the release line's actionable credit/context feedback.
+    const serviceFailure = ['credit_exhausted', 'context_overflow', 'context_compress_failed'].includes(errorType ?? '')
+        ? undefined : failure;
 
-    const key = errorType && KNOWN_TYPES.has(errorType) ? errorType : 'unknown';
-    const title = localize(`com_linsight_error_title_${key}`);
-    const desc = description ?? localize(`com_linsight_error_desc_${key}`);
-    const hint = hideHint ? '' : localize(`com_linsight_error_hint_${key}`);
+    const key = errorCopyKey(errorType, surface);
+    const descKey = surface === 'chat' && CHAT_DESC_TYPES.has(key) ? `chat_${key}` : key;
+    const title = serviceFailure ? localize(`api_errors.failure_${serviceFailure.category}`) : localize(`com_linsight_error_title_${key}`);
+    const desc = serviceFailure ? undefined : localizedBusinessFailure(errorCode, localize) ?? description ?? localize(`com_linsight_error_desc_${descKey}`);
+    const hint = serviceFailure || hideHint ? '' : localize(`com_linsight_error_hint_${key}`);
     const rawDetail = detail || fallbackMessage || '';
 
     // Transient → calm neutral notice (with retry where the surface wires it).
@@ -119,6 +156,8 @@ export function ChatErrorCard({
                 // load) family; timeout / unavailable are outages, so they get
                 // the static gray attention mark.
                 icon={isRateLimit ? 'gauge' : 'attention'}
+                failureInfo={failure}
+                referenceId={referenceId}
                 detail={isRateLimit ? undefined : rawDetail}
                 onRetry={onRetry}
                 retrying={retrying}
@@ -138,23 +177,8 @@ export function ChatErrorCard({
                     <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-text-3">{desc}</p>
                     {hint && <p className="mt-1.5 leading-relaxed text-text-3">{hint}</p>}
 
-                    {rawDetail && (
-                        <div className="mt-2.5">
-                            <button
-                                type="button"
-                                onClick={() => setShowDetail((v) => !v)}
-                                className="inline-flex items-center gap-1 text-body text-gray-400 transition-colors hover:text-gray-600"
-                            >
-                                {localize(showDetail ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
-                                {showDetail ? <Outlined.Down size={14} /> : <Outlined.Right size={14} />}
-                            </button>
-                            {showDetail && (
-                                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-100 p-2.5 text-xs leading-relaxed text-gray-500">
-                                    {rawDetail}
-                                </pre>
-                            )}
-                        </div>
-                    )}
+                    <FailureInfoDetails failureInfo={failure} referenceId={referenceId} detail={rawDetail} />
+                    {!failure && <ErrorDetailDisclosure detail={rawDetail} />}
                 </div>
             </div>
         </div>

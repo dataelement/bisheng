@@ -44,6 +44,8 @@ export interface PermissionCatalogModel {
   allow_same_level: boolean
   action_codes: string[]
   version: number
+  readonly visibility_only_resource_types?: readonly PermissionResourceType[]
+  readonly visibility_level?: PermissionActionLevel | null
 }
 
 export interface PermissionModelPreset {
@@ -148,6 +150,7 @@ export interface GrantablePermissionModel {
   name: string
   level: PermissionActionLevel | null
   active: boolean
+  readonly visibility_only?: boolean
 }
 
 export interface ResourcePermissionContext {
@@ -357,9 +360,11 @@ export async function getResourcePermissionGrantsApi(
 export async function getMyResourcePermissionsApi(
   resourceType: PermissionResourceType,
   resourceId: string,
+  config?: { showError?: boolean; signal?: AbortSignal },
 ): Promise<MyResourcePermissions> {
   return await axios.get(
     `${permissionResourcePath(resourceType, resourceId)}/my-permissions`,
+    config,
   )
 }
 

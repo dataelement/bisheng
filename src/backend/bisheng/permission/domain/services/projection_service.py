@@ -37,6 +37,10 @@ from bisheng.permission.domain.services.projection_plan import (
 ProjectionCommitUnknownError = projection_plan_types.ProjectionCommitUnknownError
 
 
+class ProjectionScopeDeferred(PermissionPublishNotReadyError):
+    """A model journal exists but its business owner has not bound it yet."""
+
+
 class ProjectionMarkerPort(Protocol):
     async def is_ready(self) -> bool: ...
 
@@ -314,9 +318,12 @@ class ProjectionService:
             raise PermissionPublishNotReadyError(
                 msg=f"Projection operation is not recoverable from status {status}",
             )
-        if plan.scope_type != "resource":
+        if plan.scope_type != "resource" and not (
+            plan.scope_type == "llm_model_deletion"
+            and await self._scope_guard.is_failed_closed_recovery_scope(plan, int(operation.id))
+        ):
             raise PermissionPublishNotReadyError(
-                msg="FAILED_CLOSED forward recovery only supports resource scopes",
+                msg="FAILED_CLOSED forward recovery requires its original business fence",
             )
 
         correction = await self._terminal_correction(plan.deltas)
@@ -373,10 +380,7 @@ class ProjectionService:
             )
         if len(preview.correction_deltas) > MAX_ATOMIC_TUPLES:
             raise PermissionPublishNotReadyError(
-                msg=(
-                    "FAILED_CLOSED recovery requires more than "
-                    f"{MAX_ATOMIC_TUPLES} atomic tuple corrections"
-                ),
+                msg=(f"FAILED_CLOSED recovery requires more than {MAX_ATOMIC_TUPLES} atomic tuple corrections"),
             )
         if not await self._scope_guard.is_failed_closed_recovery_scope(
             plan,
@@ -405,9 +409,7 @@ class ProjectionService:
         try:
             await self._marker.arm(plan)
             commit_checksum = (
-                await self._write(preview.correction_deltas)
-                if preview.correction_deltas
-                else operation.after_checksum
+                await self._write(preview.correction_deltas) if preview.correction_deltas else operation.after_checksum
             )
         except Exception as exc:
             if not await self._is_after(plan.deltas):
@@ -455,6 +457,10 @@ class ProjectionService:
     ) -> ProjectionOutcome:
         try:
             await self._scope_guard.reserve(plan, int(operation.id))
+        except ProjectionScopeDeferred as exc:
+            if plan.scope_type != "llm_model_deletion":
+                await self.abandon_prepared(plan, exc)
+            raise
         except Exception as exc:
             await self.abandon_prepared(plan, exc)
             raise
@@ -656,7 +662,9 @@ class ProjectionService:
     ) -> str:
         writes = tuple(delta for delta in deltas if delta.action == "WRITE")
         deletes = tuple(delta for delta in deltas if delta.action == "DELETE")
-        return await self._fga.write_atomic(writes=writes, deletes=deletes)
+        from bisheng.permission.domain.services.maintenance_guard import guarded_fga_write
+
+        return await guarded_fga_write(self._fga, writes=writes, deletes=deletes)
 
     async def _pending_stage_deltas(
         self,
@@ -771,6 +779,8 @@ class ProjectionService:
         )
         try:
             if inverse:
+                if not await self._scope_guard.is_expected_version(plan, int(operation.id)):
+                    raise PermissionVersionConflictError(msg="Projection scope changed before stage compensation")
                 await self._write(inverse)
             if applied and await self._classify(applied) != "BEFORE":
                 raise RuntimeError("stage compensation verification failed")

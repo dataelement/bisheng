@@ -1,0 +1,395 @@
+pageType: cover
+background:
+  type: solid
+  color: $navy
+notes: |
+  管理层汇报主题：中国跨境电商从流量出海到本地经营。
+  2024 年统一采用海关总署在 2025 年 6 月披露的更新统计 2.71 万亿元；2024 年规模比 2020 年高约 67%。
+elements:
+  - elementId: cover-paper-field
+    elementType: shape
+    bounds:
+      - 0
+      - 398
+      - 960
+      - 142
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $paper
+      width: 0
+  - elementId: cover-cyan-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 14
+      - 398
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: cover-top-rule
+    elementType: line
+    bounds:
+      - 54
+      - 44
+      - 852
+      - 1
+    viewBox:
+      - 852
+      - 1
+    points: 0,0 852,0
+    border:
+      color: $mist
+      width: 0.8
+  - elementId: cover-route-1
+    elementType: line
+    bounds:
+      - 74
+      - 426
+      - 202
+      - 1
+    viewBox:
+      - 202
+      - 1
+    points: 0,0 202,0
+    border:
+      color: $ink
+      width: 1.6
+  - elementId: cover-route-2
+    elementType: line
+    bounds:
+      - 286
+      - 426
+      - 194
+      - 1
+    viewBox:
+      - 194
+      - 1
+    points: 0,0 194,0
+    border:
+      color: $ink
+      width: 1.6
+  - elementId: cover-route-3
+    elementType: line
+    bounds:
+      - 490
+      - 426
+      - 190
+      - 1
+    viewBox:
+      - 190
+      - 1
+    points: 0,0 190,0
+    border:
+      color: $ink
+      width: 1.6
+  - elementId: cover-route-4
+    elementType: line
+    bounds:
+      - 690
+      - 426
+      - 192
+      - 1
+    viewBox:
+      - 192
+      - 1
+    points: 0,0 192,0
+    border:
+      color: $ink
+      width: 1.6
+    arrow:
+      - null
+      - triangle
+  - elementId: cover-node-cn
+    elementType: shape
+    bounds:
+      - 62
+      - 414
+      - 24
+      - 24
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $ink
+      width: 1.2
+  - elementId: cover-node-sea
+    elementType: shape
+    bounds:
+      - 274
+      - 414
+      - 24
+      - 24
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $ink
+      width: 1.2
+  - elementId: cover-node-warehouse
+    elementType: shape
+    bounds:
+      - 478
+      - 408
+      - 34
+      - 36
+    shapeName: rect
+    fill:
+      type: solid
+      color: $clay
+    border:
+      color: $ink
+      width: 1.2
+  - elementId: cover-warehouse-door
+    elementType: shape
+    bounds:
+      - 488
+      - 426
+      - 14
+      - 18
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $ink
+      width: 1
+  - elementId: cover-node-local
+    elementType: shape
+    bounds:
+      - 678
+      - 414
+      - 24
+      - 24
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: $mist
+    border:
+      color: $ink
+      width: 1.2
+  - elementId: cover-report-code
+    elementType: text
+    bounds:
+      - 54
+      - 18
+      - 420
+      - 18
+    content:
+      text: MANAGEMENT OPERATING REPORT / 16
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8.5
+      bold: true
+      letterSpacing: 1.2
+      color: $mist
+  - elementId: cover-period
+    elementType: text
+    bounds:
+      - 724
+      - 18
+      - 182
+      - 18
+    content:
+      text: 2020—2024
+      fontFamily: *ref_0
+      fontSize: 8.5
+      bold: true
+      letterSpacing: 1.2
+      color: $mist
+      align:
+        - right
+        - top
+  - elementId: cover-title
+    elementType: text
+    bounds:
+      - 54
+      - 82
+      - 570
+      - 122
+    content:
+      text: 中国跨境电商<br>从流量出海到本地经营
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 41
+      bold: true
+      lineHeight: 1.15
+      color: $white
+  - elementId: cover-subtitle
+    elementType: text
+    bounds:
+      - 58
+      - 234
+      - 480
+      - 56
+    content:
+      text: 行业规模仍在增长，竞争能力正在从获客效率<br>迁移到库存、履约、合规与本地客户经营。
+      fontFamily: *ref_0
+      fontSize: 14
+      lineHeight: 1.42
+      color: $mist
+  - elementId: cover-hero
+    elementType: text
+    bounds:
+      - 672
+      - 82
+      - 230
+      - 86
+    content:
+      text: '2.71'
+      fontFamily: *ref_1
+      fontSize: 72
+      bold: true
+      letterSpacing: -2
+      color: $cyan
+      align:
+        - right
+        - top
+  - elementId: cover-hero-unit
+    elementType: text
+    bounds:
+      - 720
+      - 169
+      - 180
+      - 30
+    content:
+      text: 万亿元
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      color: $white
+      align:
+        - right
+        - top
+  - elementId: cover-hero-note
+    elementType: text
+    bounds:
+      - 684
+      - 213
+      - 216
+      - 58
+    content:
+      text: 2024 更新统计<br>同比 +14.0%<br>较 2020 约 +67%
+      fontFamily: *ref_0
+      fontSize: 10
+      lineHeight: 1.45
+      color: $mist
+      align:
+        - right
+        - top
+  - elementId: cover-cn-label
+    elementType: text
+    bounds:
+      - 52
+      - 454
+      - 102
+      - 40
+    content:
+      text: 中国供给<br>商品与品牌
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      lineHeight: 1.25
+      color: $ink
+  - elementId: cover-sea-label
+    elementType: text
+    bounds:
+      - 264
+      - 454
+      - 116
+      - 40
+    content:
+      text: 跨境链路<br>平台与干线
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      lineHeight: 1.25
+      color: $ink
+  - elementId: cover-wh-label
+    elementType: text
+    bounds:
+      - 468
+      - 454
+      - 120
+      - 40
+    content:
+      text: 海外仓<br>库存与退换货
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      lineHeight: 1.25
+      color: $ink
+  - elementId: cover-local-label
+    elementType: text
+    bounds:
+      - 668
+      - 454
+      - 120
+      - 40
+    content:
+      text: 本地经营<br>客户与合规
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      lineHeight: 1.25
+      color: $ink
+  - elementId: cover-thesis
+    elementType: text
+    bounds:
+      - 794
+      - 454
+      - 112
+      - 42
+    content:
+      text: 增长终点<br>留在当地
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      lineHeight: 1.18
+      color: $ink
+      align:
+        - right
+        - top
+  - elementId: cover-source
+    elementType: text
+    bounds:
+      - 54
+      - 514
+      - 700
+      - 14
+    content:
+      text: 数据：海关总署 2024 更新统计｜派生值根据海关披露数据计算
+      fontFamily: *ref_0
+      fontSize: 7.5
+      color: $muted
+  - elementId: cover-page
+    elementType: text
+    bounds:
+      - 866
+      - 514
+      - 40
+      - 14
+    content:
+      text: 16—01
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $ink
+      align:
+        - right
+        - bottom

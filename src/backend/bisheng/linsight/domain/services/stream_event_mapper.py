@@ -26,13 +26,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
 from loguru import logger
 
+from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.common.services.llm_error_classifier import classify_for_event
 from bisheng.common.utils.think_tags import strip_reasoning_tags
+from bisheng.linsight.domain.schemas import run_events
 from bisheng_langchain.linsight.event import (
     BaseEvent,
     ExecStep,
@@ -105,6 +109,9 @@ class _TodoProjection:
     task_id: str
     content: str
     status: str
+    # Wording this row had before the update that produced this projection
+    # rewrote it. Set only on that one update; None otherwise.
+    previous_content: str | None = None
 
 
 @dataclass
@@ -195,6 +202,11 @@ class StreamEventMapper:
 
     def __init__(self, svid: str):
         self.ctx = StreamContext(svid=svid)
+        # F004: call_id -> the complete output of a main-graph tool call whose
+        # event output was truncated. None (default) keeps nothing. A run driver
+        # that stores the complete result sets this to a dict and pops each entry
+        # when it has used it (``DirectRunner``); the emitted events do not change.
+        self.full_outputs: dict[str, str] | None = None
 
     # -- public entry ------------------------------------------------------
 
@@ -333,44 +345,53 @@ class StreamEventMapper:
         ]
 
     def _diff_todos(self, new_todos: list[dict[str, Any]]) -> list[BaseEvent]:
-        """3-level diff alignment of write_todos snapshots (design §3.3.1)."""
+        """Two-pass diff alignment of write_todos snapshots (design §3.3.1; F004 决策 6).
+
+        Pass 1 gives every new item whose wording is unchanged its old row back.
+        Pass 2 lets the remaining new items inherit, by position, an old row that
+        pass 1 left unclaimed (the model reworded it). Whatever is still unmatched
+        is a new row. Doing both in ONE loop was wrong once users could edit the
+        plan mid-run: an item inserted in the middle took the next row's id by
+        position before that row had the chance to match by content, and every
+        untouched row after it changed id.
+        """
         old = self.ctx.todos
         used_old_idx: set[int] = set()
+        items = [(str(item.get("content", "")), str(item.get("status", "pending"))) for item in new_todos]
+        matched_old: list[_TodoProjection | None] = [None] * len(items)
+
+        # Pass 1: exact content match
+        for pos, (content, _status) in enumerate(items):
+            for i, o in enumerate(old):
+                if i not in used_old_idx and o.content == content:
+                    matched_old[pos] = o
+                    used_old_idx.add(i)
+                    break
+        # Pass 2: positional alignment (content rewritten)
+        for pos in range(len(items)):
+            if matched_old[pos] is None and pos < len(old) and pos not in used_old_idx:
+                matched_old[pos] = old[pos]
+                used_old_idx.add(pos)
+
         new_projection: list[_TodoProjection] = []
         newly_generated: list[_TodoProjection] = []
         renamed: list[_TodoProjection] = []
         status_events: list[BaseEvent] = []
 
-        for pos, item in enumerate(new_todos):
-            content = str(item.get("content", ""))
-            status = str(item.get("status", "pending"))
-
-            matched: _TodoProjection | None = None
-            # Level 1: exact content match
-            for i, o in enumerate(old):
-                if i in used_old_idx:
-                    continue
-                if o.content == content:
-                    matched = o
-                    used_old_idx.add(i)
-                    break
-            # Level 2: positional alignment (content rewritten)
-            if matched is None and pos < len(old) and pos not in used_old_idx:
-                matched = old[pos]
-                used_old_idx.add(pos)
-
+        for (content, status), matched in zip(items, matched_old, strict=True):
             if matched is not None:
                 proj = _TodoProjection(task_id=matched.task_id, content=content, status=status)
                 new_projection.append(proj)
                 if matched.content != content:
-                    # Level-2 alignment reused an existing row id while the model
+                    # Positional alignment reused an existing row id while the model
                     # REWROTE the wording. Re-announce it so the DB row's task_data
                     # (and therefore the panel after a refresh) follows the current
-                    # plan instead of keeping the very first draft's title.
+                    # plan instead of keeping the very first draft's title. The old
+                    # wording rides along so the panel can show what was replaced.
+                    proj.previous_content = matched.content
                     renamed.append(proj)
                 status_events.extend(self._status_transition(matched.status, status, proj))
             else:
-                # Level 3: brand new
                 proj = _TodoProjection(
                     task_id=_stable_task_id(self.ctx.svid, content),
                     content=content,
@@ -416,6 +437,7 @@ class StreamEventMapper:
                             "task_id": p.task_id,
                             "name": p.content,
                             "status": p.status,
+                            **({"previous_name": p.previous_content} if p.previous_content else {}),
                         }
                         for p in (*newly_generated, *renamed)
                     ],
@@ -462,6 +484,20 @@ class StreamEventMapper:
         enriched = self._reconcile_open_delegations()
 
         # Thinking stream: reasoning_content (DeepSeek-R1) or thinking blocks.
+        if info := FailureContextAdapter.from_payload(getattr(message, "additional_kwargs", None)):
+            enriched.append(
+                ExecStep(
+                    task_id=self.ctx.svid,
+                    call_id=f"model_failure:{info['failure_id']}",
+                    name="model_call",
+                    call_reason="",
+                    params=None,
+                    output="Model call failed.",
+                    step_type="tool",
+                    status="end",
+                    extra_info={"failure_info": info, **({"namespace": ns} if ns else {})},
+                )
+            )
         thinking = self._extract_thinking(message)
         # A whitespace-only delta is the model's own line break and MUST survive:
         # dropping it split the segment (``normalize`` closes a segment on any
@@ -693,12 +729,20 @@ class StreamEventMapper:
         # also carried the tool result), recover them from the buffer so the end
         # frame still carries the delegation goal. The buffer is then disposable.
         self._enrich_delegation_from_buffer(open_call)
+        # A streamed ordinary tool call surfaced with empty args (only the first
+        # delta carries name+id); its reassembled args are complete by now.
+        if not open_call.params:
+            open_call.params = self._parse_arg_buffer(raw_call_id) or open_call.params
         self.ctx.tool_arg_buffers.pop(raw_call_id, None)
         return [self._build_end_step(open_call, payload)]
 
     def _build_end_step(self, open_call: _OpenCall, payload: dict[str, Any]) -> ExecStep:
         output, truncated = _truncate(payload.get("output"))
+        if truncated and self.full_outputs is not None and not open_call.namespace:
+            self.full_outputs[open_call.call_id] = payload["output"]
         extra_info: dict[str, Any] = {"truncated": truncated}
+        if info := FailureContextAdapter.from_payload(payload.get("output")):
+            extra_info["failure_info"] = info
         if open_call.delegate_goal is not None:
             extra_info["delegate_goal"] = open_call.delegate_goal
         if open_call.namespace:
@@ -836,3 +880,338 @@ class StreamEventMapper:
                     parts.append(str(block))
             return "".join(parts)
         return str(content)
+
+
+# ==========================================================================
+# F004 unified run events — the mapper's second, opt-in output (design §4.3)
+# ==========================================================================
+
+# Receives one unified event ``{type, data, run_id?}``. In production this is
+# ``EventWriter.emit`` (or a wrapper around ``RunEventStream.append``); the mapper
+# itself still touches no Redis.
+UnifiedSink = Callable[[dict[str, Any]], Awaitable[Any]]
+
+_PLAN_STATUS_BY_TODO_STATUS = {
+    "pending": run_events.PLAN_PENDING,
+    "in_progress": run_events.PLAN_IN_PROGRESS,
+    "completed": run_events.PLAN_COMPLETED,
+    "done": run_events.PLAN_COMPLETED,
+}
+
+_ASK_USER_TOOL_NAME = "ask_user"
+
+
+class UnifiedEventOutput:
+    """Turn what a ``StreamEventMapper`` produces into unified run events.
+
+    The legacy output is untouched: ``feed`` calls ``mapper.normalize`` exactly as
+    the WebSocket path does and returns the same ``BaseEvent`` list, so a run
+    driver can keep persisting with them (design 决策 8) while every event also
+    goes to the unified channel through ``sink``.
+
+    Mapping:
+
+    - ``GenerateSubTask`` / ``TaskStart`` / ``TaskEnd`` -> one ``plan`` event
+      carrying the WHOLE plan, read from the mapper's own ``ctx.todos``;
+    - ``ExecStep`` -> ``thinking`` (a delta) or ``tool_call`` (start / end);
+    - ``NeedUserInput`` -> ``ask_user``;
+    - answer text of the main graph -> ``text`` (the legacy output has no event
+      for it: deep research takes its answer from the final state instead).
+
+    Run lifecycle and the events the mapper cannot see (``queued``, ``steer_*``,
+    ``file``, ``ask_user_answered``) are emitted through the helper methods.
+    After a terminal event nothing else is sent.
+
+    State kept here is translation bookkeeping of ONE run in ONE process, like
+    ``StreamContext``. The accumulated run state lives in the Redis snapshot the
+    sink maintains.
+    """
+
+    def __init__(self, mapper: StreamEventMapper, sink: UnifiedSink, *, run_id: str | None = None):
+        self.mapper = mapper
+        self.run_id = run_id
+        self._sink = sink
+        self._ended = False
+        # task_id -> wording before the most recent rewrite. The mapper reports it
+        # only on the update that reworded the row; a full snapshot must keep
+        # showing it afterwards (AC-10).
+        self._previous_content: dict[str, str] = {}
+        # task_id -> (position in the last emitted plan, row) for rows the model
+        # dropped. They are gone from ``ctx.todos`` but stay in the plan as
+        # ``cancelled`` (AC-11).
+        self._cancelled: dict[str, tuple[int, run_events.PlanItem]] = {}
+        self._plan_ids: list[str] = []
+
+    def seed_plan(self, items: list[Any] | None) -> None:
+        """Take over the plan of a run that continues with a new mapper.
+
+        A run that resumes after ``ask_user`` gets a fresh mapper and a fresh
+        output. ``items`` is the plan of the Redis snapshot (the last ``plan``
+        event). Seeding keeps row ids stable across the pause and keeps the
+        cancelled rows and the ``previous_content`` of reworded rows.
+        """
+        todos: list[_TodoProjection] = []
+        self._plan_ids = []
+        for position, raw in enumerate(items or []):
+            item = raw if isinstance(raw, run_events.PlanItem) else run_events.PlanItem.model_validate(raw)
+            self._plan_ids.append(item.id)
+            if item.previous_content:
+                self._previous_content[item.id] = item.previous_content
+            if item.status == run_events.PLAN_CANCELLED:
+                self._cancelled[item.id] = (position, item)
+            else:
+                todos.append(_TodoProjection(task_id=item.id, content=item.content, status=item.status))
+        self.mapper.ctx.todos = todos
+
+    # -- stream ------------------------------------------------------------
+
+    async def feed(self, mode: str, chunk: Any, namespace: tuple[str, ...] | None = None) -> list[BaseEvent]:
+        """Normalize one stream chunk, publish its unified events, return the legacy ones."""
+        if self._ended or self.mapper.ctx.terminated:
+            return []
+        events = self.mapper.normalize(mode, chunk, namespace)
+        unified = self.convert(events)
+        text = self._answer_text(mode, chunk, namespace)
+        if text:
+            # Reasoning of the same chunk comes before the answer it led to; a tool
+            # call announced by the same message comes after its lead-in text.
+            position = max(
+                (i + 1 for i, event in enumerate(unified) if event["type"] == run_events.THINKING),
+                default=0,
+            )
+            unified.insert(position, self._event(run_events.TEXT, run_events.TextData(text=text)))
+        for event in unified:
+            await self._emit(event)
+        return events
+
+    def convert(self, events: list[BaseEvent]) -> list[dict[str, Any]]:
+        """Map the mapper's ``BaseEvent`` output of one chunk to unified events."""
+        out: list[dict[str, Any]] = []
+        plan_position: int | None = None
+        for event in events:
+            if isinstance(event, (GenerateSubTask, TaskStart, TaskEnd)):
+                if isinstance(event, TaskEnd) and event.status == _TODO_DROPPED_STATUS:
+                    self._note_cancelled(event)
+                if plan_position is None:
+                    plan_position = len(out)
+            elif isinstance(event, NeedUserInput):
+                out.append(self._ask_user_event(event))
+            elif isinstance(event, ExecStep):
+                out.append(self._step_event(event))
+        if plan_position is not None:
+            # One snapshot per chunk, however many rows changed in it.
+            out.insert(plan_position, self._plan_event())
+        return out
+
+    # -- lifecycle and events the mapper cannot see -------------------------
+
+    async def run_started(self, data: dict[str, Any] | None = None) -> None:
+        await self._emit(self._event(run_events.RUN_STARTED, data))
+
+    async def run_finished(self, data: dict[str, Any] | None = None) -> None:
+        await self._emit_terminal(self._event(run_events.RUN_FINISHED, data))
+
+    async def run_stopped(self, reason: str | None = None, unread_messages: list[dict[str, Any]] | None = None) -> None:
+        """``run_stopped`` with ``{reason, status: "stopped", unread_messages}`` (design §7 items 2, 6)."""
+        await self._emit_terminal(
+            self._event(run_events.RUN_STOPPED, run_events.stopped_data(unread_messages, reason=reason or "user"))
+        )
+
+    async def run_failed(self, error: BaseException | str) -> None:
+        """Publish ``run_failed`` with deep research's error-card fields.
+
+        Same classification and redaction as ``task_exec._handle_task_failure``:
+        ``code`` / ``reason`` come from ``classify_for_event`` (a registered
+        business error code in the cause chain wins), ``detail`` and
+        ``reference_id`` from ``FailureContextAdapter``.
+        """
+        classified = classify_for_event(error)
+        if isinstance(error, BaseException):
+            payload = FailureContextAdapter.public_payload(
+                {"error_code": classified.error_code, "error_type": classified.error_type}, exc=error
+            )
+            failure_info = payload.get("failure_info")
+            data = run_events.RunFailedData(
+                code=payload["error_code"],
+                reason=payload["error_type"],
+                detail=payload["detail"],
+                # A dependency failure is found by its failure_id; a business error
+                # code needs no reference, so that case stays None.
+                reference_id=payload.get("reference_id") or (failure_info or {}).get("failure_id"),
+                failure_info=failure_info,
+            )
+        else:
+            data = run_events.RunFailedData(
+                code=classified.error_code,
+                reason=classified.error_type,
+                detail=FailureContextAdapter.public_text(error),
+                reference_id=None,
+            )
+        await self._emit_terminal(self._event(run_events.RUN_FAILED, data))
+
+    async def queued(self, position: int) -> None:
+        await self._emit(self._event(run_events.QUEUED, run_events.QueuedData(position=position)))
+
+    async def steer_accepted(self, message_id: str) -> None:
+        await self._emit(self._event(run_events.STEER_ACCEPTED, run_events.SteerData(message_id=message_id)))
+
+    async def steer_read(self, message_id: str) -> None:
+        await self._emit(self._event(run_events.STEER_READ, run_events.SteerData(message_id=message_id)))
+
+    async def ask_user_answered(self, call_id: str | None = None, answer: Any = None) -> None:
+        await self._emit(
+            self._event(run_events.ASK_USER_ANSWERED, run_events.AskUserAnsweredData(call_id=call_id, answer=answer))
+        )
+
+    async def file(
+        self, *, file_id: str, name: str, path: str, size: int | None = None, source: str | None = None
+    ) -> None:
+        await self._emit(
+            self._event(
+                run_events.FILE, run_events.FileData(file_id=file_id, name=name, path=path, size=size, source=source)
+            )
+        )
+
+    # -- internals ----------------------------------------------------------
+
+    def _event(self, event_type: str, data: Any = None) -> dict[str, Any]:
+        return run_events.make_event(event_type, data, run_id=self.run_id)
+
+    async def _emit(self, event: dict[str, Any]) -> None:
+        if self._ended:
+            return
+        await self._sink(event)
+
+    async def _emit_terminal(self, event: dict[str, Any]) -> None:
+        # First terminal event wins, like ``StreamEventMapper.terminate``.
+        if self._ended:
+            return
+        await self._sink(event)
+        self._ended = True
+
+    def _plan_event(self) -> dict[str, Any]:
+        items: list[run_events.PlanItem] = []
+        for todo in self.mapper.ctx.todos:
+            if todo.previous_content:
+                self._previous_content[todo.task_id] = todo.previous_content
+            # The model put a dropped row back with the same wording (same id).
+            self._cancelled.pop(todo.task_id, None)
+            if not todo.content.strip():
+                # A model that writes a plan row without text is misbehaving
+                # (measured once with qwen3.8-max, design 决策 6). Show it as it is
+                # and leave a trace; do not invent a title.
+                logger.warning(
+                    "unified_event_output: plan row without text svid={} task_id={}",
+                    self.mapper.ctx.svid,
+                    todo.task_id,
+                )
+            items.append(
+                run_events.PlanItem(
+                    id=todo.task_id,
+                    content=todo.content,
+                    previous_content=self._previous_content.get(todo.task_id),
+                    status=_PLAN_STATUS_BY_TODO_STATUS.get(todo.status, run_events.PLAN_PENDING),
+                )
+            )
+        cancelled_ids = set(self._cancelled)
+        for position, item in sorted(self._cancelled.values(), key=lambda entry: entry[0]):
+            items.insert(min(position, len(items)), item)
+        self._plan_ids = [item.id for item in items]
+        self._cancelled = {item.id: (i, item) for i, item in enumerate(items) if item.id in cancelled_ids}
+        return self._event(run_events.PLAN, run_events.PlanData(items=items))
+
+    def _note_cancelled(self, event: TaskEnd) -> None:
+        """Keep a row the model dropped, at the place it had in the last plan."""
+        task_id = event.task_id
+        position = self._plan_ids.index(task_id) if task_id in self._plan_ids else len(self._plan_ids)
+        self._cancelled[task_id] = (
+            position,
+            run_events.PlanItem(
+                id=task_id,
+                content=event.name,
+                previous_content=self._previous_content.get(task_id),
+                status=run_events.PLAN_CANCELLED,
+            ),
+        )
+
+    def _step_event(self, step: ExecStep) -> dict[str, Any]:
+        extra_info = dict(step.extra_info or {})
+        if step.step_type == "thinking":
+            return self._event(
+                run_events.THINKING,
+                run_events.TextData(
+                    text=step.output or "", call_id=step.call_id, namespace=extra_info.get("namespace")
+                ),
+            )
+        return self._event(
+            run_events.TOOL_CALL,
+            run_events.ToolCallData(
+                call_id=step.call_id,
+                name=step.name,
+                status="end" if step.status == "end" else "start",
+                step_type=step.step_type or "tool",
+                call_reason=step.call_reason or "",
+                params=step.params,
+                output=step.output,
+                extra_info=extra_info,
+            ),
+        )
+
+    def _ask_user_event(self, event: NeedUserInput) -> dict[str, Any]:
+        params = event.params if isinstance(event.params, dict) else {}
+        questions = []
+        for call in params.get("tool_calls") or []:
+            if not isinstance(call, dict):
+                continue
+            args = call.get("args") if isinstance(call.get("args"), dict) else {}
+            questions.append(
+                run_events.AskUserQuestion(
+                    id=str(call["id"]) if call.get("id") is not None else None,
+                    question=str(args.get("question") or ""),
+                    options=[str(option) for option in args.get("options") or []],
+                    multiple=bool(args.get("multiple")),
+                )
+            )
+        return self._event(
+            run_events.ASK_USER,
+            run_events.AskUserData(
+                call_id=self._ask_user_call_id(), reason=event.call_reason or "", questions=questions
+            ),
+        )
+
+    def _ask_user_call_id(self) -> str:
+        """Id of the ``ask_user`` tool call that is waiting for the answer.
+
+        An interrupt carries no tool-call id, but the call that raised it is the
+        one the mapper still holds open (it got a start frame and no end frame).
+        """
+        ctx = self.mapper.ctx
+        for open_call in reversed(list(ctx.open_calls.values())):
+            if open_call.name == _ASK_USER_TOOL_NAME and not open_call.namespace:
+                return open_call.call_id
+        # An interrupt that did not come from the ask_user tool.
+        return f"ask_user:{ctx.svid}:{ctx.run_token}"
+
+    @staticmethod
+    def _answer_text(mode: str, chunk: Any, namespace: tuple[str, ...] | None) -> str | None:
+        """Answer text of a main-graph model message in the ``messages`` stream.
+
+        A subagent's text is an intermediate result for the main graph, not the
+        answer, so namespaced chunks are skipped. Thinking blocks are not text.
+        """
+        if mode != "messages" or namespace:
+            return None
+        message = chunk[0] if isinstance(chunk, (list, tuple)) and chunk else chunk
+        if getattr(message, "type", None) not in ("ai", "AIMessageChunk"):
+            return None
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content or None
+        if isinstance(content, list):
+            parts = [
+                str(block.get("text") or "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            ]
+            return "".join(parts) or None
+        return None

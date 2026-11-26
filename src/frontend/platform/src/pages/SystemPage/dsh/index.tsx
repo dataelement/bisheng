@@ -1,3 +1,4 @@
+import { LoadingState } from '@/components/bs-icons/loading/LoadingState'
 import { Button } from '@bisheng/ui'
 import { getModelListApi } from '@/controllers/API/finetune'
 import { userContext } from '@/contexts/userContext'
@@ -8,6 +9,7 @@ import type { DshSection } from '@/pages/DshPage/sections'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CreditRulesView } from './CreditRulesView'
+import { CreditSettingsPanel } from './CreditSettingsPanel'
 import { AuditHistory } from './AuditHistory'
 import { PolicyView } from './PolicyView'
 import { SettingsPanel } from './SettingsPanel'
@@ -21,13 +23,16 @@ export function DshManagement({ section = 'credits' }: DshManagementProps) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
-    if (!config) return <div role={failed ? 'alert' : 'status'}>{t(failed ? 'dsh.unavailable' : 'dsh.loading')}</div>
+    if (!config) return failed ? <div role="alert">{t('dsh.unavailable')}</div> : <LoadingState size="page" label={t('dsh.loading')} className="h-full" />
     if (!config.management_enabled) return <p>{t('dsh.managementUnavailable')}</p>
     const activeSection = config.enabled ? section : 'access'
     return <div className="flex h-full min-h-0 flex-col px-2 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
-            {activeSection === 'credits' && <CreditRulesView />}
+            {activeSection === 'credits' && <div className="space-y-8">
+                <CreditSettingsPanel />
+                <CreditRulesView />
+            </div>}
             {activeSection === 'usage' && <PolicyView />}
             {activeSection === 'model-audit' && <ModelAuditPanel />}
             {activeSection === 'operations' && <AuditHistory revision={0} />}
@@ -62,7 +67,7 @@ function DshModelsView() {
         return (
             <div className="space-y-3">
                 <p role={error ? 'alert' : 'status'}>
-                    {t(error ? 'dsh.modelsUnavailable' : 'dsh.loading')}
+                    {error ? t('dsh.modelsUnavailable') : <LoadingState label={t('dsh.loading')} />}
                 </p>
                 {error && (
                     <Button
