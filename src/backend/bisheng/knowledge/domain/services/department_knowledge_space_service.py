@@ -43,6 +43,7 @@ from bisheng.user.domain.models.user import UserDao
 
 
 class DepartmentKnowledgeSpaceService:
+    DEFAULT_NAME_MAX_LENGTH = 50
     DEFAULT_AUTH_TYPE = AuthTypeEnum.APPROVAL
     # Department knowledge spaces are not published to the square by default;
     # admins can opt in per-space via the edit dialog.
@@ -55,7 +56,8 @@ class DepartmentKnowledgeSpaceService:
 
     @classmethod
     def _build_default_name(cls, department_name: str) -> str:
-        return f"{department_name}的知识空间"
+        suffix = "的知识空间"
+        return department_name[: cls.DEFAULT_NAME_MAX_LENGTH - len(suffix)] + suffix
 
     @classmethod
     def _build_default_description(cls, department_name: str) -> str:

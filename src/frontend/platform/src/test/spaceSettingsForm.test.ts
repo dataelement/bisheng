@@ -19,14 +19,16 @@ const info: KnowledgeSpaceInfo = {
   auto_tag_mode: "custom",
   auto_tag_custom_tags: ["first", "second"],
 };
-it("matches the client's full-width name and description limits", () => {
+it("counts each name character once and keeps the full-width description limit", () => {
   const draft = spaceSettingsDraft(info)!;
-  draft.name = "a".repeat(20);
   draft.description = "b".repeat(400);
-  expect(validSpaceSettings(draft, false)).toBe(true);
-  draft.name += "a";
-  expect(validSpaceSettings(draft, false)).toBe(false);
-  draft.name = ideograph.repeat(10);
+  for (const character of ["a", ideograph, "😀"]) {
+    draft.name = character.repeat(50);
+    expect(validSpaceSettings(draft, false)).toBe(true);
+    draft.name += character;
+    expect(validSpaceSettings(draft, false)).toBe(false);
+  }
+  draft.name = ideograph.repeat(50);
   draft.description = ideograph.repeat(200);
   expect(validSpaceSettings(draft, false)).toBe(true);
   draft.description += ideograph;
@@ -42,9 +44,14 @@ it("truncates mixed text in full-width units without splitting a surrogate pair"
   );
 });
 it("does not silently truncate a saved long name when opening settings", () => {
-  const draft = spaceSettingsDraft({ ...info, name: "a".repeat(21) })!;
-  expect(draft.name).toHaveLength(21);
+  const original = { ...info, name: " " + "a".repeat(51) };
+  const draft = spaceSettingsDraft(original)!;
+  expect(draft.name).toBe(original.name);
   expect(validSpaceSettings(draft, false)).toBe(false);
+  expect(validSpaceSettings(draft, false, original.name)).toBe(true);
+  expect(spaceSettingsPayload(draft, original, false, false).name).toBe(original.name);
+  draft.name = "b".repeat(51);
+  expect(validSpaceSettings(draft, false, original.name)).toBe(false);
 });
 it("restores saved custom tags without inventing a library binding", () => {
   expect(spaceSettingsDraft(info)).toMatchObject({

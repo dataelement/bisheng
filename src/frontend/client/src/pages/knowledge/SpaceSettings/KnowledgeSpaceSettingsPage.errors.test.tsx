@@ -9,6 +9,7 @@ const mockNavigate = jest.fn();
 const mockNotify = jest.fn();
 const mockSettings = {
   mode: 'edit', loading: false, loadError: null, canEdit: true, canManagePermissions: false,
+  originalName: 'Space',
   relationModels: [], permissionRows: [], autoTagFeatureVisible: true,
   tagLibraries: [{ id: 1, name: 'Library' }], autoTagPreview: [],
   form: { name: 'Space', description: 'Keep these edits', visibility: 'private', autoTagEnabled: true,
@@ -31,7 +32,6 @@ jest.mock('~/hooks/useSelectCopy', () => ({ __esModule: true, default: () => ({}
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: mockNotify }) }));
 jest.mock('~/utils', () => ({
   cn: (...values: unknown[]) => values.filter(Boolean).join(' '),
-  getFullWidthLength: (value: string) => value.length,
   truncateByFullWidth: (value: string) => value,
 }));
 jest.mock('~/components/permission/PermissionDraftPanel', () => ({ PermissionDraftPanel: () => null }));
@@ -45,10 +45,29 @@ beforeEach(() => {
   window.showToast = mockNotify;
   mockSubmit.mockReset();
   mockSettings.mode = 'edit';
+  mockSettings.originalName = 'Space';
+  mockSettings.form.name = 'Space';
 });
 
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'com_unified_permission.save' }));
 const failure = () => normalizeApiError({ status_code: 10989, status_message: 'Invalid library', data: { message: 'PRIVATE details' } }, { message: 'PRIVATE details' });
+
+it('blocks a new name beyond 50 characters and permits an unchanged saved long name', () => {
+  mockSettings.form.name = String.fromCodePoint(0x7814).repeat(50);
+  const { rerender } = render(<KnowledgeSpaceSettingsPage />);
+  const button = screen.getByRole('button', { name: 'com_unified_permission.save' });
+  expect(screen.getByText('50/50')).toBeInTheDocument();
+  expect(button).toBeEnabled();
+
+  mockSettings.form.name += 'A';
+  rerender(<KnowledgeSpaceSettingsPage />);
+  expect(screen.getByText('51/50')).toBeInTheDocument();
+  expect(button).toBeDisabled();
+
+  mockSettings.originalName = mockSettings.form.name;
+  rerender(<KnowledgeSpaceSettingsPage />);
+  expect(button).toBeEnabled();
+});
 
 it('shows the tag-library business error and retains the edit page for retry', async () => {
   mockSubmit.mockRejectedValueOnce(failure()).mockResolvedValueOnce({ id: '4322' });

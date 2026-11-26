@@ -174,6 +174,13 @@ def _load_service_class():
     return module.DepartmentKnowledgeSpaceService
 
 
+@pytest.mark.parametrize("department_name", ["研" * 50, "a" * 50, "😀" * 50])
+def test_default_space_name_keeps_suffix_within_fifty_characters(department_name):
+    service_cls = _load_service_class()
+
+    assert service_cls._build_default_name(department_name) == department_name[:45] + "的知识空间"
+
+
 def _make_login_user(*, is_admin: bool = True):
     return SimpleNamespace(
         user_id=1,

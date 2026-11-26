@@ -1435,7 +1435,7 @@
     "departmentKnowledgeSpaceSaveSuccess": "保存しました",
     "departmentKnowledgeSpaceConfigured": "設定済み",
     "departmentKnowledgeSpaceHidden": "非表示",
-    "departmentKnowledgeSpaceDefaultName": "既定のスペース名",
+    "departmentKnowledgeSpaceDefaultName": "既定のスペース名：{{departmentName}}的知识空间",
     "departmentKnowledgeSpaceManager": "部門ナレッジスペース管理",
     "departmentKnowledgeSpaceManagerDesc2": "部門を選択してナレッジスペースを作成します。設定済み部門の選択を解除すると、スペースやデータを削除せず非表示にできます。",
     "departmentKnowledgeSpaceClearAll": "選択を解除",

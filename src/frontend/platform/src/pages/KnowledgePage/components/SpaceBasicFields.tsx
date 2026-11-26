@@ -1,25 +1,24 @@
 import { Input, Textarea } from "@bisheng/ui";
+import { isValidSpaceName, SPACE_NAME_LIMIT, spaceNameLength } from "@bisheng/knowledge";
 import { useId, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  getSpaceTextLength,
   SPACE_DESCRIPTION_LIMIT,
-  SPACE_NAME_LIMIT,
   truncateSpaceText,
 } from "./spaceSettingsForm";
 
 const LEGACY_SPACE_TEXT_LIMIT = 200;
 
-export function isValidSpaceBasic(name: string, description: string) {
+export function isValidSpaceBasic(name: string, description: string, originalName?: string) {
   return (
-    name.trim().length > 0 &&
-    name.length <= LEGACY_SPACE_TEXT_LIMIT &&
+    isValidSpaceName(name, originalName) &&
     description.length <= LEGACY_SPACE_TEXT_LIMIT
   );
 }
 
 interface SpaceBasicFieldsProps {
   name: string;
+  originalName?: string;
   description: string;
   onNameChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
@@ -30,6 +29,7 @@ interface SpaceBasicFieldsProps {
 
 export function SpaceBasicFields({
   name,
+  originalName,
   description,
   onNameChange,
   onDescriptionChange,
@@ -39,10 +39,9 @@ export function SpaceBasicFields({
 }: SpaceBasicFieldsProps) {
   const { t } = useTranslation("knowledge");
   const id = useId();
-  const nameComposing = useRef(false);
   const descriptionComposing = useRef(false);
-  const nameLength = getSpaceTextLength(name);
-  const nameTooLong = mode === "settings" && nameLength > SPACE_NAME_LIMIT;
+  const nameLength = spaceNameLength(name);
+  const nameTooLong = name !== originalName && nameLength > SPACE_NAME_LIMIT;
   const fieldClassName = compact ? "space-y-2" : undefined;
   const labelClassName = compact
     ? "block text-body font-medium text-text-1"
@@ -61,36 +60,16 @@ export function SpaceBasicFields({
           disabled={disabled}
           required={compact}
           status={nameTooLong ? "error" : undefined}
-          aria-describedby={mode ? `${id}-name-count` : undefined}
+          aria-describedby={`${id}-name-count`}
           suffix={
-            mode ? (
-              <span
-                id={`${id}-name-count`}
-                className={`text-body-sm ${nameTooLong ? "text-danger" : "text-text-3"}`}
-              >
-                {Math.ceil(nameLength)}/{SPACE_NAME_LIMIT}
-              </span>
-            ) : undefined
+            <span
+              id={`${id}-name-count`}
+              className={`text-body-sm ${nameTooLong ? "text-danger" : "text-text-3"}`}
+            >
+              {nameLength}/{SPACE_NAME_LIMIT}
+            </span>
           }
-          onCompositionStart={() => {
-            nameComposing.current = true;
-          }}
-          onCompositionEnd={(event) => {
-            nameComposing.current = false;
-            if (mode) {
-              onNameChange(
-                truncateSpaceText(event.currentTarget.value, SPACE_NAME_LIMIT),
-              );
-            }
-          }}
-          onChange={(event) => {
-            const value = event.target.value;
-            onNameChange(
-              mode && !nameComposing.current
-                ? truncateSpaceText(value, SPACE_NAME_LIMIT)
-                : value,
-            );
-          }}
+          onChange={(event) => onNameChange(event.target.value)}
         />
       </div>
       <div className={fieldClassName}>

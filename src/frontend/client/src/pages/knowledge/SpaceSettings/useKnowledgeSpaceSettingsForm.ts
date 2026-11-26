@@ -1,3 +1,4 @@
+import { isValidSpaceName } from "@bisheng/knowledge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { generateUUID } from "~/utils";
@@ -100,6 +101,8 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   } = permissionDraft;
   const [form, setForm] =
     useState<KnowledgeSpaceSettingsFormState>(INITIAL_FORM);
+  const [savedName, setSavedName] = useState<string>();
+  const originalName = mode === "edit" ? savedName : undefined;
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -223,6 +226,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         }
         setCanEdit(canEditSpace);
         setIsDepartmentSpace(space.departmentId != null || space.spaceKind === "department");
+        setSavedName(space.name);
         setForm({
           name: space.name,
           description: space.description ?? "",
@@ -273,7 +277,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     const customTags = parseKnowledgeSpaceCustomTags(form.autoTagCustomText);
     const autoTagEnabled = autoTagFeatureVisible && form.autoTagEnabled;
     return {
-      name: form.name.trim(),
+      name: form.name === originalName ? originalName : form.name.trim(),
       description: form.description.trim(),
       auth_type: form.visibility,
       is_released:
@@ -286,10 +290,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       auto_tag_custom_tags:
         autoTagEnabled && form.autoTagMode === "custom" ? customTags : null,
     };
-  }, [autoTagFeatureVisible, form]);
+  }, [autoTagFeatureVisible, form, originalName]);
 
   const submit = useCallback(async () => {
-    if (!form.name.trim() || submitting || (!canEdit && !canManagePermissions))
+    if (!isValidSpaceName(form.name, originalName) || submitting || (!canEdit && !canManagePermissions))
       return null;
     setSubmitting(true);
     try {
@@ -360,6 +364,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     form.name,
     form.visibility,
     mode,
+    originalName,
     permissionDiff.changes,
     permissionHasChanges,
     permissionRows,
@@ -392,6 +397,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   return {
     mode,
     form,
+    originalName,
     updateForm,
     loading,
     submitting,

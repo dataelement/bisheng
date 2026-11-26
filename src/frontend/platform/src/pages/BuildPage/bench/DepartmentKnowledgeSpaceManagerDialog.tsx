@@ -1,4 +1,5 @@
 import { Button, notification } from '@bisheng/ui';
+import { SPACE_NAME_LIMIT, truncateSpaceName } from '@bisheng/knowledge';
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department";
 
 import {
@@ -30,6 +31,9 @@ interface Props {
 }
 
 type Binding = { isHidden: boolean; name: string };
+
+// Reserve the same five characters as the backend's default space-name suffix.
+const DEPARTMENT_NAME_PREFIX_LIMIT = SPACE_NAME_LIMIT - 5;
 
 export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onChanged }: Props) {
     const { t } = useTranslation();
@@ -219,8 +223,9 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
                                 </div>
                                 {withDefaultName && (
                                     <div className="mt-1 pl-3.5 text-xs text-[#86909C]">
-                                        {t("bench.departmentKnowledgeSpaceDefaultName")}：
-                                        {`${nameOf(deptId)}的知识空间`}
+                                        {t("bench.departmentKnowledgeSpaceDefaultName", {
+                                            departmentName: truncateSpaceName(nameOf(deptId), DEPARTMENT_NAME_PREFIX_LIMIT),
+                                        })}
                                     </div>
                                 )}
                             </div>

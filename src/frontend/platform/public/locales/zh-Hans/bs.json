@@ -1441,7 +1441,7 @@
     "departmentKnowledgeSpaceSaveSuccess": "保存成功",
     "departmentKnowledgeSpaceConfigured": "已配置",
     "departmentKnowledgeSpaceHidden": "已隐藏",
-    "departmentKnowledgeSpaceDefaultName": "默认空间名",
+    "departmentKnowledgeSpaceDefaultName": "默认空间名：{{departmentName}}的知识空间",
     "departmentKnowledgeSpaceManager": "部门知识空间管理",
     "departmentKnowledgeSpaceManagerDesc2": "勾选部门创建知识空间，取消勾选已配置部门可将其从列表隐藏（不会删除空间与数据）。",
     "departmentKnowledgeSpaceClearAll": "取消全选",

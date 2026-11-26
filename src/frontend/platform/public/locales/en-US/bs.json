@@ -1452,7 +1452,7 @@
     "departmentKnowledgeSpaceSaveSuccess": "Saved successfully",
     "departmentKnowledgeSpaceConfigured": "Configured",
     "departmentKnowledgeSpaceHidden": "Hidden",
-    "departmentKnowledgeSpaceDefaultName": "Default space name",
+    "departmentKnowledgeSpaceDefaultName": "Default space name: {{departmentName}}的知识空间",
     "departmentKnowledgeSpaceManager": "Department knowledge spaces",
     "departmentKnowledgeSpaceManagerDesc2": "Select departments to create knowledge spaces. Clear configured departments to hide their spaces without deleting spaces or data.",
     "departmentKnowledgeSpaceClearAll": "Clear selection",
