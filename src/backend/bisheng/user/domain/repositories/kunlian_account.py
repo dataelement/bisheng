@@ -21,10 +21,10 @@ class KunlianAccountRepository:
     def __init__(self, session_factory=get_async_db_session):
         self.session_factory = session_factory
 
-    async def exact_accounts(self, user_account: str) -> list[AccountRow]:
-        """Stop after two *Python-exact* matches, irrespective of DB collation.
+    async def exact_accounts(self, user_account: str, *, limit: int = 2) -> list[AccountRow]:
+        """Stop after `limit` *Python-exact* matches, irrespective of DB collation.
 
-        Stream SQL equality candidates: LIMIT 2 before exact comparison can hide
+        Stream SQL equality candidates: LIMIT before exact comparison can hide
         a duplicate behind case/accent/space-equivalent names on MySQL or DM8.
         Disabled rows count toward ambiguity and cannot be silently skipped.
         """
@@ -40,13 +40,13 @@ class KunlianAccountRepository:
                     async for user_id, user_name, deleted in result:
                         if user_name == user_account:
                             matches.append(AccountRow(user_id, user_name, deleted))
-                            if len(matches) == 2:
+                            if len(matches) == limit:
                                 break
                 finally:
                     await result.close()
         return matches
 
-    async def current_memberships(self, user_id: int) -> list[int]:
+    async def current_memberships(self, user_id: int, *, limit: int = 2) -> list[int]:
         """Only current active memberships into active tenants; no default fallback."""
         with bypass_tenant_filter():
             async with self.session_factory() as session:
@@ -60,7 +60,7 @@ class KunlianAccountRepository:
                             UserTenant.status == "active",
                             Tenant.status == "active",
                         )
-                        .limit(2)
+                        .limit(limit)
                     )
                 ).all()
         return list(rows)

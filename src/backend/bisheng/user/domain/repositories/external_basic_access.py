@@ -152,7 +152,13 @@ class UserExternalBasicAccessRepository:
             raise KunlianBindingConflictError()
         tenant = (await session.exec(select(Tenant).where(Tenant.id == tenant_id))).first()
         membership = (
-            await session.exec(select(UserTenant).where(UserTenant.user_id == user_id, UserTenant.is_active == 1))
+            await session.exec(
+                select(UserTenant).where(
+                    UserTenant.user_id == user_id,
+                    UserTenant.tenant_id == tenant_id,
+                    UserTenant.is_active == 1,
+                )
+            )
         ).first()
         if (
             tenant is None

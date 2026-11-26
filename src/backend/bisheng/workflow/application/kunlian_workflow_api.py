@@ -6,6 +6,30 @@ from bisheng.open_api.domain.services.kunlian_credential import KunlianAccessErr
 from bisheng.permission.application.business_authorization import require_business_action
 
 
+def _read_workflow_tenant_id_sync(workflow_id: str) -> int | None:
+    from bisheng.common.errcode.flow import PlatformAgentExecutionError, PlatformAgentPublicationError
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.workflow.domain.repositories.platform_agent import PlatformAgentRepository
+
+    # Run inside worker thread so ContextVar tenant bypass always applies to sync SQLModel sessions.
+    with bypass_tenant_filter():
+        try:
+            target = PlatformAgentRepository().get_workflow(workflow_id)
+        except (PlatformAgentPublicationError, PlatformAgentExecutionError):
+            return None
+    if not target or target.get("flow_type") != 10:
+        return None
+    tenant_id = target.get("tenant_id")
+    return tenant_id if type(tenant_id) is int and tenant_id > 0 else None
+
+
+async def resolve_kunlian_workflow_tenant_id(workflow_id: str) -> int | None:
+    """Resolve owning tenant_id for a Kunlian workflow path parameter; returns None if missing."""
+    if not isinstance(workflow_id, str) or not workflow_id.strip():
+        return None
+    return await to_thread(_read_workflow_tenant_id_sync, workflow_id.strip())
+
+
 class KunlianWorkflowApi:
     def __init__(self, *, target_reader=None, flow_service=None, workflow_service=None, repository=None):
         from bisheng.api.services.flow import FlowService

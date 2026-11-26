@@ -225,3 +225,100 @@ async def test_binding_or_internal_tenant_mapping_must_agree(account_owner, fail
     with pytest.raises(KunlianIdentityUnavailableError):
         await app.resolve_account("kl", "Alice")
     assert not is_tenant_filter_bypassed()
+
+
+async def test_scoped_resolution_disambiguates_same_username_across_tenants(account_owner):
+    app, sessions, directory = account_owner
+    async with sessions() as session:
+        session.add(User(user_id=10, user_name="Alice", password="", delete=0))
+        session.add(User(user_id=20, user_name="Alice", password="", delete=0))
+        session.add(Tenant(id=2, tenant_code="two", tenant_name="Two"))
+        session.add(Tenant(id=3, tenant_code="three", tenant_name="Three"))
+        session.add(UserTenant(user_id=10, tenant_id=2, status="active", is_active=1))
+        session.add(UserTenant(user_id=20, tenant_id=3, status="active", is_active=1))
+        await session.commit()
+
+    async def find_bindings(connection_id, user_id, *, limit=2):
+        if user_id == 10:
+            return [SimpleNamespace(connection_id="kl", local_user_id=10, external_tenant_id="ext-a", subject="sub-a")]
+        if user_id == 20:
+            return [SimpleNamespace(connection_id="kl", local_user_id=20, external_tenant_id="ext-b", subject="sub-b")]
+        return []
+
+    async def get_mapping(connection_id, external_tenant_id):
+        mappings = {
+            "ext-a": SimpleNamespace(connection_id="kl", external_tenant_id="ext-a", local_tenant_id=2, enabled=True),
+            "ext-b": SimpleNamespace(connection_id="kl", external_tenant_id="ext-b", local_tenant_id=3, enabled=True),
+        }
+        return mappings.get(external_tenant_id)
+
+    directory.find_account_bindings.side_effect = find_bindings
+    directory.get_tenant_binding.side_effect = get_mapping
+
+    scoped = await app.resolve_account_scoped("kl", "Alice", allowed_external_tenants=("ext-b",))
+    assert (scoped.user_id, scoped.tenant_id, scoped.external_tenant_id, scoped.external_user_id) == (
+        20,
+        3,
+        "ext-b",
+        "sub-b",
+    )
+
+    by_header = await app.resolve_account_scoped(
+        "kl", "Alice", allowed_external_tenants=("*",), preferred_external_tenant_id="ext-a"
+    )
+    assert (by_header.user_id, by_header.tenant_id, by_header.external_tenant_id) == (10, 2, "ext-a")
+
+    by_workflow_tenant = await app.resolve_account_scoped(
+        "kl", "Alice", allowed_external_tenants=("*",), preferred_local_tenant_id=3
+    )
+    assert (by_workflow_tenant.user_id, by_workflow_tenant.tenant_id, by_workflow_tenant.external_tenant_id) == (
+        20,
+        3,
+        "ext-b",
+    )
+
+    with pytest.raises(KunlianIdentityUnavailableError):
+        await app.resolve_account_scoped("kl", "Alice", allowed_external_tenants=("*",))
+
+    with pytest.raises(KunlianIdentityUnavailableError):
+        await app.resolve_account_scoped(
+            "kl", "Alice", allowed_external_tenants=("ext-a",), preferred_external_tenant_id="ext-b"
+        )
+
+
+async def test_multi_membership_user_resolves_target_tenant_and_filters_read_current_tenant(account_owner):
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.tenant.domain.repositories.external_membership import ExternalMembershipRepository
+
+    app, sessions, directory = account_owner
+    async with sessions() as session:
+        session.add(User(user_id=10, user_name="Alice", password="", delete=0))
+        session.add(Tenant(id=2, tenant_code="two", tenant_name="Two", parent_tenant_id=1))
+        session.add(Tenant(id=3, tenant_code="three", tenant_name="Three", parent_tenant_id=1))
+        session.add(UserTenant(user_id=10, tenant_id=2, status="inactive", is_active=0))
+        session.add(UserTenant(user_id=10, tenant_id=3, status="active", is_active=1))
+        await session.commit()
+
+    directory.find_account_bindings.return_value = [
+        SimpleNamespace(connection_id="kl", local_user_id=10, external_tenant_id="ext-a", subject="sub-a"),
+        SimpleNamespace(connection_id="kl", local_user_id=10, external_tenant_id="ext-b", subject="sub-b"),
+    ]
+
+    async def get_mapping(connection_id, external_tenant_id):
+        mappings = {
+            "ext-a": SimpleNamespace(connection_id="kl", external_tenant_id="ext-a", local_tenant_id=2, enabled=True),
+            "ext-b": SimpleNamespace(connection_id="kl", external_tenant_id="ext-b", local_tenant_id=3, enabled=True),
+        }
+        return mappings.get(external_tenant_id)
+
+    directory.get_tenant_binding.side_effect = get_mapping
+
+    account = await app.resolve_account_scoped("kl", "Alice", allowed_external_tenants=("*",))
+    assert (account.user_id, account.tenant_id, account.external_tenant_id) == (10, 3, "ext-b")
+
+    membership_repo = ExternalMembershipRepository(sessions)
+    with tenant_execution_scope(3):
+        tenant = await membership_repo.read_current_tenant(10, SimpleNamespace(local_tenant_id=3))
+    assert tenant.id == 3
+    with tenant_execution_scope(2), pytest.raises(KunlianIdentityUnavailableError):
+        await membership_repo.read_current_tenant(10, SimpleNamespace(local_tenant_id=2))

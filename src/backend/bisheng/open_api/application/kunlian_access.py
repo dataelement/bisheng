@@ -68,7 +68,15 @@ class KunlianAccessService:
         self.privilege_reader = privilege_reader or _privileges
 
     @asynccontextmanager
-    async def use_user(self, authorization, user_account, *, capability):
+    async def use_user(
+        self,
+        authorization,
+        user_account,
+        *,
+        capability,
+        preferred_external_tenant_id=None,
+        preferred_local_tenant_id=None,
+    ):
         if (
             not isinstance(user_account, str)
             or not user_account.strip()
@@ -84,7 +92,18 @@ class KunlianAccessService:
             accounts = await get_kunlian_account_application(SimpleNamespace(state=SimpleNamespace()))
         elif not hasattr(accounts, "resolve_account"):
             accounts = await accounts()
-        facts = await accounts.resolve_account(connection_id=caller.connection_id, user_account=user_account)
+        from bisheng.user.application.kunlian_account import KunlianAccountApplication
+
+        if isinstance(accounts, KunlianAccountApplication):
+            facts = await accounts.resolve_account_scoped(
+                connection_id=caller.connection_id,
+                user_account=user_account,
+                allowed_external_tenants=getattr(caller, "tenant_ids", ()) or None,
+                preferred_external_tenant_id=preferred_external_tenant_id,
+                preferred_local_tenant_id=preferred_local_tenant_id,
+            )
+        else:
+            facts = await accounts.resolve_account(connection_id=caller.connection_id, user_account=user_account)
         credential = await self.credentials.validate_reference(
             caller.credential_id,
             integration_id=caller.integration_id,

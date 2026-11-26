@@ -40,6 +40,7 @@ class KunlianCaller:
     connection_id: str
     capabilities: frozenset[str]
     policy_revision: int
+    tenant_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,7 +171,12 @@ class KunlianCredentialService:
         """Verify transport credentials before resolving an account or selecting a tenant."""
         row = await self._authenticate_row(authorization, capability=capability)
         return KunlianCaller(
-            row.id, row.integration_id, row.connection_id, frozenset(row.capabilities), row.policy_revision
+            row.id,
+            row.integration_id,
+            row.connection_id,
+            frozenset(row.capabilities),
+            row.policy_revision,
+            tuple(row.tenant_ids),
         )
 
     async def authenticate(self, authorization, *, external_tenant_id, capability):

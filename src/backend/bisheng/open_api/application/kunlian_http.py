@@ -96,6 +96,18 @@ class KunlianApiRoute(APIRoute):
         return guarded
 
 
+def _read_optional_external_tenant_header(request: Request) -> str | None:
+    values = request.headers.getlist("x-kunlian-tenant-id")
+    if not values:
+        return None
+    if len(values) != 1:
+        raise KunlianAccessError("INVALID_INPUT")
+    tenant_id = values[0]
+    if not tenant_id or not tenant_id.strip() or tenant_id != tenant_id.strip() or len(tenant_id) > 64:
+        raise KunlianAccessError("INVALID_INPUT")
+    return tenant_id
+
+
 async def get_kunlian_request_user(
     request: Request,
     user_account: str = Query(..., min_length=1, max_length=128),
@@ -106,6 +118,7 @@ async def get_kunlian_request_user(
         name in request.query_params for name in ("external_tenant_id", "external_user_id")
     ):
         raise KunlianAccessError("INVALID_INPUT")
+    preferred_external_tenant_id = _read_optional_external_tenant_header(request)
     capability = getattr(request.scope.get("endpoint"), "kunlian_capability", None)
     if capability is None:
         raise KunlianAccessError("FORBIDDEN")
@@ -122,9 +135,28 @@ async def get_kunlian_request_user(
             return await get_kunlian_account_application(request.app)
 
         service = KunlianAccessService(KunlianCredentialService(), identity_factory, account_resolver=account_factory)
+    preferred_local_tenant_id = None
+    user_kwargs = {}
+    if isinstance(service, KunlianAccessService):
+        if preferred_external_tenant_id is not None:
+            user_kwargs["preferred_external_tenant_id"] = preferred_external_tenant_id
+        else:
+            workflow_id = request.path_params.get("workflow_id")
+            if isinstance(workflow_id, str) and workflow_id.strip():
+                resolver = getattr(request.app.state, "kunlian_workflow_tenant_resolver", None)
+                if resolver is None:
+                    from bisheng.workflow.application.kunlian_workflow_api import resolve_kunlian_workflow_tenant_id
+
+                    resolver = resolve_kunlian_workflow_tenant_id
+                preferred_local_tenant_id = await resolver(workflow_id)
+                if preferred_local_tenant_id is not None:
+                    user_kwargs["preferred_local_tenant_id"] = preferred_local_tenant_id
     try:
         async with service.use_user(
-            request.headers.get("Authorization"), user_account, capability=capability
+            request.headers.get("Authorization"),
+            user_account,
+            capability=capability,
+            **user_kwargs,
         ) as access:
             from bisheng.core.logger import trace_id_var
             from bisheng.open_api.application.kunlian_audit import KunlianAuditService

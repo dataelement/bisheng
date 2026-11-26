@@ -53,7 +53,11 @@ class ExternalMembershipRepository:
                 tenant = await session.get(Tenant, mapping.local_tenant_id)
                 membership = (
                     await session.exec(
-                        select(UserTenant).where(UserTenant.user_id == user_id, UserTenant.is_active == 1)
+                        select(UserTenant).where(
+                            UserTenant.user_id == user_id,
+                            UserTenant.tenant_id == mapping.local_tenant_id,
+                            UserTenant.is_active == 1,
+                        )
                     )
                 ).first()
                 if (
