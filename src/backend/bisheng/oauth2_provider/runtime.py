@@ -13,8 +13,10 @@ from bisheng.core.database import get_sync_db_session
 from bisheng.oauth2_provider.domain.services.auth_service import OAuth2AuthService, OAuth2UserIdentity
 from bisheng.oauth2_provider.domain.services.client_service import OAuth2ClientService
 from bisheng.oauth2_provider.domain.services.exchange_service import OAuth2ExchangeService
+from bisheng.oauth2_provider.domain.services.platform_exchange_service import OAuth2PlatformExchangeService
 from bisheng.oauth2_provider.infrastructure.code_store import OAuth2CodeStore
 from bisheng.oauth2_provider.infrastructure.key_service import OAuth2KeyService
+from bisheng.user.application.oauth_exchange import validate_platform_exchange_reference
 
 
 @contextmanager
@@ -73,6 +75,7 @@ class OAuth2ProviderRuntime:
     auth: OAuth2AuthService
     keys: OAuth2KeyService
     exchange: OAuth2ExchangeService | None = None
+    platform_exchange: OAuth2PlatformExchangeService | None = None
 
 
 async def build_oauth2_runtime() -> OAuth2ProviderRuntime:
@@ -92,8 +95,18 @@ async def build_oauth2_runtime() -> OAuth2ProviderRuntime:
     exchange = OAuth2ExchangeService(
         clients=clients, keys=keys, session_factory=oauth2_db_session, identity_lookup=lookup_user_identity
     )
+    platform_exchange = OAuth2PlatformExchangeService(
+        keys=keys,
+        session_factory=oauth2_db_session,
+        identity_lookup=lookup_user_identity,
+        platform_validator=validate_platform_exchange_reference,
+    )
+    exchange._platform_validator = platform_exchange.validate_claims
     auth._exchange_validator = exchange.validate_exchange_claims
-    return OAuth2ProviderRuntime(clients=clients, auth=auth, keys=keys, exchange=exchange)
+    auth._consent_recorder = platform_exchange.record_consent
+    return OAuth2ProviderRuntime(
+        clients=clients, auth=auth, keys=keys, exchange=exchange, platform_exchange=platform_exchange
+    )
 
 
 async def get_oauth2_runtime(request: Request) -> OAuth2ProviderRuntime:

@@ -87,6 +87,7 @@ class OAuth2AuthService:
         self._session_factory = session_factory
         self._identity_lookup = identity_lookup
         self._exchange_validator = None
+        self._consent_recorder = None
 
     @staticmethod
     def build_openid_metadata(origin: str) -> dict[str, Any]:
@@ -162,6 +163,7 @@ class OAuth2AuthService:
         request_id = str(uuid4())
         payload = {
             "client_id": client.client_id,
+            "client_registration_id": client.id,
             "redirect_uri": redirect_uri,
             "scopes": requested_scopes,
             "state": state,
@@ -179,6 +181,8 @@ class OAuth2AuthService:
             raise OAuth2AuthorizationExpiredError()
         payload, ttl = found
         client = await self.clients.get_active_client_model(payload["client_id"])
+        if payload.get("client_registration_id") != client.id:
+            raise OAuth2AuthorizationExpiredError()
         return OAuth2ConsentDetails(
             request_id=request_id,
             client_id=client.client_id,
@@ -198,7 +202,9 @@ class OAuth2AuthService:
         user_id: int,
         tenant_id: int,
     ) -> str:
-        res = await self.submit_consent(request_id=request_id, user_id=user_id, tenant_id=tenant_id, decision="approve")
+        res = await self.submit_consent(
+            request_id=request_id, user_id=user_id, tenant_id=tenant_id, decision="approve", _record_consent=False
+        )
         return res.redirect_uri
 
     async def submit_consent(
@@ -208,11 +214,14 @@ class OAuth2AuthService:
         user_id: int,
         tenant_id: int,
         decision: str,
+        _record_consent: bool = True,
     ) -> OAuth2ConsentDecisionResponse:
         payload = await self.code_store.consume_request(request_id)
         if payload is None:
             raise OAuth2AuthorizationExpiredError()
         client = await self.clients.get_active_client_model(payload["client_id"])
+        if payload.get("client_registration_id") != client.id:
+            raise OAuth2AuthorizationExpiredError()
         redirect_uri = payload["redirect_uri"]
         state = payload.get("state")
 
@@ -226,11 +235,16 @@ class OAuth2AuthService:
         if identity is None or not identity.active:
             raise OAuth2UserInactiveError()
 
+        if decision != "approve":
+            raise OAuth2InvalidRequestError()
+        if _record_consent and client.require_consent and self._consent_recorder is not None:
+            await self._consent_recorder(client, identity.user_id, identity.tenant_id, payload["scopes"])
         code = secrets.token_urlsafe(32)
         await self.code_store.save_code(
             code,
             {
                 "client_id": client.client_id,
+                "client_registration_id": client.id,
                 "redirect_uri": redirect_uri,
                 "scopes": payload["scopes"],
                 "code_challenge": payload.get("code_challenge"),
@@ -314,7 +328,11 @@ class OAuth2AuthService:
         code_data = await self.code_store.consume_code(code)
         if code_data is None:
             raise OAuth2InvalidGrantError()
-        if code_data["client_id"] != client.client_id or code_data["redirect_uri"] != redirect_uri:
+        if (
+            code_data["client_id"] != client.client_id
+            or code_data["redirect_uri"] != redirect_uri
+            or code_data.get("client_registration_id") != client.id
+        ):
             raise OAuth2InvalidGrantError()
 
         if client.require_pkce or code_data.get("code_challenge"):

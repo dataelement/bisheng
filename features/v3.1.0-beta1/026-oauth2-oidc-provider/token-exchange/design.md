@@ -4,7 +4,7 @@
 
 ## 1. 目标与约束
 
-同一用户、同一租户从 A 换取 B 接受的短期登录Token。复用 F026，不改 B 产品自身代码，不支持代其他用户/租户登录、公开客户端直接交换、连锁交换或刷新交换凭证。遵循 docs/constitution.md C1–C8；发布契约按已确认规格登记OAuth身份断言与ApiCredential窄边界。
+同一用户、同一租户换取B接受的短期登录Token，支持既有第三方OAuth A→B以及新增第一方web/mobile会话→B。以下§2–7的A/confidential/配对限制指旧OAuth路径；第一方数据流和依赖见§8及增量设计。复用 F026，不改 B 产品自身代码，不支持代其他用户/租户登录、第三方公开A直接交换、连锁交换或刷新交换凭证；第一方受信任源可以换取public B的身份凭证。遵循 docs/constitution.md C1–C8；发布契约按已确认规格登记OAuth身份断言与ApiCredential窄边界。
 
 核心链路：A可信后端 → 原 /api/v1/oauth2/token 的新grant → 校验A、原凭证、A→B授权及身份 → 创建B独立会话和父会话关联 → ES256签发 aud=B → B校验并建立自身会话。
 
@@ -44,7 +44,7 @@ POST /api/v1/oauth2/token，application/x-www-form-urlencoded。A使用HTTP Basi
 | scope | 非空，显式空格分隔；只能取openid/profile/email |
 | requested_token_type | 可省略或同access_token类型；其他类型拒绝 |
 
-新换证请求body上限64KiB，subject_token上限16KiB，audience/client_id上限128字符、scope上限512字符，超限返回invalid_request；不把这些限制强加到旧grant。拒绝重复参数（含JSON原始重复键）、多目标、resource、actor_token/actor_token_type以及其他未支持的换证参数；不静默忽略身份/租户覆盖字段。JSON兼容输入遵守同样字段集合和标量约束；新的换证解析不得改变旧grant输入兼容性。
+Token端点在解析前流式读取，body总上限64KiB（共用防内存滥用边界，合法旧grant字段和认证保持兼容）；新换证的subject_token上限16KiB，audience/client_id上限128字符、scope上限512字符，超限返回invalid_request；具体subject/audience/scope字段限制只用于新exchange。拒绝重复参数（含JSON原始重复键）、多目标、resource、actor_token/actor_token_type以及其他未支持的换证参数；不静默忽略身份/租户覆盖字段。JSON兼容输入遵守同样字段集合和标量约束；新的换证解析不得改变旧grant输入兼容性。
 
 成功响应：access_token、issued_token_type（access_token URN）、token_type=Bearer、expires_in、scope、session_id（B会话ID）。没有refresh_token、refresh_expires_in或id_token。Discovery新增该grant；原client默认grant不变，A需通过现有客户端管理API显式加入该grant并配置允许的A→B策略。
 
@@ -97,8 +97,26 @@ invalid_client=401（A认证失败/公开客户端）；unauthorized_client=400�
 - A为公开插件时不能塞入client_secret；需独立后端授权方案，本轮不默认信任代理。B本地会话不会随A自动注销，不能把短期Token过期误报成跨系统单点登出。
 - 部署issuer取已有public URL解析，A签发和换证必须一致；改域名后旧iss不匹配应拒绝。多节点依赖同一DB/签名配置，不用进程内policy缓存或本地文件作为授权真相。
 
-## 8. 后续与修订
+## 8. 第一方会话增量（用户已确认）
 
-后续若需要公开客户端、外部IdP、业务scope、跨租户或统一B会话注销，应独立评审，本轮不预建框架。初版设计形成于用户接受规格之后；用户确认设计后完成本分支实现。验证范围及尚未执行的线上/DM8实库检查见verification.md。
+采用[first-party-extension.md](./first-party-extension.md)中已接受的静默、B opt-in与consent规则；新Token Type分派到独立服务和用户域application seam，新增父引用与用户consent两张独立表，不修改现有表。待授权request和code绑定登记实例以拒绝删除重建重放。开发验证后按用户新指令部署115；原OAuth路径不变。
+
+### 8.1 关键模块与契约
+
+| 模块 | 当前职责 |
+| --- | --- |
+| user/application/oauth_exchange.py | 用户域权威inspect/decode、Cookie CSRF、闭合无密引用；公开validate_reference供注入 |
+| platform_exchange_service.py | B opt-in/scope/consent、独立child+link事务、300秒期限、在线父引用复核 |
+| repositories/platform_exchange.py | 按当前登记实例与user/tenant查询/保存同意及link，不接管业务资源权限 |
+| auth_service.py | 显式同意回调；request/code绑定registration，自动批准不记录同意 |
+| runtime.py / oidc.py | 注入上述服务、按显式Token Type分派；公共OAuth错误与平台撤销同意信封分别保留 |
+
+已知坑：旧fixed Cookie可与新选定Cookie共存，不能遮蔽有效新会话（用户域seam处理）；仅存client_id的旧待批页会在删除重建后给新应用授权（request/code登记绑定处理）；第一方已签发后不能以旧SSO镜像作为安全回滚地板（F003 handoff约束）。
+
+## 9. 后续与修订
+
+后续若需要公开第三方A发起、外部IdP、业务scope、跨租户或统一B会话注销，应独立评审，本轮不预建框架。初版设计形成于用户接受规格之后；用户确认设计后完成本分支实现。验证范围及尚未执行的线上/DM8实库检查见verification.md。
 
 修订：2026-11-26（America/Los_Angeles），新增标准grant、policy/link、父链校验及测试，依据用户明确的设计实施授权；修正路由生成物遗漏；诊断仅记录异常类型和栈位置，不输出源码行/locals/异常值。无推翻既定设计的偏差。
+
+2026-11-27：用户新增并确认第一方静默换证：移除额外第一方→B配对、保留B.require_consent；实现独立父引用/用户同意模型和平台接缝，修复旧待批请求跨登记实例授权。用户随后授权115部署并要求不备份；版本记录保留。

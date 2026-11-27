@@ -773,11 +773,12 @@ async def test_tenant_removal_between_consent_and_exchange_blocks_token(real_per
     from bisheng.database.models.tenant import UserTenant
 
     runtime = real_person_identity
-    await runtime.clients.get_active_client_model(BUILTIN_DSH_CLIENT_ID)
+    client = await runtime.clients.get_active_client_model(BUILTIN_DSH_CLIENT_ID)
     await runtime.auth.code_store.save_code(
         "before-removal",
         {
             "client_id": BUILTIN_DSH_CLIENT_ID,
+            "client_registration_id": client.id,
             "redirect_uri": "http://127.0.0.1/dsh/callback",
             "tenant_id": 7,
             "user_id": 42,

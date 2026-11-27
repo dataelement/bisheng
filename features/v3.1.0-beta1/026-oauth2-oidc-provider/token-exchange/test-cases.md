@@ -17,4 +17,11 @@
 | TC-TEX-011 | 旧功能回归 | P0 | 原OAuth/DSH场景 | code/PKCE/refresh/revoke/DSH授权 | 行为兼容，无默认exchange授权 | 待执行 | — |
 | TC-TEX-012 | B接收端 | P0 | 参考B配置issuer/aud/JWKS | 送正确/错aud/错issuer/过期Token | 只接受正确凭证，不继承A业务角色 | 待执行 | — |
 
+| TC-TEX-013 | 第一方静默 | P0 | 正式web/mobile会话，B启用exchange且require_consent=false，无pair策略 | Cookie+CSRF或Bearer/body请求新Token Type | 本人本租户、aud=B、无refresh/id_token，无人工审批 | 本地通过 | AC18/21；真实TCP，线上115待执行 |
+| TC-TEX-014 | 明确用户同意 | P0 | B.require_consent=true | 未同意/拒绝/自动批准/只同意openid，申请profile；再明确同意并重试 | 前者consent_required，最后静默成功 | 本地通过 | AC19；真实HTTP批准后重试 |
+| TC-TEX-015 | 第一方父撤销 | P0 | 有平台父与B子 | 撤销B后检查父；另换B后平台logout/变token_version/失成员 | B撤销不影响父；父失效后B在线401 | 本地通过 | AC20；退出使用真实HTTP/auth/logout |
+| TC-TEX-016 | 凭证混淆/CSRF | P0 | Cookie、Bearer、显式body和旧fixed Cookie样本 | 测冲突/跨Origin/缺CSRF/bootstrap/旧JWT/Refresh/链式Token | 拒绝；合法新会话不被残留fixed Cookie遮蔽 | 本地通过 | AC22；接缝48项 |
+| TC-TEX-017 | 重新登记应用 | P0 | B1待批请求/code/已有同意；B2重用其client_id | 删除重建后查看/批准旧请求、兑旧code、申请平台换证 | 旧请求/code拒绝，B2不继承同意 | 本地通过 | AC23；审查Medium回归3相 |
+| TC-TEX-018 | 同意撤销和故障 | P0 | B要求consent、有有效child | 跨tenant撤销、本人撤销；注入提交失败/密钥ValueError/250秒延迟 | 隔离正确；本人撤销B在线401；故障503/回滚/不记值，寿命消耗 | 本地通过 | AC20/21/23；线上实库待验证 |
+
 映射：001→AC01/08/14；002→AC06/07；003→AC04/05；004→AC02/03；005→AC10/11；006→AC08/09；007→AC15；008→AC03/09/10；009→AC16；010→AC12/13；011→AC17；012→AC14。新入口与造数依据design §4–7，真实环境账号/地址不预填；执行后填写结果。

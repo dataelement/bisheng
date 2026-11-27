@@ -9,6 +9,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.oauth2_provider import OAuth2InvalidRequestError
 from bisheng.common.schemas.api import PageData, resp_200
 from bisheng.oauth2_provider.domain.schemas.exchange import OAuth2ExchangePolicyUpdate
+from bisheng.oauth2_provider.domain.schemas.platform_exchange import PLATFORM_SESSION_TOKEN_TYPE
 from bisheng.oauth2_provider.runtime import get_oauth2_runtime
 
 admin_router = APIRouter(prefix="/oauth2/exchange-policies", tags=["OAuth2 Exchange Admin"])
@@ -79,7 +80,17 @@ async def parse_exchange(request):
         for key, limit in [("subject_token", 16384), ("audience", 128), ("client_id", 128), ("scope", 512)]
     ):
         raise OAuth2InvalidRequestError()
-    if "authorization" in request.headers:
+    if result.get("subject_token_type") == PLATFORM_SESSION_TOKEN_TYPE:
+        if (
+            "client_id" in result
+            or "client_secret" in result
+            or (
+                "authorization" in request.headers
+                and not request.headers["authorization"].lower().startswith("bearer ")
+            )
+        ):
+            raise OAuth2InvalidRequestError()
+    elif "authorization" in request.headers:
         if (
             not request.headers["authorization"].lower().startswith("basic ")
             or "client_id" in result

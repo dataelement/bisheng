@@ -72,6 +72,7 @@ class OAuth2ExchangeService:
     def __init__(self, *, clients, keys, session_factory, identity_lookup):
         self.clients, self.keys = clients, keys
         self._session_factory, self._identity_lookup = session_factory, identity_lookup
+        self._platform_validator = None
 
     async def list_policies(self, source_client_id=None, page=1, page_size=50):
         def operation():
@@ -334,6 +335,10 @@ class OAuth2ExchangeService:
             raise unavailable(exc) from None
 
     async def validate_exchange_claims(self, claims):
+        if "exchange_source" in claims:
+            if claims["exchange_source"] != "platform_session" or self._platform_validator is None:
+                raise OAuth2InvalidAccessTokenError()
+            return await self._platform_validator(claims)
         try:
             if claims.get("token_exchange") is not True:
                 raise OAuth2InvalidAccessTokenError()

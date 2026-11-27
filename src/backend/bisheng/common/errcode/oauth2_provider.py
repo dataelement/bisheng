@@ -91,3 +91,8 @@ class OAuth2TemporarilyUnavailableError(BaseErrorCode):
 class OAuth2ExchangePolicyConflictError(BaseErrorCode):
     Code: int = 28118
     Msg: str = "OAuth2 exchange policy changed concurrently"
+
+
+class OAuth2ConsentRequiredError(BaseErrorCode):
+    Code: int = 28119
+    Msg: str = "OAuth2 user consent is required for the requested scopes"

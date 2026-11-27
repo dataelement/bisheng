@@ -1,6 +1,18 @@
 # Token Exchange 验证报告
 
-目标：feat/3.1.0-alpha1/026-token-exchange，基线572d5ecf77。状态：本地实现验证完成，用户明确要求不部署。没有对109/115或其他服务器执行本轮部署、迁移或配置变更。
+目标：PR2821 → feat/3.1.0-alpha1，已整合7f665b1704的F003平台会话。2026-11-27用户确认第一方静默规则并要求开发完成后部署115，且明确不需要备份。目前本地实现验证完成，115部署尚待SSH认证；没有把本地通过当作115上线。
+
+## 最新：第一方扩展验证
+
+全套同进程合跑 **217 passed, 1 skipped, 913 warnings，10.70s，exit0**，覆盖整个test/oauth2_provider、test/platform_auth，两条真实TCP交换链路、request-scope registry/bootstrap和Alembic single-head。源接缝48项+原平台session10项单独联合58通过；provider新增22项和fault/登记重放回归包含在总数中。
+
+第一方TCP链路：合法HttpOnly式选定Cookie+Origin/CSRF静默换B→JWKS验签/错误aud拒绝→开启require_consent后consent_required→现有authorize/consent明确批准→静默再换成功→HTTP撤销本人同意后B在线401→重新允许免同意后换B→HTTP/auth/logout后B在线401。使用真实Uvicorn/httpx、SQL平台会话引擎；仅自然人/成员事实和Redis为隔离fixture，未执行真实密码登录/生产中间件全栈。共享TCP helper在finally停止线程并关闭socket。
+
+独立审查发现旧待授权页跨同client_id新登记写入consent的问题；修复request/code登记绑定，pending/code/existing-consent三相回归通过。原成员删除测试人工code fixture补充登记字段，原UserInactive拒绝断言保留。
+
+新增schema auto-discovery与MySQL表/索引编译已纳入原双库参数化测试；DM8仍因缺dmSQLAlchemy显式跳过，实库覆盖不计通过。Ruff与arch-guard通过，28119三语文案由生成器输出，route inventory包含新增IDENTITY本人同意撤销端点。完整main/Gateway与115实库验收待部署，需保留F003回滚地板；用户要求不额外备份。
+
+## 历史：原OAuth换证首次验证
 
 ## 执行结果
 
@@ -39,6 +51,6 @@
 
 ## 实际局限
 
-没有全生产main lifespan配合真实MySQL/Redis/OpenFGA/Gateway验收，也没有真实B产品的本地会话建立、普通用户浏览器交互或DM8实库验证。真实HTTP测试覆盖实际F026路由/服务/签名，但使用测试app和被覆盖的身份依赖；不能据此宣称109上线或生产全链路通过。没有新增UI，因此无新增页面验收项。后续经单独部署授权后再执行真实环境回归。
+没有全生产main lifespan配合真实MySQL/Redis/OpenFGA/Gateway验收，也没有真实B产品的本地会话建立、普通用户浏览器交互或DM8实库验证。真实HTTP测试覆盖实际F026路由/服务/签名，但使用测试app和被覆盖的身份依赖；不能据此宣称109上线或生产全链路通过。没有新增UI，因此无新增页面验收项。用户现已明确授权115部署，待获得SSH连接后执行真实环境回归；尚未执行不得声明上线。
 
 代码审查与接入说明见code-review.md、README.md。

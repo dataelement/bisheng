@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import time
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -12,9 +13,12 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.oauth2_provider import (
     OAuth2InvalidClientAuthError,
+    OAuth2InvalidGrantError,
     OAuth2InvalidRequestError,
+    OAuth2TemporarilyUnavailableError,
     OAuth2UnsupportedGrantTypeError,
 )
+from bisheng.common.errcode.platform_auth import PlatformAuthError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.oauth2_provider.api.endpoints.exchange import parse_exchange
 from bisheng.oauth2_provider.api.protocol import OAuth2ProtocolRoute
@@ -26,8 +30,10 @@ from bisheng.oauth2_provider.domain.schemas.auth import (
     OAuth2UserInfoResponse,
 )
 from bisheng.oauth2_provider.domain.schemas.exchange import EXCHANGE_GRANT_TYPE
-from bisheng.oauth2_provider.domain.services.exchange_service import event
+from bisheng.oauth2_provider.domain.schemas.platform_exchange import PLATFORM_SESSION_TOKEN_TYPE
+from bisheng.oauth2_provider.domain.services.exchange_service import event, unavailable
 from bisheng.oauth2_provider.runtime import OAuth2ProviderRuntime, get_oauth2_runtime
+from bisheng.user.application.oauth_exchange import read_platform_exchange_subject
 
 public_router = APIRouter(prefix="/oauth2", tags=["OAuth2 Provider"], route_class=OAuth2ProtocolRoute)
 consent_router = APIRouter(prefix="/oauth2", tags=["OAuth2 Provider"])
@@ -184,14 +190,59 @@ async def submit_consent(
     return resp_200(data=result)
 
 
+async def _first_party_subject(request, subject_token=None):
+    try:
+        return await read_platform_exchange_subject(request, subject_token)
+    except PlatformAuthError as exc:
+        event("platform_subject_denied_" + exc.reason)
+        if exc.http_status == 503:
+            raise OAuth2TemporarilyUnavailableError() from None
+        if exc.reason in {"csrf_rejected", "credential_conflict", "invalid_auth_request"}:
+            raise OAuth2InvalidRequestError() from None
+        raise OAuth2InvalidGrantError() from None
+    except Exception as exc:
+        raise unavailable(exc) from None
+
+
+@consent_router.delete("/consent/grants/{client_id}")
+async def revoke_user_consent(client_id: str, request: Request, runtime=Depends(get_oauth2_runtime)):
+    subject = await _first_party_subject(request)
+    if not 1 <= len(client_id) <= 128:
+        raise OAuth2InvalidRequestError()
+    if runtime.platform_exchange is None:
+        raise OAuth2TemporarilyUnavailableError()
+    await runtime.platform_exchange.revoke_consent(client_id, subject["user_id"], subject["tenant_id"])
+    return resp_200(data={"revoked": True})
+
+
 @public_router.post("/token", response_model=OAuth2TokenResponse)
 async def token(request: Request, runtime: OAuth2ProviderRuntime = Depends(get_oauth2_runtime)):
-    await request.body()  # Preserve raw fields for strict exchange parsing after grant dispatch.
+    started_at = int(time.time())
+    # Bound allocation before legacy grant dispatch and preserve Starlette body cache.
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > 65536:
+            raise OAuth2InvalidRequestError()
+        raw.extend(chunk)
+    request._body = bytes(raw)
     params = await _parse_form_or_json(request)
     grant_type = params.get("grant_type")
     if grant_type == EXCHANGE_GRANT_TYPE:
         try:
             params = await parse_exchange(request)
+            if params.get("subject_token_type") == PLATFORM_SESSION_TOKEN_TYPE:
+                if runtime.platform_exchange is None:
+                    raise OAuth2TemporarilyUnavailableError()
+                subject = await _first_party_subject(request, params.get("subject_token"))
+                result = await runtime.platform_exchange.exchange(
+                    origin=resolve_public_origin(request),
+                    subject=subject,
+                    audience=params.get("audience"),
+                    scope=params.get("scope"),
+                    requested_token_type=params.get("requested_token_type"),
+                    _started_at=started_at,
+                )
+                return JSONResponse(content=result)
             basic_id, basic_secret = _parse_basic_client_auth(request)
         except BaseErrorCode as exc:
             event("request_denied_" + str(exc.code))

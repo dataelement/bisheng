@@ -2,15 +2,12 @@
 
 import base64
 import hashlib
-import socket
-import threading
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import jwt
 import pytest
-import uvicorn
 from fastapi import FastAPI
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -19,6 +16,7 @@ from bisheng.oauth2_provider.api.endpoints.oidc import consent_router, public_ro
 from bisheng.oauth2_provider.api.router import well_known_router
 from bisheng.oauth2_provider.domain.schemas.exchange import ACCESS_TOKEN_TYPE, EXCHANGE_GRANT_TYPE
 from bisheng.oauth2_provider.runtime import get_oauth2_runtime
+from test.e2e.helpers.local_provider import local_http_server
 from test.oauth2_provider.test_exchange import ORIGIN, exchange_env, oauth2_env  # noqa: F401
 
 
@@ -36,23 +34,9 @@ async def test_http_authorize_exchange_recipient_and_revocation(request):
     app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(
         user_id=42, tenant_id=7, is_global_super=False
     )
-    ready = threading.Event()
-
-    class Server(uvicorn.Server):
-        async def startup(self, sockets=None):
-            await super().startup(sockets=sockets)
-            ready.set()
-
-    sock = socket.socket()
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    server = Server(uvicorn.Config(app, log_level="error", access_log=False, lifespan="off"))
-    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
-    thread.start()
-    try:
-        assert ready.wait(10), "Local HTTP provider did not start"
+    with local_http_server(app) as base_url:
         async with httpx.AsyncClient(
-            base_url=f"http://127.0.0.1:{port}",
+            base_url=base_url,
             headers={"Host": "bisheng.example.com", "X-Forwarded-Proto": "https"},
             trust_env=False,
             timeout=10,
@@ -122,8 +106,3 @@ async def test_http_authorize_exchange_recipient_and_revocation(request):
             assert revoked.status_code == 200
             denied = await client.get("/api/v1/oauth2/userinfo", headers={"Authorization": "Bearer " + token})
             assert denied.status_code == 401 and denied.json()["error"] == "invalid_token"
-    finally:
-        server.should_exit = True
-        thread.join(10)
-        sock.close()
-        assert not thread.is_alive(), "Local HTTP server failed to terminate"

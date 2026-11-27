@@ -13,6 +13,14 @@
 
 依赖顺序：T001定义policy/schema和接口，T002以独立会话补齐在线撤销，T003合跑旧新回归并做真实HTTP集成。目标文件分别为exchange模型/schema/repository/API/protocol/errors；exchange_service/auth_service/runtime；test_exchange、test_exchange_boundaries、test_e2e_token_exchange_local及locales/route metadata生成物。配对测试均在同一提交，已执行；L1/L2核查记录见code-review.md。两子代理异常退出且无改动，主代理接手全部实现，无并发文件覆盖。未知/失败状态拒绝，无环境部署授权扩展。
 
+## 第一方增量（用户已确认）
+
+| 任务 | 状态 | 范围 |
+| --- | --- | --- |
+| T004 权威平台接缝 | ✅ 完成 | user/application/oauth_exchange；web/mobile/CSRF/版本/撤销，独立58项联合测试通过 |
+| T005 第一方换证与同意 | ✅ 本地验证完成 | 独立服务、两新表、token分派、consent记录/撤销、登记绑定；AC18–23 |
+| T006 集成与交付 | 🔄 执行中 | 真实HTTP、全回归、独立审查、PR更新及115备份部署验收 |
+
 ## 实际偏差
 
 暂无推翻已确认设计的偏差。测试使用SQLite/FakeRedis和真实签名；不把它当作MySQL/DM8或线上部署验收。

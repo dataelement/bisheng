@@ -12,6 +12,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.oauth2_provider import OAuth2InvalidAccessTokenError
 from bisheng.core.database.model_discovery import discover_sqlmodel_module_names
 from bisheng.oauth2_provider.domain.models.exchange import OAuth2ExchangePolicy, OAuth2ExchangeSession
+from bisheng.oauth2_provider.domain.models.platform_exchange import OAuth2PlatformExchangeSession, OAuth2UserConsent
 from bisheng.oauth2_provider.domain.models.session import OAuth2Session
 from bisheng.oauth2_provider.domain.schemas.client import OAuth2ClientCreate
 from bisheng.oauth2_provider.domain.schemas.exchange import EXCHANGE_GRANT_TYPE
@@ -21,9 +22,12 @@ from test.oauth2_provider.test_exchange import exchange_env, oauth2_env  # noqa:
 @pytest.mark.parametrize("dialect_name", ["mysql", "dm"])
 def test_models_discovered_and_dual_database_ddl(dialect_name):
     """AC-17: discovery/DDL compile, with an explicit skip if optional DM dialect is absent."""
-    assert "bisheng.oauth2_provider.domain.models.exchange" in discover_sqlmodel_module_names()
+    assert {
+        "bisheng.oauth2_provider.domain.models.exchange",
+        "bisheng.oauth2_provider.domain.models.platform_exchange",
+    } <= set(discover_sqlmodel_module_names())
     dialect = mysql.dialect() if dialect_name == "mysql" else pytest.importorskip("dmSQLAlchemy.dmpython").dialect()
-    for model in (OAuth2ExchangePolicy, OAuth2ExchangeSession):
+    for model in (OAuth2ExchangePolicy, OAuth2ExchangeSession, OAuth2PlatformExchangeSession, OAuth2UserConsent):
         assert model.__tablename__ in str(CreateTable(model.__table__).compile(dialect=dialect)).lower()
         for index in model.__table__.indexes:
             assert str(CreateIndex(index).compile(dialect=dialect))
