@@ -21,7 +21,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     select_registry_items_for_persistence,
     strip_unregistered_citation_markers,
 )
-from bisheng.common.chat.utils import sync_judge_source, sync_process_source_document
+from bisheng.common.chat.utils import SourceType, sync_judge_source
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.errcode.flow import (
     WorkFlowInvalidUserInputError,
@@ -614,7 +614,8 @@ class RedisCallback(BaseCallback):
             if isinstance(source_documents, Document):
                 result = source_documents
             source, result = sync_judge_source(result, source_documents, self.chat_id, extra)
-            chat_response.source = source
+            # File citations use the registry; source=1 is reserved for historical keyword recall.
+            chat_response.source = SourceType.NOT_SUPPORT.value if source == SourceType.FILE.value else source
             chat_response.extra = json.dumps(extra, ensure_ascii=False)
 
         # Attachments the user sent become permanent here, not at upload time —
@@ -677,15 +678,6 @@ class RedisCallback(BaseCallback):
                 chat_id=self.chat_id,
                 flow_id=self.workflow_id,
             )
-            if chat_response.source not in [0, 4]:
-                thread_pool.submit(
-                    f"workflow_source_document_{self.chat_id}",
-                    sync_process_source_document,
-                    source_documents,
-                    self.chat_id,
-                    message.id,
-                    chat_response.message.get("msg"),
-                )
             if created is not None:
                 self.new_session = created
                 telemetry_service.log_event_sync(

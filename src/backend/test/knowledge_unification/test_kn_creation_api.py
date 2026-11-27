@@ -212,3 +212,28 @@ async def test_list_http_query_bounds_are_validated(catalog, path):
         with management_tenant_scope(101):
             result = (await client.get("/api/v1/knowledge/space/" + path)).json()
     assert result["status_code"] == 422
+
+
+async def test_http_default_creation_uses_current_knowledge_model(web_create):
+    """F002 AC-02, AC-05: actual HTTP creation persists the knowledge default."""
+    from bisheng.knowledge.domain.services.knowledge_space_service import LLMService
+
+    LLMService.aget_knowledge_llm.return_value = SimpleNamespace(embedding_model_id=12)
+    result = await post_create(web_create, {"name": "knowledge-default"})
+    assert result["status_code"] == 200 and result["status_message"]
+    row = next(
+        item for item in creation_fixtures.state(web_create.context)["knowledge"] if item["id"] == result["data"]["id"]
+    )
+    assert row["model"] == "12"
+    LLMService.aget_knowledge_llm.assert_awaited_once_with(slots=("embedding_model_id",))
+
+
+async def test_http_default_missing_is_a_knowledge_error_without_creation(web_create):
+    """F002 AC-04: missing model returns 10901 and leaves business state untouched."""
+    from bisheng.knowledge.domain.services.knowledge_space_service import LLMService
+
+    LLMService.aget_knowledge_llm.return_value = None
+    before = creation_fixtures.state(web_create.context)
+    result = await post_create(web_create, {"name": "missing-default"})
+    assert result["status_code"] == 10901
+    assert creation_fixtures.state(web_create.context) == before

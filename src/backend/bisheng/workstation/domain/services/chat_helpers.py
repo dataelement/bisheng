@@ -1,27 +1,22 @@
-import asyncio
 import base64
 import json
 from datetime import datetime
 
 import aiofiles
 from fastapi import Request
-from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
 from pydantic import BaseModel
 
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.common.chat.utils import SourceType, process_source_document
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.common.utils.title_generator import generate_conversation_title_async
-from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.dsh.domain.services import chat_credits
+from bisheng.database.models.message import ChatMessage
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.utils import get_request_ip
-from bisheng.workstation.domain.schemas import WorkstationConversation, WorkstationMessage
 
 
 def custom_json_serializer(obj):
@@ -66,56 +61,6 @@ def step_message(step_id, run_id, index, msg_id):
     return f"event: message\ndata: {msg}\n\n"
 
 
-async def final_message(
-    conversation: MessageSession,
-    title: str,
-    request_message: ChatMessage,
-    text: str,
-    error: bool,
-    model_name: str,
-    source_document: list[Document] = None,
-):
-    response_message = await ChatMessageDao.ainsert_one(
-        ChatMessage(
-            user_id=conversation.user_id,
-            chat_id=conversation.chat_id,
-            flow_id="",
-            type="assistant",
-            is_bot=True,
-            message=text,
-            category="answer",
-            sender=model_name,
-            extra=json.dumps({"parentMessageId": request_message.id, "error": error}),
-            source=SourceType.FILE.value if source_document else SourceType.NOT_SUPPORT.value,
-        )
-    )
-    if source_document:
-        # F016: traceability is billed as daily chat but runs after the answer was sent, so it is
-        # never compared with the allowance; the task inherits the unmetered context.
-        with chat_credits.unmetered():
-            asyncio.create_task(
-                process_source_document(
-                    source_document=source_document,
-                    chat_id=conversation.chat_id,
-                    message_id=response_message.id,
-                    answer=text,
-                    app_type=ApplicationTypeEnum.DAILY_CHAT,
-                )
-            )
-
-    msg = json.dumps(
-        {
-            "final": True,
-            "conversation": WorkstationConversation.from_chat_session(conversation).model_dump(),
-            "title": title,
-            "requestMessage": (await WorkstationMessage.from_chat_message(request_message)).model_dump(),
-            "responseMessage": (await WorkstationMessage.from_chat_message(response_message)).model_dump(),
-        },
-        default=custom_json_serializer,
-    )
-    return f"event: message\ndata: {msg}\n\n"
-
-
 async def resolve_title_llm(chat_llm: BaseChatModel, login_user: UserPayload) -> BaseChatModel:
     """Pick the model that names a workbench conversation.
 
@@ -123,7 +68,6 @@ async def resolve_title_llm(chat_llm: BaseChatModel, login_user: UserPayload) ->
     set, so a fast non-thinking model can take naming off the chat model; with
     none set, the conversation's own chat model names it, as before.
     """
-    from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
     from bisheng.llm.domain import LLMService
 
     model_id = None

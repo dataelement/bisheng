@@ -1,8 +1,8 @@
 """Real-session regression for partial workbench POSTs preserving model lists.
 
 覆盖 AC: AC-71, AC-87, AC-88, AC-89, AC-92
-None keeps the saved list; [] clears; an explicit list replaces. Typed business
-errors remain 10810/10811. Provider/rebuild IO is never reached by these cases.
+None keeps the saved list; [] clears; an explicit list replaces. Chat-default errors remain 10811; retired embedding inputs are ignored.
+Provider/rebuild IO is never reached by these cases.
 """
 
 import json
@@ -14,7 +14,7 @@ import pytest
 from fastapi import BackgroundTasks
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.llm import WorkbenchChatDefaultModelError, WorkbenchEmbeddingError
+from bisheng.common.errcode.llm import WorkbenchChatDefaultModelError
 from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.schemas import WorkbenchModelConfig, WSModel
@@ -102,13 +102,12 @@ async def test_provided_models_replace_normally(merge_store):
 
 
 @pytest.mark.parametrize("invalid_model_id", ["", "null", "undefined", "0", "-1"])
-async def test_invalid_embedding_model_id_returns_business_error(merge_store, invalid_model_id):
-    incoming = WorkbenchModelConfig(
-        models=[WSModel(id="840", name="new")], embedding_model=WSModel(id=invalid_model_id)
+async def test_retired_embedding_model_does_not_validate_or_probe(merge_store, invalid_model_id):
+    incoming = WorkbenchModelConfig.model_validate(
+        {"models": [{"id": "840", "name": "new"}], "embedding_model": {"id": invalid_model_id}}
     )
-    with pytest.raises(WorkbenchEmbeddingError) as raised:
-        await _run_and_capture(merge_store, incoming)
-    assert raised.value.code == 10810
+    persisted = await _run_and_capture(merge_store, incoming)
+    assert "embedding_model" not in persisted
     merge_store.provider.assert_not_awaited()
 
 

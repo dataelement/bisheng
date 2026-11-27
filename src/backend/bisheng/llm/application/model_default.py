@@ -1,7 +1,6 @@
 """Default configurations and R2 bindings share the caller's transaction."""
 
 import json
-from dataclasses import dataclass
 
 from pydantic import BaseModel
 
@@ -10,7 +9,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
     ResourceReferenceInvalidError,
 )
-from bisheng.common.errcode.llm import WorkbenchChatDefaultModelError, WorkbenchEmbeddingError
+from bisheng.common.errcode.llm import WorkbenchChatDefaultModelError
 from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
 from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.tenant import is_tenant_filter_bypassed
@@ -46,12 +45,6 @@ def current_model_default_tenant(expected=None):
     ):
         raise ResourceReferenceInvalidError(reason="model_default_tenant_required")
     return tenant
-
-
-@dataclass(frozen=True, slots=True)
-class ModelDefaultSaveResult:
-    config: BaseModel
-    embedding_changed: bool = False
 
 
 class ModelDefaultApplication:
@@ -93,11 +86,6 @@ class ModelDefaultApplication:
                     else MODEL_DEFAULT_SCHEMAS[key]()
                 )
                 config.models = original.models
-            if config.embedding_model is not None:
-                try:
-                    config.embedding_model.id = canonical_target_id(config.embedding_model.id)
-                except (TypeError, ValueError) as error:
-                    raise WorkbenchEmbeddingError() from error
             if config.chat_default_model_id is not None:
                 try:
                     selected = canonical_target_id(config.chat_default_model_id)
@@ -110,10 +98,6 @@ class ModelDefaultApplication:
                 if selected not in choices:
                     raise WorkbenchChatDefaultModelError()
         return config
-
-    @staticmethod
-    def _embedding_id(config):
-        return canonical_target_id(config.embedding_model.id) if config.embedding_model is not None else None
 
     @classmethod
     async def _asave(cls, session, key, payload, *, login_user):
@@ -129,11 +113,6 @@ class ModelDefaultApplication:
             references = extract_model_default_references(key, config)
         except (TypeError, ValueError) as error:
             raise ResourceReferenceInvalidError(reason="model_default_configuration_invalid") from error
-        embedding_changed = False
-        if effective is not None:
-            original = MODEL_DEFAULT_SCHEMAS[key].model_validate_json(effective.payload_json)
-            selected = cls._embedding_id(config)
-            embedding_changed = selected is not None and selected != cls._embedding_id(original)
 
         async def lock_root(active_session):
             current = await repository.alock_root(active_session, key)
@@ -156,11 +135,11 @@ class ModelDefaultApplication:
         require_callable_default_models(key, existing, states)
         await cls._authorize(login_user, tenant)
         await repository.aput(session, key, canonical_payload_json(config.model_dump(mode="json")))
-        return ModelDefaultSaveResult(config, embedding_changed)
+        return config
 
     @classmethod
     async def asave(cls, session, key, payload, *, login_user):
-        return (await cls._asave(session, key, payload, login_user=login_user)).config
+        return await cls._asave(session, key, payload, login_user=login_user)
 
     @classmethod
     async def arestore_inheritance(cls, session, key, *, login_user):

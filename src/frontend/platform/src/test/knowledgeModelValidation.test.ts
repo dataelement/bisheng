@@ -7,7 +7,6 @@ import {
 
 const configuredModelIds: KnowledgeModelIds = {
     embedding_model_id: 101,
-    source_model_id: 999,
     extract_title_model_id: 999,
     qa_similar_model_id: 202,
     asr_model_id: null,
@@ -24,12 +23,11 @@ describe("normalizeKnowledgeModelIds", () => {
         expect(normalizeKnowledgeModelIds(configuredModelIds, visibleModelOptions)).toEqual({
             modelIds: {
                 embedding_model_id: 101,
-                source_model_id: 999,
                 extract_title_model_id: 999,
                 qa_similar_model_id: 202,
                 asr_model_id: null,
             },
-            unavailableFields: ["source_model_id", "extract_title_model_id"],
+            unavailableFields: ["extract_title_model_id"],
         });
     });
 
@@ -39,7 +37,6 @@ describe("normalizeKnowledgeModelIds", () => {
                 {
                     ...configuredModelIds,
                     embedding_model_id: "101",
-                    source_model_id: null,
                     extract_title_model_id: 202,
                 },
                 visibleModelOptions,
@@ -47,7 +44,6 @@ describe("normalizeKnowledgeModelIds", () => {
         ).toEqual({
             modelIds: {
                 embedding_model_id: "101",
-                source_model_id: null,
                 extract_title_model_id: 202,
                 qa_similar_model_id: 202,
                 asr_model_id: null,

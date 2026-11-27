@@ -10,7 +10,6 @@ export interface ModelOptionGroup {
 
 export interface KnowledgeModelIds {
     embedding_model_id: ModelId;
-    source_model_id: ModelId;
     extract_title_model_id: ModelId;
     qa_similar_model_id: ModelId;
     asr_model_id: ModelId;
@@ -49,7 +48,6 @@ export function normalizeKnowledgeModelIds(
 } {
     const optionGroupsByField: Record<KnowledgeModelIdField, ModelOptionGroup[]> = {
         embedding_model_id: options.embeddings,
-        source_model_id: options.llmOptions,
         extract_title_model_id: options.llmOptions,
         qa_similar_model_id: options.llmOptions,
         asr_model_id: options.asrModels,

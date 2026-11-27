@@ -1,18 +1,8 @@
-import ast
 import json
-import re
 from enum import Enum
 from urllib.parse import unquote, urlparse
 
-from langchain_classic.chains import LLMChain
-from langchain_classic.prompts import PromptTemplate
 from langchain_classic.schema.document import Document
-from loguru import logger
-
-from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.database.models.message import ChatMessageDao
-from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.llm.domain.services import LLMService
 
 
 class SourceType(Enum):
@@ -25,56 +15,6 @@ class SourceType(Enum):
     NO_PERMISSION = 2
     LINK = 3
     QA = 4
-
-
-prompt_template = """Analyze givenQuestionEkstrakQuestionContained inKeyWords, output list format
-
-Examples:
-Question: The current ratios of Damon over the past three years are as follows:2021Year:3.74x2020Year:2.82x2019Year:2.05x
-KeyWords: ['Past three years', 'Current ratio', '2021', '3.74', '2020', '2.82', '2019', '2.05']
-
-----------------
-Question: {question}"""
-
-
-def extract_answer_keys(answer, llm):
-    """
-    EkstrakanswerKeywords in
-    """
-    llm_chain = None
-    if llm:
-        llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
-    try:
-        keywords_str = llm_chain.run(answer)
-        keywords_str = re.sub("<think>.*</think>", "", keywords_str, flags=re.S).strip()
-        keywords = ast.literal_eval(keywords_str[9:])
-    except Exception:
-        import jieba.analyse
-
-        logger.warning("llm extract_not_support, change to jieba")
-        keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
-
-    return keywords
-
-
-async def extract_answer_keys_async(answer, llm):
-    """
-    EkstrakanswerKeywords in
-    """
-    llm_chain = None
-    if llm:
-        llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
-    try:
-        keywords_str = await llm_chain.arun(answer)
-        keywords_str = re.sub("<think>.*</think>", "", keywords_str, flags=re.S).strip()
-        keywords = ast.literal_eval(keywords_str[9:])
-    except Exception:
-        import jieba.analyse
-
-        logger.warning("llm extract_not_support, change to jieba")
-        keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
-
-    return keywords
 
 
 def sync_judge_source(result, source_document, chat_id, extra: dict):
@@ -130,71 +70,6 @@ def sync_judge_source(result, source_document, chat_id, extra: dict):
 
 async def judge_source(result, source_document, chat_id, extra: dict):
     return sync_judge_source(result, source_document, chat_id, extra)
-
-
-def sync_process_source_document(source_document: list[Document], chat_id, message_id, answer):
-    if not source_document or not message_id:
-        return
-
-    message_info = ChatMessageDao.get_message_by_id(message_id)
-    if not message_info:
-        return
-    llm = LLMService.get_knowledge_source_llm(message_info.user_id)
-
-    answer_keywords = extract_answer_keys(answer, llm)
-
-    batch_insert = []
-    for doc in source_document:
-        if "bbox" in doc.metadata:
-            content = doc.page_content
-            recall_chunk = RecallChunk(
-                chat_id=chat_id,
-                keywords=json.dumps(answer_keywords),
-                chunk=content,
-                file_id=doc.metadata.get("file_id") or doc.metadata.get("document_id"),
-                meta_data=json.dumps(doc.metadata),
-                message_id=message_id,
-            )
-            batch_insert.append(recall_chunk)
-    if batch_insert:
-        with get_sync_db_session() as db_session:
-            db_session.add_all(batch_insert)
-            db_session.commit()
-
-
-async def process_source_document(source_document: list[Document], chat_id, message_id, answer, app_type=None):
-    logger.debug(f"process_source_document: {len(source_document)} message_id: {message_id}")
-
-    if not source_document or not message_id:
-        return
-    message_info = await ChatMessageDao.aget_message_by_id(message_id)
-    if not message_info:
-        return
-    # F016: the workbench passes daily_chat so traceability is billed; workflows keep the default.
-    extra = {"app_type": app_type} if app_type is not None else {}
-    llm = await LLMService.get_knowledge_source_llm_async(message_info.user_id, **extra)
-
-    answer_keywords = await extract_answer_keys_async(answer, llm)
-
-    batch_insert = []
-    for doc in source_document:
-        if "bbox" in doc.metadata:
-            content = doc.page_content
-            recall_chunk = RecallChunk(
-                chat_id=chat_id,
-                keywords=json.dumps(answer_keywords),
-                chunk=content,
-                file_id=doc.metadata.get("file_id") or doc.metadata.get("document_id"),
-                meta_data=json.dumps(doc.metadata),
-                message_id=message_id,
-            )
-            batch_insert.append(recall_chunk)
-    if batch_insert:
-        logger.debug(f"batch_insert: {len(batch_insert)} message_id: {message_id}")
-        async with get_async_db_session() as db_session:
-            db_session.add_all(batch_insert)
-            await db_session.commit()
-    logger.debug(f"process_source_document_over: {len(source_document)} message_id: {message_id}")
 
 
 def process_node_data(node_data: list[dict]) -> dict:

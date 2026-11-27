@@ -91,15 +91,14 @@ it('saves without any stored model metadata when the desktop module is off', asy
     expect(mocks.message).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }))
 })
 
-it('opens the collapsed settings when the required embedding model blocks saving', async () => {
+it('saves without the retired embedding setting or rebuilding confirmation', async () => {
     mocks.get.mockResolvedValue({ data: { ...config, embedding_model: null } })
-    const { container } = render(<WorkbenchModel data={data} onBack={vi.fn()} />)
-    const save = await screen.findByRole('button', { name: 'model.save' })
-    const details = container.querySelector('details')!
-    expect(details).not.toHaveAttribute('open')
-    fireEvent.click(save)
-    await waitFor(() => expect(details).toHaveAttribute('open'))
-    expect(mocks.save).not.toHaveBeenCalled()
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce())
+    expect(mocks.save.mock.calls[0][0]).not.toHaveProperty('embedding_model')
+    expect(screen.queryByLabelText('model.workVectorModel')).not.toBeInTheDocument()
+    expect(screen.queryByText('model.confirmEmbeddingChange')).not.toBeInTheDocument()
 })
 
 it('keeps unavailable configured metadata until the administrator explicitly removes it', async () => {

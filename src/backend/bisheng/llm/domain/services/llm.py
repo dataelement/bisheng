@@ -64,7 +64,7 @@ from bisheng.llm.domain.schemas import (
     WorkbenchModelConfig,
 )
 from bisheng.llm.domain.services.context_window import ContextWindowService
-from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
+from bisheng.llm.domain.utils import invalidate_llm_info_cache, usable_proxy_url
 from bisheng.resource_reference.application.contracts import canonical_target_id
 from bisheng.resource_reference.application.source_sync import notify_reference_sync
 from bisheng.tenant.domain.constants import TenantAuditAction
@@ -1173,50 +1173,6 @@ class LLMService:
         )
 
     @classmethod
-    def get_knowledge_source_llm(
-        cls,
-        invoke_user_id: int,
-        tenant_id: int | None = None,
-        app_type: ApplicationTypeEnum = ApplicationTypeEnum.RAG_TRACEABILITY,
-    ) -> BaseChatModel | None:
-        """Get the default model configuration for Knowledge Base Traceability"""
-        knowledge_llm = cls.get_knowledge_llm(tenant_id=tenant_id, slots=("source_model_id",))
-        # If no model is configured, usejieba
-        if not knowledge_llm.source_model_id:
-            return None
-        return cls.get_bisheng_llm_sync(
-            model_id=knowledge_llm.source_model_id,
-            app_id=app_type.value,
-            app_name=app_type.value,
-            app_type=app_type,
-            user_id=invoke_user_id,
-            # F016: the workbench bills traceability as daily chat on this admin-chosen model.
-            admin_selected=True,
-        )
-
-    @classmethod
-    async def get_knowledge_source_llm_async(
-        cls,
-        invoke_user_id: int,
-        tenant_id: int | None = None,
-        app_type: ApplicationTypeEnum = ApplicationTypeEnum.RAG_TRACEABILITY,
-    ) -> BaseChatModel | None:
-        """Get the default model configuration for Knowledge Base Traceability"""
-        knowledge_llm = await cls.aget_knowledge_llm(tenant_id=tenant_id, slots=("source_model_id",))
-        # If no model is configured, usejieba
-        if not knowledge_llm.source_model_id:
-            return None
-        return await cls.get_bisheng_llm(
-            model_id=knowledge_llm.source_model_id,
-            app_id=app_type.value,
-            app_name=app_type.value,
-            app_type=app_type,
-            user_id=invoke_user_id,
-            # F016: the workbench bills traceability as daily chat on this admin-chosen model.
-            admin_selected=True,
-        )
-
-    @classmethod
     def get_knowledge_similar_llm(
         cls,
         invoke_user_id: int,
@@ -1260,30 +1216,13 @@ class LLMService:
     async def _save_model_default(cls, key, data, *, tenant_id=None, login_user=None, session=None):
         current_model_default_tenant(tenant_id)
 
-        async def save(active):
-            result = await ModelDefaultApplication._asave(active, key, data, login_user=login_user)
-            if result.embedding_changed:
-                embeddings = await cls.get_bisheng_embedding(
-                    model_id=result.config.embedding_model.id,
-                    app_id=ApplicationTypeEnum.LINSIGHT.value,
-                    app_name=ApplicationTypeEnum.LINSIGHT.value,
-                    app_type=ApplicationTypeEnum.LINSIGHT,
-                    user_id=login_user.user_id,
-                )
-                try:
-                    await embeddings.aembed_query("test")
-                except Exception as error:
-                    logger.exception("workbench embedding model probe failed")
-                    raise to_llm_invoke_error(embeddings, error) from error
-            return result
-
         if session is not None:
-            return (await save(session)).config
+            return await ModelDefaultApplication.asave(session, key, data, login_user=login_user)
         async with get_async_db_session() as active:
-            result = await save(active)
+            result = await ModelDefaultApplication.asave(active, key, data, login_user=login_user)
             await active.commit()
         await notify_reference_sync(current_model_default_tenant(tenant_id), "model_default", key)
-        return result.config
+        return result
 
     @classmethod
     async def update_knowledge_llm(

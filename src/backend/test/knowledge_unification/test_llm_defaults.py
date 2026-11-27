@@ -66,7 +66,7 @@ async def business(model_owner_tenant, monkeypatch):
 @pytest.mark.parametrize(
     "key,payload,count",
     [
-        ("knowledge_llm", {"source_model_id": 11}, 1),
+        ("knowledge_llm", {"qa_similar_model_id": 11}, 1),
         ("assistant_llm", {"auto_llm": {"model_id": 11}, "llm_list": [{"model_id": 12}]}, 2),
         ("evaluation_llm", {"model_id": 11}, 1),
         ("workflow_llm", {"model_id": 12}, 1),
@@ -127,7 +127,9 @@ async def test_stale_auxiliary_index_does_not_block_default_replacement(business
 @pytest.mark.parametrize("stage", ["deleted", "deleting"])
 async def test_auxiliary_model_deletion_marker_does_not_block_default_repair(business, stage):
     async with AsyncSession(business.engine) as session, session.begin():
-        await ModelDefaultApplication.asave(session, "knowledge_llm", {"source_model_id": 11}, login_user=business.user)
+        await ModelDefaultApplication.asave(
+            session, "knowledge_llm", {"qa_similar_model_id": 11}, login_user=business.user
+        )
         session.add(
             ResourceReferenceTombstone(
                 tenant_id=101,
@@ -145,7 +147,10 @@ async def test_auxiliary_model_deletion_marker_does_not_block_default_repair(bus
             await session.execute(delete(LLMModel).where(LLMModel.tenant_id == 101, LLMModel.id == 11))
     async with AsyncSession(business.engine) as session:
         await ModelDefaultApplication.asave(
-            session, "knowledge_llm", {"source_model_id": 11, "extract_title_model_id": 12}, login_user=business.user
+            session,
+            "knowledge_llm",
+            {"qa_similar_model_id": 11, "extract_title_model_id": 12},
+            login_user=business.user,
         )
         assert not await business.runtime.repository.alist_source_references(
             session, SourceKey(101, "model_default", "knowledge_llm", "current")
@@ -184,7 +189,7 @@ async def test_passive_model_creation_does_not_materialize_inherited_root_defaul
             [
                 TenantSystemModelConfig(tenant_id=1, key=key, value=value)
                 for key, value in [
-                    ("knowledge_llm", '{"source_model_id":22,"extract_title_model_id":22,"qa_similar_model_id":22}'),
+                    ("knowledge_llm", '{"qa_similar_model_id":22,"extract_title_model_id":22}'),
                     ("evaluation_llm", '{"model_id":22}'),
                     ("workflow_llm", '{"model_id":22}'),
                     ("assistant_llm", '{"auto_llm":{"model_id":22},"llm_list":[{"model_id":22}]}'),

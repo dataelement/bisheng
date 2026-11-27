@@ -89,8 +89,8 @@ async def consumer(business, monkeypatch):
     )
     monkeypatch.setattr(
         module.LLMService,
-        "get_workbench_llm",
-        AsyncMock(return_value=SimpleNamespace(embedding_model=SimpleNamespace(id=11))),
+        "aget_knowledge_llm",
+        AsyncMock(return_value=SimpleNamespace(embedding_model_id=11)),
     )
     monkeypatch.setattr(KnowledgeService, "_init_knowledge_indices_sync", Mock())
     monkeypatch.setattr(KnowledgeService, "delete_knowledge_file_in_vector", Mock())
