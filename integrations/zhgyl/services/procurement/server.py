@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Private Excel-snapshot mock of the supplied MK envelope. Python 3.8+, stdlib only."""
+"""Private Excel-snapshot mock of the supplied MK envelope. POSIX, Python 3.8+, stdlib only."""
 import argparse
 import hashlib
 import hmac
@@ -9,6 +9,7 @@ import math
 from pathlib import Path
 import re
 import secrets
+import signal
 import subprocess
 import sys
 import threading
@@ -19,6 +20,8 @@ from urllib.parse import parse_qs, urlsplit
 FUNCTION = 'mock_procurement_history_v1'
 CALL = '/openapi/tic-definition/integrationInterface/call'
 TOKEN_TTL = 7200
+REGEX_CPU_SECONDS = 1
+REGEX_WORKER_TIMEOUT = 5
 
 
 def norm(value):
@@ -41,11 +44,18 @@ def integer(value, name, maximum):
 
 def regex_worker():
     data = json.load(sys.stdin)
+    # The child gets one CPU second for compilation and matching. Interpreter
+    # startup, descheduling and JSON I/O do not count against the regex itself.
+    signal.signal(signal.SIGPROF, signal.SIG_DFL)
+    signal.setitimer(signal.ITIMER_PROF, REGEX_CPU_SECONDS)
     try:
         pattern = re.compile(data['pattern'], re.IGNORECASE)
-        print(json.dumps({'matches': [v for v in data['models'] if pattern.fullmatch(v)]}))
+        result = {'matches': [v for v in data['models'] if pattern.fullmatch(v)]}
     except re.error:
-        print(json.dumps({'error': 'invalid_regex'}))
+        result = {'error': 'invalid_regex'}
+    finally:
+        signal.setitimer(signal.ITIMER_PROF, 0)
+    print(json.dumps(result))
 
 
 class Application:
@@ -106,16 +116,19 @@ class Application:
         if mode == 'exact':
             matched = {norm(model)}
         else:
-            # A killed child bounds catastrophic regex backtracking; no shell or user code execution.
+            # Keep a separate wall-clock bound so a stalled child cannot hold a request slot.
             try:
                 done = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--regex-worker'],
                                       input=json.dumps({'pattern': unicodedata.normalize('NFKC', model),
                                                         'models': self.models}),
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                      encoding='utf-8', timeout=1, check=True)
-                result = json.loads(done.stdout)
+                                      encoding='utf-8', timeout=REGEX_WORKER_TIMEOUT)
             except subprocess.TimeoutExpired:
-                raise Fault(422, 'regex_timeout', 'Regex exceeded one-second runtime budget')
+                raise Fault(503, 'regex_worker_timeout', 'Regex worker did not respond in time; try again')
+            if done.returncode == -signal.SIGPROF:
+                raise Fault(422, 'regex_timeout', 'Regex exceeded one-second CPU budget')
+            done.check_returncode()
+            result = json.loads(done.stdout)
             if 'error' in result:
                 raise Fault(400, 'invalid_regex', 'Invalid Python regular expression')
             matched = set(result['matches'])

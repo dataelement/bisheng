@@ -156,7 +156,7 @@
             }
           },
           "422": {
-            "description": "正则超过一秒预算",
+            "description": "正则编译与匹配超过一秒 CPU 预算（regex_timeout）",
             "content": {
               "application/json": {
                 "schema": {
@@ -177,6 +177,16 @@
           },
           "500": {
             "description": "服务内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "正则子进程未在五秒内响应，可重试（regex_worker_timeout）",
             "content": {
               "application/json": {
                 "schema": {
