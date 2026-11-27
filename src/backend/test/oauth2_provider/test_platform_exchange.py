@@ -66,7 +66,7 @@ async def platform_env(request, tmp_path):
         )
     )
     runtime.target_secret = registered.client_secret
-    token = await source.issue(7, 9, "bisheng-mobile")
+    token = await source.issue(7, 9, getattr(request, "param", "bisheng-mobile"))
     subject = await read_platform_exchange_subject(source_request(source), token["access_token"])
     app = FastAPI()
     app.include_router(public_router, prefix="/api/v1")
@@ -110,14 +110,15 @@ async def approve(runtime, scope="openid profile", decision="approve", direct=Fa
         await runtime.auth.submit_consent(request_id=rid, user_id=7, tenant_id=9, decision=decision)
 
 
+@pytest.mark.parametrize("platform_env", ["bisheng-web", "bisheng-mobile", "bisheng-desktop"], indirect=True)
 async def test_silent_without_any_source_client_or_pair_policy(platform_env):
-    runtime, source, _, _, token, _, _ = platform_env
+    runtime, source, _, _, token, subject, _ = platform_env
     result = await exchange(platform_env)
     assert result["issued_token_type"] == ACCESS_TOKEN_TYPE and 0 < result["expires_in"] <= 300
     assert "refresh_token" not in result and "id_token" not in result
     key = await runtime.keys.get_public_key()
     claims = jwt.decode(result["access_token"], key, algorithms=["ES256"], issuer=ORIGIN, audience="platform-target")
-    assert (claims["sub"], claims["tenant_id"], claims["client_id"]) == ("7", "9", "bisheng-mobile")
+    assert (claims["sub"], claims["tenant_id"], claims["client_id"]) == ("7", "9", subject["client_id"])
     assert claims["exchange_source"] == "platform_session"
     assert token["access_token"] not in str(claims)
     info = await runtime.auth.userinfo("Bearer " + result["access_token"])
@@ -126,6 +127,7 @@ async def test_silent_without_any_source_client_or_pair_policy(platform_env):
         assert db.exec(select(OAuth2RefreshToken)).all() == []
         assert db.exec(select(OAuth2UserConsent)).all() == []
         link = db.exec(select(OAuth2PlatformExchangeSession)).one()
+        assert link.source_client_id == subject["client_id"]
         assert token["access_token"] not in str(link.source_reference)
     await runtime.auth.revoke_token(
         token=result["access_token"], client_id="platform-target", client_secret=runtime.target_secret
@@ -168,6 +170,7 @@ async def test_current_target_state_is_enforced(platform_env, update):
         await runtime.auth.userinfo("Bearer " + result["access_token"])
 
 
+@pytest.mark.parametrize("platform_env", ["bisheng-web", "bisheng-mobile", "bisheng-desktop"], indirect=True)
 async def test_explicit_user_consent_scope_and_revocation(platform_env):
     runtime, *_ = platform_env
     await runtime.clients.update_client("platform-target", OAuth2ClientUpdate(require_consent=True))
@@ -208,6 +211,7 @@ async def test_parent_access_and_session_cap(platform_env):
     await source.inspect(token["access_token"])
 
 
+@pytest.mark.parametrize("platform_env", ["bisheng-web", "bisheng-mobile", "bisheng-desktop"], indirect=True)
 async def test_http_cookie_bearer_body_and_consent_error(platform_env):
     runtime, source, _, _, token, _, app = platform_env
     data = {

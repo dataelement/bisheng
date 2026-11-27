@@ -75,8 +75,8 @@ class OAuth2ClientRepository:
             return existing
         builtin = OAuth2Client(
             client_id=BUILTIN_DSH_CLIENT_ID,
-            client_name="BiSheng Desktop (DSH)",
-            description="Built-in public PKCE client for BiSheng Desktop (DSH) native login.",
+            client_name="BiSheng Desktop",
+            description="Built-in public PKCE client for BiSheng Desktop native login.",
             client_type="public",
             client_secret_hash=None,
             redirect_uris=["http://127.0.0.1/dsh/callback"],

@@ -2,6 +2,8 @@
 
 import asyncio
 
+import pytest
+
 from bisheng.user.domain.services.platform_stream import run_platform_guarded
 from test.platform_auth.test_platform_session import runtime as _runtime
 
@@ -21,10 +23,11 @@ def reference(service, issued):
     }
 
 
-async def test_revoked_next_websocket_message_never_reaches_business(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_revoked_next_websocket_message_never_reaches_business(runtime, native_client):
     """AC-16/26: Every incoming WS action rechecks its exact session."""
     service, _, _ = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     accepted = asyncio.Event()
     messages, output, business = asyncio.Queue(), [], []
 
@@ -57,10 +60,11 @@ async def test_revoked_next_websocket_message_never_reaches_business(runtime):
     assert output[-1]["type"] == "websocket.close" and output[-1]["code"] == 1008
 
 
-async def test_idle_sse_stops_without_waiting_for_next_output(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_idle_sse_stops_without_waiting_for_next_output(runtime, native_client):
     """AC-16: An idle established stream notices logout without waiting for output."""
     service, _, _ = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     started, blocked, output = asyncio.Event(), asyncio.Event(), []
 
     async def app(scope, receive, send):
@@ -90,10 +94,11 @@ async def test_idle_sse_stops_without_waiting_for_next_output(runtime):
     assert b"session_revoked" in output[-1]["body"]
 
 
-async def test_slow_storage_budget_is_retryable_and_does_not_admit_action(runtime, monkeypatch):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_slow_storage_budget_is_retryable_and_does_not_admit_action(runtime, monkeypatch, native_client):
     """AC-17/28: A bounded storage timeout is 503; business is not admitted."""
     service, _, _ = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     ref = reference(service, issued)
     output, business = [], []
 

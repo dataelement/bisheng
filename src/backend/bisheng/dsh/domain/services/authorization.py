@@ -41,7 +41,7 @@ class DshAuthorizationService:
         if not public_origin:
             raise DshInvalidRequestError()
         require_consent = True
-        client_name = "BiSheng Desktop (DSH)"
+        client_name = "BiSheng Desktop"
         if self.oauth2_clients is not None:
             try:
                 client = await self.oauth2_clients.get_active_client_model(body.client_id)
@@ -107,7 +107,7 @@ class DshAuthorizationService:
             "challenge": payload["code_challenge"],
             "redirect_uri": payload["redirect_uri"],
             "client_id": payload["client_id"],
-            "client_name": payload.get("client_name") or "BiSheng Desktop (DSH)",
+            "client_name": payload.get("client_name") or "BiSheng Desktop",
             "require_consent": bool(payload.get("require_consent", True)),
             "state": payload["state"],
             "expires_in": ttl,

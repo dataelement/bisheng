@@ -11,7 +11,7 @@ class OAuth2PlatformSubject(BaseModel):
     model_config = ConfigDict(extra="forbid")
     user_id: int = Field(strict=True, gt=0)
     tenant_id: int = Field(strict=True, gt=0)
-    client_id: Literal["bisheng-web", "bisheng-mobile"]
+    client_id: Literal["bisheng-web", "bisheng-mobile", "bisheng-desktop"]
     expires_at: int = Field(strict=True, gt=0)
     session_expires_at: int = Field(strict=True, gt=0)
     reference: dict

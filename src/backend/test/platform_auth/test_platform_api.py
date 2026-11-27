@@ -28,10 +28,11 @@ def app_for(service):
     return app
 
 
-async def test_native_http_rotate_and_logout(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_native_http_rotate_and_logout(runtime, native_client):
     """AC-01/08/15: Native wire tokens rotate and logout is authoritative."""
     service, _, _ = runtime
-    first = await service.issue(7, 9, "bisheng-mobile")
+    first = await service.issue(7, 9, native_client)
     async with AsyncClient(transport=ASGITransport(app=app_for(service)), base_url="https://platform.test") as client:
         result = await client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]})
         assert result.status_code == 200
@@ -92,10 +93,11 @@ async def test_web_pending_bootstrap_csrf_cookie_scope_and_conflict(runtime):
         assert cross_origin.status_code == 403
 
 
-async def test_ticket_is_single_use_and_parent_revocation_applies(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_ticket_is_single_use_and_parent_revocation_applies(runtime, native_client):
     """AC-15/26: Host delivery is one-use and never outlives its native parent."""
     service, _, _ = runtime
-    parent = await service.issue(7, 9, "bisheng-mobile")
+    parent = await service.issue(7, 9, native_client)
     async with AsyncClient(transport=ASGITransport(app=app_for(service)), base_url="https://platform.test") as client:
         ticket = (
             await client.post("/api/v1/auth/web-session", headers={"Authorization": f"Bearer {parent['access_token']}"})

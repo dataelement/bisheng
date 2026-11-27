@@ -64,7 +64,7 @@ def signed(service, claims):
     )
 
 
-@pytest.mark.parametrize("client", ["bisheng-web", "bisheng-mobile"])
+@pytest.mark.parametrize("client", ["bisheng-web", "bisheng-mobile", "bisheng-desktop"])
 @pytest.mark.parametrize("transport", ["body", "bearer", "cookie"])
 async def test_subject_has_only_closed_verified_fields(runtime, client, transport):
     service, clock, _ = runtime
@@ -119,9 +119,10 @@ async def test_cookie_requires_origin_and_csrf_even_with_body(runtime, change):
         {"sec-fetch-site": "same-site"},
     ],
 )
-async def test_explicit_token_cannot_bypass_browser_boundaries(runtime, headers):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_explicit_token_cannot_bypass_browser_boundaries(runtime, headers, native_client):
     service, _, _ = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     with pytest.raises(PlatformAuthError, match="csrf_rejected"):
         await oauth_exchange.read_platform_exchange_subject(request(service, headers), issued["access_token"])
 
@@ -200,9 +201,10 @@ async def test_no_basic_or_empty_bearer(runtime, authorization):
 @pytest.mark.parametrize(
     "kind", ["refresh", "legacy", "dsh", "signature", "bootstrap", "bound-bootstrap", "client", "tenant", "version"]
 )
-async def test_non_subject_credentials_rejected(runtime, kind):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_non_subject_credentials_rejected(runtime, kind, native_client):
     service, _, _ = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     token = issued["access_token"]
     if kind == "refresh":
         token = issued["refresh_token"]
@@ -236,9 +238,10 @@ async def test_non_subject_credentials_rejected(runtime, kind):
 @pytest.mark.parametrize(
     "failure", ["access-expiry", "session-expiry", "logout", "token-version", "session-version", "parent"]
 )
-async def test_live_state_and_reference_validation(runtime, monkeypatch, failure):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_live_state_and_reference_validation(runtime, monkeypatch, failure, native_client):
     service, clock, identity = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     parent = issued
     if failure == "parent":
         ticket = await service.create_ticket(parent["access_token"], "https://platform.test")

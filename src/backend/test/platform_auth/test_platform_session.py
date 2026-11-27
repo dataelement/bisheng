@@ -37,10 +37,11 @@ def runtime(tmp_path):
     return service, clock, identity
 
 
-async def test_default_ttls_refresh_does_not_renew(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_default_ttls_refresh_does_not_renew(runtime, native_client):
     """AC-05/06/07/08: 30-day Access, 90-day idle; only activity renews."""
     service, clock, _ = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     assert issued["expires_in"] == 30 * 86400
     assert issued["refresh_expires_in"] == 90 * 86400
     original = issued["session_expires_at"]
@@ -52,10 +53,11 @@ async def test_default_ttls_refresh_does_not_renew(runtime):
     assert renewed["session_expires_at"] != original
 
 
-async def test_deterministic_recovery_then_replay_revokes_family(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_deterministic_recovery_then_replay_revokes_family(runtime, native_client):
     """AC-11: Lost-response recovery never creates a second refresh branch."""
     service, _, _ = runtime
-    first = await service.issue(7, 9, "bisheng-mobile")
+    first = await service.issue(7, 9, native_client)
     second = await service.refresh(first["refresh_token"])
     retry = await service.refresh(first["refresh_token"])
     assert retry["refresh_token"] == second["refresh_token"]
@@ -83,31 +85,33 @@ async def test_bootstrap_token_never_becomes_business_credential(runtime):
         await service.bootstrap(pending["access_token"])
 
 
-async def test_revoke_version_and_expiry(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_revoke_version_and_expiry(runtime, native_client):
     """AC-10/15: Version, logout and idle expiry are authoritative."""
     service, clock, identity = runtime
-    first = await service.issue(7, 9, "bisheng-mobile")
+    first = await service.issue(7, 9, native_client)
     identity["token_version"] += 1
     with pytest.raises(PlatformAuthError, match="session_revoked"):
         await service.refresh(first["refresh_token"])
-    second = await service.issue(7, 9, "bisheng-mobile")
+    second = await service.issue(7, 9, native_client)
     await service.logout(second["access_token"])
     await service.logout(second["access_token"])
     with pytest.raises(PlatformAuthError, match="session_revoked"):
         await service.inspect(second["access_token"])
-    third = await service.issue(7, 9, "bisheng-mobile")
+    third = await service.issue(7, 9, native_client)
     clock[0] += timedelta(days=91)
     with pytest.raises(PlatformAuthError, match="session_expired"):
         await service.refresh(third["refresh_token"])
 
 
-async def test_session_policy_is_frozen_and_absolute_cap_applies(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_session_policy_is_frozen_and_absolute_cap_applies(runtime, native_client):
     """AC-05/06/07: Configuration updates affect new sessions only."""
     service, clock, _ = runtime
-    first = await service.issue(7, 9, "bisheng-mobile")
+    first = await service.issue(7, 9, native_client)
     service.access_seconds, service.idle_seconds, service.grace_seconds = 86400, 10 * 86400, 0
     service.absolute_seconds = 5 * 86400
-    second = await service.issue(7, 9, "bisheng-mobile")
+    second = await service.issue(7, 9, native_client)
     assert second["expires_in"] == 86400
     clock[0] += timedelta(days=1)
     rotated = await service.refresh(first["refresh_token"])
@@ -120,7 +124,8 @@ async def test_session_policy_is_frozen_and_absolute_cap_applies(runtime):
     assert (await service.inspect(second_rotated["access_token"]))["session_expires_at"] == "2026-01-06T00:00:00+00:00"
 
 
-async def test_same_second_tokens_and_live_single_login_policy(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_same_second_tokens_and_live_single_login_policy(runtime, native_client):
     """AC-13: Same-second logins are unique and current login policy is read live."""
     service, _, _ = runtime
     multi = [True]
@@ -129,13 +134,13 @@ async def test_same_second_tokens_and_live_single_login_policy(runtime):
         return multi[0]
 
     service.login_policy_reader = policy
-    first = await service.issue(7, 9, "bisheng-mobile")
+    first = await service.issue(7, 9, native_client)
     second = await service.issue(7, 9, "bisheng-web")
     assert first["access_token"] != second["access_token"]
     assert first["session_id"] != second["session_id"]
     await service.inspect(first["access_token"])
     multi[0] = False
-    final = await service.issue(7, 9, "bisheng-mobile")
+    final = await service.issue(7, 9, native_client)
     for old in (first, second):
         with pytest.raises(PlatformAuthError, match="session_revoked"):
             await service.inspect(old["access_token"])
@@ -143,10 +148,11 @@ async def test_same_second_tokens_and_live_single_login_policy(runtime):
     assert refreshed["session_id"] == final["session_id"]
 
 
-async def test_serialized_parallel_retries_and_no_resurrection(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_serialized_parallel_retries_and_no_resurrection(runtime, native_client):
     """AC-12: Serialized SQL retries converge; a late activity cannot resurrect logout."""
     service, _, _ = runtime
-    first = await service.issue(7, 9, "bisheng-mobile")
+    first = await service.issue(7, 9, native_client)
     results = await asyncio.gather(*(service.refresh(first["refresh_token"]) for _ in range(8)))
     assert len({result["refresh_token"] for result in results}) == 1
     await service.logout(results[0]["access_token"])
@@ -154,10 +160,11 @@ async def test_serialized_parallel_retries_and_no_resurrection(runtime):
         await service.activity(results[0]["access_token"])
 
 
-async def test_host_activity_renews_parent_and_refresh(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_host_activity_renews_parent_and_refresh(runtime, native_client):
     """AC-07/26: WebView business activity keeps the native parent and current RT alive."""
     service, clock, _ = runtime
-    parent = await service.issue(7, 9, "bisheng-mobile")
+    parent = await service.issue(7, 9, native_client)
     ticket = await service.create_ticket(parent["access_token"], "https://platform.test")
     host = await service.consume_ticket(ticket["ticket"], "https://platform.test")
     clock[0] += timedelta(days=29)
@@ -168,22 +175,24 @@ async def test_host_activity_renews_parent_and_refresh(runtime):
     await service.inspect(refreshed["access_token"])
 
 
-async def test_refresh_grace_is_24_hours_and_does_not_recover_consumed_successor(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_refresh_grace_is_24_hours_and_does_not_recover_consumed_successor(runtime, native_client):
     """AC-11: The stored grace policy ends after 24h and always revokes stale reuse."""
     service, clock, _ = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     await service.refresh(issued["refresh_token"])
     clock[0] += timedelta(days=1, seconds=1)
     with pytest.raises(PlatformAuthError, match="refresh_token_reused"):
         await service.refresh(issued["refresh_token"])
 
 
-async def test_closed_worker_reference_cannot_bypass_logout(runtime):
+@pytest.mark.parametrize("native_client", ["bisheng-mobile", "bisheng-desktop"])
+async def test_closed_worker_reference_cannot_bypass_logout(runtime, native_client):
     """AC-26: A queued platform reference retains its exact Session and original AT expiry."""
     from test.platform_auth.test_platform_stream import reference
 
     service, _, _ = runtime
-    issued = await service.issue(7, 9, "bisheng-mobile")
+    issued = await service.issue(7, 9, native_client)
     ref = reference(service, issued)
     assert (await service.validate_reference(ref))["id"] == 7
     await service.logout(issued["access_token"])

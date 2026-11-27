@@ -4,6 +4,7 @@ import hmac
 from datetime import datetime
 
 from bisheng.common.errcode.platform_auth import PlatformAuthError
+from bisheng.user.domain.const import FIRST_PARTY_CLIENT_IDS
 from bisheng.user.domain.services.platform_transport import access_credential, require_csrf, require_origin
 from bisheng.user.platform_auth_runtime import get_platform_auth, platform_auth_service
 
@@ -38,7 +39,7 @@ async def read_platform_exchange_subject(request, subject_token: str | None = No
     service = get_platform_auth(request)
     metadata = await service.inspect(token)
     claims = service.decode(token)
-    if claims["client_id"] not in {"bisheng-web", "bisheng-mobile"}:
+    if claims["client_id"] not in FIRST_PARTY_CLIENT_IDS:
         raise PlatformAuthError()
     if "cookie" in request.headers:
         require_csrf(request, metadata)

@@ -10,6 +10,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.platform_auth import PlatformAuthError
 from bisheng.common.request_scope import RequestScope, request_scope
 from bisheng.common.schemas.api import resp_200
+from bisheng.user.domain.const import FIRST_PARTY_CLIENT_IDS, NATIVE_CLIENT_IDS
 from bisheng.user.domain.services.platform_origin import public_origin
 from bisheng.user.domain.services.platform_transport import (
     access_credential,
@@ -80,7 +81,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
     from bisheng.user.application.platform_auth import issue_password_session, validate_password_identity
     from bisheng.user.domain.schemas.password_identity import PasswordLoginIdentity
 
-    if body.client_id not in {"bisheng-web", "bisheng-mobile"}:
+    if body.client_id not in FIRST_PARTY_CLIENT_IDS:
         raise PlatformAuthError("invalid_auth_request")
     if body.client_id == "bisheng-web":
         require_origin(request)
@@ -108,7 +109,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         response.headers["Cache-Control"] = "no-store"
         return identity
     data = await issue_password_session(identity, request, get_platform_auth(request), body)
-    return resp_200(deliver(response, request, data, native=body.client_id == "bisheng-mobile"))
+    return resp_200(deliver(response, request, data, native=body.client_id in NATIVE_CLIENT_IDS))
 
 
 async def transport_refresh(request, body, service):
