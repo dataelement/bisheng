@@ -56,6 +56,19 @@ it('clears cached business data and old identity on cross-tab logout', async () 
   expect(screen.getByText('anonymous')).toBeInTheDocument();
   expect(client.getQueryData(['old-account-business'])).toBeUndefined();
 });
+it.each([null, 'a'.repeat(32)])('opens the anonymous route when startup rejects session %s', async session => {
+  let finish: ((value: null) => void) | undefined;
+  mocks.initialize.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  mount();
+  expect(mocks.business).not.toHaveBeenCalled();
+  await act(async () => {
+    mocks.subscription?.({ type: 'logout', session });
+    finish?.(null);
+  });
+  await screen.findByText('anonymous');
+  expect(mocks.getUser).not.toHaveBeenCalled();
+  expect(mocks.business).toHaveBeenCalledOnce();
+});
 it('reloads identity after cross-tab login and rejects a late old identity response', async () => {
   mocks.initialize.mockResolvedValue(null);
   let finishOld: ((value: ReturnType<typeof profile>) => void) | undefined;

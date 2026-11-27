@@ -294,6 +294,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             queryClient.clear();
             setUser(null);
             useAuthSessionStore.setState({ phase: event.type === 'login' ? 'loading' : 'ready', session: null });
+            if (event.type === 'logout') setStartupReady(true);
             if (event.type === 'login') void loadIdentity();
         });
         return () => { ++identityEpoch; unsubscribe(); };
