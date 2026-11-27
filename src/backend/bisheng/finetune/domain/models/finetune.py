@@ -45,6 +45,21 @@ class FinetuneBase(SQLModelSerializable):
     model_id: int = Field(default=0, index=True, description="Published Training ModelsID")
     model_name: str = Field(index=True, max_length=50, description="Name of the training model")
     method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description="Training Methods")
+    data_type: str | None = Field(default=None, max_length=32, description="Training data modality; NULL means legacy")
+    transient_upload_id: str | None = Field(default=None, max_length=64, unique=True, index=True)
+    stage: str | None = Field(default=None, max_length=32, description="Detailed execution stage")
+    capability_snapshot: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Frozen model capability"
+    )
+    dataset_report: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Dataset validation report"
+    )
+    artifact_report: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Training artifact report"
+    )
+    inference_validation: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Clean-process inference result"
+    )
     extra_params: dict = Field(
         sa_column=Column(JsonType), description="Additional parameters required for training tasks"
     )
@@ -81,7 +96,12 @@ class FinetuneBase(SQLModelSerializable):
         if v is None or not isinstance(v, list):
             raise ValueError("Finetune.train_data must be a list")
         for one in v:
-            if not (one.get("name", None) and one.get("url", None)):
+            if not (
+                one.get("upload_id")
+                or one.get("version_id")
+                or one.get("catalog_id")
+                or (one.get("name") and one.get("url"))
+            ):
                 raise ValueError('Finetune.train_data each item must be {name:"",url:"",num:0}')
         return v
 
@@ -134,7 +154,11 @@ class FinetuneList(BaseModel):
             count_statement = count_statement.where(Finetune.user_id == self.user_id)
         if self.page and self.limit:
             offset = (self.page - 1) * self.limit
-            statement = statement.offset(offset).limit(self.limit).order_by(col(Finetune.create_time).desc())
+            statement = (
+                statement.offset(offset)
+                .limit(self.limit)
+                .order_by(col(Finetune.create_time).desc(), col(Finetune.id).desc())
+            )
         return statement, count_statement
 
 

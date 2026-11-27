@@ -1,245 +1,85 @@
-// @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Button, Tag } from '@bisheng/ui';
+import EditLabel from '@/components/bs-ui/editLabel';
+import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm';
+import { showApiError } from '@/controllers/request';
+import { cancelTraining, getTrainingInfo, TrainingInfo } from '@/controllers/API/finetuneV2';
+import { publishTaskApi, unPublishTaskApi, updataTaskNameApi } from '@/controllers/API/finetune';
+import { FinetuneLoss } from './FinetuneLoss';
+import { FinetuneValidation } from './FinetuneValidation';
+import { TrainingArtifacts } from './TrainingArtifacts';
+import { trainingMethodLabel } from './TrainingMethodField';
+import { downloadTrainingText } from './finetuneHelpers';
 
-import { useContext, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Tag } from "@bisheng/ui";
-
-import EditLabel from "../../../components/bs-ui/editLabel";
-import { alertContext } from "../../../contexts/alertContext";
-import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updataTaskNameApi } from "../../../controllers/API/finetune";
-import { handleUiRequest, showApiError } from "../../../controllers/request";
-import { TaskDB } from "../../../types/api/finetune";
-import FinetuneResult from "./FinetuneResult";
-import { formatMilliseconds } from "../../../util/utils";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-
-export const enum TaskStatus {
-    /** 训练中 */
-    TRAINING_IN_PROGRESS = 1,
-    /** 训练失败 */
-    TRAINING_FAILED,
-    /** 训练中止 */
-    TASK_ABORTED,
-    /** 训练成功 */
-    TRAIN_SUCCESS,
-    /** 训练成功 */
-    PUBLISH_SUCCESS
+export const enum TaskStatus { TRAINING_IN_PROGRESS = 1, TRAINING_FAILED, TASK_ABORTED, TRAIN_SUCCESS, PUBLISH_SUCCESS }
+export function BadgeView({ value, stage }: { value: number; stage?: string }) {
+    const { t } = useTranslation('model');
+    const keys = ['', 'trainingInProgress', 'trainingFailed', 'taskAborted', 'trainingSuccess', 'publishSuccess'];
+    return <Tag>{t(`finetune.${stage === 'cancelling' ? 'cancelling' : keys[value] || 'unknownStatus'}`)}</Tag>;
 }
-
-// 徽章
-export const BadgeView = ({ value }) => {
-    const { t } = useTranslation()
-    // 训练成功
-    // return null
-    const texts = ['', t('finetune.trainingInProgress'), t('finetune.trainingFailed'), t('finetune.taskAborted'), t('finetune.trainingSuccess'), t('finetune.publishSuccess')]
-    return <Tag size="small" dot className="shrink-0 whitespace-nowrap" color={value === 2 ? "danger" : value >= 4 ? "success" : value === 1 ? "warning" : "default"}>{texts[value]}</Tag>
-}
-
-const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete, onStop }) => {
-    const { t } = useTranslation('model')
-    const [loading, setLoading] = useState(false)
-
-    const cancelPublish = async () => {
-        if (online) {
-            bsConfirm({
-                desc: t('finetune.confirmCancelPublish'),
-                async onOk(next) {
-                    setLoading(true)
-                    try {
-                        await onUnPublish()
-                        next()
-                    } finally {
-                        setLoading(false)
-                    }
-                }
-            })
-        } else {
-            setLoading(true)
-            try {
-                await onUnPublish()
-            } finally {
-                setLoading(false)
-            }
-        }
-    }
-
-    const handlePublish = async () => {
-        setLoading(true)
+interface Props { id: string; onDelete: () => void; onStatusChange: (status?: number) => void }
+export function FinetuneDetail({ id, onDelete, onStatusChange }: Props) {
+    const { t } = useTranslation('model');
+    const [info, setInfo] = useState<TrainingInfo>();
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const translate = useRef(t); translate.current = t;
+    const statusChanged = useRef(onStatusChange); statusChanged.current = onStatusChange;
+    const previousStatus = useRef<number>();
+    const activeId = useRef(id); activeId.current = id;
+    const handleRefresh = useCallback(async () => {
         try {
-            await onPublish()
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const deleteClick = () => {
-        let tip = t('finetune.confirmDeleteModel', { name })
-        if (online) {
-            tip = t('finetune.confirmDeleteOnlineModel', { name })
-        } else if (status === TaskStatus.PUBLISH_SUCCESS) {
-            tip = t('finetune.confirmDeletePublishedModel', { name })
-        }
-        bsConfirm({
-            desc: tip,
-            async onOk(next) {
-                await onDelete()
-                next()
-            }
-        })
-    }
-
-    const stopClick = () => {
-        bsConfirm({
-            desc: t('finetune.confirmStopTraining'),
-            async onOk(next) {
-                await onStop()
-                next()
-            }
-        })
-    }
-
-    return <div className="absolute right-4 flex gap-2">
-        {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="small" disabled={loading} onClick={handleUiRequest(cancelPublish)} loading={loading}>
-
-                {t('finetune.cancelPublish')}
-            </Button> :
-            status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="small" disabled={loading} onClick={handleUiRequest(handlePublish)} loading={loading}>
-
-                    {t('finetune.publish')}
-                </Button> : null
-        }
-        {status === TaskStatus.TRAINING_IN_PROGRESS ?
-            <Button size="small" color="danger" onClick={stopClick}>{t('finetune.stop')}</Button> :
-            <Button size="small" color="danger" onClick={deleteClick}>{t('bs:delete')}</Button>
-        }
-    </div>
-}
-
-
-
-
-export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
-    const { t } = useTranslation('model')
-
-    const { setSuccessData } = useContext(alertContext);
-
-    const [baseInfo, setBaseInfo] = useState<TaskDB>(null)
-
-    // 上线状态
-    const [online, setOnline] = useState(false)
-
+            const data = await getTrainingInfo(id);
+            if (activeId.current !== id) return;
+            setInfo(data); setError('');
+            if (previousStatus.current != null && data.finetune.status !== previousStatus.current) statusChanged.current(data.finetune.status);
+            previousStatus.current = data.finetune.status;
+        } catch { if (activeId.current === id) setError(translate.current('finetune.refreshFailed')); }
+    }, [id]);
     useEffect(() => {
-        getTaskInfoApi(id).then((data) => {
-            setBaseInfo(data.finetune)
-            setOnline(data.model_online === true)
-        }).catch(showApiError)
-    }, [id])
-
-    const handlePublish = async () => {
-        const res = await publishTaskApi(id)
-        if (!res) return
-        // 成功
-        onStatusChange(TaskStatus.PUBLISH_SUCCESS)
-        setBaseInfo({ ...baseInfo, status: TaskStatus.PUBLISH_SUCCESS })
-        setSuccessData({ title: t('finetune.publishSuccess') })
-    }
-
-    const handleUnPublish = async () => {
-        const res = await unPublishTaskApi(id)
-        if (!res) return
-        onStatusChange(TaskStatus.TRAIN_SUCCESS)
-        setBaseInfo({ ...baseInfo, status: TaskStatus.TRAIN_SUCCESS })
-    }
-
-    const handleStopTrain = async () => {
-        const res = await cancelTaskApi(id)
-        if (!res) return
-
-        onStatusChange(TaskStatus.TASK_ABORTED)
-        return setBaseInfo({ ...baseInfo, status: TaskStatus.TASK_ABORTED })
-    }
-
-    const handleChangeName = async (name) => {
-        const res = await updataTaskNameApi(id, name)
-        if (!res) return
-
-        onStatusChange(baseInfo.status)
-        setBaseInfo({ ...baseInfo, model_name: name })
-    }
-
-    if (!baseInfo) return <></>
-
-    return <div>
-        {/* <div>选择模型已查看详情</div> */}
-        <HeadButtonView
-            name={baseInfo.model_name}
-            status={baseInfo.status}
-            online={online}
-            onPublish={handlePublish}
-            onUnPublish={handleUnPublish}
-            onDelete={onDelete}
-            onStop={handleStopTrain}
-        ></HeadButtonView>
-        <div className="border-b pb-4">
-            <div className="flex gap-4 items-center">
-                <EditLabel
-                    rule={[
-                        {
-                            pattern: /^(?=.*[a-zA-Z])(?=.*\d)?[a-zA-Z\d_-]+$/,
-                            message: t('finetune.enterModelName'),
-                        }
-                    ]}
-                    str={baseInfo.model_name}
-                    onChange={handleChangeName}>
-                    {(val) => <div className="text-lg font-semibold">{val}</div>}
-                </EditLabel>
-                <BadgeView value={baseInfo.status} />
-            </div>
-            <div className="flex gap-4 mt-4">
-                <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.taskId')}</small>
-                <small className="text-sm font-medium leading-none text-gray-700">{baseInfo.id}</small>
-            </div>
-            <div className="flex gap-4 mt-4">
-                <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.baseModel')}</small>
-                <small className="text-sm font-medium leading-none text-gray-700">{baseInfo.base_model_name}</small>
-            </div>
+        setInfo(undefined); previousStatus.current = undefined;
+        let active = true;
+        let timer: ReturnType<typeof setTimeout>;
+        const poll = async () => { await handleRefresh(); if (active) timer = setTimeout(() => void poll(), 5000); };
+        void poll();
+        return () => { active = false; clearTimeout(timer); };
+    }, [handleRefresh]);
+    const handleStop = () => bsConfirm({ desc: t('finetune.confirmStopTraining'), onOk: async next => {
+        next(); setBusy(true);
+        try { await cancelTraining(id); await handleRefresh(); } catch (error) { showApiError(error); } finally { setBusy(false); }
+    } });
+    // The task detail reports whether its published model is online, so no model-management request is needed.
+    const deleteTip = info?.model_online ? 'finetune.confirmDeleteOnlineModel'
+        : info?.finetune.status === TaskStatus.PUBLISH_SUCCESS ? 'finetune.confirmDeletePublishedModel' : 'finetune.confirmDeleteModel';
+    const handleDelete = () => bsConfirm({ desc: t(deleteTip, { name: info?.finetune.model_name }), onOk: next => { next(); onDelete(); } });
+    const runPublish = async (cancel: boolean) => {
+        setBusy(true);
+        try { await (cancel ? unPublishTaskApi(id) : publishTaskApi(id)); await handleRefresh(); } catch (error) { showApiError(error); } finally { setBusy(false); }
+    };
+    const handlePublish = async (cancel: boolean) => {
+        if (cancel && info?.model_online) return bsConfirm({ desc: t('finetune.confirmCancelPublish'), onOk: async next => { await runPublish(true); next(); } });
+        await runPublish(cancel);
+    };
+    if (!info) return <p role="status">{error || t('finetune.loadingTask')}</p>;
+    const task = info.finetune;
+    const logs = info.train_log || (typeof info.log === 'string' ? info.log : JSON.stringify(info.log ?? '', null, 2));
+    const config = info.config_snapshot || info.report?.train_config || task.report?.train_config || task.extra_params;
+    const isV2 = task.contract_version === 2 || task.extra_params?.contract_version === 2;
+    const completed = task.status === TaskStatus.TRAIN_SUCCESS || task.status === TaskStatus.PUBLISH_SUCCESS;
+    return <div className="space-y-4 pb-8">
+        <div className="flex flex-wrap gap-2 items-center"><EditLabel rule={[{pattern: /^(?=.*[a-zA-Z])(?=.*\d)?[a-zA-Z\d_.-]+$/, message: t('finetune.enterModelName')}]} str={task.model_name} onChange={async name => { await updataTaskNameApi(id, name); setInfo(current => current ? {...current, finetune: {...current.finetune, model_name: name}} : current); statusChanged.current(task.status); }}>{name => <h2 className="text-lg font-semibold break-all">{name}</h2>}</EditLabel><BadgeView value={task.status} stage={task.stage} /><Button size="small" variant="outlined" disabled={busy} onClick={() => void handleRefresh()}>{t('finetune.refresh')}</Button>
+            {task.status === TaskStatus.TRAINING_IN_PROGRESS ? <Button size="small" variant="outlined" disabled={busy || task.stage === 'cancelling'} onClick={handleStop}>{t('finetune.stop')}</Button> : <Button size="small" variant="outlined" disabled={busy} onClick={handleDelete}>{t('bs:delete')}</Button>}
+            {!isV2 && completed && <Button size="small" disabled={busy} onClick={() => void handlePublish(task.status === TaskStatus.PUBLISH_SUCCESS)}>{t(task.status === TaskStatus.PUBLISH_SUCCESS ? 'finetune.cancelPublish' : 'finetune.publish')}</Button>}
         </div>
-        <div className="border-b pb-4">
-            <div className="flex gap-4 mt-4">
-                <small className="text-sm font-medium leading-none text-gray-500">{t('bs:createTime')}</small>
-                <small className="text-sm font-medium leading-none text-gray-700">{baseInfo.create_time.replace('T', ' ')}</small>
-            </div>
-            <div className="flex gap-4 mt-4">
-                <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.runtime')}</small>
-                <small className="text-sm font-medium leading-none text-gray-700">
-                    {TaskStatus.TRAINING_IN_PROGRESS === baseInfo.status ? '--' : formatMilliseconds(baseInfo.report?.train_runtime || 0, t('finetune.formatTime'))}
-                </small>
-            </div>
-            <div className="flex gap-4 mt-4">
-                <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.creator')}</small>
-                <small className="text-sm font-medium leading-none text-gray-700">{baseInfo.user_name}</small>
-            </div>
-        </div>
-        <div className="border-b pb-4">
-            <div className="flex gap-4 mt-4">
-                <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.dataset')}</small>
-                <small className="text-sm font-medium leading-none text-gray-700">{
-                    baseInfo.preset_data.concat(baseInfo.train_data).map(el => el.name).join(',')
-                }</small>
-            </div>
-        </div>
-        <FinetuneResult
-            id={id}
-            isStop={TaskStatus.TASK_ABORTED === baseInfo.status}
-            training={TaskStatus.TRAINING_IN_PROGRESS === baseInfo.status}
-            failed={TaskStatus.TRAINING_FAILED === baseInfo.status}
-            onChange={status => {
-                setBaseInfo({ ...baseInfo, status });
-                onStatusChange(status)
-            }}
-        ></FinetuneResult>
-    </div>
-};
+        {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm"><dt>{t('finetune.taskId')}</dt><dd className="break-all">{task.id}</dd><dt>{t('finetune.baseModel')}</dt><dd>{task.base_model_name}</dd><dt>{t('finetune.dataType')}</dt><dd>{t(`finetune.type_${task.data_type || 'text'}`)}</dd>{task.method && <><dt>{t('finetune.trainingMethod')}</dt><dd>{t(trainingMethodLabel(task.method))}</dd></>}<dt>{t('finetune.createTime')}</dt><dd>{task.create_time?.replace('T', ' ')}</dd><dt>{t('finetune.creator')}</dt><dd>{task.user_name}</dd><dt>{t('finetune.dataset')}</dt><dd>{[...(task.train_data || []), ...(task.preset_data || [])].map(file => file.name).join(', ')}</dd>{task.dataset_report?.transfer && <><dt>{t('finetune.datasetTransfer')}</dt><dd>{t(`finetune.datasetTransfer_${task.dataset_report.transfer}`)}</dd></>}</dl>
+        {task.reason && <p role="alert" className="text-sm text-red-500 break-words">{task.reason}</p>}
+        <div className="border-t pt-4 space-y-2"><div className="flex justify-between items-center"><h3>{t('finetune.trainingLogs')}</h3><Button size="small" variant="outlined" onClick={() => downloadTrainingText(`${id}.log`, logs)}>{t('finetune.downloadLogs')}</Button></div><pre className="text-xs whitespace-pre-wrap break-all bg-muted rounded-md p-3 max-h-[320px] overflow-auto">{logs || t('finetune.awaitingLogs')}</pre></div>
+        <FinetuneLoss samples={info.loss_data} />
+        {config && <details><summary>{t('finetune.actualConfiguration')}</summary><pre className="text-xs whitespace-pre-wrap break-all p-3">{JSON.stringify(config, null, 2)}</pre><Button size="small" variant="outlined" onClick={() => downloadTrainingText(`${id}-config.json`, JSON.stringify(config, null, 2))}>{t('finetune.exportConfiguration')}</Button></details>}
+        {task.artifact_report && <TrainingArtifacts report={task.artifact_report} />}
+        {isV2 && completed && task.artifact_report?.complete && <FinetuneValidation key={id} task={task} />}
+        {isV2 && completed && <p className="text-sm text-muted-foreground">{t('finetune.deploymentSeparate')}</p>}
+    </div>;
+}

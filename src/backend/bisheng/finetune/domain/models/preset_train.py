@@ -19,6 +19,11 @@ class PresetTrainBase(SQLModelSerializable):
     user_id: str = Field(default="", index=True, description="creatorID")
     user_name: str = Field(default="", index=True, description="creatorName")
     type: int = Field(default=0, index=True, description="0 Doc. 1 QA")
+    data_type: str = Field(default="legacy", max_length=32, index=True, sa_column_kwargs={"server_default": "legacy"})
+    source_type: str = Field(default="local", max_length=16, sa_column_kwargs={"server_default": "local"})
+    version_id: str | None = Field(default=None, max_length=64, unique=True, index=True)
+    source_dataset_id: str | None = Field(default=None, max_length=64)
+    is_deleted: bool = Field(default=False, index=True, sa_column_kwargs={"server_default": "0"})
     tenant_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
@@ -56,14 +61,14 @@ class PresetTrainDao(PresetTrainBase):
     @classmethod
     async def find_one(cls, file_id: str) -> PresetTrain | None:
         async with get_async_db_session() as session:
-            statement = select(PresetTrain).where(PresetTrain.id == file_id)
+            statement = select(PresetTrain).where(PresetTrain.id == file_id, col(PresetTrain.is_deleted).is_(False))
             with strict_tenant_filter():
                 return (await session.exec(statement)).first()
 
     @classmethod
     async def find_all(cls) -> list[PresetTrain]:
         async with get_async_db_session() as session:
-            statement = select(PresetTrain)
+            statement = select(PresetTrain).where(col(PresetTrain.is_deleted).is_(False))
             with strict_tenant_filter():
                 return (await session.exec(statement)).all()
 
@@ -71,15 +76,19 @@ class PresetTrainDao(PresetTrainBase):
     async def find_by_url(cls, url: str) -> PresetTrain | None:
         async with get_async_db_session() as session:
             with strict_tenant_filter():
-                return (await session.exec(select(PresetTrain).where(PresetTrain.url == url))).first()
+                return (
+                    await session.exec(
+                        select(PresetTrain).where(PresetTrain.url == url, col(PresetTrain.is_deleted).is_(False))
+                    )
+                ).first()
 
     @classmethod
     async def search_name(
         cls, keyword: str | None = None, page_size: int | None = None, page_num: int | None = None
     ) -> tuple[list[PresetTrain], int]:
         async with get_async_db_session() as session:
-            statement = select(PresetTrain)
-            count = select(func.count(PresetTrain.id))
+            statement = select(PresetTrain).where(col(PresetTrain.is_deleted).is_(False))
+            count = select(func.count(PresetTrain.id)).where(col(PresetTrain.is_deleted).is_(False))
             if keyword:
                 statement = statement.where(col(PresetTrain.name).like(f"%{keyword}%"))
                 count = count.where(col(PresetTrain.name).like(f"%{keyword}%"))

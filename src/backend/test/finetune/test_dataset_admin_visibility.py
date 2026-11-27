@@ -18,6 +18,8 @@ from bisheng.common.request_scope import RequestScope, inherit_scope
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope, visible_tenant_ids
 from bisheng.finetune.api.finetune import router
 from bisheng.finetune.domain.models import preset_train as model
+from bisheng.finetune.domain.models.dataset import FinetuneDataset
+from bisheng.finetune.domain.repositories import dataset_catalog
 from test.fixtures.tenant_filter import isolated_tenant_filter as isolated_tenant_filter
 
 
@@ -26,6 +28,7 @@ async def datasets(tmp_path, monkeypatch, isolated_tenant_filter):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'datasets.db'}")
     async with engine.begin() as connection:
         await connection.run_sync(model.PresetTrain.__table__.create)
+        await connection.run_sync(FinetuneDataset.__table__.create)
 
     @asynccontextmanager
     async def sessions():
@@ -33,6 +36,7 @@ async def datasets(tmp_path, monkeypatch, isolated_tenant_filter):
             yield session
 
     monkeypatch.setattr(model, "get_async_db_session", sessions)
+    monkeypatch.setattr(dataset_catalog, "get_async_db_session", sessions)
     with bypass_tenant_filter():
         async with sessions() as session:
             for tenant in (1, 60, 70):
