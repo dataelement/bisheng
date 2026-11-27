@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from bisheng.oauth2_provider.api.endpoints.clients import admin_router as oauth2_admin_router
+from bisheng.oauth2_provider.api.endpoints.exchange import admin_router as oauth2_exchange_admin_router
 from bisheng.oauth2_provider.api.endpoints.oidc import (
     consent_router as oauth2_consent_router,
 )
@@ -20,6 +21,7 @@ well_known_router.add_api_route("/.well-known/oauth-authorization-server", openi
 __all__ = [
     "oauth2_admin_router",
     "oauth2_consent_router",
+    "oauth2_exchange_admin_router",
     "oauth2_public_router",
     "well_known_router",
 ]

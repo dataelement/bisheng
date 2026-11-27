@@ -34,7 +34,7 @@ from bisheng.oauth2_provider.domain.schemas.client import (
 )
 
 _PBKDF2_ITERATIONS = 200_000
-_ALLOWED_GRANT_TYPES = {"authorization_code", "refresh_token"}
+_ALLOWED_GRANT_TYPES = {"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:token-exchange"}
 _SUPPORTED_SCOPES = {"openid", "profile", "email", "offline_access", "dsh"}
 _PKCE_VERIFIER_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 _PKCE_CHALLENGE_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")

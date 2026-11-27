@@ -1495,14 +1495,8 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
-    "no-console": {
-      "count": 2
-    },
     "no-restricted-imports": {
       "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 4
     }
   },
   "src/hooks/Chat/useAddedHelpers.ts": {
@@ -1984,9 +1978,6 @@
   "src/pages/DevLogin/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 8
     }
   },
   "src/pages/MenuUnavailablePage.tsx": {

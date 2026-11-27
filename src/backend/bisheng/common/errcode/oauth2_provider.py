@@ -71,3 +71,28 @@ class OAuth2UserInactiveError(BaseErrorCode):
 class OAuth2UnsupportedGrantTypeError(BaseErrorCode):
     Code: int = 28114
     Msg: str = "Unsupported OAuth2 grant_type"
+
+
+class OAuth2InvalidTargetError(BaseErrorCode):
+    Code: int = 28115
+    Msg: str = "OAuth2 exchange target is not allowed"
+
+
+class OAuth2UnauthorizedClientError(BaseErrorCode):
+    Code: int = 28116
+    Msg: str = "OAuth2 client is not allowed to exchange tokens"
+
+
+class OAuth2TemporarilyUnavailableError(BaseErrorCode):
+    Code: int = 28117
+    Msg: str = "OAuth2 exchange is temporarily unavailable"
+
+
+class OAuth2ExchangePolicyConflictError(BaseErrorCode):
+    Code: int = 28118
+    Msg: str = "OAuth2 exchange policy changed concurrently"
+
+
+class OAuth2ConsentRequiredError(BaseErrorCode):
+    Code: int = 28119
+    Msg: str = "OAuth2 user consent is required for the requested scopes"

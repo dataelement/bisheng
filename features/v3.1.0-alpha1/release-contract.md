@@ -17,6 +17,14 @@
 - 头像展示遵循现有消息接收人、资源授权和主体可见范围。资源授权的判断、变更与权限归属继续由现有权限体系负责。
 - 对象访问路径兼容性沿用 v3.1.0-beta1 的 F009 契约。错误码沿用既有领域分配。
 
+## F026：第一方会话向第三方静默换证（用户已确认）
+
+- 第一方正式web/mobile会话经用户域权威接缝校验后，B显式启用token-exchange即可静默换证，不增加第一方→B配对白名单或人工审批；B.require_consent=true仍检查本人、本租户、当前B登记实例与scope的既有同意。旧第三方OAuth A→B保留配对授权。
+- 平台会话及其校验/撤销归F003用户域；输出B身份断言、child会话、同意与父引用关联归F026。只通过用户域application seam取得已验证值与无密引用，不跨域读写源Session。
+- 输出同用户/租户、仅openid/profile/email、最长300秒并受原Access/Session及B TTL约束，不发refresh/id_token；不授予ApiCredential/API Key/PAT/DSH模型能力，不复制业务角色。B本地验签接受至多300秒撤销残余，B本地会话自行管理。
+- 新平台父引用/同意两独立表由模型发现创建，原三张OAuth表不改；request/code绑定registration，旧未完成申请/code须重新发起，同ID新登记不继承旧用户同意。
+- 增量规格/设计与证据：[F026第一方扩展](../v3.1.0-beta1/026-oauth2-oidc-provider/token-exchange/first-party-extension.md)。115部署需完整F003与两SPA协同，不能把旧SSO镜像作已签发平台凭证后的回滚地板。
+
 ## F003：平台统一认证与会话（开发及单元验证完成，真实集成待执行）
 
 本增量对应 [spec](./003-platform-auth-session/spec.md) 与 [design](./003-platform-auth-session/design.md)。需求基线为 2026-11-27 用户确认的“将 DSH 会话机制平台化”；代码证据基线为 `572d5ecf77`。用户已确认spec S1、design D1以及Session／Refresh默认90天，随后已授权按tasks实施与测试；仅修改bisheng及bisheng-mobile，不改网关和桌面源码，未部署。

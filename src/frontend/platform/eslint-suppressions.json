@@ -568,7 +568,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 3
     }
   },
   "src/controllers/API/approval.ts": {
@@ -811,9 +811,6 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2079,9 +2076,6 @@
   "src/pages/LoginPage/login.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1

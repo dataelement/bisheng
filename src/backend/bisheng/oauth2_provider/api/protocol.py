@@ -22,6 +22,10 @@ _PROTOCOL_ERRORS = {
     28112: ("invalid_token", 401),
     28113: ("invalid_grant", 400),
     28114: ("unsupported_grant_type", 400),
+    28115: ("invalid_target", 400),
+    28116: ("unauthorized_client", 400),
+    28117: ("temporarily_unavailable", 503),
+    28119: ("consent_required", 400),
 }
 
 

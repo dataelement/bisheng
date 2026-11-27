@@ -65,6 +65,7 @@ from bisheng.message.api.router import router as message_router
 from bisheng.oauth2_provider.api.router import (
     oauth2_admin_router,
     oauth2_consent_router,
+    oauth2_exchange_admin_router,
     oauth2_public_router,
 )
 from bisheng.open_api.api.dependencies import verify_open_api_access
@@ -216,6 +217,7 @@ router.include_router(platform_auth_router, request_scope=S.CREDENTIAL)
 router.include_router(oauth2_public_router, request_scope=S.PUBLIC)
 router.include_router(oauth2_consent_router, request_scope=S.IDENTITY)
 router.include_router(oauth2_admin_router, request_scope=S.PLATFORM)
+router.include_router(oauth2_exchange_admin_router, request_scope=S.PLATFORM)
 router.include_router(relink_router, request_scope=S.PLATFORM)
 router.include_router(tenant_router, request_scope=S.PLATFORM)
 router.include_router(citation_router, request_scope=S.TENANT)
