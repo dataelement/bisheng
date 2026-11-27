@@ -8,6 +8,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "uuid": "catalog:"
+  },
   "scripts": {
     "test": "vitest run --maxWorkers=1 --minWorkers=1",
     "typecheck": "tsc --noEmit",

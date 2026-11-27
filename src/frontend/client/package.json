@@ -135,7 +135,7 @@
     "tailwindcss-radix": "catalog:",
     "unified": "^11",
     "unist-util-visit": "^5",
-    "uuid": "^11.1.0",
+    "uuid": "catalog:",
     "vite-plugin-html": "catalog:",
     "vite-plugin-static-copy": "catalog:",
     "xlsx": "catalog:",
