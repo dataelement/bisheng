@@ -371,6 +371,8 @@ Compose 的 Engine 控制网络为 internal 的 `runtime-control`，只有 manag
 
 出站策略用生成环境中的平台/模型/附件 URL 建可信目标，而非只放行一个 backend 主机名。重试用相同 phase/op 凭据，生产策略按 route.operation_id 拒绝旧代，恢复后继续有效；候选仅在当前 assignment/deadline 内放行。缓存最多5秒，失联到期关闭。UTC-naive SQL 时间转 epoch 时显式标 UTC；旧预览 local datetime 先转 UTC，避免容器 TZ 导致所有策略提前8小时过期。
 
+应用声明的 `*.example.com` 在 backend 策略签发时归一化为代理已有的 `.example.com` zone 表示；保留端口和 `trusted=false`，精确域名不扩展为 zone，裸 `*` 与非前缀通配符仍拒绝。启动预检携带同一份 `egress.domains`，经正式运行相同的出站策略校验，仍使用隔离数据和预检凭据。
+
 ## 5. 已知坑与处理位置
 
 | 事实 | 忽略后的结果 | 本轮处理位置 |
@@ -380,6 +382,7 @@ Compose 的 Engine 控制网络为 internal 的 `runtime-control`，只有 manag
 | 没挂 socket 仍能经 proxy 创建高权限容器 | 把 manager 当普通低权限 API，与入口合并后扩大宿主攻击面 | socket-proxy 控制网与 payload 白名单；§3.3、§4.10 |
 | manager 重启不停止容器，但路由现状仍依赖它 | 3秒后新请求失败，声称“应用不受重启影响”不成立 | app-proxy RouteClient、platform route Repository；§4.10 |
 | 本地 policy.json 在同机 Compose 看似可共享 | 代理跨机器或清空目录后无法授权/错用旧策略 | egress policy client＋SQL 投影；§4.3、§4.10 |
+| 预检未携带业务域名，而 backend 与代理对 `*.example.com` 解析不一致 | 预检通过，审批后正式上线在 egress-bindings 返回409，尚未创建容器便失败 | runtime_egress_service.destination 归一化；runtime_delivery_coordinator.probe 传递真实声明；回归 test_runtime_egress_destinations 与 test_runtime_k8s_delivery_coordinator |
 | SQL epoch/Redis 锁不能撤销已发出的 Engine 请求 | 超时自动接管后旧进程仍创建容器，SQLite 双写 | runtime_assignment、manager executor；§4.8，禁止不确定接管 |
 | wheel 通用名/venv 路径不证明 ABI 可移植 | arm64、glibc 或 shebang 不匹配，运行时失败 | profile 验证与 dependency preparer；§4.4、§4.6 |
 | Node install 脚本可能读业务代码 | 只按 package-lock 缓存会运行旧生成代码 | source-input digest/preparer；§4.6 |
@@ -593,6 +596,7 @@ uv run pytest test/database/test_alembic_single_head.py test/app_runtime test/ap
 | --- | --- | --- |
 | 2026-10-20 | 首版设计评审稿；区分基线与目标，落实默认应用包、明确主体、双架构、回收及存储解耦 | 用户要求修复四项spec问题，复审通过后继续SDD；尚未实现 |
 | 2026-10-20 | 同步实际表/接口/模块、生成目录、owner材料绑定、短命数据helper、控制网、UTC策略和CI；代码进入集成验收 | 用户确认design后继续SDD；不把本地测试当部署证明 |
+| 2026-11-27 | 统一通配出网域名为代理既有 zone 表示，并让启动预检携带真实域名声明 | 生产预检通过后正式上线遭 egress_destination_invalid；修复至3.1.0发版线，未部署生产 |
 
 ### 2026-10-20 运行验收修订
 
