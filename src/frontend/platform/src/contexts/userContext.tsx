@@ -172,8 +172,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             let restored = false;
             return platformAuth.initialize(true).then(session => {
                 if (epoch !== identityEpoch) throw new Error('Identity changed');
-                useAuthSessionStore.setState({ phase: platformAuth.hostPending ? 'host' : 'ready', session });
-                setStartupReady(true);
+                useAuthSessionStore.setState({ phase: platformAuth.hostPending ? 'host' : 'loading', session });
                 restored = true;
                 return platformAuth.hostPending ? null : getUserInfo();
             }).then(res => {
@@ -284,6 +283,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     useAuthSessionStore.setState({ phase: 'unavailable' });
                 }
                 setUser(null)
+            }).finally(() => {
+                if (epoch !== identityEpoch) return;
+                // Identity and landing-route selection must finish before mounting routes.
+                if (useAuthSessionStore.getState().phase === 'loading') {
+                    useAuthSessionStore.setState({ phase: 'ready' });
+                }
+                setStartupReady(true);
             })
         };
         void loadIdentity();
