@@ -2,13 +2,9 @@ from bisheng.common.chat.client import ChatClient
 from bisheng.common.chat.types import IgnoreException, WorkType
 from bisheng.common.chat.utils import (
     SourceType,
-    extract_answer_keys,
-    extract_answer_keys_async,
     judge_source,
     process_node_data,
-    process_source_document,
     sync_judge_source,
-    sync_process_source_document,
 )
 
 __all__ = [
@@ -17,13 +13,9 @@ __all__ = [
     "IgnoreException",
     "SourceType",
     "WorkType",
-    "extract_answer_keys",
-    "extract_answer_keys_async",
     "judge_source",
     "process_node_data",
-    "process_source_document",
     "sync_judge_source",
-    "sync_process_source_document",
 ]
 
 

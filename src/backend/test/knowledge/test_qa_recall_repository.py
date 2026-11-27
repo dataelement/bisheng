@@ -86,6 +86,21 @@ async def test_service_rejects_real_foreign_parent_even_without_orm_events(stora
     assert exc.value.status_code == 404
 
 
+async def test_old_keywords_remain_readable_without_any_generation_model(storage, monkeypatch):
+    """F002 AC-13, AC-14: historical reads never ask for a model or regenerate data."""
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from bisheng.knowledge.domain.services.qa_recall_service import QaRecallService
+    from bisheng.llm.domain.services.llm import LLMService
+
+    models = Mock(side_effect=AssertionError("historical recall must not read model configuration"))
+    monkeypatch.setattr(LLMService, "get_knowledge_llm", models)
+    assert await QaRecallService.keywords(SimpleNamespace(user_id=7, tenant_id=1), 1) == ["own"]
+    models.assert_not_called()
+    assert [row.keywords for row in storage.chunks(1, "own")] == ['["own"]']
+
+
 @pytest.mark.parametrize("user_id,message_id,expected", [(7, 1, 200), (9, 1, 403), (8, 2, 404)])
 async def test_http_endpoint_service_and_real_repository(storage, monkeypatch, user_id, message_id, expected):
     from types import SimpleNamespace

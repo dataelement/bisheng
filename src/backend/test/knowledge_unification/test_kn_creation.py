@@ -39,13 +39,13 @@ def created(context, ident):
     return next(row for row in fixtures.state(context)["knowledge"] if row["id"] == ident)
 
 
-async def test_ordinary_creation_keeps_workbench_model_and_does_not_snapshot_system_defaults(consumer):
+async def test_ordinary_creation_keeps_knowledge_default_and_does_not_snapshot_system_defaults(consumer):
     context, service, _ = consumer
     first = await service.create_knowledge_space(name="ordinary")
     row = created(context, first.id)
     assert row["model"] == "11" and row["processing_defaults"] is None
     assert row["processing_config_version"] == 0
-    fixtures.module.LLMService.get_workbench_llm.return_value = SimpleNamespace(embedding_model=SimpleNamespace(id=12))
+    fixtures.module.LLMService.aget_knowledge_llm.return_value = SimpleNamespace(embedding_model_id=12)
     second = await service.create_knowledge_space(name="later")
     assert created(context, first.id)["model"] == "11"
     assert created(context, second.id)["model"] == "12"
@@ -141,9 +141,9 @@ async def test_invalid_internal_defaults_are_revalidated_before_any_sql(advanced
     assert fixtures.state(context) == before
 
 
-async def test_explicit_model_does_not_require_a_workbench_default(advanced):
+async def test_explicit_model_does_not_require_a_system_default(advanced):
     context, service, _, qualification, _ = advanced
-    fixtures.module.LLMService.get_workbench_llm.return_value = None
+    fixtures.module.LLMService.aget_knowledge_llm.return_value = None
     result = await service.create_knowledge_space(
         name="explicit", embedding_model_id=12, web_creation_context=qualification
     )
@@ -174,3 +174,39 @@ async def test_idempotency_hash_binds_explicit_model_and_canonical_defaults(adva
     with pytest.raises(SpaceCreationRequestConflictError):
         await service.create_knowledge_space(**kwargs)
     assert fixtures.state(context) == before
+
+
+async def test_missing_knowledge_default_rejects_creation_without_writes(consumer):
+    """F002 AC-04: no retired workbench fallback or partially created space."""
+    context, service, _ = consumer
+    fixtures.module.LLMService.aget_knowledge_llm.return_value = None
+    before = fixtures.state(context)
+    with pytest.raises(KnowledgeNoEmbeddingError) as error:
+        await service.create_knowledge_space(name="missing default")
+    assert error.value.code == 10901
+    assert fixtures.state(context) == before
+
+
+async def test_creation_grant_choices_do_not_require_a_default_model(consumer, monkeypatch):
+    """F002 AC-03: choosing a model does not couple grant choices to system defaults."""
+    _, service, _ = consumer
+    service.prospective_grant_application = object()
+    monkeypatch.setattr(service, "_assert_space_creation_quota", AsyncMock())
+    monkeypatch.setattr(service, "_permission_actor", AsyncMock(return_value="actor"))
+    lookup = AsyncMock(side_effect=AssertionError("grant choices must not resolve a default model"))
+    monkeypatch.setattr(fixtures.module.LLMService, "aget_knowledge_llm", lookup)
+    assert await service._prospective_creation_access() == (service.prospective_grant_application, "actor", 101)
+    service._assert_space_creation_quota.assert_awaited_once()
+    service._permission_actor.assert_awaited_once()
+    lookup.assert_not_awaited()
+
+
+@pytest.mark.parametrize("denied", ["_assert_space_creation_quota", "_permission_actor"])
+async def test_creation_grant_choices_keep_quota_and_identity_checks(consumer, monkeypatch, denied):
+    """F002 AC-07: retiring a model check cannot remove quota or identity checks."""
+    _, service, _ = consumer
+    service.prospective_grant_application = object()
+    for name in ("_assert_space_creation_quota", "_permission_actor"):
+        monkeypatch.setattr(service, name, AsyncMock(side_effect=PermissionDeniedError() if name == denied else None))
+    with pytest.raises(PermissionDeniedError):
+        await service._prospective_creation_access()

@@ -8,7 +8,7 @@ formatting. Actual default helpers use native/async SQL and no provider IO.
 import ast
 import inspect
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import delete, update
@@ -169,8 +169,6 @@ def test_knowledge_utils_abstract_llm_accepts_tenant_id():
 
 def test_llm_service_helpers_accept_tenant_id():
     for name in (
-        "get_knowledge_source_llm",
-        "get_knowledge_source_llm_async",
         "get_knowledge_similar_llm",
         "get_knowledge_default_embedding",
         "get_evaluation_llm_object",
@@ -187,7 +185,6 @@ async def admitted_defaults(reads, monkeypatch):
 @pytest.mark.parametrize(
     "method,provider",
     [
-        ("get_knowledge_source_llm", "get_bisheng_llm_sync"),
         ("get_knowledge_similar_llm", "get_bisheng_llm_sync"),
         ("get_knowledge_default_embedding", "get_bisheng_knowledge_embedding_sync"),
     ],
@@ -219,18 +216,11 @@ async def test_native_live_helpers_consume_original_admitted_id_and_reject_tenan
     model.assert_not_called()
 
 
-async def test_async_live_helper_uses_same_whole_source_before_provider(admitted_defaults, monkeypatch):
-    with Session(admitted_defaults.engine) as session, session.begin():
-        native.seed_default(session, key="knowledge_llm", payload={"source_model_id": 11})
-    model = AsyncMock(return_value="actual-client-boundary")
-    monkeypatch.setattr(LLMService, "get_bisheng_llm", model)
-    assert await LLMService.get_knowledge_source_llm_async(7, tenant_id=101) == "actual-client-boundary"
-    assert model.await_args.kwargs["model_id"] == 11 and model.await_args.kwargs["user_id"] == 7
-
-
 async def test_invalid_other_slot_does_not_block_actual_default_consumer(admitted_defaults, monkeypatch):
     with Session(admitted_defaults.engine) as session, session.begin():
-        native.seed_default(session, key="knowledge_llm", payload={"source_model_id": 22, "extract_title_model_id": 11})
+        native.seed_default(
+            session, key="knowledge_llm", payload={"qa_similar_model_id": 22, "extract_title_model_id": 11}
+        )
         session.execute(delete(LLMModel).where(LLMModel.tenant_id == 101, LLMModel.id == 11))
         session.add(
             ResourceReferenceTombstone(
@@ -247,5 +237,5 @@ async def test_invalid_other_slot_does_not_block_actual_default_consumer(admitte
         )
     model = Mock(return_value=object())
     monkeypatch.setattr(LLMService, "get_bisheng_llm_sync", model)
-    assert LLMService.get_knowledge_source_llm(7, tenant_id=101) is model.return_value
+    assert LLMService.get_knowledge_similar_llm(7, tenant_id=101) is model.return_value
     assert model.call_args.kwargs["model_id"] == 22

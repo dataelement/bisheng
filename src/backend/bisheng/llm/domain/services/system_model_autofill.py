@@ -126,6 +126,7 @@ def _workbench_listed_ws_slot(field: str) -> ModelSlot:
         fill=fill,
     )
 
+
 def _fill_assistant_auto(cfg: AssistantLLMConfig, model: LLMModel) -> None:
     cfg.auto_llm = AssistantLLMItem(model_id=model.id)
 
@@ -139,7 +140,6 @@ def _fill_assistant_list(cfg: AssistantLLMConfig, model: LLMModel) -> None:
 # it needs an image-capable model and has no admin picker.
 SLOTS: tuple[ModelSlot, ...] = (
     _field_slot(ConfigKeyEnum.KNOWLEDGE_LLM, "embedding_model_id", KIND_EMBEDDING),
-    _field_slot(ConfigKeyEnum.KNOWLEDGE_LLM, "source_model_id", KIND_LLM),
     _field_slot(ConfigKeyEnum.KNOWLEDGE_LLM, "extract_title_model_id", KIND_LLM),
     _field_slot(ConfigKeyEnum.KNOWLEDGE_LLM, "qa_similar_model_id", KIND_LLM),
     _field_slot(ConfigKeyEnum.KNOWLEDGE_LLM, "asr_model_id", KIND_ASR),
@@ -168,7 +168,6 @@ SLOTS: tuple[ModelSlot, ...] = (
     ),
     _workbench_default_slot("chat_default_model_id"),
     _workbench_default_slot("linsight_default_model_id"),
-    _ws_slot("embedding_model", KIND_EMBEDDING),
     _ws_slot("asr_model", KIND_ASR),
     _ws_slot("tts_model", KIND_TTS),
     _ws_slot("chat_title_llm", KIND_LLM),

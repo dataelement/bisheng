@@ -5,7 +5,6 @@ import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 import { shouldRetryApiError } from "@bisheng/api-client";
 import { Button, Cascader, toast } from "@bisheng/ui";
 
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Label } from "@/components/bs-ui/label";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
@@ -19,14 +18,13 @@ import { ModelFieldHint } from "../ModelFieldHint";
 import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { showApiError } from "@/controllers/request";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { managementRequestScope } from '@/controllers/managementScope';
 import { useModel } from "..";
 import { UserSelectableModels } from "../UserSelectableModels";
 import { updateModelMetadata } from "../userModelMetadata";
-import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
 import { SharedToolSettings } from "./SharedToolSettings";
 
 export const ModelSelect = ({
@@ -70,12 +68,11 @@ export const ModelSelect = ({
 
 export default function WorkbenchModel({ data, onBack }) {
   const { config: enterpriseConfig } = useDshBrowserConfig();
-  const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
+  const { llmOptions, asrModel, ttsModel } = useModel();
   const { t } = useTranslation("model");
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState<any>({
-    sourceModelId: null,
     linsightDefaultModelId: null,
     chatDefaultModelId: null,
     asrModelId: null,
@@ -87,10 +84,7 @@ export default function WorkbenchModel({ data, onBack }) {
     models: [],
   });
 
-  const lastSaveFormDataRef = useRef(null);
   const [saveload, setSaveLoad] = useState(false);
-  // The collapsed section holds the required embedding model; open it when it blocks a save.
-  const [otherSettingsOpen, setOtherSettingsOpen] = useState(false);
 
   const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
@@ -125,7 +119,6 @@ export default function WorkbenchModel({ data, onBack }) {
     const {
       linsightDefaultModelId,
       chatDefaultModelId,
-      sourceModelId,
       asrModelId,
       ttsModelId,
       chatTitleLlmId,
@@ -141,7 +134,6 @@ export default function WorkbenchModel({ data, onBack }) {
         // Empty displayName falls back to the model's own name so the
         // workspace model picker never renders a blank option.
         models: models.map((m) => ({ ...m, displayName: m.displayName?.trim() || findModelLabel(m.id) })),
-        embedding_model: { id: String(sourceModelId) },
         // Linsight default executor model: one of the workbench chat models' id.
         linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
         // Daily-mode default model: independent sibling of the Linsight default.
@@ -156,7 +148,6 @@ export default function WorkbenchModel({ data, onBack }) {
       };
 
       await updateLinsightModelConfig(data);
-      lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...data };
       toast.show({ type: "success", message: String(t("model.saveSuccess") ?? "") });
       await queryClient.invalidateQueries({ queryKey: ['system-model-settings'] });
             await queryClient.invalidateQueries({ queryKey: ['system-model-settings-impact'] });
@@ -172,7 +163,6 @@ export default function WorkbenchModel({ data, onBack }) {
       // Apply refreshed data only when the refresh succeeds.
       const newConfig = updatedConfig.data;
       setForm({
-        sourceModelId: newConfig?.embedding_model?.id || null,
         linsightDefaultModelId: newConfig?.linsight_default_model_id || null,
         chatDefaultModelId: newConfig?.chat_default_model_id || null,
         asrModelId: newConfig?.asr_model?.id || null,
@@ -183,33 +173,12 @@ export default function WorkbenchModel({ data, onBack }) {
         knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null,
         models: newConfig?.models || [],
       });
-
-      lastSaveFormDataRef.current = {
-        embedding_model: { id: newConfig?.embedding_model?.id },
-        linsight_default_model_id: newConfig?.linsight_default_model_id || null,
-        chat_default_model_id: newConfig?.chat_default_model_id || null,
-        abstract_prompt: newConfig?.abstract_prompt || defalutPrompt,
-        asr_model: { id: newConfig?.asr_model?.id },
-        tts_model: { id: newConfig?.tts_model?.id },
-        chat_title_llm: { id: newConfig?.chat_title_llm?.id },
-        memory_llm: { id: newConfig?.memory_llm?.id },
-        image_read_model: { id: newConfig?.image_read_model?.id },
-        knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
-        models: newConfig?.models || [],
-      };
     } catch (err) {
       showApiError(err);
       throw err;
     } finally {
       setSaveLoad(false);
     }
-  };
-
-  // Check whether the embedding model changed.
-  const checkEmbeddingModified = () => {
-    const lastEmbeddingId = lastSaveFormDataRef.current?.embedding_model?.id;
-    const currentEmbeddingId = form.sourceModelId;
-    return lastEmbeddingId !== currentEmbeddingId;
   };
 
   const handleSave = () => {
@@ -224,30 +193,12 @@ export default function WorkbenchModel({ data, onBack }) {
     if (form.models.some((model) => !model.id)) {
       errors.push(t("model.chatModelRowRequired"));
     }
-    if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
-      errors.push(t("model.workVectorModel") + t("bs:required"));
-      setOtherSettingsOpen(true);
-    }
     if (errors.length) {
       toast.show({ type: "error", message: errors.filter(Boolean).join("\n") });
       return;
     }
 
-    if (checkEmbeddingModified()) {
-      bsConfirm({
-        title: t("model.tip"),
-        desc: t("model.confirmEmbeddingChange"),
-        showClose: true,
-        okTxt: t("model.confirm"),
-        canelTxt: t("model.cancel"),
-        onOk(next) {
-          return submitConfig().then(next);
-        },
-        onCancel() {},
-      });
-    } else {
-      void submitConfig().catch(showApiError);
-    }
+    void submitConfig().catch(showApiError);
   };
 
   useEffect(() => {
@@ -258,7 +209,6 @@ export default function WorkbenchModel({ data, onBack }) {
     // Update the form and cache once the configuration is ready.
     if (linsightConfig) {
       setForm({
-        sourceModelId: linsightConfig.embedding_model?.id || null,
         linsightDefaultModelId: linsightConfig.linsight_default_model_id || null,
         chatDefaultModelId: linsightConfig.chat_default_model_id || null,
         asrModelId: linsightConfig.asr_model?.id || null,
@@ -269,20 +219,6 @@ export default function WorkbenchModel({ data, onBack }) {
         knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null,
         models: linsightConfig.models || [],
       });
-
-      lastSaveFormDataRef.current = {
-        embedding_model: { id: linsightConfig.embedding_model?.id },
-        linsight_default_model_id: linsightConfig.linsight_default_model_id || null,
-        chat_default_model_id: linsightConfig.chat_default_model_id || null,
-        abstract_prompt: linsightConfig.abstract_prompt || defalutPrompt,
-        asr_model: { id: linsightConfig.asr_model?.id },
-        tts_model: { id: linsightConfig.tts_model?.id },
-        chat_title_llm: { id: linsightConfig.chat_title_llm?.id },
-        memory_llm: { id: linsightConfig.memory_llm?.id },
-        image_read_model: { id: linsightConfig.image_read_model?.id },
-        knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id },
-        models: linsightConfig.models || [],
-      };
     }
   }, [linsightConfig, error, defalutPrompt, t]);
 
@@ -331,11 +267,7 @@ export default function WorkbenchModel({ data, onBack }) {
           })}
         </ul>
       </section>}
-      <details
-        className="mt-2 border-t pt-4"
-        open={otherSettingsOpen}
-        onToggle={(event) => setOtherSettingsOpen(event.currentTarget.open)}
-      >
+      <details className="mt-2 border-t pt-4">
         <summary className="cursor-pointer text-sm text-muted-foreground">
           {t("model.otherModelSettings")}
         </summary>
@@ -355,15 +287,6 @@ export default function WorkbenchModel({ data, onBack }) {
             value={form.chatDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("chatDefaultModelId", val)}
-          />
-          <ModelSelect
-            close
-            label={t("model.workVectorModel")}
-            tooltipText={t("model.workVectorModelTooltip")}
-            value={form.sourceModelId}
-            options={embeddings}
-            onChange={(val) => setForm({ ...form, sourceModelId: val })}
-            required
           />
           <h3 className="bisheng-label">{t("model.workbenchVoiceModel")}</h3>
           <div className="border rounded-lg p-4 -mt-3 space-y-4">
@@ -433,7 +356,6 @@ export function useLinsightConfig() {
       // Badge / Banner without re-fetching.
       const cfg = env?.data || {
         models: [],
-        embedding_model: null,
         abstract_prompt: defalutPrompt,
         linsight_default_model_id: null,
         chat_default_model_id: null,

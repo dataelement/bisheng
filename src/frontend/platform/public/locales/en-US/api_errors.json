@@ -128,7 +128,7 @@
   "10813": "The model price was changed by someone else. Refresh and try again.",
   "10814": "The model price is invalid. Check it and try again.",
   "10900": "Knowledge base name already exists",
-  "10901": "Embedding model required",
+  "10901": "Select an embedding model, or set a default under Knowledge Models in system model settings.",
   "10902": "Summary model invalid. Reconfigure in system model settings.",
   "10903": "The embedding model for knowledge base \"{knowledge_name}\" is unavailable. Please check its configuration.",
   "10910": "This version does not support segmentation changes. Create a new knowledge base",

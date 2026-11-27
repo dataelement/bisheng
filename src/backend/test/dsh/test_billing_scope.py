@@ -94,36 +94,6 @@ async def test_unmetered_context_reaches_tasks_created_inside_and_resets():
     assert await task == "unmetered"
 
 
-async def test_knowledge_source_llm_defaults_to_traceability_and_is_admin_selected(monkeypatch):
-    from bisheng.llm.domain.services.llm import LLMService
-
-    created = AsyncMock(return_value="llm")
-    monkeypatch.setattr(LLMService, "aget_knowledge_llm", AsyncMock(return_value=SimpleNamespace(source_model_id=5)))
-    monkeypatch.setattr(LLMService, "get_bisheng_llm", created)
-    await LLMService.get_knowledge_source_llm_async(2)
-    assert created.await_args.kwargs["app_type"] is ApplicationTypeEnum.RAG_TRACEABILITY
-    assert created.await_args.kwargs["admin_selected"] is True
-    await LLMService.get_knowledge_source_llm_async(2, app_type=ApplicationTypeEnum.DAILY_CHAT)
-    assert created.await_args.kwargs["app_type"] is ApplicationTypeEnum.DAILY_CHAT
-    assert created.await_args.kwargs["app_id"] == "daily_chat"
-
-
-async def test_traceability_passes_the_scenario_through(monkeypatch):
-    from bisheng.common.chat import utils
-    from bisheng.llm.domain.services.llm import LLMService
-
-    monkeypatch.setattr(utils.ChatMessageDao, "aget_message_by_id", AsyncMock(return_value=SimpleNamespace(user_id=2)))
-    getter = AsyncMock(return_value=None)
-    monkeypatch.setattr(LLMService, "get_knowledge_source_llm_async", getter)
-    monkeypatch.setattr(utils, "extract_answer_keys_async", AsyncMock(return_value=[]))
-    document = SimpleNamespace(metadata={}, page_content="")
-    await utils.process_source_document([document], "chat", 1, "answer", app_type=ApplicationTypeEnum.DAILY_CHAT)
-    getter.assert_awaited_once_with(2, app_type=ApplicationTypeEnum.DAILY_CHAT)
-    getter.reset_mock()
-    await utils.process_source_document([document], "chat", 1, "answer")
-    getter.assert_awaited_once_with(2)
-
-
 async def test_image_view_model_is_admin_selected(monkeypatch):
     from bisheng.common.image_view import loop
     from bisheng.llm.domain.services.llm import LLMService

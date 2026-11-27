@@ -24,12 +24,11 @@ MODEL_DEFAULT_SCHEMAS = MappingProxyType(
 )
 KNOWLEDGE_MODEL_SLOTS = (
     "embedding_model_id",
-    "source_model_id",
     "extract_title_model_id",
     "qa_similar_model_id",
     "asr_model_id",
 )
-WORKBENCH_MODEL_OBJECTS = ("embedding_model", "asr_model", "tts_model", "chat_title_llm", "memory_llm", "image_read_model")
+WORKBENCH_MODEL_OBJECTS = ("asr_model", "tts_model", "chat_title_llm", "memory_llm", "image_read_model")
 
 
 def extract_model_default_references(key: str, payload: dict | BaseModel) -> tuple[ReferenceSpec, ...]:
@@ -131,7 +130,7 @@ def project_model_default(key: str, payload: dict, slots: tuple[str, ...]) -> di
 
 
 def model_default_slot_types(key: str, slot: str) -> frozenset[str]:
-    if slot in {"embedding_model_id", "embedding_model.id"}:
+    if slot == "embedding_model_id":
         return frozenset({"embedding"})
     if slot in {"asr_model_id", "asr_model.id"}:
         return frozenset({"asr", "asr_rt"})

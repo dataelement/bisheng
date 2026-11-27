@@ -37,7 +37,7 @@ def test_first_llm_fills_every_llm_setting_including_later_ones():
     assert workbench.memory_llm.id == "1"
     assert workbench.linsight_default_model_id == "1"
     assert workbench.chat_default_model_id == "1"
-    assert workbench.embedding_model is None  # another kind
+    assert "embedding_model" not in workbench.model_dump()
 
     workflow = EvaluationLLMConfig()
     assert fill_empty_slots(ConfigKeyEnum.WORKFLOW_LLM, workflow, LLM) == ["workflow_llm.model_id"]
@@ -71,7 +71,7 @@ def test_speech_models_fill_workbench_and_knowledge_slots():
     assert fill_empty_slots(ConfigKeyEnum.LINSIGHT_LLM, workbench, ASR) == ["linsight_llm.asr_model"]
     assert fill_empty_slots(ConfigKeyEnum.KNOWLEDGE_LLM, knowledge, ASR) == ["knowledge_llm.asr_model_id"]
     assert fill_empty_slots(ConfigKeyEnum.LINSIGHT_LLM, workbench, TTS) == ["linsight_llm.tts_model"]
-    assert workbench.embedding_model is None
-    assert fill_empty_slots(ConfigKeyEnum.LINSIGHT_LLM, workbench, EMBED) == ["linsight_llm.embedding_model"]
+    assert "embedding_model" not in workbench.model_dump()
+    assert fill_empty_slots(ConfigKeyEnum.LINSIGHT_LLM, workbench, EMBED) == []
     assert kind_of("asr") == KIND_ASR
     assert kind_of("rerank") is None

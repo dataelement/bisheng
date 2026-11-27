@@ -41,9 +41,9 @@ vi.mock('@bisheng/ui', async (original) => ({
 }));
 const options = [{ value: 'provider', label: 'Provider', children: [{ value: '1', label: 'Embedding' }, { value: '7', label: 'Replacement' }, { value: '9', label: 'Original' }] }];
 const inference = { model_id: '9', agent_executor_type: 'function call', knowledge_max_content: 15000, knowledge_sort_index: false, default: true, streaming: false };
-const knowledge = { embedding_model_id: '1', source_model_id: '9', extract_title_model_id: '9', qa_similar_model_id: '9', asr_model_id: null, abstract_enabled: true, auto_tag_enabled: true, abstract_prompt: 'summary', auto_tag_prompt: 'tags' };
+const knowledge = { embedding_model_id: '1', extract_title_model_id: '9', qa_similar_model_id: '9', asr_model_id: null, abstract_enabled: true, auto_tag_enabled: true, abstract_prompt: 'summary', auto_tag_prompt: 'tags' };
 const cases = [
-    { name: 'knowledge', load: mocks.knowledge, save: mocks.saveKnowledge, initial: knowledge, local: { ...knowledge, source_model_id: '7' }, field: 'model.sourceTracingModel', render: () => <KnowledgeModel llmOptions={options} embeddings={options} onBack={vi.fn()} /> },
+    { name: 'knowledge', load: mocks.knowledge, save: mocks.saveKnowledge, initial: knowledge, local: { ...knowledge, extract_title_model_id: '7' }, field: 'model.documentSummaryModel', render: () => <KnowledgeModel llmOptions={options} embeddings={options} onBack={vi.fn()} /> },
     { name: 'assistant', load: mocks.assistant, save: mocks.saveAssistant, initial: { llm_list: [inference], auto_llm: inference }, local: { llm_list: [{ ...inference, model_id: '7' }], auto_llm: inference }, field: 'build.selectModel', render: () => <AssisModel llmOptions={options} onBack={vi.fn()} /> },
     { name: 'evaluation', load: mocks.evaluation, save: mocks.saveEvaluation, initial: { model_id: '9' }, local: { model_id: '7' }, field: 'build.selectModel', render: () => <EvaluationModel llmOptions={options} onBack={vi.fn()} /> },
     { name: 'workflow', load: mocks.workflow, save: mocks.saveWorkflow, initial: { model_id: '9' }, local: { model_id: '7' }, field: 'build.selectModel', render: () => <WorkflowModel llmOptions={options} onBack={vi.fn()} /> },
@@ -121,13 +121,13 @@ it('saving a prompt refreshes source without discarding unsaved model repairs in
     const client = new QueryClient();
     render(<QueryClientProvider client={client}><KnowledgeModel llmOptions={options} embeddings={options} onBack={vi.fn()} /></QueryClientProvider>);
     await screen.findByRole('button', { name: 'model.saveLocalConfiguration' });
-    fireEvent.change(screen.getByRole('combobox', { name: 'model.sourceTracingModel' }), { target: { value: '7' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'model.documentSummaryModel' }), { target: { value: '7' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'model.editPromptButton' })[0]);
     fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'saved prompt' } });
     fireEvent.click(screen.getByRole('button', { name: 'model.save' }));
     await waitFor(() => expect(mocks.saveKnowledge).toHaveBeenCalledWith({ ...knowledge, abstract_prompt: 'saved prompt' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByRole('combobox', { name: 'model.sourceTracingModel' })).toHaveValue('7');
+    expect(screen.getByRole('combobox', { name: 'model.documentSummaryModel' })).toHaveValue('7');
     expect(screen.queryByText('model.systemConfigInheritedBadge')).not.toBeInTheDocument();
     client.clear();
 });
