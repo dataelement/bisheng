@@ -8,6 +8,7 @@ on:
       - scripts/prepare-offline-delivery.sh
       - scripts/nexus-upload.sh
       - scripts/collect-images.sh
+      - scripts/wait-offline-test-images.sh
       - scripts/tests/test_offline_deploy.py
       - scripts/tests/offline-bundle.sh
       - scripts/tests/compose/test-install.sh

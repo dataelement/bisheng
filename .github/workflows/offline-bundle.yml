@@ -1,22 +1,28 @@
 name: Offline bundle
 on:
+  push:
+    tags:
+      - 'v*-offline-test-*'
   workflow_dispatch:
     inputs:
       version:
         description: 已发布的 git tag，例如 v3.1.0
         required: true
         type: string
+permissions:
+  contents: read
+  actions: read
 jobs:
   offline-bundle:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { arch: amd64, runner: ubuntu-latest }
-          - { arch: arm64, runner: ubuntu-22.04-arm }
+        # Current Compose Gateway is amd64-only; test tags exercise the complete amd64 package.
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"arch":"amd64","runner":"ubuntu-latest"}]' || '[{"arch":"amd64","runner":"ubuntu-latest"},{"arch":"arm64","runner":"ubuntu-22.04-arm"}]') }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ inputs.version || github.ref_name }}
       ARCH: ${{ matrix.arch }}
       NEXUS_USER: ${{ secrets.NEXUS_CI_USER }}
       NEXUS_PASS: ${{ secrets.NEXUS_CI_PASS }}
@@ -47,18 +53,29 @@ jobs:
         password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
 
     - name: Require the promoted CR tag
+      if: github.event_name != 'push'
       run: |
         suffix=""
         [[ "$ARCH" == "arm64" ]] && suffix="-arm64"
         docker manifest inspect "cr.dataelem.com/dataelement/bisheng-backend:${VERSION}${suffix}" >/dev/null
 
     - name: Collect image refs
-      run: ./scripts/collect-images.sh --arch "$ARCH" --version "$VERSION" --env-example "$RUNNER_TEMP/docker/.env.example" > images.txt
+      run: |
+        args=()
+        [[ "$GITHUB_EVENT_NAME" != push ]] || args+=(--native-tags)
+        ./scripts/collect-images.sh --arch "$ARCH" --version "$VERSION" \
+          --env-example "$RUNNER_TEMP/docker/.env.example" "${args[@]}" > images.txt
+
+    - name: Wait for test-tag native images
+      if: github.event_name == 'push'
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: bash scripts/wait-offline-test-images.sh images.txt
 
     - name: Build offline bundle
       env:
         GIT_COMMIT: ${{ steps.tag.outputs.commit }}
-        GIT_REF: refs/tags/${{ inputs.version }}
+        GIT_REF: refs/tags/${{ inputs.version || github.ref_name }}
         CI_PROVIDER: github
       run: |
         ./scripts/make-bundle.sh \
@@ -69,10 +86,12 @@ jobs:
 
     - name: Upload to Nexus
       run: |
+        args=()
+        [[ "$GITHUB_EVENT_NAME" == push ]] || args+=(--update-latest)
         ./scripts/nexus-upload.sh \
           --dir dist --version "${VERSION#v}" --arch "$ARCH" \
           --base-url "$NEXUS_BASE" --repo "$NEXUS_REPO" \
-          --method rest --verify sha256 --update-latest
+          --method rest --verify sha256 "${args[@]}"
 
     - name: Notify
       if: always()

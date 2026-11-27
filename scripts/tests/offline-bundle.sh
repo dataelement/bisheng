@@ -20,6 +20,10 @@ mysql_amd64="$(printf '%s\n' "$lines" | awk '$1=="MYSQL_IMAGE"{print $3}')"
 mysql_arm64="$(printf '%s\n' "$arm" | awk '$1=="MYSQL_IMAGE"{print $3}')"
 [[ "$mysql_amd64" == "$mysql_arm64" && -n "$mysql_amd64" ]] || fail 'middleware tag changed between architectures'
 pass 'collect-images writes the default 13 refs'
+native="$(bash "$ROOT/scripts/collect-images.sh" --arch amd64 --version v3.1.0-offline-test-1 --env-example "$ROOT/docker/.env.example" --native-tags)"
+printf '%s\n' "$native" | grep -q 'bisheng-backend:v3.1.0-offline-test-1-amd64$' || fail 'native backend ref'
+printf '%s\n' "$native" | grep -q 'bisheng-runtime-manager:v3.1.0-offline-test-1-amd64$' || fail 'native runtime ref'
+pass 'test bundles use architecture image tags without formal promotion'
 
 printf 'backend only-two-columns\n' > "$TMP/bad.txt"
 if bash "$ROOT/scripts/make-bundle.sh" --version 3.1.0 --arch amd64 --images-file "$TMP/bad.txt" --docker-dir "$ROOT/docker" --out "$TMP/out" --dry-run >"$TMP/bad.err" 2>&1; then

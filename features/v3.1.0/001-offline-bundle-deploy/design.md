@@ -53,3 +53,9 @@ Incoming：固定版本 docker 目录、已发布平台镜像与 Compose 指定�
 ## 修订历史
 
 2026-11-27：落实已确认单脚本方案与 Compose Gateway 来源要求，记录文件协议及验证边界。
+
+## 测试 tag 构建（2026-11-27）
+
+`v*-offline-test-*` 推送自动触发 Offline bundle，使用同 tag 的 `-amd64` 原生镜像，不需要创建 Release 或改写正式镜像 tag。等待 CI / Runtime delivery images 产物就绪；上游构建失败且缺镜像时提前退出。测试包只发布版本目录，不更新 Nexus latest。
+
+已通过实际 `docker manifest inspect --verbose` 确认 Compose Gateway v1.9.3 仅支持 linux/amd64，因此测试 tag 只生成带 Gateway 的完整 amd64 包；手动正式打包仍保留原双架构矩阵及架构不符失败的行为。没有猜测或替换 Gateway tag。

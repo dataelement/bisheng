@@ -7,6 +7,7 @@ set -euo pipefail
 ARCH=""
 VERSION=""
 ENV_FILE="docker/.env.example"
+NATIVE_TAGS=0
 
 log() { printf '[collect-images] %s\n' "$*" >&2; }
 die() { printf '[collect-images][ERROR] %s\n' "$*" >&2; exit 1; }
@@ -16,6 +17,7 @@ while [[ $# -gt 0 ]]; do
     --arch) ARCH="${2:?}"; shift 2 ;;
     --version) VERSION="${2:?}"; shift 2 ;;
     --env-example) ENV_FILE="${2:?}"; shift 2 ;;
+    --native-tags) NATIVE_TAGS=1; shift ;;
     -h|--help)
       printf '%s\n' "用法：$0 --arch amd64|arm64 --version v3.1.0 [--env-example docker/.env.example]"
       exit 0 ;;
@@ -38,6 +40,7 @@ emit() { printf '%s %s %s\n' "$1" "$2" "$3"; }
 
 suffix=""
 [[ "$ARCH" == arm64 ]] && suffix="-arm64"
+[[ "$NATIVE_TAGS" == 0 ]] || suffix="-${ARCH}"
 registry="cr.dataelem.com/dataelement"
 emit BISHENG_BACKEND_IMAGE backend "${registry}/bisheng-backend:${VERSION}${suffix}"
 emit BISHENG_FRONTEND_IMAGE frontend "${registry}/bisheng-frontend:${VERSION}${suffix}"
