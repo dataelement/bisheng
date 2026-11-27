@@ -698,6 +698,9 @@ importers:
 
   packages/api-client:
     devDependencies:
+      fake-indexeddb:
+        specifier: 6.0.0
+        version: 6.0.0
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

@@ -17,10 +17,12 @@ import {
   useGetUserQuery,
   useLoginUserMutation,
   useLogoutUserMutation,
-  useRefreshTokenMutation,
 } from '~/hooks/queries/data-provider';
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
-import useTimeout from './useTimeout';
+import { requestHostAuthRenewal } from '@bisheng/api-client';
+import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { platformAuth } from '~/api/request';
 import store from '~/store';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 
@@ -33,6 +35,10 @@ const AuthContextProvider = ({
   authConfig?: TAuthConfig;
   children: ReactNode;
 }) => {
+  const queryClient = useQueryClient();
+  const { t: translate } = useTranslation();
+  const [hostPending, setHostPending] = useState(false);
+  const [startupFailed, setStartupFailed] = useState(false);
   const [user, setUser] = useRecoilState(store.user);
   const [token, setToken] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -44,7 +50,7 @@ const AuthContextProvider = ({
     enabled: !!(isAuthenticated && user?.role === SystemRoles.ADMIN),
   });
   useEffect(() => {
-    setUserContext({ token, isAuthenticated: !!user, user });
+    setIsAuthenticated(Boolean(user));
   }, [user])
 
   const navigate = useNavigate();
@@ -72,7 +78,7 @@ const AuthContextProvider = ({
     },
     [navigate, setUser],
   );
-  const doSetError = useTimeout({ callback: (error) => setError(error as string | undefined) });
+  const doSetError = useCallback((message?: string) => setError(message), []);
 
   const loginUser = useLoginUserMutation({
     onSuccess: (data: t.TLoginResponse) => {
@@ -93,8 +99,7 @@ const AuthContextProvider = ({
   });
   const logoutUser = useLogoutUserMutation({
     onSuccess: (data) => {
-      // Drop the auth-state sentinel so the next /api/user/me success is
-      // detected as a fresh login and wipes cached chat preferences.
+      // Drop only the non-secret authentication sentinel.
       try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
       const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
       if (thirdPartyLogoutUrl) {
@@ -110,7 +115,9 @@ const AuthContextProvider = ({
     },
     onError: (error) => {
       try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
-      doSetError((error as Error).message);
+      const message = translate('platformAuth.localLogoutUnconfirmed');
+      doSetError(message);
+      window.showToast?.({ message, status: 'warning' });
       const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
       if (thirdPartyLogoutUrl) {
         window.location.href = thirdPartyLogoutUrl;
@@ -124,68 +131,48 @@ const AuthContextProvider = ({
       });
     },
   });
-  // const refreshToken = useRefreshTokenMutation();
-
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const initialize = () => {
+      void platformAuth.initialize().then(() => {
+        if (active) { setHostPending(platformAuth.hostPending); setAuthReady(!platformAuth.hostPending); setStartupFailed(false); }
+      }).catch(() => {
+        if (active) { setStartupFailed(true); doSetError(translate('platformAuth.serviceUnavailable')); }
+      });
+    };
+    initialize();
+    window.addEventListener('online', initialize);
+    const unsubscribe = platformAuth.subscribe(event => {
+      if (!active || !event || event.type === 'refresh') return;
+      void queryClient.cancelQueries();
+      queryClient.clear();
+      setUser(undefined);
+      setIsAuthenticated(false);
+      setToken(undefined);
+      if (event.type === 'login') { setAuthReady(false); initialize(); }
+      else setAuthReady(true);
+    });
+    return () => { active = false; unsubscribe(); window.removeEventListener('online', initialize); };
+  }, [setUser, queryClient, doSetError, translate]);
   const logout = useCallback(() => logoutUser.mutate(undefined), [logoutUser]);
-  const userQuery = useGetUserQuery();
-  // const userQuery = useGetUserQuery({ enabled: !!(token ?? '') });
-
-  const login = (data: t.TLoginUser) => {
-    loginUser.mutate(data);
-  };
-
+  const userQuery = useGetUserQuery({ enabled: authReady });
+  const mutateLogin = loginUser.mutate;
+  const login = useCallback((data: t.TLoginUser) => { mutateLogin(data); }, [mutateLogin]);
   const silentRefresh = useCallback(() => {
-    if (authConfig?.test === true) {
-      console.log('Test mode. Skipping silent refresh.');
-      return;
-    }
-    // refreshToken.mutate(undefined, {
-    //   onSuccess: (data: t.TRefreshTokenResponse | undefined) => {
-    //     const { user, token = '' } = data ?? {};
-    //     if (token) {
-    //       setUserContext({ token, isAuthenticated: true, user });
-    //     } else {
-    //       console.log('Token is not present. User is not authenticated.');
-    //       if (authConfig?.test === true) {
-    //         return;
-    //       }
-    //       navigate('/login');
-    //     }
-    //   },
-    //   onError: (error) => {
-    //     console.log('refreshToken mutation error:', error);
-    //     if (authConfig?.test === true) {
-    //       return;
-    //     }
-    //     navigate('/login');
-    //   },
-    // });
-  }, []);
+    if (authConfig?.test || platformAuth.snapshot?.refresh_mode !== 'cookie') return;
+    void platformAuth.refresh().catch((cause: unknown) => doSetError(translate(
+      (cause as { status?: number }).status === 401 ? 'platformAuth.sessionEnded' : 'platformAuth.serviceUnavailable')));
+  }, [authConfig?.test, doSetError, translate]);
 
   useEffect(() => {
     if (userQuery.data) {
       setUser(userQuery.data);
       setIsAuthenticated(true);
-      // Auth-state sentinel: stored in localStorage (shared across tabs)
-      // so refresh and new-tab don't trigger a wipe. Cleared on logout and
-      // on 401 in the response interceptor; SSO landing leaves it absent
-      // until the first /api/user/me succeeds. Mismatch (absent or different
-      // uid — including a leftover bs:* set from a prior user) is treated
-      // as "fresh login" → wipe cached chat preferences and legacy global
-      // keys so admin-configured defaults re-apply.
+      // Keep a non-secret identity marker; authentication never clears user preferences.
       try {
         const uid = String(userQuery.data.id ?? '');
         if (uid && localStorage.getItem('bs:auth-state') !== uid) {
-          for (let i = localStorage.length - 1; i >= 0; i--) {
-            const k = localStorage.key(i);
-            if (k && k.startsWith('bs:')) localStorage.removeItem(k);
-          }
-          // One-time cleanup of legacy global keys that used to be persisted
-          // via atomWithLocalStorage. Their atoms no longer write to these
-          // keys; remove any stale values so the keys don't linger forever.
-          ['chatModel', 'modelType', 'searchType', 'isSearch'].forEach((k) => {
-            localStorage.removeItem(k);
-          });
           localStorage.setItem('bs:auth-state', uid);
         }
       } catch { /* ignore storage errors */ }
@@ -210,17 +197,16 @@ const AuthContextProvider = ({
     navigate,
     silentRefresh,
     setUserContext,
+    doSetError,
   ]);
 
+  const refetchUser = userQuery.refetch;
   useEffect(() => {
-    const handleTokenUpdate = (event) => {
-      console.log('tokenUpdated event received event');
-      const newToken = event.detail;
-      setUserContext({
-        token: newToken,
-        isAuthenticated: true,
-        user: user,
-      });
+    const handleTokenUpdate = () => {
+      if (platformAuth.snapshot?.refresh_mode !== 'host') return;
+      void platformAuth.initialize(true).then(session => {
+        if (session?.refresh_mode === 'host') void refetchUser();
+      }).catch(() => undefined);
     };
 
     window.addEventListener('tokenUpdated', handleTokenUpdate);
@@ -228,13 +214,13 @@ const AuthContextProvider = ({
     return () => {
       window.removeEventListener('tokenUpdated', handleTokenUpdate);
     };
-  }, [setUserContext, user]);
+  }, [refetchUser]);
 
   // Consider "still loading" in two cases:
   // 1. The query hasn't completed yet (!isFetched)
   // 2. The query succeeded with data, but the useEffect that syncs
   //    userQuery.data → Recoil `user` atom hasn't fired yet (render gap)
-  const isUserLoading = !userQuery.isFetched || (userQuery.isSuccess && !user);
+  const isUserLoading = !authReady || (platformAuth.snapshot?.refresh_mode === 'host' && userQuery.isError) || !userQuery.isFetched || (userQuery.isSuccess && !user);
 
   // Make the provider update only when it should
   const memoedValue = useMemo(
@@ -253,10 +239,13 @@ const AuthContextProvider = ({
       isUserLoading,
     }),
 
-    [user, error, isAuthenticated, token, userRole, adminRole, isUserLoading],
+    [user, error, isAuthenticated, token, userRole, adminRole, isUserLoading, login, logout],
   );
 
-  return <AuthContext.Provider value={memoedValue}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={memoedValue}>{authReady ? children : <div role="status">
+    {translate(hostPending ? 'platformAuth.hostReconnect' : startupFailed ? 'platformAuth.serviceUnavailable' : 'platformAuth.loading')}
+    {(startupFailed || hostPending) && <button type="button" onClick={() => hostPending ? requestHostAuthRenewal() : location.reload()}>{translate('platformAuth.retry')}</button>}
+  </div>}</AuthContext.Provider>;
 };
 
 const useAuthContext = () => {

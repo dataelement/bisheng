@@ -36,7 +36,7 @@ class RuntimeAuthorizationService:
             self_review = principal.resource_owner_user_id
         else:
             reference = deepcopy(getattr(identity, "_runtime_credential_reference", None))
-            if not reference or reference.get("kind") not in {"web_session", "dsh_session"}:
+            if not reference or reference.get("kind") not in {"web_session", "platform_session", "dsh_session"}:
                 raise PermissionDeniedError(reason="runtime_web_identity_unavailable")
             self_review = actor.subject_id
         return {
@@ -62,7 +62,11 @@ class RuntimeAuthorizationService:
             raise PermissionDeniedError(reason="preview_task_changed")
         actor = await AppAuthorizationService.resolve_actor(identity)
         reference = deepcopy(getattr(identity, "_runtime_credential_reference", None))
-        if actor.subject_type != "user" or not reference or reference.get("kind") != "web_session":
+        if (
+            actor.subject_type != "user"
+            or not reference
+            or reference.get("kind") not in {"web_session", "platform_session"}
+        ):
             raise PermissionDeniedError(reason="preview_web_identity_required")
         return {
             "schema": 1,
@@ -120,7 +124,7 @@ class RuntimeAuthorizationService:
                     }:
                         raise PermissionDeniedError(reason="runtime_identity_changed")
                     yield identity
-            elif reference.get("kind") in {"web_session", "dsh_session"}:
+            elif reference.get("kind") in {"web_session", "platform_session", "dsh_session"}:
                 principal_scope = without_open_api_identity()
                 principal_scope.__enter__()
                 actor_token = set_current_permission_actor(None)

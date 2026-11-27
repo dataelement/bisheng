@@ -1,5 +1,7 @@
+import { isAccessExpired } from '@bisheng/api-client';
 import { requiresManagementScope, managementRequestScope, guardManagementResponse } from "./managementScope";
 import request, {
+  platformAuth,
   handleRequestError,
   handleRequestResponse,
   requestAuthHeaders,
@@ -9,12 +11,14 @@ import request, {
 export async function requestStream(
   url: string,
   signal?: AbortSignal,
+  retried = false,
 ): Promise<ReadableStream<Uint8Array>> {
   const sharedBase = (request.defaults.baseURL || "/").replace(/\/?$/, "/");
   const target = new URL(
     url.replace(/^\//, ""),
     new URL(sharedBase, location.origin),
   );
+  await platformAuth.settled();
   const scoped = requiresManagementScope("POST", url, request.defaults.baseURL);
   if (scoped) await bootstrapManagementRequestScope();
   const snapshot = scoped ? managementRequestScope() : null;
@@ -53,6 +57,7 @@ export async function requestStream(
       await handleRequestError({ config, status_code: 19704 });
       throw error;
     }
+    platformAuth.noteBusinessActivity();
     return response.body;
   }
   const reader = response.body?.getReader();
@@ -79,6 +84,9 @@ export async function requestStream(
       status_code: response.status,
       status_message: "Stream unavailable",
     };
+  }
+  if (isAccessExpired(data) && !retried && await platformAuth.refresh()) {
+    return requestStream(url, signal, true);
   }
   if (response.ok) {
     await handleRequestResponse({

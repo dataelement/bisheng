@@ -61,6 +61,11 @@ async def browser_message_identity_scope(identity):
     to the authenticated Home, rather than that administrator-selected view.
     Yield no replacement execution so the native client retains its own state.
     """
+    reference = getattr(identity, "_runtime_credential_reference", None)
+    if reference and reference.get("kind") == "platform_session":
+        from bisheng.user.platform_auth_runtime import platform_auth_service
+
+        await platform_auth_service().validate_reference(reference)
     facts = (await read_current_person_facts([identity.user_id])).get(identity.user_id)
     if (
         facts is None
@@ -83,6 +88,8 @@ async def browser_message_identity_scope(identity):
 
 
 async def resolve_web_creation_identity(reference):
+    if reference.get("kind") == "platform_session":
+        return await resolve_platform_runtime_identity(reference)
     try:
         expires = datetime.fromisoformat(reference["expires_at"])
         expires = expires.replace(tzinfo=UTC) if expires.tzinfo is None else expires
@@ -105,6 +112,8 @@ async def resolve_web_creation_identity(reference):
 
 
 async def resolve_web_runtime_identity(reference):
+    if reference.get("kind") == "platform_session":
+        return await resolve_platform_runtime_identity(reference)
     try:
         if reference["kind"] != "web_session" or datetime.fromisoformat(reference["expires_at"]) <= datetime.utcnow():
             raise ValueError("expired")
@@ -130,3 +139,17 @@ async def resolve_preview_person(user_id):
     return await UserPayload.init_login_user(
         user_id=user.user_id, user_name=user.user_name, tenant_id=tenant, token_version=user.token_version
     )
+
+
+async def resolve_platform_runtime_identity(reference):
+    from bisheng.user.platform_auth_runtime import platform_auth_service
+
+    facts = await platform_auth_service().validate_reference(reference)
+    user = await UserPayload.init_login_user(
+        user_id=facts["id"],
+        user_name=facts["user_name"],
+        tenant_id=facts["tenant_id"],
+        token_version=facts["token_version"],
+    )
+    user._runtime_credential_reference = dict(reference)
+    return user

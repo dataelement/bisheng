@@ -15,6 +15,7 @@ from bisheng.utils import get_request_ip
 
 # Paths exempt from tenant context checks (login, env, health, docs, static)
 TENANT_CHECK_EXEMPT_PATHS = (
+    "/api/v1/auth/",
     "/api/v1/internal/app-proxy/desktop-session",
     "/api/v1/user/login",
     "/api/v1/user/regist",
@@ -156,6 +157,11 @@ def _extract_http_access_token(request: Request) -> str | None:
     skipping Bearer caused ``token_version`` invalidation (account disable) to never
     run for logged-in SPA sessions.
     """
+    from bisheng.user.domain.services.platform_transport import access_credential
+
+    platform = access_credential(request)
+    if platform:
+        return platform
     token = request.cookies.get("access_token_cookie")
     if token:
         return token
@@ -389,6 +395,19 @@ async def _apply_token_version_and_visible(
     None otherwise. ``decoded_subject`` lets the caller share a JWT decode
     across middleware steps so the same token isn't decoded twice.
     """
+    from bisheng.user.domain.services.platform_identity import is_platform_token
+
+    if is_platform_token(token):
+        from bisheng.common.errcode.platform_auth import PlatformAuthError
+        from bisheng.user.platform_auth_runtime import get_platform_auth
+
+        try:
+            await get_platform_auth(request).inspect(token)
+            return None  # Route admission owns current roles and management scope.
+        except PlatformAuthError as exc:
+            return JSONResponse(
+                status_code=exc.http_status, content=exc.payload(), headers={"Cache-Control": "no-store"}
+            )
     subject = decoded_subject if decoded_subject is not None else _decode_jwt_subject(token)
     if subject is None:
         return None  # Undecodable tokens fall through to existing logic.
@@ -468,6 +487,11 @@ class CustomMiddleware(BaseHTTPMiddleware):
             trace_id = trace_id_generator()
         ip = get_request_ip(request)
         req_path = request.url.path
+        # Public and independently credentialed entrances must not interpret
+        # unrelated browser credentials before their own endpoint runs.
+        is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS) or bool(
+            re.fullmatch(r"/api/v1/apps/[A-Za-z0-9_-]+/storage(?:/.*)?", req_path)
+        )
         dsh_owned = owns_dsh_credential(request.method, req_path)
         dsh_scope = dsh_owned
         market_browser_token = None
@@ -487,7 +511,11 @@ class CustomMiddleware(BaseHTTPMiddleware):
                 market_browser_token = request.cookies.get("access_token_cookie")
             if market_browser_token:
                 dsh_owned = False
-        path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/dsh/", "/api/v1/internal/dsh/")) else request.url
+        path = (
+            req_path
+            if req_path.startswith(("/api/v1/auth/", "/api/v1/dsh/", "/api/dsh/", "/api/v1/internal/dsh/"))
+            else request.url
+        )
         trace_id_var.set(trace_id)
 
         # Tenant context injection from JWT cookie. Decode the JWT once and
@@ -496,12 +524,49 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # v2 resolves its API credential and v3 uses its default operator, and DSH
         # owns its own credential. Browser credentials must not change any of
         # those channels' identity or errors.
+        try:
+            selected_token = (
+                _extract_http_access_token(request)
+                if _uses_browser_identity(request.url.path)
+                and not dsh_owned
+                and not is_exempt
+                and request.url.path not in {"/api/v1/auth/login", "/api/v1/user/login"}
+                else None
+            )
+        except Exception as exc:
+            from bisheng.common.errcode.platform_auth import PlatformAuthError
+
+            if isinstance(exc, PlatformAuthError):
+                return JSONResponse(
+                    status_code=exc.http_status, content=exc.payload(), headers={"Cache-Control": "no-store"}
+                )
+            raise
         token = (
-            (market_browser_token or _extract_http_access_token(request))
-            if _uses_browser_identity(request.url.path) and not dsh_owned
+            (market_browser_token or selected_token)
+            if _uses_browser_identity(request.url.path) and not dsh_owned and not is_exempt
             else None
         )
-        decoded_subject = _decode_jwt_subject(token) if token else None
+        if req_path.startswith("/api/v1/auth/"):
+            token = None  # Each declared auth route owns its distinct proof.
+        from bisheng.user.domain.services.platform_identity import is_platform_token
+
+        if token and is_platform_token(token):
+            from bisheng.common.errcode.platform_auth import PlatformAuthError
+            from bisheng.user.platform_auth_runtime import get_platform_auth
+
+            try:
+                claims = get_platform_auth(request).decode(token)
+                decoded_subject = {
+                    "user_id": int(claims["sub"]),
+                    "tenant_id": int(claims["tenant_id"]),
+                    "token_version": claims["token_version"],
+                }
+            except PlatformAuthError as exc:
+                return JSONResponse(
+                    status_code=exc.http_status, content=exc.payload(), headers={"Cache-Control": "no-store"}
+                )
+        else:
+            decoded_subject = _decode_jwt_subject(token) if token else None
         dsh_scope_tokens = []
         if dsh_scope:
             from bisheng.core.context import tenant as tenant_context
@@ -515,11 +580,6 @@ class CustomMiddleware(BaseHTTPMiddleware):
                 tenant_context._strict_tenant_filter.set(False),
             ]
         tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)
-
-        req_path = request.url.path
-        is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS) or bool(
-            re.fullmatch(r"/api/v1/apps/[A-Za-z0-9_-]+/storage(?:/.*)?", req_path)
-        )
 
         # Exempt paths run before tenant context is established (login,
         # register, SSO/LDAP callbacks, captcha, env, internal sync hooks).
@@ -572,6 +632,8 @@ class CustomMiddleware(BaseHTTPMiddleware):
             status_code = 500
             try:
                 response = await call_next(request)
+                if getattr(request.state, "_session_activity_recorded", False):
+                    response.headers["X-Auth-Activity-Recorded"] = "1"
                 status_code = response.status_code
                 response.headers["X-Process-Time"] = str(round(time() - start_time, 4))
                 response.headers["X-Trace-ID"] = trace_id

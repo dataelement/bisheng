@@ -1,6 +1,6 @@
 import { knowledgeProcessingConflictVariant } from '@bisheng/knowledge/processing-conflicts';
 // @ts-strict-ignore
-import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate, hasIndependentScope } from '@bisheng/api-client';
+import { BrowserAuthSession, requestHostAuthRenewal, isPlatformAuthPath, isAccessExpired, isDefinitiveAuthFailure, AuthSessionError, decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate, hasIndependentScope } from '@bisheng/api-client';
 import type { ErrorEnvelope } from '@bisheng/api-client';
 import { notification } from '@bisheng/ui';
 
@@ -21,6 +21,12 @@ const customAxios = axios.create({
 export const requestInterceptor: {
     remoteLoginFuc?: (msg: string) => void
 } = {};
+
+export const platformAuth = new BrowserAuthSession(async (method, path, data, headers) => {
+    const response = await customAxios.request({ method, url: path, baseURL: window.location.origin, data, headers,
+        platformAuthTransport: true, timeout: 15000, withCredentials: true, validateStatus: () => true });
+    return response as unknown as {status: number; data: unknown};
+});
 
 const SESSION_KICKED_CODE = 10604
 const SESSION_KICK_ACK_KEY = "bs:session-kicked-ack"
@@ -79,7 +85,11 @@ export async function bootstrapManagementRequestScope() {
 }
 
 customAxios.interceptors.request.use(async function (config) {
+    if (config.platformAuthTransport || isPlatformAuthPath(config.url || '')) return config;
     Object.assign(config.headers, requestAuthHeaders(config.url || ''));
+    if (requiresManagementScope(config.method || 'get', config.url || '', config.baseURL) || (config.url || '').includes('/user/info')) {
+        await platformAuth.settled();
+    }
     const scoped = config.managementContext !== 'independent' && !hasIndependentScope(config.headers) && requiresManagementScope(config.method || 'get', config.url || '', config.baseURL);
     if (scoped) await bootstrapManagementRequestScope();
     config.managementScopeSnapshot = scoped ? managementRequestScope() : null;
@@ -227,6 +237,18 @@ async function responseError(cause, response?) {
 }
 
 export async function handleRequestResponse(response) {
+    if (response.config?.platformAuthTransport) return response;
+    if (isAccessExpired(response.data) && !response.config?.platformAuthRetry) {
+        if (await platformAuth.refresh()) return customAxios.request({ ...response.config, platformAuthRetry: true });
+        requestHostAuthRenewal();
+        return Promise.reject(new AuthSessionError(401, 10651, 'host_refresh_required', false));
+    }
+    if (isDefinitiveAuthFailure(response.data) && platformAuth.snapshot?.refresh_mode === 'host') {
+        requestHostAuthRenewal();
+        return Promise.reject(new AuthSessionError(401, 10651, 'host_refresh_required', false));
+    }
+    if (isDefinitiveAuthFailure(response.data)) platformAuth.invalidate();
+    if (response.headers?.['x-auth-activity-recorded']) platformAuth.noteBusinessActivity();
     try {
         if (response.config?.managementScopeSnapshot != null)
             guardManagementResponse(response.headers,response.config?.managementScopeSnapshot);
@@ -281,6 +303,18 @@ export async function handleRequestResponse(response) {
 }
 
 export async function handleRequestError(cause) {
+    if (cause?.config?.platformAuthTransport) return Promise.reject(cause);
+    if (cause instanceof AuthSessionError) return Promise.reject(cause);
+    if (isAccessExpired(cause) && !cause?.config?.platformAuthRetry) {
+        if (await platformAuth.refresh()) return customAxios.request({ ...cause.config, platformAuthRetry: true });
+        requestHostAuthRenewal();
+        return Promise.reject(cause);
+    }
+    if ((platformAuth.hostPending || platformAuth.snapshot?.refresh_mode === 'host') && cause?.response?.status === 401) {
+        requestHostAuthRenewal();
+        return Promise.reject(cause);
+    }
+    if (isDefinitiveAuthFailure(cause)) platformAuth.invalidate();
     const error = await responseError(cause);
     if ([19703, 19704, 19705].includes(error.status_code)) pauseManagementScopeForRequest(cause?.config ?? cause?.response?.config);
     if (error.httpStatus === 401) {
@@ -324,6 +358,6 @@ export function handleUiRequest<Args extends unknown[]>(handler: (...args: Args)
 }
 
 export function requestAuthHeaders(url: string): Record<string, string> {
-    const token = localStorage.getItem("ws_token");
-    return token && !/^\/bisheng/.test(url) ? { Authorization: `Bearer ${token}` } : {};
+    void url;
+    return {};
 }

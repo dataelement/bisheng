@@ -23,7 +23,7 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("shared streaming request policy", () => {
-  it("reuses base URL and Bearer authentication without buffering the successful body", async () => {
+  it("reuses base URL and HttpOnly cookie authentication without buffering the successful body", async () => {
     const request = (await import("./request")).default;
     request.defaults.baseURL = "/base/";
     localStorage.setItem("ws_token", "synthetic-session");
@@ -45,9 +45,8 @@ describe("shared streaming request policy", () => {
     const result = await requestStream("/api/v1/audit");
     expect(result).toBe(body);
     expect(fetchMock.mock.calls[0]?.[0].pathname).toBe("/base/api/v1/audit");
-    expect(fetchMock.mock.calls[0]?.[1].headers.Authorization).toBe(
-      "Bearer synthetic-session",
-    );
+    expect(fetchMock.mock.calls[0]?.[1].headers.Authorization).toBeUndefined();
+    expect(fetchMock.mock.calls[0]?.[1].credentials).toBe("include");
     await result.cancel();
   });
   it("retains the central kicked-session confirmation for HTTP 200 business errors", async () => {

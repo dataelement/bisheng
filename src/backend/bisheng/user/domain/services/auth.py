@@ -191,6 +191,11 @@ class AuthJwt:
         """Cookie first, then Bearer. Phone clients only send the header."""
         if self.req is None:
             return None
+        from bisheng.user.domain.services.platform_transport import access_credential
+
+        platform = access_credential(self.req)
+        if platform:
+            return platform
         token = self.req.cookies.get(self._access_cookie_key)
         if token:
             return token
@@ -201,12 +206,38 @@ class AuthJwt:
 
     def decode_jwt_token(self, token: str) -> dict:
         """decode jwt token"""
+        from bisheng.user.domain.services.platform_identity import is_platform_token
+
+        if is_platform_token(token):
+            from bisheng.user.platform_auth_runtime import platform_auth_service
+
+            claims = platform_auth_service().decode(token)
+            return {
+                "user_id": int(claims["sub"]),
+                "user_name": "",
+                "tenant_id": int(claims["tenant_id"]),
+                "token_version": claims["token_version"],
+                "platform_session": claims["session_id"],
+            }
         try:
             payload = jwt.decode(
                 token, self.jwt_secret, issuer=self.cookie_conf.jwt_iss, algorithms=self._decode_algorithms
             )
-            return json.loads(payload.get("sub"))
+            subject = json.loads(payload.get("sub"))
+            if (
+                settings.platform_auth.reject_legacy_web_tokens
+                and settings.platform_auth.mobile_cutover_ready
+                and "dsh_web_session" not in subject
+            ):
+                from bisheng.common.errcode.platform_auth import PlatformAuthError
+
+                raise PlatformAuthError("legacy_web_token_rejected")
+            return subject
         except Exception as e:
+            from bisheng.common.errcode.platform_auth import PlatformAuthError
+
+            if isinstance(e, PlatformAuthError):
+                raise
             raise JWTDecodeError(status_code=422, message=str(e))
 
 
@@ -594,6 +625,12 @@ class LoginUser(BaseModel):
         cached = getattr(getattr(getattr(auth_jwt, "req", None), "state", None), "admitted_login_user", None)
         if isinstance(cached, cls):
             return cached
+        from bisheng.user.domain.services.platform_identity import authenticate_platform, is_platform_token
+
+        if is_platform_token(auth_jwt.request_access_token()):
+            user = await authenticate_platform(auth_jwt.req, identity_class=cls)
+            await record_authenticated_activity(auth_jwt.req)
+            return user
         subject = auth_jwt.get_subject()
         request = getattr(auth_jwt, "req", None)
         current_options = (
@@ -661,6 +698,12 @@ class LoginUser(BaseModel):
         cached = getattr(getattr(websocket, "state", None), "admitted_login_user", None)
         if isinstance(cached, cls):
             return cached
+        from bisheng.user.domain.services.platform_identity import authenticate_platform, is_platform_token
+        from bisheng.user.domain.services.platform_transport import access_credential
+
+        candidate = t or access_credential(websocket)
+        if is_platform_token(candidate):
+            return await authenticate_platform(websocket, identity_class=cls, token=candidate)
         subject = auth_jwt.get_subject(auth_from="websocket", websocket=websocket, token=t)
         if "dsh_web_session" in subject:
             from bisheng.dsh.domain.services.web_session import validate_web_session

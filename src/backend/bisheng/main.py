@@ -50,11 +50,17 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
         logger.exception("Unhandled exception")
         msg = {"status_code": 500, "status_message": str(exc)}
         http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
-    logger.error(f"{req.method} {req.url} {exc!s}")
+    log_path = req.url.path if req.url.path.startswith("/api/v1/auth/") else req.url
+    logger.error(f"{req.method} {log_path} {exc!s}")
     return JSONResponse(status_code=http_status, content=msg)
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
+    if req.url.path.startswith("/api/v1/auth/"):
+        from bisheng.common.errcode.platform_auth import PlatformAuthError
+
+        error = PlatformAuthError("invalid_auth_request")
+        return JSONResponse(error.payload(), status_code=error.http_status, headers={"Cache-Control": "no-store"})
     # Pydantic validator context can contain ValueError instances.
     errors = redact_validation_errors(exc.errors())
     msg = jsonable_encoder(
@@ -295,6 +301,12 @@ def create_app():
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):
         return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+    from bisheng.common.errcode.platform_auth import PlatformAuthError
+
+    @app.exception_handler(PlatformAuthError)
+    async def platform_auth_error_handler(request: Request, exc: PlatformAuthError):
+        return JSONResponse(status_code=exc.http_status, content=exc.payload(), headers={"Cache-Control": "no-store"})
 
     app.include_router(router)
     from bisheng.dsh.api.router import compatibility_router

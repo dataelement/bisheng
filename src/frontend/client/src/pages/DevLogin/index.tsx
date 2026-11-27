@@ -1,7 +1,8 @@
 import { JSEncrypt } from 'jsencrypt';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import request from '~/api/request';
+import request, { platformAuth } from '~/api/request';
+import { useTranslation } from 'react-i18next';
 import { Button } from '~/components/ui/Button';
 import { Input } from '~/components/ui/Input';
 import { useLocalize } from '~/hooks';
@@ -20,6 +21,7 @@ async function encryptPwd(raw: string): Promise<string> {
 
 export default function DevLogin() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const localize = useLocalize();
   const mailRef = useRef<HTMLInputElement>(null);
   const pwdRef = useRef<HTMLInputElement>(null);
@@ -47,38 +49,26 @@ export default function DevLogin() {
     const mail = mailRef.current?.value;
     const pwd = pwdRef.current?.value;
     if (!mail || !pwd) {
-      setErr('请输入账号和密码');
+      setErr(t('platformAuth.credentialsRequired'));
       return;
     }
     if (captcha.user_capthca && !captchaRef.current?.value) {
-      setErr('请输入验证码');
+      setErr(t('platformAuth.captchaRequired'));
       return;
     }
     setLoading(true);
     try {
       const encrypted = await encryptPwd(pwd);
-      const resp = await request.post('/api/v1/user/login', {
+      await platformAuth.login({
         user_name: mail,
         password: encrypted,
         captcha_key: captcha.captcha_key,
         captcha: captchaRef.current?.value ?? '',
       });
-      if (resp?.status_code !== 200) {
-        setErr(resp?.status_message || '登录失败');
-        fetchCaptcha();
-        return;
-      }
-      // Backend sets HttpOnly access_token cookie on success; browser keeps it.
-      // Mirror platform's localStorage flags for cross-app consistency.
-      const token = resp?.data?.access_token;
-      if (token) {
-        localStorage.setItem('ws_token', token);
-        window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
-      }
       localStorage.setItem('isLogin', '1');
       navigate('/c/new', { replace: true });
     } catch (e: any) {
-      setErr(e?.response?.data?.status_message || e?.message || '登录失败');
+      setErr(e?.response?.data?.status_message || e?.message || t('platformAuth.loginFailed'));
       fetchCaptcha();
     } finally {
       setLoading(false);
@@ -91,7 +81,7 @@ export default function DevLogin() {
         <div>
           <h1 className="text-xl font-semibold text-text-primary">Dev Login</h1>
           <p className="mt-1 text-xs text-text-secondary">
-            Hidden developer entry · backend <code>/api/v1/user/login</code>
+            Hidden developer entry · backend <code>/api/v1/auth/login</code>
           </p>
         </div>
         <div className="space-y-3">
@@ -110,13 +100,13 @@ export default function DevLogin() {
           />
           {captcha.user_capthca && (
             <div className="flex items-center gap-2">
-              <Input ref={captchaRef} type="text" placeholder="验证码" />
+              <Input ref={captchaRef} type="text" placeholder={t('platformAuth.captcha')} />
               <img
                 src={`data:image/jpg;base64,${captcha.captcha}`}
                 alt="captcha"
                 onClick={fetchCaptcha}
                 className="h-10 w-[120px] cursor-pointer rounded border"
-                title="点击刷新"
+                title={t('platformAuth.refreshCaptcha')}
               />
             </div>
           )}
@@ -127,7 +117,7 @@ export default function DevLogin() {
             disabled={loading}
             onClick={submit}
           >
-            {loading ? '登录中…' : '登录'}
+            {loading ? t('platformAuth.signingIn') : t('platformAuth.signIn')}
           </Button>
         </div>
       </div>

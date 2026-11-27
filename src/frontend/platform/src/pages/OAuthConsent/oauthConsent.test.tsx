@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ButtonHTMLAttributes } from 'react'
+import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode, ButtonHTMLAttributes } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { UserProvider } from '@/contexts/userContext'
 import { getUserInfo } from '@/controllers/API/user'
@@ -22,7 +23,7 @@ vi.mock('@/controllers/API', () => ({
     delComponentApi: vi.fn(), getComponents: vi.fn(), overridComponent: vi.fn(), saveComponent: vi.fn(),
 }))
 vi.mock('@/controllers/API/user', () => ({ getUserInfo: vi.fn(), logoutApi: vi.fn() }))
-vi.mock('@/controllers/request', () => ({ markSessionKickAck: vi.fn(), requestInterceptor: {} }))
+vi.mock('@/controllers/request', () => ({ markSessionKickAck: vi.fn(), requestInterceptor: {}, platformAuth: { initialize: () => Promise.resolve(null), subscribe: () => () => {}, hostPending: false } }))
 vi.mock('@/controllers/API/oauth2', () => ({ getOAuth2ConsentDetails: vi.fn(), submitOAuth2ConsentDecision: vi.fn() }))
 
 const origin = 'https://bisheng.example'
@@ -43,6 +44,10 @@ const details = {
 function visit(path: string) {
     const url = new URL(path, origin)
     vi.stubGlobal('location', { origin, href: url.href, pathname: url.pathname, search: url.search, assign, replace })
+}
+function render(ui: ReactNode) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return renderComponent(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
 }
 function renderConsent() {
     return render(<UserProvider><OAuthConsent /></UserProvider>)

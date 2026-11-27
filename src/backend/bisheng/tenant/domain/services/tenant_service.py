@@ -677,6 +677,17 @@ class TenantService:
     @classmethod
     async def aswitch_tenant(cls, user_id: int, tenant_id: int, db_user, auth_jwt) -> str:
         """Switch user to a different tenant. Returns new access token."""
+        from bisheng.user.domain.services.platform_identity import is_platform_token
+
+        candidate = auth_jwt.request_access_token()
+        if is_platform_token(candidate):
+            from bisheng.user.platform_auth_runtime import get_platform_auth
+
+            service = get_platform_auth(auth_jwt.req)
+            metadata = await service.inspect(candidate)
+            if metadata["user"]["id"] != user_id or metadata["tenant"]["id"] != tenant_id:
+                raise TenantSwitchForbiddenError()
+            return candidate  # Home identity is immutable within a platform session.
         # Validate membership
         ut = await UserTenantDao.aget_user_tenant(user_id, tenant_id)
         if not ut or ut.status != "active":

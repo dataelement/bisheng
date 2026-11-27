@@ -57,7 +57,7 @@ class EvaluationService:
         reference = login_user._runtime_credential_reference
         if reference is not None and (
             not isinstance(reference, dict)
-            or reference.get("kind") != "web_session"
+            or reference.get("kind") not in {"web_session", "platform_session"}
             or any(type(reference.get(key)) is not int for key in ("user_id", "tenant_id", "token_version"))
             or (reference["user_id"], reference["tenant_id"], reference["token_version"])
             != (login_user.user_id, login_user.tenant_id, login_user.token_version)

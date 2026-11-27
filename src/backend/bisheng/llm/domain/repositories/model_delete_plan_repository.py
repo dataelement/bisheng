@@ -27,11 +27,12 @@ from bisheng.core.context.tenant import (
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL, DATA_SCOPE_PERSONAL
 from bisheng.resource_reference.application.contracts import TargetKey, TargetType, canonical_target_id
+from bisheng.user.domain.schemas.credential_reference import valid_browser_reference_shape
 
 ModelDeleteOperation = Literal["model_update_server", "model_delete_server"]
+
 _OPERATIONS = frozenset({"model_update_server", "model_delete_server"})
 _ACTOR_FIELDS = frozenset({"tenant_id", "actor_user_id", "credential_reference", "data_scope"})
-_WEB_FIELDS = frozenset({"kind", "user_id", "tenant_id", "token_version", "expires_at"})
 
 
 def _now() -> datetime:
@@ -107,8 +108,7 @@ class ModelDeletePlanRepository:
         credential = actor["credential_reference"]
         if (
             not isinstance(credential, Mapping)
-            or set(credential) != _WEB_FIELDS
-            or credential["kind"] != "web_session"
+            or not valid_browser_reference_shape(credential)
             or type(credential["user_id"]) is not int
             or credential["user_id"] != actor["actor_user_id"]
             or type(credential["tenant_id"]) is not int

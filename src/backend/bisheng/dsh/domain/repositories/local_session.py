@@ -129,25 +129,25 @@ class DshSessionRepository:
         now = clock()
         if row is None or token is None:
             return None, "invalid_refresh_token"
-        # Check the shared authority before handling any historical generation.
-        if row.state != "ACTIVE":
-            return None, "session_revoked"
-        if now >= row.expires_at:
-            return None, "session_expired"
-        if token.state == "USED":
-            if self._return_unspent_successor(row, token, next_digest, now, grace_seconds):
-                logger.info(
-                    "dsh refresh grace return session_id={} generation={}",
-                    row.session_id,
-                    token.generation + 1,
-                )
-                return self.snapshot(row), None
+        from bisheng.user.application.session_protocol import rotation_decision
+
+        decision = rotation_decision(
+            session_state=row.state,
+            session_expired=now >= row.expires_at,
+            token_state=token.state,
+            token_expired=row.expiry_policy == ABSOLUTE_SESSION_POLICY and now >= token.expires_at,
+            generation=token.generation,
+            recoverable=token.state == "USED"
+            and self._return_unspent_successor(row, token, next_digest, now, grace_seconds),
+        )
+        if decision == "recover":
+            logger.info("dsh refresh grace return session_id={} generation={}", row.session_id, token.generation + 1)
+            return self.snapshot(row), None
+        if decision == "revoke":
             self.revoke(row)
             return None, "refresh_token_reused"
-        if row.expiry_policy == ABSOLUTE_SESSION_POLICY and now >= token.expires_at:
-            return None, "session_expired"
-        if token.state != "ACTIVE" or token.generation >= 9223372036854775807:
-            return None, "invalid_refresh_token"
+        if decision != "rotate":
+            return None, decision
         token.state = "USED"
         token.used_at = now
         self.session.add(token)
@@ -169,10 +169,10 @@ class DshSessionRepository:
         The successor digest is derived from the presented token, so a retry names
         the same row. Returning it leaves the database unchanged.
         """
+        from bisheng.user.application.session_protocol import recovery_window_open
+
         if (
-            grace_seconds <= 0
-            or token.used_at is None
-            or now - token.used_at > timedelta(seconds=grace_seconds)
+            not recovery_window_open(now=now, used_at=token.used_at, grace_seconds=grace_seconds)
             or row.state != "ACTIVE"
             or now >= row.expires_at
             or (row.expiry_policy == ABSOLUTE_SESSION_POLICY and now >= token.expires_at)

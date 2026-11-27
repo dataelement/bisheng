@@ -58,13 +58,21 @@ async def market_actor(request: Request) -> MarketActor:
             tenant_context._bypass_tenant_filter.set(False)
             return MarketActor(tenant_id, int(principal.user_id), desktop=True)
     from bisheng.user.domain.services.auth import AuthJwt, LoginUser
+    from bisheng.user.domain.services.platform_identity import authenticate_platform, is_platform_token
+    from bisheng.user.domain.services.platform_transport import access_credential
     from bisheng.utils.http_middleware import _validate_token_version
 
-    token = request.cookies.get("access_token_cookie")
+    token = access_credential(request) or request.cookies.get("access_token_cookie")
     if authorization.startswith("Bearer "):
         token = authorization[7:]
     if not token:
         raise HTTPException(401, "Enterprise login required")
+    if is_platform_token(token):
+        user = await authenticate_platform(request, token=token)
+        set_is_management_api(False)
+        set_current_tenant_id(user.tenant_id)
+        set_visible_tenant_ids(frozenset({user.tenant_id}))
+        return MarketActor(user.tenant_id, user.user_id, user.is_global_super)
     try:
         subject = AuthJwt(request).decode_jwt_token(token)
         user_id = int(subject["user_id"])

@@ -4818,5 +4818,14 @@
   },
   "memory": {
     "operation": "メモリ操作"
+  },
+  "platformAuth": {
+    "sessionEnded": "セッションが終了しました。再度ログインしてください。",
+    "serviceUnavailable": "認証サービスを一時的に利用できません。再試行してください。",
+    "upgradeRequired": "クライアントを更新してください。",
+    "hostReconnect": "クライアントで再接続してください。",
+    "localLogoutUnconfirmed": "端末からログアウトしました。サーバーでの無効化は確認できませんでした。",
+    "retry": "再試行",
+    "loading": "ログイン状態を復元しています…"
   }
 }

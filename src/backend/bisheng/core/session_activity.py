@@ -41,13 +41,20 @@ class AuthenticatedActivity(ABC):
     async def record(self) -> None:
         """Recheck and renew the authenticated device session."""
 
+    def policy_for(self, endpoint) -> ActivityPolicy | None:
+        """Keep existing transports on their original server-owned declarations."""
+        return getattr(endpoint, "__session_activity_policy__", None)
+
 
 async def record_authenticated_activity(connection: HTTPConnection | None, *, message: object = None) -> None:
     """Run after authentication and before business permission/quota decisions."""
     if not isinstance(connection, HTTPConnection):
         return
+    recorder = getattr(connection.state, "authenticated_activity", None)
+    if not isinstance(recorder, AuthenticatedActivity):
+        return
     endpoint = connection.scope.get("endpoint")
-    policy = getattr(endpoint, "__session_activity_policy__", None)
+    policy = recorder.policy_for(endpoint)
     if not isinstance(policy, ActivityPolicy):
         return
     if message is None:
@@ -61,8 +68,7 @@ async def record_authenticated_activity(connection: HTTPConnection | None, *, me
         ) or (connection.scope["type"] == "http" and isinstance(method, str) and method in policy.rpc_methods)
     else:
         return
-    recorder = getattr(connection.state, "authenticated_activity", None)
-    if eligible and isinstance(recorder, AuthenticatedActivity):
+    if eligible:
         await recorder.record()
         if message is None:
             connection.state._session_activity_recorded = True

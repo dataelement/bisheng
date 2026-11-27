@@ -4873,5 +4873,14 @@
   },
   "memory": {
     "operation": "Memory operation"
+  },
+  "platformAuth": {
+    "sessionEnded": "Your session ended. Please sign in again.",
+    "serviceUnavailable": "Authentication is temporarily unavailable. Please try again.",
+    "upgradeRequired": "Upgrade your client to continue.",
+    "hostReconnect": "Reconnect in your client.",
+    "localLogoutUnconfirmed": "Signed out locally. Server revocation could not be confirmed.",
+    "retry": "Retry",
+    "loading": "Restoring your session…"
   }
 }

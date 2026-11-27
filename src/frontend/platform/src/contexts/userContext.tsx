@@ -1,4 +1,7 @@
 // @ts-strict-ignore
+import { requestHostAuthRenewal } from '@bisheng/api-client';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuthSessionStore } from '@/store/authSessionStore';
 import { notification } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
@@ -10,7 +13,7 @@ import { ReactNode, createContext, useCallback, useLayoutEffect, useState } from
 import { useCurrentIdentityRefresh, type CurrentIdentity } from '@/hooks/useCurrentIdentityRefresh';
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
-import { markSessionKickAck, requestInterceptor } from "../controllers/request";
+import { platformAuth, markSessionKickAck, requestInterceptor } from "../controllers/request";
 import { User } from "../types/api/user";
 
 type userContextType = {
@@ -35,6 +38,9 @@ const initialValue = {
 export const userContext = createContext<userContextType>(initialValue);
 
 export function UserProvider({ children }: { children: ReactNode }) {
+    const queryClient = useQueryClient();
+    const authPhase = useAuthSessionStore(state => state.phase);
+    const [startupReady, setStartupReady] = useState(false);
     const [user, setUser] = useState<any>(initialValue.user);
     const [savedComponents, setSavedComponents] = useState([]);
     const handleIdentityRefresh = useCallback((identity: CurrentIdentity) => {
@@ -160,112 +166,138 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 },
             })
         }
-        // 获取用户信息
-        getUserInfo().then(res => {
-            setUser(res.user_id ? res : null)
-            const { user_id } = res;
-            // Apply the same Child Admin compatibility grants used by the route layer.
-            const web_menu: string[] = resolveRoutePermissions(res);
+        let identityEpoch = 0;
+        const loadIdentity = () => {
+            const epoch = ++identityEpoch;
+            let restored = false;
+            return platformAuth.initialize(true).then(session => {
+                if (epoch !== identityEpoch) throw new Error('Identity changed');
+                useAuthSessionStore.setState({ phase: platformAuth.hostPending ? 'host' : 'ready', session });
+                setStartupReady(true);
+                restored = true;
+                return platformAuth.hostPending ? null : getUserInfo();
+            }).then(res => {
+                if (epoch !== identityEpoch || !res) return;
+                setUser(res.user_id ? res : null)
+                const { user_id } = res;
+                // Apply the same Child Admin compatibility grants used by the route layer.
+                const web_menu: string[] = resolveRoutePermissions(res);
 
-            localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
-            // if (user_id) loadComponents();
-            // 是否有访问后台权限
-            if (/^(\/\w+)?\/chat/.test(location.pathname)) return
-            // Desktop consent is available to ordinary platform identities.
-            if (location.pathname === '/desktop-login' || hasDesktopLoginReturnTo()) return
-            // OAuth consent authenticates ordinary users without granting admin access.
-            if (isOAuthConsentPath() || hasOAuthConsentLoginReturnTo()) return
+                localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
+                // if (user_id) loadComponents();
+                // 是否有访问后台权限
+                if (/^(\/\w+)?\/chat/.test(location.pathname)) return
+                // Desktop consent is available to ordinary platform identities.
+                if (location.pathname === '/desktop-login' || hasDesktopLoginReturnTo()) return
+                // OAuth consent authenticates ordinary users without granting admin access.
+                if (isOAuthConsentPath() || hasOAuthConsentLoginReturnTo()) return
 
-            const BASE_URL = __APP_ENV__.BASE_URL
+                const BASE_URL = __APP_ENV__.BASE_URL
 
-            // v2.5 角色菜单使用 admin 作为管理端父级；旧数据可能仍为 backend（WebMenuResource 遗留）
-            const adminMenuKeys = new Set([
-                'backend',
-                'admin',
-                'board',
-                'model',
-                'log',
-                'knowledge',
-                'build',
-                'evaluation',
-                'system_config',
-                'mark_task',
-            ])
-            // 部门管理员在 v2.5 允许进入管理端（至少可管理其权限范围内数据）；
-            // 仅依赖 web_menu 会把这类账号误判成无权限（error=90001）。
-            const canAccessPlatform =
-                res.has_admin_console
-                ?? (
-                    res.role === 'admin'
-                    || Boolean(res.is_department_admin)
-                    || Boolean(res.can_manage_user_groups)
-                    || web_menu.some((k: string) => adminMenuKeys.has(k))
-                )
-            if (!canAccessPlatform) {
-                // Check if the user can at least access the workspace client.
-                // If neither platform nor workspace is accessible, redirect to /403
-                // to avoid a back-and-forth redirect loop between the two apps.
-                const canAccessWorkspace =
-                    res.has_workbench
+                // v2.5 角色菜单使用 admin 作为管理端父级；旧数据可能仍为 backend（WebMenuResource 遗留）
+                const adminMenuKeys = new Set([
+                    'backend',
+                    'admin',
+                    'board',
+                    'model',
+                    'log',
+                    'knowledge',
+                    'build',
+                    'evaluation',
+                    'system_config',
+                    'mark_task',
+                ])
+                // 部门管理员在 v2.5 允许进入管理端（至少可管理其权限范围内数据）；
+                // 仅依赖 web_menu 会把这类账号误判成无权限（error=90001）。
+                const canAccessPlatform =
+                    res.has_admin_console
                     ?? (
-                        web_menu.includes('workstation')
-                        || web_menu.includes('frontend')
+                        res.role === 'admin'
+                        || Boolean(res.is_department_admin)
+                        || Boolean(res.can_manage_user_groups)
+                        || web_menu.some((k: string) => adminMenuKeys.has(k))
                     )
-                if (!canAccessWorkspace) {
-                    history.pushState(null, '', BASE_URL + '/403')
+                if (!canAccessPlatform) {
+                    // Check if the user can at least access the workspace client.
+                    // If neither platform nor workspace is accessible, redirect to /403
+                    // to avoid a back-and-forth redirect loop between the two apps.
+                    const canAccessWorkspace =
+                        res.has_workbench
+                        ?? (
+                            web_menu.includes('workstation')
+                            || web_menu.includes('frontend')
+                        )
+                    if (!canAccessWorkspace) {
+                        history.pushState(null, '', BASE_URL + '/403')
+                        return
+                    }
+                    notification.open({ type: 'error', description: String(i18next.t('menu.noAdminConsoleAccess') ?? '') })
+                    // Hard-navigate to the workspace client. Must NOT use history.back()
+                    // here: under the SSO flow the previous history entry is the IdP /
+                    // portal page, so "going back" silently re-triggers SSO and produces
+                    // an infinite redirect loop for non-admin users. replace() also drops
+                    // the un-usable platform URL from history.
+                    window.location.replace(getWorkspaceClientUrl('/'))
                     return
                 }
-                notification.open({ type: 'error', description: String(i18next.t('menu.noAdminConsoleAccess') ?? '') })
-                // Hard-navigate to the workspace client. Must NOT use history.back()
-                // here: under the SSO flow the previous history entry is the IdP /
-                // portal page, so "going back" silently re-triggers SSO and produces
-                // an infinite redirect loop for non-admin users. replace() also drops
-                // the un-usable platform URL from history.
-                window.location.replace(getWorkspaceClientUrl('/'))
-                return
-            }
 
-            const pathName = location.pathname.replace(BASE_URL, '');
+                const pathName = location.pathname.replace(BASE_URL, '');
 
-            // Jump to the route based on permissions
-            if (pathName === '/admin') {
-                const adminApprovalMode = Boolean(res.menu_approval_mode_admin ?? res.menu_approval_mode);
-                const target = resolveAdminLandingPath(web_menu, adminApprovalMode);
-                history.pushState(null, '', BASE_URL + target);
-            } else {
-                // 403
-                const MENU_KEY_MAP: Record<string, string> = {
-                    '/dashboard': 'board',
-                    '/build/apps': 'build',
-                    '/filelib': 'knowledge',
-                    '/dataset': 'dataset',
-                    '/model/management': 'model',
-                    '/dsh': 'sys',
-                    '/evaluation': 'evaluation',
-                    '/label': 'mark_task',
-                    '/log': 'log',
+                // Jump to the route based on permissions
+                if (pathName === '/admin') {
+                    const adminApprovalMode = Boolean(res.menu_approval_mode_admin ?? res.menu_approval_mode);
+                    const target = resolveAdminLandingPath(web_menu, adminApprovalMode);
+                    history.pushState(null, '', BASE_URL + target);
+                } else {
+                    // 403
+                    const MENU_KEY_MAP: Record<string, string> = {
+                        '/dashboard': 'board',
+                        '/build/apps': 'build',
+                        '/filelib': 'knowledge',
+                        '/dataset': 'dataset',
+                        '/model/management': 'model',
+                        '/dsh': 'sys',
+                        '/evaluation': 'evaluation',
+                        '/label': 'mark_task',
+                        '/log': 'log',
+                    }
+                    const normalizedPath = pathName.replace(/\/+$/, '') || '/'
+                    let menuName = MENU_KEY_MAP[normalizedPath]
+                    if (!menuName && normalizedPath.startsWith('/label')) {
+                        menuName = 'mark_task'
+                    }
+                    if (!menuName && normalizedPath.startsWith('/log')) {
+                        menuName = 'log'
+                    }
+                    if (
+                        menuName
+                        && res.role !== 'admin'
+                        && !web_menu.includes(menuName)
+                        && !(res.menu_approval_mode_admin ?? res.menu_approval_mode)
+                    ) {
+                        history.pushState(null, '', BASE_URL + '/403');
+                    }
                 }
-                const normalizedPath = pathName.replace(/\/+$/, '') || '/'
-                let menuName = MENU_KEY_MAP[normalizedPath]
-                if (!menuName && normalizedPath.startsWith('/label')) {
-                    menuName = 'mark_task'
+            }).catch(e => {
+                if (epoch !== identityEpoch) return;
+                if (!restored || e?.retryable || e?.kind === 'network' || e?.kind === 'timeout' || e?.httpStatus >= 500) {
+                    useAuthSessionStore.setState({ phase: 'unavailable' });
                 }
-                if (!menuName && normalizedPath.startsWith('/log')) {
-                    menuName = 'log'
-                }
-                if (
-                    menuName
-                    && res.role !== 'admin'
-                    && !web_menu.includes(menuName)
-                    && !(res.menu_approval_mode_admin ?? res.menu_approval_mode)
-                ) {
-                    history.pushState(null, '', BASE_URL + '/403');
-                }
-            }
-        }).catch(e => {
-            setUser(null)
-        })
-    }, [])
+                setUser(null)
+            })
+        };
+        void loadIdentity();
+        const unsubscribe = platformAuth.subscribe(event => {
+            if (!event || event.type === 'refresh') return;
+            ++identityEpoch;
+            void queryClient.cancelQueries();
+            queryClient.clear();
+            setUser(null);
+            useAuthSessionStore.setState({ phase: event.type === 'login' ? 'loading' : 'ready', session: null });
+            if (event.type === 'login') void loadIdentity();
+        });
+        return () => { ++identityEpoch; unsubscribe(); };
+    }, [queryClient])
 
     return (
         <userContext.Provider
@@ -273,7 +305,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 user, setUser, savedComponents, checkComponentsName, delComponent, addSavedComponent
             }}
         >
-            {children}
+            {startupReady && authPhase === 'ready' ? children : <div role="status">
+                {String(i18next.t(authPhase === 'host' ? 'platformAuth.hostReconnect' : authPhase === 'unavailable' ? 'platformAuth.serviceUnavailable' : 'platformAuth.loading'))}
+                {(authPhase === 'unavailable' || authPhase === 'host') && <button type="button" onClick={() => authPhase === 'host' ? requestHostAuthRenewal() : location.reload()}>{String(i18next.t('platformAuth.retry'))}</button>}
+            </div>}
         </userContext.Provider>
     );
 }
