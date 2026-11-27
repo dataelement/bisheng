@@ -10,6 +10,7 @@ import {
 
 type MobileHostBridgeInput = {
   userLoaded: boolean;
+  configReady: boolean;
   isLoading: boolean;
   conversationId?: string;
   messageCount: number;
@@ -30,18 +31,34 @@ type MobileHostBridgeInput = {
 export function useMobileHostBridge(input: MobileHostBridgeInput): void {
   const { capabilities } = useClientEnvironment();
   const enabled = capabilities.hasHostChatHeader && input.userLoaded;
+  const ready = enabled && input.configReady && !input.isLoading;
   const inputRef = useRef(input);
+  const sendPendingRef = useRef(false);
   inputRef.current = input;
 
   useEffect(() => {
     if (!enabled) return undefined;
     const api: MobileHostApi = {
-      send: (draft) => runMobileHostSend(draft, {
-        conversationId: inputRef.current.conversationId,
-        apply: (prepared) => inputRef.current.apply(prepared),
-        sendMessage: (text, files, opts) => inputRef.current.sendMessage(text, files, opts),
-        post: postMobileHost,
-      }),
+      send: async (draft) => {
+        // Lock before the lease or request can yield. React's streaming state
+        // does not update soon enough to protect two host calls in one tick.
+        if (sendPendingRef.current) return;
+        if (!inputRef.current.configReady || inputRef.current.isLoading) {
+          postMobileHost({ type: "send-failed", handedOff: false });
+          return;
+        }
+        sendPendingRef.current = true;
+        try {
+          await runMobileHostSend(draft, {
+            conversationId: inputRef.current.conversationId,
+            apply: (prepared) => inputRef.current.apply(prepared),
+            sendMessage: (text, files, opts) => inputRef.current.sendMessage(text, files, opts),
+            post: postMobileHost,
+          });
+        } finally {
+          sendPendingRef.current = false;
+        }
+      },
       resetBlank: () => inputRef.current.navigate("/c/new", { replace: true }),
     };
     publishMobileHost(true, api);
@@ -49,14 +66,14 @@ export function useMobileHostBridge(input: MobileHostBridgeInput): void {
   }, [enabled]);
 
   useEffect(() => {
-    if (!enabled || input.isLoading) return;
+    if (!ready) return;
     postMobileHost({ type: "shell-ready" });
-  }, [enabled, input.isLoading]);
+  }, [ready]);
 
   useEffect(() => {
-    if (!enabled || input.isLoading) return;
+    if (!ready) return;
     if (input.conversationId !== "new") return;
     if (input.messageCount > 0) return;
     postMobileHost({ type: "blank-ready" });
-  }, [enabled, input.isLoading, input.conversationId, input.messageCount]);
+  }, [ready, input.conversationId, input.messageCount]);
 }

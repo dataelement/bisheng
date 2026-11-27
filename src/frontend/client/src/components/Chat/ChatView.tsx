@@ -302,6 +302,7 @@ function useChatView(
   });
   useMobileHostBridge({
     userLoaded: Boolean(user),
+    configReady: Boolean(bsConfig?.models?.length),
     isLoading,
     conversationId,
     messageCount: messages.length,
