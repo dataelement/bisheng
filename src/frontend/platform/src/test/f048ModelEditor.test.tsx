@@ -165,7 +165,7 @@ describe("ModelCatalogPanel", () => {
     )
   })
 
-  it("keeps standard action edits local and still saves the existing same-level policy", async () => {
+  it("publishes standard action edits with same-level policy and keeps same-level-only saves working", async () => {
     renderPanel()
     const standardEdit = getRow(standardModel.key).getByRole("checkbox", { name: "model.action.edit" })
     const customRow = getRow(customModel.key)
@@ -188,21 +188,30 @@ describe("ModelCatalogPanel", () => {
     expect(customVisible).toBeChecked()
     expect(customVisible).toBeDisabled()
 
+    // 取消勾选 edit 并同时开启同级授予，提交 UPDATE_MODEL 草稿并打开编辑影响确认
     fireEvent.click(edit)
     fireEvent.click(row.getByLabelText("model.allowSameLevel"))
     expect(edit).not.toBeChecked()
     expect(edit).toBeEnabled()
-    expect(screen.queryByText("model.builtinActionPreview")).not.toBeInTheDocument()
     expect(save).toBeEnabled()
     fireEvent.click(save)
-    expect(onCreateDraft).not.toHaveBeenCalled()
-    expect(onReviewImpact).not.toHaveBeenCalled()
-    expect(confirmEdit(standardModel.key)).toBeEnabled()
-    expect(row.getByRole("checkbox", { name: "model.action.edit" })).not.toBeChecked()
 
+    await waitFor(() => {
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "UPDATE_MODEL",
+          model_key: "manager",
+          action_codes: ["visible", "manage_permission"],
+          allow_same_level: true,
+        },
+      ])
+    })
+    expect(onReviewImpact).toHaveBeenCalledWith(draft, "modelEdit")
+
+    // 重新勾回 edit（恢复原操作集合）仅改同级授予，提交 SET_ALLOW_SAME_LEVEL
+    onCreateDraft.mockClear()
     fireEvent.click(edit)
     expect(edit).toBeChecked()
-    expect(save).toBeEnabled()
     fireEvent.click(save)
 
     await waitFor(() => {
@@ -563,5 +572,112 @@ describe("ImpactDialog", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("shows deduplicated affected users with cross-tenant labels, pagination, retry, and expiry handling", async () => {
+    const loadMore = vi.fn()
+      .mockRejectedValueOnce(new Error("network timeout"))
+      .mockResolvedValueOnce({
+        draft_id: draft.draft_id,
+        total: 3,
+        page: 2,
+        page_size: 20,
+        has_more: false,
+        cross_tenant: true,
+        items: [{ user_id: 201, username: "alice", tenant_id: 2, tenant_name: "华东子公司" }],
+      })
+
+    render(
+      <ImpactDialog
+        open
+        variant="modelEdit"
+        draft={{
+          ...draft,
+          impact: {
+            ...draft.impact,
+            affected_user_count: 3,
+            affected_users_has_more: true,
+            affected_users_cross_tenant: true,
+            affected_users: [
+              { user_id: 101, username: "alice", tenant_id: 1, tenant_name: "总部租户" },
+              { user_id: 102, username: "bob", tenant_id: 1, tenant_name: "总部租户" },
+            ],
+          },
+        }}
+        onOpenChange={vi.fn()}
+        onPublish={onPublish}
+        onLoadAffectedUsers={loadMore}
+        now={new Date("2026-07-29T12:00:00Z")}
+      />,
+    )
+
+    expect(screen.getByTestId("impact-affected-user-count")).toHaveTextContent("3")
+    const list = screen.getByTestId("impact-affected-users-list")
+    expect(within(list).getByText("alice")).toBeInTheDocument()
+    expect(within(list).getByText("bob")).toBeInTheDocument()
+    expect(within(list).getAllByText("总部租户")).toHaveLength(2)
+
+    // 首次分页失败 -> 展示错误并支持重试
+    fireEvent.click(within(list).getByRole("button", { name: "impact.loadMoreUsers" }))
+    expect(await within(list).findByText("impact.affectedUsersLoadFailed")).toBeInTheDocument()
+
+    // 重试成功 -> 追加同名跨租户用户并附 #user_id 区分
+    fireEvent.click(within(list).getByRole("button", { name: "catalog.retry" }))
+    expect(await within(list).findByText("华东子公司")).toBeInTheDocument()
+    expect(within(list).getByText("#101")).toBeInTheDocument()
+    expect(within(list).getByText("#201")).toBeInTheDocument()
+    expect(within(list).queryByRole("button", { name: "impact.loadMoreUsers" })).not.toBeInTheDocument()
+  })
+
+  it("handles zero affected users and marks draft expired when affected-users pagination reports expiry", async () => {
+    const expiredLoader = vi.fn().mockRejectedValue({ status_code: 25008, status_message: "Catalog draft has expired" })
+
+    const { rerender } = render(
+      <ImpactDialog
+        open
+        variant="modelEdit"
+        draft={{
+          ...draft,
+          impact: {
+            ...draft.impact,
+            affected_user_count: 0,
+            affected_users_has_more: false,
+            affected_users_cross_tenant: false,
+            affected_users: [],
+          },
+        }}
+        onOpenChange={vi.fn()}
+        onPublish={onPublish}
+        now={new Date("2026-07-29T12:00:00Z")}
+      />,
+    )
+    expect(screen.getByText("impact.noAffectedUsers")).toBeInTheDocument()
+    expect(screen.queryByTestId("impact-affected-users-list")).not.toBeInTheDocument()
+
+    rerender(
+      <ImpactDialog
+        open
+        variant="modelEdit"
+        draft={{
+          ...draft,
+          draft_id: 99,
+          impact: {
+            ...draft.impact,
+            affected_user_count: 25,
+            affected_users_has_more: true,
+            affected_users_cross_tenant: false,
+            affected_users: [{ user_id: 101, username: "alice", tenant_id: 1, tenant_name: "总部租户" }],
+          },
+        }}
+        onOpenChange={vi.fn()}
+        onPublish={onPublish}
+        onLoadAffectedUsers={expiredLoader}
+        now={new Date("2026-07-29T12:00:00Z")}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "impact.loadMoreUsers" }))
+    expect(await screen.findByText("impact.expired")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "model.confirmEdit" })).toBeDisabled()
   })
 })

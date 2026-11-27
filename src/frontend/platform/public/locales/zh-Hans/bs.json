@@ -421,7 +421,7 @@
     "scopeDept": "部门",
     "scopeTenant": "租户",
     "scopeGlobalRole": "全局（不绑定具体部门）",
-    "roleSearchPlaceholder": "按角色名称搜索",
+    "roleSearchPlaceholder": "搜索用户或角色",
     "roleEditTitle": "编辑角色",
     "roleCreateTitle": "新建角色",
     "roleScopeHint": "部门范围与角色类型分别设置；全部部门不代表跨租户共享。指定部门按业务归属校验。",

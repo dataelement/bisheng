@@ -167,11 +167,13 @@ export function ModelCatalogPanel({
       (level, action) => (action.level !== null && action.level > (level ?? 0) ? action.level : level),
       null,
     );
-  const canConfirm = Boolean(editing && (isStandard || (
-    editing.name.trim() && effectiveActions.length > 0 && !hasInvalidSelection
-  )));
-  // The catalog API currently accepts only same-level granting changes for built-in templates.
-  const canSave = canConfirm && !(isStandard && actionsChanged);
+  const canConfirm = Boolean(
+    editing
+    && effectiveActions.length > 0
+    && !hasInvalidSelection
+    && (isStandard || editing.name.trim()),
+  );
+  const canSave = canConfirm;
 
   const handleCloseEditor = () => {
     setEditing(null);
@@ -199,19 +201,27 @@ export function ModelCatalogPanel({
 
   const handleSave = async (closePrompt?: () => void) => {
     if (!editing || !canSave || saving) return;
+    const effectiveAllowSameLevel = canGrantSameLevel(actions, editing.selected) && editing.allowSameLevel;
     const change: PermissionCatalogChange = isStandard
-      ? {
-        type: "SET_ALLOW_SAME_LEVEL",
-        model_key: editing.model.key,
-        allow_same_level: editing.allowSameLevel,
-      }
+      ? (actionsChanged
+        ? {
+          type: "UPDATE_MODEL",
+          model_key: editing.model.key,
+          action_codes: effectiveActions.map((action) => action.code),
+          allow_same_level: effectiveAllowSameLevel,
+        }
+        : {
+          type: "SET_ALLOW_SAME_LEVEL",
+          model_key: editing.model.key,
+          allow_same_level: effectiveAllowSameLevel,
+        })
       : {
         type: editing.creating ? "CREATE_MODEL" : "UPDATE_MODEL",
         ...(!editing.creating && { model_key: editing.model.key }),
         name: editing.name.trim(),
         action_codes: effectiveActions.map((action) => action.code),
         active: editing.active,
-        allow_same_level: canGrantSameLevel(actions, editing.selected) && editing.allowSameLevel,
+        allow_same_level: effectiveAllowSameLevel,
       };
 
     setSaving(true);
@@ -262,8 +272,7 @@ export function ModelCatalogPanel({
       return {
         ...current,
         selected,
-        allowSameLevel: current.allowSameLevel
-          && (current.model.kind === "STANDARD" || canGrantSameLevel(actions, selected)),
+        allowSameLevel: current.allowSameLevel && canGrantSameLevel(actions, selected),
       };
     });
   };
@@ -426,7 +435,7 @@ export function ModelCatalogPanel({
               </>
             )}
           </div>
-          {form && !isBuiltin && hasInvalidSelection && (
+          {form && hasInvalidSelection && (
             <span role="status" className="mt-1 block whitespace-normal text-right text-caption text-warning">
               {t("model.unavailableSelection")}
             </span>

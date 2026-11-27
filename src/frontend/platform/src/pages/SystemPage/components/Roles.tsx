@@ -17,7 +17,7 @@ import {
 import { showApiError } from "@/controllers/request";
 import { DepartmentTreeNode } from "@/types/api/department";
 import { ROLE } from "@/types/api/user";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CHILD_DEPENDENTS,
@@ -115,8 +115,13 @@ export function useRolesController() {
     if (res) setDeptTree(res);
   };
 
+  const rolesRequestSeqRef = useRef(0);
+
   const loadRoles = async (nextPage = page, nextKeyword = keyword) => {
+    // 递增请求序号，快速搜索或连续翻页时仅采纳最新一次响应
+    const requestSeq = ++rolesRequestSeqRef.current;
     const res = await getRolesPageApi({ page: nextPage, limit: 20, keyword: nextKeyword || undefined });
+    if (requestSeq !== rolesRequestSeqRef.current) return;
     if (res) {
       setRoles(res.data || []);
       setTotal(res.total || 0);

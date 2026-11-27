@@ -419,7 +419,7 @@
     "scopeDept": "Department",
     "scopeTenant": "Tenant",
     "scopeGlobalRole": "Global (not bound to a department)",
-    "roleSearchPlaceholder": "Search by role name",
+    "roleSearchPlaceholder": "Search users or roles",
     "roleEditTitle": "Edit role",
     "roleCreateTitle": "Create role",
     "roleScopeHint": "Department scope is separate from role type. All departments does not mean cross-tenant sharing. Department business ownership is validated.",
