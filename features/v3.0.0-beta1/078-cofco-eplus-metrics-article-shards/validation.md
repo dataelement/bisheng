@@ -55,3 +55,29 @@ python -m pytest -p no:cacheprovider   test/eplus/ test/metric_log/   test/chann
 - 定向回归：`test/channel/test_article_reshard_cli.py`、`test/channel/test_article_reshard_plan.py`、`test/channel/test_repartition_channel_articles.py`，**38 passed**，7 项既有依赖警告。覆盖 CLI 默认/覆盖/非法值、初始化前拒绝非法值、真实编排的五轮全量扫描及两次 reindex 参数、完整跨页内容指纹、只读 status 返回运行批量。
 - 真实 ES 8.12.2：专用本机容器 `codex-f078-batch-es-20261028`，cluster_name=`codex-f078-batch-20261028`，仅绑定 `127.0.0.1:32772`，512 MB 堆、1 GB 容器内存。既有 E2E 文件 **3 passed**，13 项既有依赖/Tasks API 警告；具体索引和 alias 两个迁移用例显式使用 `batch_size=1` 迁移两篇文档，证明跨页全量校验及复制；恢复用例使用默认批量。仅使用测试数据，完成后停止专用容器并通过 `--rm` 清理。
 - 上述测试不证明 105 环境 MemoryError 已解决；批量按文档条数控制，单篇大文档仍需足够内存。本次未部署、未重新执行生产迁移，也未清理或解锁旧运行。
+
+## 2026-11-27：1125 线 clone/split 与默认原生校验
+
+- 分支：`feat/cofco-1125-3.0.0-beta1`，最新远端基线 `d97ed9bc4101633e5f62504dbf56397cff68429e`。独立 worktree 开发，保留主工作区全部无关改动。
+- 用户确认默认 clone 备份 + split 扩分片，并明确取消默认全文扫描；split 默认 `verification=native`，只查恢复完成、count、mappings/settings、分片、副本及 alias，原生一致性由 ES 提供。独立全文指纹是 `--verification full` 可选项；reindex 仍要求 full。批量默认 100，native 路径不分页、不读正文。Spec AC-23/Design/README 同步该决定。
+- 测试环境：用户指定 `192.168.106.109`，已有镜像 `cr.dataelem.com/bitnami/elasticsearch:8.12.0` 启动专用容器 `codex-article-split-es-20261127`；cluster_name=`codex-f078-109-20261127`，cluster_uuid=`PkfehURSQuqbLc1vEuSh4g`，堆 1 GiB。仅绑定宿主 `127.0.0.1:39200`；单节点、测试索引副本 0。原有 ES 服务与业务数据不用于测试。
+- pytest 最终 **70 passed，20 warnings，62.45s**，其中 59 项定向测试、11 项真实 ES 用例。警告为既有依赖及 ES Tasks API technical-preview，不跳过失败项。
+- 真实用例：具体索引/alias × split-native、split-full、reindex-full 六种组合；完整停写前未刷新的新增/更新/删除；路由与 filtered/routed/hidden alias；default/final pipeline 不重复加工、恢复后正常加工；备份回切；空索引 1→3；多主分片默认真实 routing 空间 3→6；split 已受理后模拟响应丢失，保持原入口、备份及锁，可查询 SPLITTING_PENDING，拒绝重复 apply；大文章/native 场景。
+- 大文章样本：25 篇，使用实际 `ARTICLE_MAPPINGS` 与 ngram 1..3，正文总计 **7,967,652 bytes**，最大单篇 JSON **9,793,092 bytes**（正文约 4.6 MiB，另含 HTML）。native 迁移耗时 **3.61s**，采样最高堆 **391,545,104 bytes**。用 spy 明确禁止运行中调用 reindex 或全文 search；迁移结束后由测试另行逐篇 GET 比对完整内容，全部一致。数字仅描述本次合成样本，不推算生产速度。
+- 直接命令行实测：将最终三个脚本放在 109 已有 `bisheng-backend-dm` 容器的独立 `/tmp/cofco-article-split-20261127`，不覆盖服务代码；使用临时配置仅将 search/telemetry ES 指向专用测试实例。5 篇带 routing 的测试文章完成 dry-run → apply（complete）→ status（COMPLETE，write_block=false）→ 重复运行 noop；独立确认原文、3 主分片及新增/更新/删除正常。该过程使用实际 app context 初始化，不 mock CLI 初始化。
+- 实测修正：ES 8.12 对已阻写目标重复 add_block 返回 `shards_acknowledged=false`；resize 目标自创建阻写，改为检查阻写仍在并 refresh。clone 显式补出的 `routing_partition_size=1` 与未声明的默认 1 做等价比较。多主分片使用 cluster metadata 的 `routing_num_shards`，不误用 get_settings 的声明默认值。
+- Ruff format/check、变更文件 arch-guard、`git diff --check` 均通过。自查未发现未解决的切换/恢复缺陷。测试结束后清理专用容器、临时脚本及临时配置；不部署或操作客户业务索引，不清理其历史失败 run/写屏障。
+- 结果 JSON：[`summary.json`](../../../docs/reviews/evidence/cofco-article-split-20261127/summary.json)；同目录保存 CLI dry-run/apply/status/noop 摘要，不包含连接凭据或文章正文。
+- **边界**：未执行 119 GB / 198483 篇现场迁移、真实多节点/副本压力测试或全平台验收；这些不标通过。
+
+复现命令（从 `src/backend/`，ES 必须是套件认可的专用集群）：
+
+```bash
+export config=<test-config-path>
+export E2E_ARTICLE_SHARDS_ES_URL=http://127.0.0.1:<isolated-port>
+python -m pytest test/channel/test_article_index_settings.py \
+  test/channel/test_article_reshard_plan.py \
+  test/channel/test_repartition_channel_articles.py \
+  test/channel/test_article_reshard_cli.py \
+  test/e2e/test_e2e_cofco_article_shards.py -q -s --tb=short
+```

@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-27",
+  "branch": "feat/cofco-1125-3.0.0-beta1",
+  "base_commit": "d97ed9bc4101633e5f62504dbf56397cff68429e",
+  "host": "192.168.106.109",
+  "es_version": "8.12.0",
+  "cluster_name": "codex-f078-109-20261127",
+  "cluster_uuid": "PkfehURSQuqbLc1vEuSh4g",
+  "heap_limit_bytes": 1073741824,
+  "pytest": "70 passed, 20 warnings in 62.45s (0:01:02)",
+  "real_es_cases": 11,
+  "large_articles": {
+    "documents": 25,
+    "content_bytes": 7967652,
+    "largest_document_bytes": 9793092,
+    "migration_seconds": 3.61,
+    "sampled_max_heap_bytes": 391545104,
+    "strategy": "split",
+    "verification": "native"
+  },
+  "cli_crud": {
+    "documents": 5,
+    "target_shards": 3,
+    "verification": "native",
+    "result": "passed"
+  },
+  "limitations": [
+    "Synthetic samples only; not a 119 GB or 198483-document production acceptance",
+    "Single node with zero replicas; no multi-node/replica performance acceptance"
+  ]
+}

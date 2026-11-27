@@ -3,7 +3,7 @@
 **状态**：实现及本地验证已完成；用户已授权合并推送目标线，交付状态以 Git 记录为准；未执行生产迁移。验证边界见 [validation.md](./validation.md)。
 **关联**：[Spec](./spec.md) · [版本契约](../release-contract.md) · [需求确认](../../../docs/cofco-1028-eplus-es-shards-discovery.md#6-确认记录)
 **版本**：v3.0.0-beta1 / 中粮定制线；基线 `8ebcfdcc270fbfa1c20b100262ccd5d83844c76c`。
-**最后更新**：2026-10-28；补充迁移批量参数。
+**最后更新**：2026-11-27；用户确认改为 clone 备份 + split 扩分片，并在 109 隔离 ES 实测。
 
 ## 1. 目标与非目标
 
@@ -42,13 +42,13 @@
 
 - 备选：全局 ES 默认值；应用启动自动重建；频道文章专属配置与显式维护脚本。
 - 选定：专属配置 `channel_article_index.number_of_shards`，严格正整数、默认 3。同步/异步创建共用一个 settings 构造函数；已有索引不变。
-- 旧数据采用任意有效目标分片数的 reindex，不依赖 split/shrink 的倍数约束。应用继续使用 `channel_articles`；切换采用别名，不新增业务索引名配置或要求所有节点同时改配置。
+- 旧数据默认采用 clone 恢复副本 + split 目标，避免两次重新分析大正文/ngram。1 主分片支持拆成任意大于 1 的数量；多主分片要求目标为源的更大整数倍且可整除真实 routing_num_shards。不兼容时预检停止；任意有效数量仍由显式 `--strategy reindex` 支持，不自动回退。应用继续使用 `channel_articles`；切换采用别名，不新增业务索引名配置或要求所有节点同时改配置。
 - 重新考虑条件：文章存储改成租户独立索引、数据流或 ILM 时，另行评审迁移范围。
 
 ### 决策 4：停写、完整基准与可恢复切换
 
 - 备选：边写边复制后数文档；停写后复制，只比较 count；停写屏障与刷新后做完整身份/内容核验。
-- 选定：运维停写并排空 → 源 `indices.add_block(block="write")` → 检查每个分片的屏障结果 → 源 refresh → 建立源完整基准 → 复制/核验 → 切换。专用 write-block API 成功返回时覆盖已在途写入；refresh 使此前已确认操作进入检索视图。[ES 写屏障](https://www.elastic.co/guide/en/elasticsearch/reference/8.19/index-modules-blocks.html)、[Refresh](https://www.elastic.co/docs/api/doc/elasticsearch/v8/operation/operation-indices-refresh)。
+- 选定：运维停写并排空 → 源 `indices.add_block(block="write")` → 检查每个分片的屏障结果 → 源 refresh → 建立冻结基准 → 复制/核验 → 切换。2026-11-27 用户要求避免全文校验耗时，clone/split 默认依赖 ES 原生一致性，检查恢复完成、数量及配置；独立全文指纹仅作为可选审计，reindex 仍强制全文校验。专用 write-block API 成功返回时覆盖在途写入；refresh 使已确认操作进入检索视图。[ES 写屏障](https://www.elastic.co/guide/en/elasticsearch/reference/8.19/index-modules-blocks.html)、[Refresh](https://www.elastic.co/docs/api/doc/elasticsearch/v8/operation/operation-indices-refresh)。
 - 若 `channel_articles` 仍为具体索引，必须先验证独立恢复副本，再用同一 aliases 请求移除原具体索引并添加同名业务别名；原本为单索引别名时，移除旧关系并添加新关系，保留旧实体。切换需验证响应和实际关系，不能只看 HTTP 200。[ES Aliases](https://www.elastic.co/guide/en/elasticsearch/reference/8.19/aliases.html)。
 - 重新考虑条件：客户不能停写，或实际集群不具备所需 API/容量时，先报告前置条件不满足，不能偷偷降级为有遗漏风险的复制。
 
@@ -135,29 +135,29 @@ channel_article_index:
 
 新增 `scripts/repartition_channel_articles.py` 及可选薄 shell wrapper，README 登记。脚本 bootstrap backend 路径并使用 argparse；`config` 环境变量和共享 settings 与服务一致。`initialize_app_context(config=settings)` 后取得默认 `get_es_connection`，finally 执行 `close_app_context`；不得调用 init_config、create_all 或权限运行时。默认 dry-run 不调用任何业务/ES 写 API，初始化过程也须用测试验证不产生持久化配置或业务写入。
 
-脚本参数：默认 dry-run；`--apply` 执行；apply 需要显式 `--writers-paused` 表示已停并排空全部写入方；`--run-id` 标识一次维护；`--status` 只读检查已有 run；`--batch-size` 为严格正整数，默认 5，在访问 ES 前校验，统一控制全量指纹校验分页及备份/目标 reindex 的 `source.size`，dry-run 与 apply 分别传入相同值。run-id 限定安全的小写字母数字连字符；无值时 dry-run 展示新建议值，apply 要求使用该明确值。没有目标分片命令行覆盖，也不允许任意源索引或通配符。
+脚本参数：默认 dry-run；`--apply` 执行；apply 需要显式 `--writers-paused` 表示已停并排空全部写入方；`--run-id` 标识维护；`--status` 只读检查 run；`--strategy split|reindex` 默认 split，不自动回退；`--verification native|full` 在 split 默认 native、reindex 默认且仅允许 full。native 不读正文，检查原生恢复、数量和策略。`--batch-size` 严格正整数、默认 100，仅控制可选全文分页及 reindex 的 source.size，native 模式不使用。dry-run/apply 使用相同选项。run-id 限定小写字母数字连字符，apply 要求明确值。无 --shards、任意源索引或通配符覆盖。
 
 1. **解析与预检**：解析 `channel_articles` 为一个具体实体，记录名称、UUID、原 mappings/settings、所有关联 alias 元数据、当前分片和文档数；缺失与多实体 alias 分别报错。若分片已达标仅报告跳过。源关闭、不可读、缺少 `_source`、集群 red、磁盘水位/分片容量不满足、原有只读限制未解释时停止；展示源/备份/目标的占用估计与分配条件，不能把估计当成空间保证。
-2. **互斥与恢复前提**：同一源一次只允许一个运维执行者；所创建固定恢复实体名同时作为原子执行资格，创建失败不能进行后续源写操作。先检查活跃 reindex 任务及已有本功能目标/恢复副本，发现未完成 run 就只报告状态、拒绝新 apply。使用源 UUID 派生的固定恢复副本名，在任何源写屏障之前原子 create 恢复实体，create 请求内一次性写入 RESERVED 阶段及 run/源身份元数据；成功者才拥有本次执行资格，并发 create 失败方停止，不自行接管。该实体尚无数据，不作为有效备份；已有副本不被覆盖。
+2. **互斥与恢复前提**：同一源一次只允许一个运维执行者；先检查活跃 reindex 任务及已有目标/恢复副本/锁，发现旧现场即拒绝新 apply，不接管、不清理。split 模式使用源 UUID 派生的独立 `channel_articles__lock_<hash>` 索引原子 create，记录 RESERVED、原设置、身份及运行资料；锁为 1 主分片、0 副本，不是数据备份。这样 clone/split 的两个目标在 API 调用时均保持不存在。reindex 模式仍以固定恢复实体原子预留；两种模式均检查锁和恢复名，避免交叉重入。创建失败方不执行后续源操作。
 3. **写屏障与完整基准**：先确认运维停写，再专用 add_block(write)，检查 acknowledged 与各分片结果；源 refresh 后所有 search/scroll 禁止部分分片结果，建立完整基准。源 UUID、alias 关系或源业务 mappings/settings 相对预检改变即停止。
-4. **构建恢复副本及目标**：恢复名 `channel_articles__backup_<sha256(source-uuid)前32位>`，目标名 `channel_articles__reshard_<sha256(run-id)前32位>`；二者从源实际 mappings/settings 建立，目标注入配置分片数，恢复副本维持原分片数。恢复实体沿用步骤 2 已原子预留的实体，不重复创建；失败时空实体不算有效备份，不能切换。
-5. **复制**：异步 reindex 精确的源实体到预建实体，`op_type=create`、`routing=keep`、不使用 conflicts=proceed；先完成恢复副本再完成新目标。每个任务拿到 ID 后立即输出，并更新该实体 mappings `_meta.bisheng_article_reshard` 的 run 标记；检查 completed、顶层 error、timed_out、failures 与冲突。原业务 `_meta` 原样保存，命名空间存在不属于本功能或当前格式不可识别的内容时拒绝；识别到本功能历史标记时按业务 mappings 与当前运行标记分离，旧运行资料保留于旧实体/恢复副本，不把历次快照递归嵌入新快照。
-6. **核验**：恢复副本与目标分别 refresh 并建立 write block，完整扫描比较源基准与副本/目标的文档数、身份、routing 和 `_source` 指纹，检查 mappings、相关 settings、实际分片数与副本配置。每次搜索都检查失败分片；源基准核验前后保持不变。只按 count 或抽样校验不足以通过。
-7. **切换准备**：恢复目标正常写入所需的原 refresh/ingest 等设置并再次核验；新目标在切换前仍保持 write block。记录完整 aliases 操作计划，再次确认源 UUID、alias 关系、源基准和目标配置未变。
+4. **构建恢复副本及目标**：恢复名 `channel_articles__backup_<sha256(source-uuid)前32位>`，目标名 `channel_articles__reshard_<sha256(run-id)前32位>`。split 模式先 clone 源为相同主分片的恢复副本，按所选模式核验后再 split 源为配置数量的目标；显式指定副本数、auto_expand_replicas、write block。源必须 green；容量按 clone + split 倍数的临时 segment 放大及现有副本策略估计，并保守检查每个数据节点。不假设硬链接一定可用，不保证固定时长或零内存消耗。reindex 模式仍预建实体后复制。
+5. **复制与恢复完成**：split 模式在锁中先写 CLONING_PENDING/SPLITTING_PENDING 与 recovery_index，再发送 API，收到确认后写 CLONING/SPLITTING；循环等目标 green、无 initializing/relocating shards 后才能核验。API 确认不等于恢复完成，超时不重发。clone/split 不重新运行 ingest 或 ngram 分析器。reindex 模式异步复制，op_type=create、routing=keep，检查任务全部成功；保留 COPY_PENDING/任务 ID。原业务 `_meta` 保留，新实体仅替换本功能 namespace，防止递归快照。
+6. **核验**：reindex 目标用 add_block + refresh；resize 目标自创建即停写，确认 block 后 refresh，不重复 add_block（ES 8.12 重复请求会返回 shards_acknowledged=false）。native 模式依赖原生 clone/split 一致性，比较冻结源、副本、目标的 count、mappings/settings、分片/副本与 recovery 完成状态，不发起全文 search/scroll。full 模式额外比较 ID/routing/_source 的全文指纹，四轮扫描分别为源基准、副本、目标、最终源。
+7. **切换准备**：恢复并再次检查原 refresh/ingest 等配置，不重复扫描目标全文；新目标保持 write block。记录 aliases 操作计划及 CUTOVER_PENDING，再确认源 UUID、alias、业务设置与所选基准未变。
 8. **切换**：源为具体 `channel_articles` 时，一个 aliases 请求中 remove_index 原实体并 add 目标为同名 alias；源已是别名时 remove 原关系（must_exist=true）再 add 新关系。原实体的其他 alias 关系同步迁移到目标，保留 filter、routing、is_hidden 及原写入规则；业务 alias 明确唯一写索引。所有名称精确列举，不使用通配符。检查 errors/action_results，并重新解析所有受影响 alias；HTTP 超时或结果不确定进入待核实，不能重发删除动作。
 9. **结束检查**：仅确认所有关系正确后解除目标的本次 write block，检查逻辑入口可查询且指向唯一可写实体；保留恢复副本的写保护。输出目标分片、基准/目标文档数与指纹、任务及恢复资料。脚本不写入测试文章；真实写入/更新/删除通过验收环境验证，运维据报告恢复应用写入。
 
-迁移元数据记录在已创建副本/目标的 `_meta`：run-id、源 UUID、目标分片、batch_size、阶段、任务 ID、原设置/alias 摘要、基准指纹。dry-run/完成报告及复制进度输出本次 batch_size；status 返回运行元数据内的值，历史运行缺少该字段时返回 null。完整原 mappings/settings/alias 快照作为同一元数据的嵌套字段保存，用于恢复；快照单独保存源业务 `_meta`，剥离本功能历次运维标记以避免递归嵌套，不保存凭据。它是运维恢复资料，不新增应用运行时查询或全局业务状态。源 UUID 和 run-id 均用 SHA256 的前 32 位生成固定长度安全索引片段；不得直接拼接未校验原 UUID。
+迁移元数据记录在锁及副本/目标的 `_meta`：run-id、源 UUID、目标分片、strategy、verification、batch_size、阶段、任务 ID 或 recovery_index、原设置/alias、基准。native 基准仅 count，full 才含 sum/xor；不得把 native 报告表述为全文校验。status 优先读本 run 的锁；目标尚无新 run 元数据时仍能报告派发阶段，write_block 取当前业务实体。旧运行新字段缺失返回 null。保留原业务 mappings/settings/alias 以供恢复，剥离旧运维标记防止递归，不保存凭据。名称使用 SHA256 前 32 位。
 
-**不自动续跑**：重试相同 run 先读上述元数据、实际 alias 和任务状态，只显示 phase/任务/恢复动作；不会重新 launch 已有任务、重新创建已有目标或猜测成功。进程在任务提交与记录 ID 之间退出时，已写入的 COPY_PENDING 表示任务状态未知，保留停写，运维先检查/取消遗留任务并核实数据后再处理。`--status` 和默认 dry-run 均保持只读。用户需要可靠自动续跑时另立需求。
+**不自动续跑**：重试相同 run 不重新 launch 已有任务、覆盖目标、解锁源或猜测成功。COPY_PENDING 或 CLONING_PENDING/SPLITTING_PENDING 表示派发结果可能未知；保留停写，先检查任务或精确索引 `_recovery`/health，再核实数据。旧失败 run、半成品和原 write block 均须运维先审计并显式处理；不能通过换 run-id 或 strategy 接管。`--status` 和默认 dry-run 保持只读。
 
 ### 4.7 settings、内容核验与恢复
 
 复制实际源配置，排除 ES 生成/只读的 UUID、创建时间、版本、provided_name、历史 resize 字段及旧的物理 routing-shard 拓扑；目标由目标主分片生成合法 routing 拓扑，但保留每个文档 `_routing`。原 `routing_partition_size` 等限制与目标不兼容时预检失败，不偷偷改业务路由。保留 analysis、similarity、排序、业务 mappings、refresh 策略和副本策略；未知且无法合法重建的源配置明确报错。
 
-复制期间显式禁用目标与恢复副本的 default/final ingest pipeline，reindex 请求 `pipeline=_none`，避免既有数据被再次转换；完成后恢复原设置并核验。创建前解析匹配的 composable/legacy 模板及其有效配置，若会给任一临时实体自动附加 alias，先拒绝创建，避免提前污染业务查询；无法确定模板效果也停止。创建后再核验实际 mappings、aliases 和 settings，无法保持源合同则在切换前失败，不修改集群模板。[ES ingest 设置](https://www.elastic.co/docs/reference/elasticsearch/index-settings/index-modules)。
+reindex 期间显式禁用 default/final pipeline，请求 pipeline=_none，完成后恢复核验；clone/split 保留 pipeline 设置但不重新运行。创建前检查模板 alias 注入，创建后核验实际 aliases/mappings/settings，不修改集群模板。clone 会显式补出 routing_partition_size=1 等默认值，设置比较将其与未声明的同值默认统一；实际业务差异仍拒绝。[ES ingest 设置](https://www.elastic.co/docs/reference/elasticsearch/index-settings/index-modules)。
 
-mappings 核验排除单独比较的本功能运维标记；源原有业务 `_meta` 与其他 mappings 内容仍须一致。全量指纹：逐文档规范化 JSON `[_id, _routing, _source]` 后 SHA256，累加 256-bit sum 和 xor 并记录 count，顺序无关、内存有界。对相同冻结基准比较三项及 mappings/settings；这是全量内容指纹核验，不将它写成逐字节人工比对或现网验收结论。扫描按 `--batch-size` 分页，默认 5 条，大文章或内存紧张时建议传 1；备份和目标 reindex 同样显式传入 `source.size=batch_size`。该参数控制文档条数，不限制响应字节或单篇文档内存占用，不能保证消除 MemoryError；减小批量会增加请求开销，仍须完成全量校验。任一批次/分片失败均拒绝切换。修改批量参数不接管、不清理、不续跑旧失败 run。
+mappings 核验排除本功能标记，业务 `_meta` 与其他内容仍须一致。默认 native 不读取正文；可选 full 对规范化 `[_id, _routing, _source]` 做 SHA256、累加 256-bit sum/xor/count。full 按 batch_size 分页，默认 100；reindex 同样传 source.size。批量仅限制条数，不限制字节/单文档内存；启用 full 仍有扫描成本。任一实际校验失败均拒绝切换。
 
 恢复规则：
 

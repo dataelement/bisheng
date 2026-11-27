@@ -36,7 +36,15 @@ async def test_success_includes_unsearchable_writes_and_preserves_recovery(alias
 async def test_failed_precondition_or_copy_never_cuts_over(fault):
     es = FakeEs(fault=fault)
     with pytest.raises(MigrationError):
-        await run_migration(es, 3, apply=True, writers_paused=True, run_id="test")
+        await run_migration(
+            es,
+            3,
+            apply=True,
+            writers_paused=True,
+            run_id="test",
+            strategy="reindex" if fault == "task_failed" else "split",
+            verification="full",
+        )
     assert LOGICAL_INDEX in es.indexes and not any(w[0] == "cutover" for w in es.writes)
     if fault == "template_alias":
         assert es.writes == []
@@ -129,12 +137,13 @@ async def test_batch_size_reaches_every_fingerprint_and_both_reindex_tasks():
         writers_paused=True,
         run_id="small-batch",
         batch_size=1,
+        strategy="reindex",
     )
     assert result["mode"] == "complete" and result["documents"] == 2
     assert result["batch_size"] == 1
-    assert es.search.await_count == 5
+    assert es.search.await_count == 4
     assert all(call.kwargs["size"] == 1 for call in es.search.call_args_list)
-    assert es.scroll.await_count == 10
+    assert es.scroll.await_count == 8
     assert es.reindex.await_count == 2
     assert all(call.kwargs["body"]["source"]["size"] == 1 for call in es.reindex.call_args_list)
     for name in (result["backup"], result["target"]):
@@ -153,3 +162,144 @@ async def test_invalid_runtime_batch_size_fails_before_any_es_operation(value):
         await run_migration(es, 3, batch_size=value)
     assert error.value.code == 2
     assert es.mock_calls == []
+
+
+async def test_split_uses_clone_and_split_without_reindex_or_precreating_destinations():
+    """AC-21 through AC-24: no reanalysis, exact source/backup/target content."""
+    from unittest.mock import AsyncMock
+
+    es = FakeEs()
+    es.reindex = AsyncMock(side_effect=AssertionError("split must never reindex"))
+    es.search = AsyncMock(wraps=es.search)
+    es.indexes[es.source]["settings"]["index"]["number_of_routing_shards"] = "1024"
+    result = await run_migration(es, 3, apply=True, writers_paused=True, run_id="split")
+    assert result["strategy"] == "split" and result["mode"] == "complete"
+    assert ("clone", result["backup"]) in es.writes and ("split", result["target"]) in es.writes
+    assert ("create", result["backup"]) not in es.writes and ("create", result["target"]) not in es.writes
+    es.reindex.assert_not_awaited()
+    assert es.search.await_count == 0  # Native mode never reads or hashes bodies.
+    assert result["verification"] == "native" and result["basis"] == {"count": 2}
+    assert es.docs[result["backup"]] == es.docs[result["target"]]
+    assert (await run_migration(es, 3, status=True, run_id="split"))["phase"] == "COMPLETE"
+
+
+@pytest.mark.parametrize("source,target,routing", [(3, 1, 1536), (2, 3, 1024), (2, 6, 1024)])
+async def test_incompatible_split_is_rejected_without_any_mutation(source, target, routing):
+    es = FakeEs()
+    es.indexes[es.source]["settings"]["index"].update(
+        number_of_shards=str(source), number_of_routing_shards=str(routing)
+    )
+    with pytest.raises(MigrationError, match="explicit --strategy reindex"):
+        await run_migration(es, target, apply=True, writers_paused=True, run_id="invalid-split")
+    assert es.writes == []
+
+
+async def test_yellow_source_is_rejected_before_reserving_or_blocking():
+    es = FakeEs()
+    es.cluster.health.return_value = {"status": "yellow"}
+    with pytest.raises(MigrationError, match="green source"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="yellow")
+    assert es.writes == []
+
+
+async def test_split_checks_per_node_temporary_segment_headroom():
+    es = FakeEs()
+    # Enough aggregate space, but one data node cannot hold clone + split work.
+    node = es.nodes.stats.return_value["nodes"]["n"]
+    from copy import deepcopy
+
+    es.nodes.stats.return_value["nodes"]["small"] = deepcopy(node)
+    es.nodes.stats.return_value["nodes"]["small"]["fs"]["total"]["available_in_bytes"] = 100300
+    with pytest.raises(MigrationError, match="temporary segment headroom"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="disk")
+    assert es.writes == []
+
+
+async def test_resize_unknown_retains_reservation_and_reports_pending_without_replay():
+    """AC-25: accepted clone with lost response stays inspectable and blocked."""
+    es = FakeEs(fault="resize_unknown")
+    with pytest.raises(TimeoutError):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="unknown")
+    status = await run_migration(es, 3, status=True, run_id="unknown")
+    assert status["phase"] == "CLONING_PENDING" and status["write_block"]
+    assert status["recovery_index"] == status["backup"]
+    assert es.docs[status["backup"]] == es.docs[es.source]
+    before = list(es.writes)
+    with pytest.raises(MigrationError, match="artifacts already exist"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="retry")
+    assert es.writes == before and not any(w[0] == "cutover" for w in es.writes)
+
+
+async def test_target_recovery_timeout_is_inspectable_even_before_target_metadata_is_written():
+    es = FakeEs()
+
+    async def health(**kwargs):
+        if "reshard" in kwargs.get("index", ""):
+            return {"status": "yellow", "timed_out": True, "initializing_shards": 1}
+        return {"status": "green"}
+
+    es.cluster.health.side_effect = health
+    with pytest.raises(MigrationError, match="recovery observation timed out"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="timeout", timeout_seconds=0)
+    status = await run_migration(es, 3, status=True, run_id="timeout")
+    assert status["phase"] == "SPLITTING" and status["basis"]["count"] == 2
+    assert es.docs[status["backup"]] == es.docs[es.source]
+    assert not any(w[0] == "cutover" for w in es.writes)
+
+
+async def test_split_never_cuts_over_when_backup_content_is_corrupted():
+    es = FakeEs()
+    original = es.clone
+
+    async def corrupt_backup(**kwargs):
+        response = await original(**kwargs)
+        es.docs[kwargs["target"]]["old"]["_source"]["title"] = "corrupt"
+        return response
+
+    es.clone = corrupt_backup
+    with pytest.raises(MigrationError, match="document verification"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="bad-backup", verification="full")
+    assert not any(w[0] in {"split", "cutover"} for w in es.writes)
+
+
+async def test_existing_source_uuid_reservation_prevents_overlapping_runs():
+    from scripts.article_reshard_plan import safe_index_name
+
+    es = FakeEs()
+    es.indexes[safe_index_name("lock", "sourceUUID")] = es.indexes[es.source]
+    with pytest.raises(MigrationError, match="artifacts already exist"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="second")
+    assert es.writes == []
+
+
+async def test_optional_full_split_verification_detects_body_changes():
+    from unittest.mock import AsyncMock
+
+    es = FakeEs(fault="corrupt")
+    es.search = AsyncMock(wraps=es.search)
+    with pytest.raises(MigrationError, match="document verification"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="full", verification="full")
+    assert es.search.await_count == 3
+    assert not any(w[0] == "cutover" for w in es.writes)
+
+
+async def test_native_count_mismatch_still_prevents_cutover():
+    es = FakeEs()
+    original = es.split
+
+    async def lose_document(**kwargs):
+        response = await original(**kwargs)
+        es.docs[kwargs["target"]].pop("old")
+        return response
+
+    es.split = lose_document
+    with pytest.raises(MigrationError, match="document verification"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id="count")
+    assert not any(w[0] == "cutover" for w in es.writes)
+
+
+async def test_reindex_cannot_use_native_verification():
+    es = FakeEs()
+    with pytest.raises(MigrationError, match="reindex requires full"):
+        await run_migration(es, 3, strategy="reindex", verification="native")
+    assert es.writes == []

@@ -1,4 +1,4 @@
-"""Read-only planning and bounded full-content verification for article maintenance."""
+"""Read-only article maintenance planning and optional bounded content fingerprints."""
 
 import fnmatch
 import hashlib
@@ -11,7 +11,7 @@ from loguru import logger
 
 LOGICAL_INDEX = "channel_articles"
 RUN_META_KEY = "bisheng_article_reshard"
-DEFAULT_BATCH_SIZE = 5
+DEFAULT_BATCH_SIZE = 100
 
 
 class MigrationError(RuntimeError):
@@ -54,6 +54,8 @@ def copy_settings(source, shards, *, copying=True):
     if int(settings.get("routing_partition_size", 1)) >= shards and int(settings.get("routing_partition_size", 1)) > 1:
         raise MigrationError("routing_partition_size is incompatible with requested shards")
     settings["number_of_shards"] = shards
+    settings.setdefault("auto_expand_replicas", "false")
+    settings.setdefault("routing_partition_size", 1)
     for key in ("default_pipeline", "final_pipeline"):
         settings[key] = "_none" if copying else source.get(key, "_none")
     return settings
@@ -154,12 +156,20 @@ class MigrationPlan:
     documents: int
     run_id: str
     batch_size: int = DEFAULT_BATCH_SIZE
+    strategy: str = "split"
+    verification: str = "native"
+
+    @property
+    def lock(self):
+        return safe_index_name("lock", self.source_uuid)
 
     def report(self):
-        return {key: value for key, value in asdict(self).items() if key not in {"mappings", "settings"}}
+        return {key: value for key, value in asdict(self).items() if key not in {"mappings", "settings"}} | {
+            "lock": self.lock
+        }
 
     def metadata(self, phase):
-        return asdict(self) | {"schema_version": 1, "logical_index": LOGICAL_INDEX, "phase": phase}
+        return asdict(self) | {"schema_version": 1, "logical_index": LOGICAL_INDEX, "phase": phase, "lock": self.lock}
 
 
 async def source_state(es):
@@ -175,7 +185,7 @@ async def source_state(es):
     return name, state
 
 
-async def make_plan(es, shards, run_id, *, batch_size=DEFAULT_BATCH_SIZE):
+async def make_plan(es, shards, run_id, *, batch_size=DEFAULT_BATCH_SIZE, strategy="split", verification="native"):
     validate_batch_size(batch_size)
     if type(shards) is not int or shards < 1:
         raise MigrationError("requested primary shards must be a positive integer")
@@ -199,7 +209,31 @@ async def make_plan(es, shards, run_id, *, batch_size=DEFAULT_BATCH_SIZE):
         int(response["count"]),
         run_id,
         batch_size=batch_size,
+        strategy=strategy,
+        verification=verification,
     )
+
+
+async def check_split_eligibility(es, plan):
+    if plan.target_shards <= plan.source_shards or plan.target_shards % plan.source_shards:
+        raise MigrationError(
+            "split requires a larger primary-shard count that is a multiple of the source; use explicit --strategy reindex if required"
+        )
+    # ES permits a single primary to split into any count > 1, even with the
+    # default routing-shard count (e.g. 1024 -> three primary shards).
+    if plan.source_shards > 1:
+        # get_settings(include_defaults=True) returns the setting default, not
+        # necessarily the routing hash space calculated at index creation.
+        state = await es.cluster.state(
+            metric="metadata", index=plan.source, filter_path="metadata.indices.*.routing_num_shards"
+        )
+        routing_shards = state.get("metadata", {}).get("indices", {}).get(plan.source, {}).get("routing_num_shards")
+        if not routing_shards:
+            raise MigrationError("cannot determine source routing_num_shards from cluster metadata")
+        if int(routing_shards) % plan.target_shards:
+            raise MigrationError(
+                "target shards do not divide source number_of_routing_shards; use explicit --strategy reindex if required"
+            )
 
 
 async def check_templates(es, index):
@@ -234,12 +268,24 @@ async def check_capacity(es, plan):
     health = await es.cluster.health()
     if health.get("status") == "red":
         raise MigrationError("cluster is red; maintenance refused")
+    if plan.strategy == "split":
+        source_health = await es.cluster.health(index=plan.source)
+        if source_health.get("status") != "green" or source_health.get("timed_out"):
+            raise MigrationError("clone/split requires a green source index with all replicas active")
     config = await es.cluster.get_settings(include_defaults=True, flat_settings=True)
     config = config.get("defaults", {}) | config.get("persistent", {}) | config.get("transient", {})
     stats = await es.nodes.stats(metric="fs")
     nodes = [node for node in stats["nodes"].values() if any(role.startswith("data") for role in node.get("roles", []))]
     if not nodes:
         raise MigrationError("cannot determine data-node disk capacity")
+    storage = await es.indices.stats(index=plan.source, metric="store")
+    check_shards(storage)
+    size = storage["_all"]["total"]["store"]["size_in_bytes"]
+    primary_size = storage["_all"]["primaries"]["store"]["size_in_bytes"]
+    # Split can temporarily retain every source segment in each child shard.
+    # Do not budget only the eventual logical document size or assume hardlinks.
+    factor = plan.target_shards // plan.source_shards if plan.strategy == "split" else 1
+    extra = (1 + factor) * size
     free = 0
     for node in nodes:
         space = node["fs"]["total"]
@@ -248,14 +294,16 @@ async def check_capacity(es, plan):
         )
         if space["available_in_bytes"] <= reserve:
             raise MigrationError("a data node is at or above the high disk watermark")
-        free += space["available_in_bytes"] - reserve
-    storage = await es.indices.stats(index=plan.source, metric="store")
-    check_shards(storage)
-    size = storage["_all"]["total"]["store"]["size_in_bytes"]
-    if free <= 2 * size:
+        headroom = space["available_in_bytes"] - reserve
+        if plan.strategy == "split" and headroom <= (1 + factor) * primary_size:
+            raise MigrationError("a data node lacks conservative clone/split temporary segment headroom")
+        free += headroom
+    if free <= extra:
         raise MigrationError("insufficient estimated disk headroom for recovery copy and target")
     added = (plan.source_shards + plan.target_shards) * (1 + int(plan.settings.get("number_of_replicas", 1)))
+    if plan.strategy == "split":
+        added += 1  # Durable source-UUID reservation, not a data recovery copy.
     current = sum(health.get(key, 0) for key in ("active_shards", "unassigned_shards", "initializing_shards"))
     if current + added > int(config.get("cluster.max_shards_per_node", 1000)) * len(nodes):
         raise MigrationError("requested migration would exceed cluster shard capacity")
-    return {"source_store_bytes": size, "estimated_extra_store_bytes": 2 * size, "additional_shard_copies": added}
+    return {"source_store_bytes": size, "estimated_extra_store_bytes": extra, "additional_shard_copies": added}

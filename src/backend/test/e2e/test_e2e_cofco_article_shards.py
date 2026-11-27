@@ -6,13 +6,19 @@ Every test document and pipeline has an e2e-f078- prefix; index cleanup addition
 requires this suite's ownership metadata. Never point this at a business cluster.
 """
 
+import asyncio
+import json
 import os
+import time
 import uuid
+from copy import deepcopy
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 from elasticsearch import AsyncElasticsearch
 
+from scripts.article_reshard_plan import MigrationError
 from scripts.article_reshard_runtime import run_migration
 
 ES_URL = os.getenv("E2E_ARTICLE_SHARDS_ES_URL", "")
@@ -45,7 +51,10 @@ async def isolated_es():
 
 
 @pytest.mark.parametrize("alias", [False, True])
-async def test_migration_freezes_all_acknowledged_operations_and_restores_live_access(isolated_es, alias):
+@pytest.mark.parametrize("strategy,verification", [("split", "native"), ("split", "full"), ("reindex", "full")])
+async def test_migration_freezes_all_acknowledged_operations_and_restores_live_access(
+    isolated_es, alias, strategy, verification
+):
     """AC-14, AC-18, AC-19, AC-21, AC-22, AC-23, AC-24, AC-26: real ES full migration."""
     es = isolated_es
     run_id = PREFIX + uuid.uuid4().hex
@@ -78,12 +87,21 @@ async def test_migration_freezes_all_acknowledged_operations_and_restores_live_a
         await es.index(index=source, id=PREFIX + "new", document={"title": "new"})
         await es.delete(index=source, id=PREFIX + "deleted")
         # Default inspection must not refresh the unsearchable operations.
-        plan = await run_migration(es, 3, run_id=run_id, batch_size=1)
+        plan = await run_migration(es, 3, run_id=run_id, batch_size=100, strategy=strategy, verification=verification)
         assert plan["mode"] == "dry_run"
         result = await run_migration(
-            es, 3, apply=True, writers_paused=True, run_id=run_id, poll_seconds=0.05, batch_size=1
+            es,
+            3,
+            apply=True,
+            writers_paused=True,
+            run_id=run_id,
+            poll_seconds=0.05,
+            batch_size=100,
+            strategy=strategy,
+            verification=verification,
         )
-        assert result["mode"] == "complete" and result["documents"] == 2 and result["batch_size"] == 1
+        assert result["mode"] == "complete" and result["documents"] == 2 and result["batch_size"] == 100
+        assert result["verification"] == verification
         data = await es.get(index="channel_articles", id=PREFIX + "updated", routing="r")
         assert data["_source"] == {"title": "after", "ingest_count": 2}
         assert not await es.exists(index="channel_articles", id=PREFIX + "deleted")
@@ -138,3 +156,131 @@ async def test_verified_backup_restores_removed_concrete_source(isolated_es):
     assert (await es.get(index="channel_articles", id=PREFIX + "recover"))["_source"] == {"title": "keep"}
     await es.index(index="channel_articles", id=PREFIX + "recovered-live", document={"title": "live"}, refresh=True)
     assert await es.exists(index="channel_articles", id=PREFIX + "recovered-live")
+
+
+@pytest.mark.parametrize("source_shards,target_shards,documents", [(1, 3, 0), (3, 6, 7)])
+async def test_empty_and_multi_primary_split_with_default_routing_space(
+    isolated_es, source_shards, target_shards, documents
+):
+    """AC-20, AC-22, AC-23: empty source and computed multi-primary routing space."""
+    es = isolated_es
+    await es.indices.create(
+        index="channel_articles",
+        settings={"number_of_shards": source_shards, "number_of_replicas": 0},
+        mappings={"_meta": {"e2e_owner": OWNER}},
+    )
+    for n in range(documents):
+        await es.index(index="channel_articles", id=PREFIX + str(n), routing="r" + str(n), document={"title": str(n)})
+    result = await run_migration(
+        es, target_shards, apply=True, writers_paused=True, run_id=PREFIX + uuid.uuid4().hex, poll_seconds=0.05
+    )
+    assert result["documents"] == documents
+    for n in range(documents):
+        assert (await es.get(index="channel_articles", id=PREFIX + str(n), routing="r" + str(n)))["_source"] == {
+            "title": str(n)
+        }
+
+
+async def test_split_response_loss_keeps_original_and_verified_backup_without_replay(isolated_es, monkeypatch):
+    """AC-24, AC-25: real split accepted before simulated response loss."""
+    es = isolated_es
+    await es.indices.create(
+        index="channel_articles",
+        settings={"number_of_shards": 1, "number_of_replicas": 0},
+        mappings={"_meta": {"e2e_owner": OWNER}},
+    )
+    await es.index(index="channel_articles", id=PREFIX + "keep", document={"title": "keep"})
+    original_split = es.indices.split
+
+    async def lose_response(**kwargs):
+        await original_split(**kwargs)
+        raise TimeoutError("simulated response loss after split accepted")
+
+    monkeypatch.setattr(es.indices, "split", lose_response)
+    run_id = PREFIX + uuid.uuid4().hex
+    with pytest.raises(TimeoutError):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id=run_id, poll_seconds=0.05)
+    status = await run_migration(es, 3, status=True, run_id=run_id)
+    assert status["phase"] == "SPLITTING_PENDING" and status["write_block"]
+    assert status["current_article_indices"] == ["channel_articles"]
+    for name in ["channel_articles", status["backup"], status["target"]]:
+        assert (await es.get(index=name, id=PREFIX + "keep"))["_source"] == {"title": "keep"}
+    with pytest.raises(MigrationError, match="artifacts already exist"):
+        await run_migration(es, 3, apply=True, writers_paused=True, run_id=run_id + "-retry")
+
+
+async def test_large_ngram_articles_split_without_reindex(isolated_es, monkeypatch):
+    """AC-22 through AC-26: 4.6 MiB article body, ngram 1..3, 1 GiB heap."""
+    from bisheng.channel.domain.es.article_index import ARTICLE_MAPPINGS, ARTICLE_SETTINGS
+
+    es = isolated_es
+    settings = deepcopy(ARTICLE_SETTINGS)
+    settings.update(number_of_shards=1, number_of_replicas=0, refresh_interval="-1")
+    await es.indices.create(
+        index="channel_articles",
+        settings=settings,
+        mappings={"_meta": {"e2e_owner": OWNER}, "properties": ARTICLE_MAPPINGS},
+    )
+    text = "中粮频道文章测试数据0123456789,价格与市场分析。\n"
+    unit_bytes = len(text.encode())
+    hits = []
+    for n in range(25):
+        size = int(4.6 * 1024**2) if n == 0 else 128 * 1024
+        content = text * (size // unit_bytes)
+        document = {
+            "title": "测试文章" + str(n),
+            "content": content,
+            "content_html": "<p>" + content + "</p>",
+            "source_type": 1,
+            "source_id": str(n),
+        }
+        hit = {"_id": PREFIX + str(n), "_routing": "r" + str(n % 4), "_source": document}
+        hits.append(hit)
+        await es.index(index="channel_articles", id=hit["_id"], routing=hit["_routing"], document=document)
+    monkeypatch.setattr(es, "reindex", AsyncMock(side_effect=AssertionError("split must not reindex")))
+    monkeypatch.setattr(es, "search", AsyncMock(side_effect=AssertionError("native must not scan bodies")))
+    heap_samples = []
+    stop = asyncio.Event()
+
+    async def monitor():
+        while not stop.is_set():
+            stats = await es.nodes.stats(metric="jvm")
+            heap_samples.extend(n["jvm"]["mem"]["heap_used_in_bytes"] for n in stats["nodes"].values())
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=0.25)
+            except TimeoutError:
+                continue
+
+    task = asyncio.create_task(monitor())
+    started = time.monotonic()
+    try:
+        result = await run_migration(
+            es, 3, apply=True, writers_paused=True, run_id=PREFIX + uuid.uuid4().hex, poll_seconds=0.05
+        )
+    finally:
+        stop.set()
+        await task
+    migration_seconds = round(time.monotonic() - started, 2)
+    assert result["basis"] == {"count": 25} and result["verification"] == "native"
+    es.reindex.assert_not_awaited()
+    es.search.assert_not_awaited()
+    # Independent test assertions, outside the timed script run.
+    for hit in hits:
+        actual = await es.get(index="channel_articles", id=hit["_id"], routing=hit["_routing"])
+        assert actual["_source"] == hit["_source"]
+    await es.index(index="channel_articles", id=PREFIX + "live", document={"title": "live"}, refresh=True)
+    assert (await es.get(index="channel_articles", id=PREFIX + "live"))["_source"]["title"] == "live"
+    print(
+        "F078_LARGE_ARTICLES "
+        + json.dumps(
+            {
+                "documents": 25,
+                "content_bytes": sum(len(h["_source"]["content"].encode()) for h in hits),
+                "largest_document_bytes": max(len(json.dumps(h["_source"], ensure_ascii=False).encode()) for h in hits),
+                "migration_seconds": migration_seconds,
+                "sampled_max_heap_bytes": max(heap_samples),
+                "strategy": result["strategy"],
+                "verification": result["verification"],
+            }
+        )
+    )

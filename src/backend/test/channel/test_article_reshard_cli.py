@@ -52,9 +52,13 @@ def test_normal_context_uses_search_es_even_when_telemetry_is_different():
     assert context.get_context("statistics_elasticsearch").es_hosts == "http://telemetry.invalid:9200"
 
 
-def test_batch_size_has_a_small_default_and_accepts_an_override():
-    assert entry.parser().parse_args([]).batch_size == 5
+def test_batch_size_defaults_to_100_and_accepts_an_override():
+    assert entry.parser().parse_args([]).batch_size == 100
     assert entry.parser().parse_args(["--batch-size", "1"]).batch_size == 1
+    assert entry.parser().parse_args([]).strategy == "split"
+    assert entry.parser().parse_args(["--strategy", "reindex"]).strategy == "reindex"
+    assert entry.parser().parse_args([]).verification is None
+    assert entry.parser().parse_args(["--verification", "full"]).verification == "full"
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "1.5", "true", "invalid"])
@@ -85,5 +89,6 @@ async def test_cli_passes_batch_size_to_the_migration(monkeypatch):
     monkeypatch.setattr(entry, "run_migration", migration)
     await entry.run(entry.parser().parse_args(["--batch-size", "2", "--run-id", "batch-cli"]))
     assert migration.call_args.kwargs["batch_size"] == 2
+    assert migration.call_args.kwargs["strategy"] == "split"
     assert migration.call_args.args == (es, 3)
     close.assert_awaited_once()

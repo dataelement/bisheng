@@ -37,6 +37,7 @@ class FakeEs:
         self.cluster = SimpleNamespace(
             health=AsyncMock(return_value={"status": "green", "active_shards": 1}),
             get_settings=AsyncMock(return_value={"defaults": {}}),
+            state=AsyncMock(return_value={"metadata": {"indices": {self.source: {"routing_num_shards": 1024}}}}),
         )
         self.nodes = SimpleNamespace(
             stats=AsyncMock(
@@ -69,7 +70,10 @@ class FakeEs:
         return {"count": sum(len(self.docs[n]) for n in self.resolve(index)), "_shards": {"failed": 0}}
 
     async def stats(self, **kwargs):
-        return {"_all": {"total": {"store": {"size_in_bytes": 100}}}, "_shards": {"failed": 0}}
+        return {
+            "_all": {"total": {"store": {"size_in_bytes": 100}}, "primaries": {"store": {"size_in_bytes": 100}}},
+            "_shards": {"failed": 0},
+        }
 
     async def simulate_index_template(self, **kwargs):
         return {"template": {"aliases": {"bad": {}} if self.fault == "template_alias" else {}}}
@@ -130,6 +134,33 @@ class FakeEs:
 
     async def clear_scroll(self, **kwargs):
         return {"succeeded": True}
+
+    async def clone(self, **kwargs):
+        return await self.resize("clone", **kwargs)
+
+    async def split(self, **kwargs):
+        return await self.resize("split", **kwargs)
+
+    async def resize(self, kind, *, index, target, settings):
+        assert target not in self.indexes
+        assert self.indexes[index]["settings"]["index"]["blocks"]["write"]
+        self.writes.append((kind, target))
+        self.indexes[target] = deepcopy(self.indexes[index])
+        self.indexes[target]["aliases"] = {}
+        config = self.indexes[target]["settings"]["index"]
+        config["uuid"] = "uuid-" + target
+        for key, value in settings.items():
+            key = key.removeprefix("index.")
+            if key == "blocks.write":
+                config.setdefault("blocks", {})["write"] = value
+            else:
+                config[key] = value
+        self.docs[target] = deepcopy(self.docs[index])
+        if self.fault == "corrupt" and kind == "split":
+            self.docs[target]["old"]["_source"]["title"] = "corrupt"
+        if self.fault == "resize_unknown":
+            raise TimeoutError("response lost after resize accepted")
+        return {"acknowledged": True, "shards_acknowledged": True}
 
     async def reindex(self, *, body, **kwargs):
         source, target = body["source"]["index"], body["dest"]["index"]

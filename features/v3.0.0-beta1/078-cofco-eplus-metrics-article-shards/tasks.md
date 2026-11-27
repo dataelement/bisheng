@@ -138,3 +138,11 @@
 
 - [x] T012–T017 补充 `--batch-size` 默认值、正整数校验、全量分页与两次 reindex 参数传递、运行报告/元数据及运维说明。
 - [x] T018 使用批量 1 完成两篇文档的真实 ES 具体索引/alias 迁移与恢复回归；结果和环境边界见 [validation.md](./validation.md#2026-10-28迁移批量参数补充)。
+
+## 2026-11-27：1125 线原生分片迁移与 109 实测
+
+- [x] 用户确认将恢复副本改为 clone、目标改为 split；保留显式 reindex 支持任意分片数，不自动回退。
+- [x] 用户进一步确认默认取消全文校验；split 使用原生恢复/数量/策略检查，独立全文校验可选，分页默认 100。同步 Spec AC-23、Design 与 CLI/README。
+- [x] 源 UUID 独立预留锁、resize 派发前阶段落盘、等待恢复、未知结果只读 status、保留备份与禁止重放；增加分片兼容及节点级临时空间检查。
+- [x] 59 项定向测试 + 11 项 109 真实 ES 用例通过；直接 CLI 的 dry-run/apply/status/noop 与迁移后 CRUD 通过。合成 ngram 大文章场景默认 native 不搜索全文，迁移后由测试逐篇独立确认内容。
+- [x] Ruff、arch-guard、diff 检查通过；证据与边界见 [validation.md](./validation.md#2026-11-271125-线-clonesplit-与默认原生校验)。

@@ -1,9 +1,12 @@
 """Repartition existing channel articles using the live service configuration.
 
 From src/backend, export the same `config` as the running service:
-    python scripts/repartition_channel_articles.py --run-id maintenance-20261027 --batch-size 1
-    python scripts/repartition_channel_articles.py --apply --writers-paused --run-id maintenance-20261027 --batch-size 1
-    python scripts/repartition_channel_articles.py --status --run-id maintenance-20261027
+    python scripts/repartition_channel_articles.py --run-id maintenance-20261127
+    python scripts/repartition_channel_articles.py --apply --writers-paused --run-id maintenance-20261127
+    python scripts/repartition_channel_articles.py --status --run-id maintenance-20261127
+
+Default split uses native recovery/count/policy checks without reading bodies.
+Optional --verification full scans bodies, with --batch-size 100 by default.
 
 Default mode only inspects the cluster. Apply requires operators to stop and
 fully drain every article writer first. Backups and failed targets are retained.
@@ -47,10 +50,21 @@ def parser():
     )
     value.add_argument("--run-id", help="Explicit maintenance identity, lowercase letters/digits/hyphens")
     value.add_argument(
+        "--strategy",
+        choices=("split", "reindex"),
+        default="split",
+        help="split: clone backup then split (default); reindex: explicitly rebuild both copies",
+    )
+    value.add_argument(
+        "--verification",
+        choices=("native", "full"),
+        help="native: recovery/count/policy checks without reading bodies (split default); full: scan every body (reindex default)",
+    )
+    value.add_argument(
         "--batch-size",
         type=positive_int,
         default=DEFAULT_BATCH_SIZE,
-        help=f"Documents per verification page and reindex scroll batch (default: {DEFAULT_BATCH_SIZE})",
+        help=f"Documents per verification page, also reindex scroll batch in reindex mode (default: {DEFAULT_BATCH_SIZE})",
     )
     return value
 
@@ -76,6 +90,8 @@ async def run(args):
             status=args.status,
             report=output,
             batch_size=args.batch_size,
+            strategy=args.strategy,
+            verification=args.verification,
         )
     finally:
         await close_app_context()

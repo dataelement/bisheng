@@ -16,20 +16,41 @@ Run from `src/backend/` with the service virtualenv active:
 
 ```bash
 export config=config.yaml
-python scripts/repartition_channel_articles.py --run-id maintenance-20261027 --batch-size 1
+python scripts/repartition_channel_articles.py --run-id maintenance-20261127
 # Stop and drain every channel article writer across all nodes/tenants first.
 python scripts/repartition_channel_articles.py \
-  --apply --writers-paused --run-id maintenance-20261027 --batch-size 1
+  --apply --writers-paused --run-id maintenance-20261127
 python scripts/repartition_channel_articles.py \
-  --status --run-id maintenance-20261027
+  --status --run-id maintenance-20261127
+# Optional independent full-content audit (use the same options for apply):
+python scripts/repartition_channel_articles.py \
+  --run-id maintenance-full-20261127 --verification full --batch-size 100
 ```
 
 The first command is read-only; `--dry-run` can also be explicit. `--apply` needs
 an explicit run ID and `--writers-paused`. There is no command-line shard override.
-`--batch-size` sets the number of documents in every full-content verification
-page and in each ES reindex scroll batch (`source.size`), for both the recovery
-copy and target. It must be a positive integer and defaults to **5**. For large
-articles or limited memory, start with `--batch-size 1`. Smaller batches increase
+`--strategy split` is the default: create a recovery index with `_clone`, verify
+it, then create the target with `_split`. Neither copy reanalyzes the article
+body or uses reindex scrolls. A single primary can split into any count greater
+than one (including 1 -> 3). For multiple source primaries, the target must be a
+larger multiple and divide the actual `routing_num_shards` from cluster metadata.
+Incompatible counts stop before any write; there is **no automatic reindex fallback**.
+Use explicit `--strategy reindex` for arbitrary counts only after planning its
+memory/indexing cost. It rebuilds both the recovery index and target.
+
+Split defaults to `--verification native`: rely on Elasticsearch's native
+segment-copy/routing consistency and check completed recovery, document counts,
+mappings/settings and aliases. **It does not read, scroll or hash article bodies.**
+Use `--verification full` only when an independent full-content audit is wanted;
+this adds full ID/routing/source fingerprints. Reindex always uses full
+verification and rejects `--verification native`. The report and run metadata
+record which verification was actually performed; native results contain counts,
+not content hashes.
+
+`--batch-size` sets the number of documents in every optional full-content verification
+page and, in reindex mode, each reindex scroll batch (`source.size`). It must be
+a positive integer and defaults to **100**. Native verification does not paginate,
+so this parameter does not affect the default split path. Smaller batches increase
 request overhead; this is a document count, not a byte or memory limit, so a
 single large document can still require substantial memory. Full verification
 still scans every document. The chosen value is included in dry-run/completion
@@ -40,22 +61,35 @@ dry-run and apply. Changing this parameter does not resume or clear a failed run
 Already matching primary shards are skipped. Missing sources, multi-index aliases,
 pre-existing artifacts/blocks, template alias injection, red clusters and inadequate
 estimated disk/shard headroom stop the operation. Plan for the original index plus
-one full recovery copy and one target with the existing replica policy; the size
-estimate is a precheck, not a production capacity guarantee.
+one full recovery copy and one target with the existing replica policy. Split
+also requires a green source index, including its replicas. Capacity estimates
+include a separate one-shard reservation and temporary segment amplification:
+clone plus split-factor copies, checked conservatively on every data node as
+well as in aggregate. Hardlinks are not assumed for disk budgeting; merging,
+replicas and relocation still consume resources. Estimates are prechecks, not
+production capacity guarantees.
 
-The fixed recovery name (derived from the source UUID) is atomically reserved
-before changing the source. The script then establishes a write barrier, refreshes
-the source, copies a recovery index and a new target, and verifies every document's
-ID, routing and source content using bounded full-content fingerprints. Source
+In split mode a fixed `channel_articles__lock_<source-UUID-hash>` index is
+atomically created before changing the source. It holds original settings and
+progress, and is **not a data backup**. Both resize destinations must remain
+absent until their respective API calls. Reindex mode retains the fixed recovery
+index reservation. The script then establishes a write barrier, refreshes the
+source, copies a recovery index and a new target, and verifies them using the
+selected mode. Source
 mappings, analyzers, routing values and replica policy are preserved. Pipelines are
-disabled during copy and restored on the target before it becomes writable.
+disabled during reindex copy and restored before the target becomes writable;
+clone/split preserve them without executing them. In full mode, four scans cover
+source baseline, recovery copy, target and final source; native mode uses counts
+at these boundaries without reading source bodies. Restoring pipeline settings
+checks policy again without redundantly scanning target content a second time.
 
 For an original concrete `channel_articles`, the verified source is removed only
 in the aliases cutover after an independent recovery copy has passed validation.
 For an existing single-index alias, the old concrete source is retained. Related
 aliases preserve their metadata. A cutover timeout or unexpected relationship is
 an uncertain outcome: writers stay stopped until the actual state is inspected.
-Successful completion prints `mode=complete`, verified count/fingerprint and
+Successful completion prints `mode=complete`, verification mode, count and (only
+in full mode) fingerprint, plus
 artifact names; then operators can restore application writes. Verify normal
 read/create/update/delete in an acceptance environment first.
 
@@ -68,9 +102,16 @@ retained state/refuses replay. Use `--status` and inspect the named indices'
 UUID, run phase, task ID and baseline. Runtime JSON progress emits task IDs as soon
 as they are returned. If the process died between dispatch and task-ID recording,
 `COPY_PENDING` means the task outcome is unknown: inspect/cancel matching active
-reindex tasks before interpreting or changing any artifact.
+reindex tasks before interpreting or changing any artifact. Split mode records
+`CLONING_PENDING`/`SPLITTING_PENDING` in the reservation **before** dispatch and
+`CLONING`/`SPLITTING` after acknowledgment, including `recovery_index`. These
+operations have no reindex task ID: inspect `GET /<exact-index>/_recovery` and
+index health. Acknowledgment alone is insufficient; all configured replicas
+must finish recovery. Status reads the reservation even if a newly created
+target does not yet carry this run's metadata. It reports the current business
+index's write block, not the reservation's block.
 
-1. **Before cutover:** keep writers stopped. Confirm every copy task is stopped,
+1. **Before cutover:** keep writers stopped. Confirm every copy task/recovery is stopped or complete,
    the original source UUID is unchanged and the source is complete. Restore only
    its original block settings from the metadata; then restore application writes.
    A `RESERVED`/partially copied index is not a verified recovery copy.
@@ -95,6 +136,8 @@ recorded plan; these are not automatic script actions):
 ```text
 GET /channel_articles/_alias
 GET /<recorded-backup>/_mapping
+GET /<recorded-lock>/_mapping
+GET /<recorded-recovery-index>/_recovery
 GET /_tasks/<recorded-task-id>
 POST /_tasks/<recorded-task-id>/_cancel
 PUT /<verified-recovery>/_settings
@@ -102,7 +145,10 @@ PUT /<verified-recovery>/_settings
 # Repoint the recorded aliases, verify them, then restore original write settings.
 ```
 
-The script never archives or deletes the fixed recovery reservation. Before a new
+The script never archives or deletes fixed recovery or lock reservations. Old
+reindex failures, partial backups and existing source write blocks must be
+audited and resolved explicitly before a new split run; changing strategy or
+run ID does not take ownership of the old run. Before a new
 apply following a failed run, an operator must audit the old run and preserve a
 verified independent recovery copy before explicitly resolving that exact reserved
 name. Do not use wildcard deletes. Retained same-cluster copies are recovery aids,
