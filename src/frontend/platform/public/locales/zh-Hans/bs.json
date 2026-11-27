@@ -407,7 +407,6 @@
     "userGroupsSel": "用户组选择",
     "roleList": "角色列表",
     "userGroupList": "用户组列表",
-    "confirmText": "是否删除",
     "roleName": "角色名称",
     "roleNameInputPlaceholder": "请输入角色名称（同一个作用域不可重复）",
     "roleType": "角色类型",
@@ -442,7 +441,13 @@
     "adminBackendMenus": "管理后台菜单",
     "quotaMoreExpand": "更多资源配额（知识空间数量、工作流等）",
     "quotaMoreCollapse": "收起更多配额",
-    "roleDeleteRevokeWarning": "该角色已分配给 {{count}} 名用户，删除后将撤销其通过该角色获得的菜单与配额策略（用户仍保留账号）。",
+    "roleDeleteTitle": "删除角色「{{name}}」？",
+    "deleteConfirmation": {
+      "cancel": "暂不",
+      "confirm": "确认删除"
+    },
+    "roleDeleteDescription": "用户将失去此角色，菜单权限和配额将重新计算。部门默认分配、审批、模型可见范围和积分规则中对此角色的引用将失效。",
+    "roleDeleteSharedScope": "影响所有使用此角色的租户。",
     "systemPresetGlobal": "系统预设",
     "roleTenantScoped": "租户内自定义",
     "quotaLabel": {
@@ -631,7 +636,10 @@
     "usernameMaxLength": "昵称须为1–32个字符",
     "passwordRequirements": "初始密码至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合",
     "roleRequired": "至少选择一个角色",
-    "userCreationSuccess": "创建用户成功！已复制用户名和初始密码到剪贴板"
+    "userCreationSuccess": "创建用户成功！已复制用户名和初始密码到剪贴板",
+    "userRolesDescription": "配置不同角色能使用的菜单入口",
+    "workbenchMenuEntryHint": "取消勾选后，用户将无法从管理后台进入工作台。",
+    "adminMenuEntryHint": "取消勾选后，工作台中的「管理后台」入口将隐藏，后台各业务菜单将不可用。"
   },
   "skills": {
     "createNew": "新建技能",
