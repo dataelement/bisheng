@@ -276,7 +276,7 @@ function Tabs({
                   <span aria-hidden className="invisible font-medium">
                     {item.label}
                   </span>
-                  <span className="absolute inset-0 flex items-center justify-center">{item.label}</span>
+                  <span className="absolute left-0 right-0 top-0 bottom-0 flex items-center justify-center">{item.label}</span>
                 </span>
                 {/* §4 — count badge, drawn by the Badge component's standalone form
                     (组件-Badge徽标.md §2): same 16px pill, same caption-sm/500, so

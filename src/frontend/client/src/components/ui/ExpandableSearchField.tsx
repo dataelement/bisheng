@@ -177,7 +177,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                 {!expanded && (
                     <button
                         type="button"
-                        className="absolute inset-0 cursor-pointer rounded-[inherit] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-deep"
+                        className="absolute left-0 top-0 h-full w-full cursor-pointer appearance-none rounded-[inherit] border-0 bg-transparent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-deep"
                         aria-label={titleWhenCollapsed ?? placeholder}
                         aria-expanded={false}
                         disabled={disabled}

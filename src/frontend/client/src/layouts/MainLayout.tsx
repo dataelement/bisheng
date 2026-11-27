@@ -258,7 +258,7 @@ export default function MainLayout() {
         // Desktop remains a flat white page split by the sidebar's hairline (Figma 13139:111431).
         isMobile
           ? "min-h-[100dvh] overflow-x-clip bg-white"
-          : "h-[100dvh] overflow-hidden bg-white",
+          : "h-screen supports-[height:100dvh]:h-[100dvh] overflow-hidden bg-white",
       )}
     >
       <DesktopShellBridge />
@@ -292,7 +292,7 @@ export default function MainLayout() {
               desktopViewport.viewport,
               // Live route shells use page-owned scrolling, like the cached module homes.
               isLiveRoute
-                ? "h-[100dvh] min-h-0 overflow-hidden overscroll-y-none"
+                ? "h-screen supports-[height:100dvh]:h-[100dvh] min-h-0 overflow-hidden overscroll-y-none"
                 : isMobile
                   ? "h-auto min-h-[100dvh] overflow-visible"
                   : "scrollbar-os h-[100dvh] overflow-y-auto overscroll-y-none",

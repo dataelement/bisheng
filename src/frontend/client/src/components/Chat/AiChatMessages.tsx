@@ -4,7 +4,7 @@
  * Each node with multiple children shows SiblingSwitch for navigation.
  */
 import { ArrowDownIcon, CornerDownRightIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
@@ -216,7 +216,6 @@ export default function AiChatMessages({
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const messagesScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const emptyScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const endRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     // Track whether user has manually scrolled up
     const isUserScrolledUp = useRef(false);
@@ -270,12 +269,19 @@ export default function AiChatMessages({
         setShowScrollBtn(!nearBottom);
     };
 
+    const scrollToBottom = useCallback(() => {
+        isUserScrolledUp.current = false;
+        const container = scrollRef.current;
+        // Keep the workbench shell out of the message list's scroll.
+        container?.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    }, []);
+
     // Auto-scroll to bottom on new messages — only if user hasn't scrolled up
     useEffect(() => {
-        if (!isUserScrolledUp.current && endRef.current) {
-            endRef.current.scrollIntoView({ behavior: "smooth" });
+        if (!isUserScrolledUp.current) {
+            scrollToBottom();
         }
-    }, [messages]);
+    }, [messages, scrollToBottom]);
 
     // ResizeObserver to detect content height changes (e.g. thinking block collapse/expand)
     useEffect(() => {
@@ -293,11 +299,6 @@ export default function AiChatMessages({
     // Show/hide scroll-to-bottom button and track user scroll position
     const handleScroll = () => {
         checkNearBottom();
-    };
-
-    const scrollToBottom = () => {
-        isUserScrolledUp.current = false;
-        endRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
     useScrollOnUserMessage(messages, conversationId, scrollOnUserMessage, () => {
@@ -476,7 +477,6 @@ export default function AiChatMessages({
                             />
                         )
                     )}
-                    <div ref={endRef} className="h-0 shrink-0" />
                     </SelectionMessagesProvider>
                 </div>
             </div>

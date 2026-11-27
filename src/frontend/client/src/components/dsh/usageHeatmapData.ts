@@ -53,7 +53,7 @@ function combine(points: DshUsageTimeBucket[]): DshUsageTimeBucket | undefined {
     return {
         ...metrics,
         start_at: points[0].start_at,
-        end_at: points.at(-1)!.end_at,
+        end_at: points[points.length - 1].end_at,
     }
 }
 
@@ -97,7 +97,7 @@ export function buildUsageHeatmap(summary: DshUsageTimeSummary, now = Date.now()
             if (days <= 62 && row === 0 && column % 3 === 0) columnLabels.push({ label: dateLabel, column })
             else if (days > 62) {
                 const month = `${date.getUTCFullYear()}-${twoDigits(date.getUTCMonth() + 1)}`
-                if (month !== previousMonth && column !== columnLabels.at(-1)?.column) {
+                if (month !== previousMonth && column !== columnLabels[columnLabels.length - 1]?.column) {
                     columnLabels.push({ label: month, column })
                     previousMonth = month
                 }

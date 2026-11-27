@@ -16,6 +16,6 @@ export function UserMessageReferences({ text, references }: UserMessageReference
                 <InlineChatReference kind={is_tag ? "tag" : kind} label={label} />
             </Fragment>
         ))}
-        {text.slice(ordered.at(-1)?.offset ?? 0)}
+        {text.slice(ordered[ordered.length - 1]?.offset ?? 0)}
     </>;
 }

@@ -2094,6 +2094,21 @@ button.scroll-convo {
   font-size: 0.5rem;
 }
 
+@supports not ((inset: 0) and (height: fit-content)) {
+  .workbench-confirm-dialog {
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    height: auto;
+    max-height: calc(100vh - 2rem);
+    margin: 0;
+    overflow-y: auto;
+    transform: translate(-50%, -50%);
+    animation: none;
+  }
+}
+
 @supports (selector(:has(*))) {
   .result-streaming> :is(ul, ol):last-child>li:last-child:not(:has(> :is(ul, ol, pre))):after {
     content: '⬤';
