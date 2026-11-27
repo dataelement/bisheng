@@ -18,6 +18,7 @@ import jwt
 from bisheng.common.errcode.oauth2_provider import (
     OAuth2AuthorizationExpiredError,
     OAuth2ClientDisabledError,
+    OAuth2ClientNotFoundError,
     OAuth2InvalidAccessTokenError,
     OAuth2InvalidClientAuthError,
     OAuth2InvalidGrantError,
@@ -85,6 +86,7 @@ class OAuth2AuthService:
         self.keys = keys
         self._session_factory = session_factory
         self._identity_lookup = identity_lookup
+        self._exchange_validator = None
 
     @staticmethod
     def build_openid_metadata(origin: str) -> dict[str, Any]:
@@ -97,7 +99,11 @@ class OAuth2AuthService:
             "revocation_endpoint": f"{base}/api/v1/oauth2/revoke",
             "jwks_uri": f"{base}/api/v1/oauth2/jwks",
             "response_types_supported": ["code"],
-            "grant_types_supported": ["authorization_code", "refresh_token"],
+            "grant_types_supported": [
+                "authorization_code",
+                "refresh_token",
+                "urn:ietf:params:oauth:grant-type:token-exchange",
+            ],
             "subject_types_supported": ["public"],
             "id_token_signing_alg_values_supported": ["ES256"],
             "scopes_supported": ["openid", "profile", "email", "offline_access", "dsh"],
@@ -487,6 +493,10 @@ class OAuth2AuthService:
     async def userinfo(self, bearer_header: str) -> OAuth2UserInfoResponse:
         claims = await self.decode_access_token(bearer_header)
         session_id = str(claims["session_id"])
+        if "token_exchange" in claims:
+            if self._exchange_validator is None:
+                raise OAuth2InvalidAccessTokenError()
+            await self._exchange_validator(claims)
 
         def _check_session():
             with self._session_factory() as db:
@@ -508,7 +518,7 @@ class OAuth2AuthService:
 
         try:
             client = await self.clients.get_active_client_model(sess["client_id"])
-        except OAuth2ClientDisabledError as exc:
+        except (OAuth2ClientDisabledError, OAuth2ClientNotFoundError) as exc:
             raise OAuth2InvalidAccessTokenError() from exc
         if not client.enabled:
             raise OAuth2InvalidAccessTokenError()

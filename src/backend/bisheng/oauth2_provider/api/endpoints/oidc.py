@@ -9,12 +9,14 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.oauth2_provider import (
     OAuth2InvalidClientAuthError,
     OAuth2InvalidRequestError,
     OAuth2UnsupportedGrantTypeError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
+from bisheng.oauth2_provider.api.endpoints.exchange import parse_exchange
 from bisheng.oauth2_provider.api.protocol import OAuth2ProtocolRoute
 from bisheng.oauth2_provider.domain.schemas.auth import (
     OAuth2ConsentDecision,
@@ -23,6 +25,8 @@ from bisheng.oauth2_provider.domain.schemas.auth import (
     OAuth2TokenResponse,
     OAuth2UserInfoResponse,
 )
+from bisheng.oauth2_provider.domain.schemas.exchange import EXCHANGE_GRANT_TYPE
+from bisheng.oauth2_provider.domain.services.exchange_service import event
 from bisheng.oauth2_provider.runtime import OAuth2ProviderRuntime, get_oauth2_runtime
 
 public_router = APIRouter(prefix="/oauth2", tags=["OAuth2 Provider"], route_class=OAuth2ProtocolRoute)
@@ -182,12 +186,34 @@ async def submit_consent(
 
 @public_router.post("/token", response_model=OAuth2TokenResponse)
 async def token(request: Request, runtime: OAuth2ProviderRuntime = Depends(get_oauth2_runtime)):
+    await request.body()  # Preserve raw fields for strict exchange parsing after grant dispatch.
     params = await _parse_form_or_json(request)
-    basic_id, basic_secret = _parse_basic_client_auth(request)
     grant_type = params.get("grant_type")
+    if grant_type == EXCHANGE_GRANT_TYPE:
+        try:
+            params = await parse_exchange(request)
+            basic_id, basic_secret = _parse_basic_client_auth(request)
+        except BaseErrorCode as exc:
+            event("request_denied_" + str(exc.code))
+            raise
+    else:
+        basic_id, basic_secret = _parse_basic_client_auth(request)
     client_id = basic_id or params.get("client_id")
     client_secret = basic_secret if basic_id is not None else params.get("client_secret")
     origin = resolve_public_origin(request)
+
+    if grant_type == EXCHANGE_GRANT_TYPE:
+        result = await runtime.exchange.exchange_token(
+            origin=origin,
+            client_id=client_id,
+            client_secret=client_secret,
+            subject_token=params.get("subject_token"),
+            subject_token_type=params.get("subject_token_type"),
+            audience=params.get("audience"),
+            scope=params.get("scope"),
+            requested_token_type=params.get("requested_token_type"),
+        )
+        return JSONResponse(content=result)
 
     if grant_type == "authorization_code":
         code = params.get("code")

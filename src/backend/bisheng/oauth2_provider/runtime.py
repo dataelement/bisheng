@@ -12,6 +12,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session
 from bisheng.oauth2_provider.domain.services.auth_service import OAuth2AuthService, OAuth2UserIdentity
 from bisheng.oauth2_provider.domain.services.client_service import OAuth2ClientService
+from bisheng.oauth2_provider.domain.services.exchange_service import OAuth2ExchangeService
 from bisheng.oauth2_provider.infrastructure.code_store import OAuth2CodeStore
 from bisheng.oauth2_provider.infrastructure.key_service import OAuth2KeyService
 
@@ -71,6 +72,7 @@ class OAuth2ProviderRuntime:
     clients: OAuth2ClientService
     auth: OAuth2AuthService
     keys: OAuth2KeyService
+    exchange: OAuth2ExchangeService | None = None
 
 
 async def build_oauth2_runtime() -> OAuth2ProviderRuntime:
@@ -87,7 +89,11 @@ async def build_oauth2_runtime() -> OAuth2ProviderRuntime:
         session_factory=oauth2_db_session,
         identity_lookup=lookup_user_identity,
     )
-    return OAuth2ProviderRuntime(clients=clients, auth=auth, keys=keys)
+    exchange = OAuth2ExchangeService(
+        clients=clients, keys=keys, session_factory=oauth2_db_session, identity_lookup=lookup_user_identity
+    )
+    auth._exchange_validator = exchange.validate_exchange_claims
+    return OAuth2ProviderRuntime(clients=clients, auth=auth, keys=keys, exchange=exchange)
 
 
 async def get_oauth2_runtime(request: Request) -> OAuth2ProviderRuntime:

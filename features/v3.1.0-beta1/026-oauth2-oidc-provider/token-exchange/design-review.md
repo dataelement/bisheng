@@ -1,6 +1,6 @@
 # Token Exchange 设计评审记录
 
-对象：design.md，对照已接受spec、design-checklist的24项、constitution与发布契约。状态：主代理静态清单自查完成，等待用户技术设计确认；没有实现或测试通过声明。
+对象：design.md，对照已接受spec、design-checklist的24项、constitution与发布契约。历史设计评审记录：主代理静态清单自查完成后，用户已明确“设计确认，开始编码”。当前实现/测试结果见verification.md、code-review.md；本记录以下自查内容保留为当时证据。
 
 ## 核查及修订
 
