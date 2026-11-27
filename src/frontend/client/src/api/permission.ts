@@ -312,7 +312,7 @@ export async function getAllResourcePermissionGrants(
 export async function getMyResourcePermissions(
   resourceType: ResourceType,
   resourceId: string,
-  config?: PermissionRequestConfig
+  config?: PermissionRequestConfig & { showError?: boolean }
 ): Promise<MyResourcePermissions> {
   const res = await request.get(
     `${permissionResourcePath(resourceType, resourceId)}/my-permissions`,

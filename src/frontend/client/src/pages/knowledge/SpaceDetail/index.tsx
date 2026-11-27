@@ -532,7 +532,11 @@ export function KnowledgeSpaceContent({
         // upload_file made every visit pop "Action upload_file is unavailable
         // for knowledge_space" beside an upload button that was already hidden.
         // A held-actions list just leaves the action out. One request, not two.
-        getMyResourcePermissions(objectType, String(objectId), { signal: controller.signal })
+        getMyResourcePermissions(objectType, String(objectId), {
+            signal: controller.signal,
+            // The folder's file-list request owns its unavailable state.
+            showError: !currentFolderId,
+        })
             .then((summary) => {
                 if (cancelled) return;
                 const held = new Set(summary?.actions ?? []);

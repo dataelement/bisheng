@@ -188,9 +188,8 @@ customAxios.interceptors.response.use(
     }
 
     // Unified business-error pipeline for callers that opted out of the 403
-    // redirect: translate the api_errors.<code> i18n key, toast it, and reject
-    // the promise so the caller's onError / .catch fires. Old call sites that
-    // rely on silent failure (no skip403Redirect) keep the previous behavior.
+    // redirect: translate the api_errors.<code> key and reject the promise so
+    // the caller's error handler runs. Background reads can opt out of the toast.
     if (
       response.config.skip403Redirect
       && response.data
@@ -198,7 +197,7 @@ customAxios.interceptors.response.use(
     ) {
       const message = translateApiErrorMessage(response.data);
       const display = message || response.data.status_message || "";
-      if (display) {
+      if (display && response.config.showError !== false) {
         window.showToast?.({ message: display, status: 'warning' });
       }
       const err: any = new Error(display || `request failed (${response.data.status_code})`);
