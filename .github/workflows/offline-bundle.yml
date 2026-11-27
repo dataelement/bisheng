@@ -65,7 +65,7 @@ jobs:
           --version "${VERSION#v}" --arch "$ARCH" \
           --images-file images.txt \
           --docker-dir "$RUNNER_TEMP/docker" \
-          --out dist --compress zstd --split-size 2G
+          --out dist --compress zstd --split-size 2G --with-gateway
 
     - name: Upload to Nexus
       run: |

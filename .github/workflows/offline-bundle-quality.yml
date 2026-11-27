@@ -1,0 +1,33 @@
+name: Offline bundle quality
+on:
+  pull_request:
+    paths:
+      - deploy.sh
+      - docker/**
+      - scripts/*bundle*.sh
+      - scripts/prepare-offline-delivery.sh
+      - scripts/nexus-upload.sh
+      - scripts/collect-images.sh
+      - scripts/tests/test_offline_deploy.py
+      - scripts/tests/compose/test-install.sh
+      - .github/workflows/offline-bundle*.yml
+      - .drone.yml
+  workflow_dispatch:
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline delivery CLI E2E (mock Docker, real local HTTP)
+        run: python3 -m unittest discover -s scripts/tests -p test_offline_deploy.py -v
+      - name: Bundle and upload regressions
+        run: bash scripts/tests/offline-bundle.sh
+      - name: Compose installer regressions
+        run: bash scripts/tests/compose/test-install.sh

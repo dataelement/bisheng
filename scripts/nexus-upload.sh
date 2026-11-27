@@ -71,32 +71,66 @@ REMOTE_URL_BASE="${BASE_URL}/repository/${REPO}/${REMOTE_DIR}"
 shopt -s nullglob
 LOCAL=(); REMOTE=()
 
-PARTS=( "${DIR}"/*.tar.part.* )
-if [[ ${#PARTS[@]} -gt 0 ]]; then
-  for p in "${PARTS[@]}"; do LOCAL+=( "$p" ); REMOTE+=( "$(basename "$p")" ); done
+INDEX_FILE=""
+if [[ -f "$DIR/download.json" ]]; then
+  INDEX_FILE="$DIR/download.json"
+  plan="$(python3 - "$DIR" "$VERSION" "$ARCH" <<'PYINDEX'
+import hashlib, json, pathlib, re, sys
+root = pathlib.Path(sys.argv[1]).resolve()
+index = json.loads((root / 'download.json').read_text())
+if index.get('version') != sys.argv[2] or index.get('arch') != sys.argv[3]:
+    raise SystemExit('下载清单版本/架构与上传目标不一致')
+seen = set()
+for item in index['files']:
+    name = item['name']
+    if not re.fullmatch(r'[A-Za-z0-9_./+-]+', name) or any(p in ('', '.', '..') for p in name.split('/')) or name in seen:
+        raise SystemExit('下载清单文件名无效或重复')
+    seen.add(name)
+    source = root / name
+    if source.is_symlink() or root not in source.resolve().parents:
+        raise SystemExit('上传文件不能逃逸产物目录')
+    digest = hashlib.sha256()
+    with source.open('rb') as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b''):
+            digest.update(chunk)
+    if source.stat().st_size != item['size'] or digest.hexdigest() != item['sha256']:
+        raise SystemExit('上传文件与下载清单不一致：' + name)
+    print(name)
+PYINDEX
+)" || die "下载清单或交付文件无效"
+  while IFS= read -r name; do LOCAL+=( "$DIR/$name" ); REMOTE+=( "$name" ); done <<< "$plan"
 else
-  TARS=( "${DIR}"/*.tar )
-  [[ ${#TARS[@]} -gt 0 ]] || die "${DIR} 下既没有 *.tar.part.* 也没有 *.tar"
-  for t in "${TARS[@]}"; do LOCAL+=( "$t" ); REMOTE+=( "$(basename "$t")" ); done
-fi
+  # Legacy bundles produced before download.json retain their existing upload layout.
+  PARTS=( "${DIR}"/*.tar.part.* )
+  if [[ ${#PARTS[@]} -gt 0 ]]; then
+    for p in "${PARTS[@]}"; do LOCAL+=( "$p" ); REMOTE+=( "$(basename "$p")" ); done
+  else
+    TARS=( "${DIR}"/*.tar )
+    [[ ${#TARS[@]} -gt 0 ]] || die "${DIR} 下既没有 *.tar.part.* 也没有 *.tar"
+    for t in "${TARS[@]}"; do LOCAL+=( "$t" ); REMOTE+=( "$(basename "$t")" ); done
+  fi
 
-MFS=( "${DIR}"/manifest*.json )
-for m in "${MFS[@]}"; do
-  case "$(basename "$m")" in
-    manifest.json|manifest-*.json) LOCAL+=( "$m" ); REMOTE+=( "manifest.json" ); break ;;
-  esac
-done
-SS=( "${DIR}"/SHA256SUMS* )
-for s in "${SS[@]}"; do
-  case "$(basename "$s")" in
-    *.parts) continue ;;
-    SHA256SUMS|SHA256SUMS-*) LOCAL+=( "$s" ); REMOTE+=( "SHA256SUMS" ); break ;;
-  esac
-done
+  MFS=( "${DIR}"/manifest*.json )
+  for m in "${MFS[@]}"; do
+    case "$(basename "$m")" in
+      manifest.json|manifest-*.json) LOCAL+=( "$m" ); REMOTE+=( "manifest.json" ); break ;;
+    esac
+  done
+  SS=( "${DIR}"/SHA256SUMS* )
+  for s in "${SS[@]}"; do
+    case "$(basename "$s")" in
+      *.parts) continue ;;
+      SHA256SUMS|SHA256SUMS-*) LOCAL+=( "$s" ); REMOTE+=( "SHA256SUMS" ); break ;;
+    esac
+  done
+
+fi
 
 log "待上传 ${#LOCAL[@]} 个文件 -> ${REMOTE_DIR}"
 
-file_bytes() { stat -f %z "$1" 2>/dev/null || stat -c %s "$1"; }
+file_bytes() {
+  if stat -c %s "$1" >/dev/null 2>&1; then stat -c %s "$1"; else stat -f %z "$1"; fi
+}
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   log "== DRY RUN =="
@@ -161,14 +195,16 @@ remote_size_matches() {
 }
 
 upload_one() {
-  local f="$1" name="$2" http body attempt=1
+  local f="$1" name="$2" http body attempt=1 directory="$REMOTE_DIR" filename
+  filename="${name##*/}"
+  [[ "$name" != */* ]] || directory="${REMOTE_DIR}/${name%/*}"
   while [[ "$attempt" -le "$RETRIES" ]]; do
     body="$(mktemp)"
     if [[ "$METHOD" == "rest" ]]; then
       http="$(curl -sS -o "$body" -w '%{http_code}' -u "${USER}:${PASS}" \
-        -F "raw.directory=${REMOTE_DIR}" \
+        -F "raw.directory=${directory}" \
         -F "raw.asset1=@${f};type=application/octet-stream" \
-        -F "raw.asset1.filename=${name}" \
+        -F "raw.asset1.filename=${filename}" \
         "${BASE_URL}/service/rest/v1/components?repository=${REPO}" || echo "000")"
     else
       http="$(curl -sS -o "$body" -w '%{http_code}' -u "${USER}:${PASS}" \
@@ -215,19 +251,31 @@ verify_one() {
   log "VERIFY ${name}  sha256 ok"
 }
 
-for i in "${!LOCAL[@]}"; do
-  f="${LOCAL[$i]}"; name="${REMOTE[$i]}"
+checked_upload() {
+  local f="$1" name="$2"
   if [[ "$VERIFY" == sha256 ]]; then
     precheck_file "$f" "$name"
     case "$PRECHECK" in
-      match) log "SKIP ${name}  (远端 sha256 一致)"; continue ;;
+      match) log "SKIP ${name}  (远端 sha256 一致)"; return 0 ;;
       missing) ;;
-      *) FAILED=$((FAILED + 1)); continue ;;
+      *) return 1 ;;
     esac
   fi
-  if ! upload_one "$f" "$name"; then FAILED=$((FAILED + 1)); continue; fi
-  if ! verify_one "$f" "$name"; then FAILED=$((FAILED + 1)); fi
+  upload_one "$f" "$name" && verify_one "$f" "$name"
+}
+
+for i in "${!LOCAL[@]}"; do
+  if ! checked_upload "${LOCAL[$i]}" "${REMOTE[$i]}"; then FAILED=$((FAILED + 1)); fi
 done
+
+# A fixed-version index is the publication marker: never publish it after a partial upload.
+if [[ -n "$INDEX_FILE" && "$FAILED" -eq 0 ]]; then
+  if checked_upload "$INDEX_FILE" download.json; then
+    LOCAL+=( "$INDEX_FILE" ); REMOTE+=( download.json )
+  else
+    FAILED=$((FAILED + 1))
+  fi
+fi
 
 if [[ "$UPDATE_LATEST" -eq 1 && "$FAILED" -eq 0 ]]; then
   LATEST_NAME="latest-${ARCH}.json"

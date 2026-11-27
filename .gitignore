@@ -284,7 +284,6 @@ docker/mysql/data/*
 docker/office/bisheng/*.gz
 
 bisheng-sync.sh
-/deploy.sh
 .omx/
 
 # Local installers / stray root files (do not commit)

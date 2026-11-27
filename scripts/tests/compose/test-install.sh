@@ -277,7 +277,7 @@ pass 'Offline install rejects a different CPU architecture before load or compos
 
 new_case
 prepare_offline amd64
-printf 'deadbeef  manifest.json\n' > "${CASE_ROOT}/SHA256SUMS"
+printf '0000000000000000000000000000000000000000000000000000000000000000  manifest.json\n' > "${CASE_ROOT}/SHA256SUMS"
 TEST_UNAME=x86_64 run_install --offline
 failed
 contains "${CASE_ROOT}/err" '离线包校验失败'

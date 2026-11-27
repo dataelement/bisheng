@@ -1,5 +1,7 @@
 # BiSheng 全新部署
 
+联网电脑下载、拷贝至隔离服务器部署，使用统一 `deploy.sh download/install`，见[离线包部署使用说明](offline-install.md)。
+
 需要已启动的 Docker 和 Docker Compose。推荐 Compose V2；也支持具备 profiles 和完成依赖能力的 `docker-compose`。
 
 从代码根目录执行：

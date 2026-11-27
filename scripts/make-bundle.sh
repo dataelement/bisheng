@@ -3,8 +3,9 @@
 # images.txt 每行必须是三列：ENV_NAME service ref
 #
 #   ./make-bundle.sh --version 3.1.0 --arch amd64 --images-file images.txt \
-#                    --docker-dir ./docker --out dist
+#                    --docker-dir ./docker --out dist [--with-gateway]
 set -euo pipefail
+export COPYFILE_DISABLE=1
 
 VERSION=""
 ARCH=""
@@ -15,6 +16,7 @@ COMPRESS="zstd"
 SPLIT_SIZE="2G"
 DO_PULL=1
 KEEP_STAGE=0
+WITH_GATEWAY=0
 DRY_RUN=0
 ZSTD_LEVEL=10
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -64,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     --zstd-level)   ZSTD_LEVEL="${2:?}"; shift 2 ;;
     --no-pull)      DO_PULL=0; shift ;;
     --keep-stage)   KEEP_STAGE=1; shift ;;
+    --with-gateway) WITH_GATEWAY=1; shift ;;
     --dry-run)      DRY_RUN=1; shift ;;
     -h|--help)      usage ;;
     *)              die "未知参数：$1（--help 查看用法）" ;;
@@ -177,6 +180,8 @@ docker_parent="$(cd "$(dirname "$DOCKER_DIR")" && pwd)"
 docker_base="$(basename "$DOCKER_DIR")"
 tar -czf "${STAGE}/docker.tar.gz" \
   --exclude='.git' --exclude='node_modules' --exclude='__pycache__' \
+  --exclude="${docker_base}/.env" --exclude="${docker_base}/.generated" \
+  --exclude="${docker_base}/data" --exclude="${docker_base}/mysql/data" \
   -C "$docker_parent" "$docker_base"
 
 log "生成 manifest.json"
@@ -280,3 +285,8 @@ log "== 产出 =="
 for p in "${PARTS[@]}"; do
   log "  $(basename "$p")  $(file_size "$p") bytes"
 done
+
+delivery_args=(--dir "$OUT_DIR" --version "$VERSION" --arch "$ARCH" --docker-dir "$DOCKER_DIR")
+[[ "$WITH_GATEWAY" == 0 ]] || delivery_args+=(--with-gateway)
+[[ "$DO_PULL" == 1 ]] || delivery_args+=(--no-pull)
+bash "$(dirname "${BASH_SOURCE[0]}")/prepare-offline-delivery.sh" "${delivery_args[@]}"
