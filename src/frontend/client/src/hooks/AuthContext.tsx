@@ -242,10 +242,10 @@ const AuthContextProvider = ({
     [user, error, isAuthenticated, token, userRole, adminRole, isUserLoading, login, logout],
   );
 
-  return <AuthContext.Provider value={memoedValue}>{authReady ? children : <div role="status">
-    {translate(hostPending ? 'platformAuth.hostReconnect' : startupFailed ? 'platformAuth.serviceUnavailable' : 'platformAuth.loading')}
-    {(startupFailed || hostPending) && <button type="button" onClick={() => hostPending ? requestHostAuthRenewal() : location.reload()}>{translate('platformAuth.retry')}</button>}
-  </div>}</AuthContext.Provider>;
+  return <AuthContext.Provider value={memoedValue}>{authReady ? children : (startupFailed || hostPending) ? <div role="status">
+    {translate(hostPending ? 'platformAuth.hostReconnect' : 'platformAuth.serviceUnavailable')}
+    <button type="button" onClick={() => hostPending ? requestHostAuthRenewal() : location.reload()}>{translate('platformAuth.retry')}</button>
+  </div> : null}</AuthContext.Provider>;
 };
 
 const useAuthContext = () => {

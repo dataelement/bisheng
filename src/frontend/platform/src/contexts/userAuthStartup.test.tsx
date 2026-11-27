@@ -43,6 +43,8 @@ it('does not mount business consumers until gateway binding initialization compl
   mount();
   expect(mocks.business).not.toHaveBeenCalled();
   expect(mocks.getUser).not.toHaveBeenCalled();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByText('platformAuth.loading')).not.toBeInTheDocument();
   await act(async () => { finish?.(null); });
   await screen.findByText('Alice');
   expect(mocks.business).toHaveBeenCalledOnce();

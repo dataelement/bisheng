@@ -306,10 +306,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 user, setUser, savedComponents, checkComponentsName, delComponent, addSavedComponent
             }}
         >
-            {startupReady && authPhase === 'ready' ? children : <div role="status">
-                {String(i18next.t(authPhase === 'host' ? 'platformAuth.hostReconnect' : authPhase === 'unavailable' ? 'platformAuth.serviceUnavailable' : 'platformAuth.loading'))}
-                {(authPhase === 'unavailable' || authPhase === 'host') && <button type="button" onClick={() => authPhase === 'host' ? requestHostAuthRenewal() : location.reload()}>{String(i18next.t('platformAuth.retry'))}</button>}
-            </div>}
+            {startupReady && authPhase === 'ready' ? children : (authPhase === 'unavailable' || authPhase === 'host') ? <div role="status">
+                {String(i18next.t(authPhase === 'host' ? 'platformAuth.hostReconnect' : 'platformAuth.serviceUnavailable'))}
+                <button type="button" onClick={() => authPhase === 'host' ? requestHostAuthRenewal() : location.reload()}>{String(i18next.t('platformAuth.retry'))}</button>
+            </div> : null}
         </userContext.Provider>
     );
 }
