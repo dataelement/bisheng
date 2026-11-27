@@ -14,7 +14,6 @@ from sqlmodel import select
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.oauth2_provider import (
     OAuth2AuthorizationExpiredError,
-    OAuth2ConsentRequiredError,
     OAuth2InvalidGrantError,
 )
 from bisheng.oauth2_provider.domain.models.platform_exchange import OAuth2PlatformExchangeSession, OAuth2UserConsent
@@ -144,8 +143,8 @@ async def test_reregistered_client_cannot_inherit_old_authorization(request, pha
                 redirect_uri="https://b.example/cb",
                 code_verifier=verifier,
             )
-    with pytest.raises(OAuth2ConsentRequiredError):
-        await exchange(env)
+    # New first-party exchange is independent of the replaced OAuth consent.
+    await exchange(env)
 
 
 async def test_public_target_explicitly_enabled_accepts_first_party(request):

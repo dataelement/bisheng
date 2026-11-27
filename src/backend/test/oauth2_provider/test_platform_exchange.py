@@ -13,7 +13,7 @@ from sqlmodel import SQLModel, select
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
-from bisheng.common.errcode.oauth2_provider import OAuth2ConsentRequiredError, OAuth2InvalidAccessTokenError
+from bisheng.common.errcode.oauth2_provider import OAuth2InvalidAccessTokenError
 from bisheng.oauth2_provider.api.endpoints.oidc import consent_router, public_router
 from bisheng.oauth2_provider.domain.models.platform_exchange import OAuth2PlatformExchangeSession, OAuth2UserConsent
 from bisheng.oauth2_provider.domain.models.session import OAuth2RefreshToken
@@ -156,7 +156,6 @@ async def test_parent_revocation_is_online_enforced(platform_env, change):
     [
         {"enabled": False},
         {"allowed_scopes": ["openid"]},
-        {"require_consent": True},
     ],
 )
 async def test_current_target_state_is_enforced(platform_env, update):
@@ -170,28 +169,19 @@ async def test_current_target_state_is_enforced(platform_env, update):
 
 
 @pytest.mark.parametrize("platform_env", ["bisheng-web", "bisheng-mobile", "bisheng-desktop"], indirect=True)
-async def test_explicit_user_consent_scope_and_revocation(platform_env):
+async def test_first_party_is_silent_regardless_of_oauth_consent(platform_env):
     runtime, *_ = platform_env
     await runtime.clients.update_client("platform-target", OAuth2ClientUpdate(require_consent=True))
-    with pytest.raises(OAuth2ConsentRequiredError):
-        await exchange(platform_env)
-    await approve(runtime, "openid", decision="deny")
-    with pytest.raises(OAuth2ConsentRequiredError):
-        await exchange(platform_env)
-    await approve(runtime, "openid", direct=True)
-    with pytest.raises(OAuth2ConsentRequiredError):
-        await exchange(platform_env, scope="openid")
-    await approve(runtime, "openid")
-    await exchange(platform_env, scope="openid")
-    with pytest.raises(OAuth2ConsentRequiredError):
-        await exchange(platform_env)
-    await approve(runtime, "openid profile")
     result = await exchange(platform_env)
-    await runtime.platform_exchange.revoke_consent("platform-target", 7, 8)
     await runtime.auth.userinfo("Bearer " + result["access_token"])
+    with runtime.auth._session_factory() as db:
+        assert db.exec(select(OAuth2UserConsent)).all() == []
+    await approve(runtime, "openid", decision="deny")
+    await exchange(platform_env)
+    await approve(runtime, "openid")
     await runtime.platform_exchange.revoke_consent("platform-target", 7, 9)
-    with pytest.raises(OAuth2InvalidAccessTokenError):
-        await runtime.auth.userinfo("Bearer " + result["access_token"])
+    await runtime.auth.userinfo("Bearer " + result["access_token"])
+    await exchange(platform_env)
 
 
 @pytest.mark.parametrize("scope", [None, "", "openid dsh", "offline_access", "admin", "openid email unknown"])
@@ -211,7 +201,7 @@ async def test_parent_access_and_session_cap(platform_env):
 
 
 @pytest.mark.parametrize("platform_env", ["bisheng-web", "bisheng-mobile", "bisheng-desktop"], indirect=True)
-async def test_http_cookie_bearer_body_and_consent_error(platform_env):
+async def test_http_cookie_bearer_body_and_silent_consent(platform_env):
     runtime, source, _, _, token, _, app = platform_env
     data = {
         "grant_type": EXCHANGE_GRANT_TYPE,
@@ -238,7 +228,7 @@ async def test_http_cookie_bearer_body_and_consent_error(platform_env):
         assert r.status_code == 400 and r.json()["error"] == "invalid_request"
         await runtime.clients.update_client("platform-target", OAuth2ClientUpdate(require_consent=True))
         r = client.post("/api/v1/oauth2/token", data=data, headers=headers)
-        assert r.status_code == 400 and r.json()["error"] == "consent_required"
+        assert r.status_code == 200, r.text
 
 
 @pytest.mark.parametrize(

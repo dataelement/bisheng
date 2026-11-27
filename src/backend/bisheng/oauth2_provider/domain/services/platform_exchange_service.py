@@ -1,4 +1,4 @@
-"""First-party exchange to enabled applications; explicit user consent is preserved."""
+"""Silent first-party exchange to enabled applications without OAuth consent prompts."""
 
 import asyncio
 import time
@@ -10,7 +10,6 @@ from pydantic import ValidationError
 
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.oauth2_provider import (
-    OAuth2ConsentRequiredError,
     OAuth2InvalidAccessTokenError,
     OAuth2InvalidGrantError,
     OAuth2InvalidRequestError,
@@ -44,10 +43,7 @@ class OAuth2PlatformExchangeService:
             raise OAuth2InvalidTargetError()
         if not scopes or not scopes <= set(target.allowed_scopes or []) & IDENTITY_SCOPES:
             raise OAuth2InvalidScopeError()
-        if target.require_consent:
-            consent = OAuth2PlatformExchangeRepository(db).get_consent(target, user_id, tenant_id)
-            if not consent or not scopes <= set(consent.scopes or []):
-                raise OAuth2ConsentRequiredError()
+        # Verified first-party sessions exchange silently, independent of OAuth consent.
         return target
 
     async def _verify_parent(self, reference):

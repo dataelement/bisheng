@@ -21,7 +21,7 @@ scope=openid profile email
 
 ## xpie 配置与用户授权
 
-目标 `xpie` 必须是已启用的非内置应用；第一方平台会话换证不要求目标额外开启 Token Exchange Grant Type。第三方 OAuth 来源的换证授权规则保持不变。Scope 必须属于目标允许范围与 `openid/profile/email` 的交集。第一方来源不需要跨 OAuth 客户端的两两 exchange policy；`require_consent=true` 时仍须先通过正常授权页面取得该用户、租户及目标注册对应的同意，缺少同意会返回 `consent_required`，客户端应引导正常授权，不能自动批准。
+目标 `xpie` 必须是已启用的非内置应用；第一方平台会话换证不要求目标额外开启 Token Exchange Grant Type。第三方 OAuth 来源的换证授权规则保持不变。Scope 必须属于目标允许范围与 `openid/profile/email` 的交集。已验证的第一方平台会话静默换证：不需要两两 exchange policy，也不读取目标的 `require_consent` 或用户 OAuth 同意记录，不弹授权确认。该规则仅作用于第一方 Token Exchange；正常 OAuth 授权码登录和第三方来源换证仍遵循各自授权规则。目标启用状态、Scope、身份和租户绑定、父会话有效性及撤销检查继续执行。
 
 ## 兼容边界
 
