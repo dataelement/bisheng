@@ -5,15 +5,17 @@ import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels
 import InputFileComponent from '@/components/inputFileComponent';
 import { locationContext } from '@/contexts/locationContext';
 import { fileAcceptToInputAccept, normalizeFileAccept } from '@/util/fileAcceptUtils';
-import { useContext, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export function InputForm({ data, title, logo, onSubmit }: { data: RawMessage; title: string; logo?: ReactNode; onSubmit: (values: Record<string, unknown>, summary: string) => void }) {
     const { t } = useTranslation();
     const selectLabels = useSelectLabels();
+    const [uploading, setUploading] = useState<Record<string, boolean>>({});
     const { appConfig } = useContext(locationContext);
     return <MessageFrame title={title} logo={logo}>
         <WorkflowForm key={String(data.node_id)} fields={normalizeFormFields(data.value)} canExecute
+            submitDisabled={Object.values(uploading).some(Boolean)}
             submitLabel={t('report.start')} requiredMessage={label => t('report.requiredField', { label })}
             onInvalid={errors => toast.show({ type: 'warning', message: errors.join('\n') })}
             onSubmit={onSubmit}
@@ -23,6 +25,7 @@ export function InputForm({ data, title, logo, onSubmit }: { data: RawMessage; t
                     placeholder={t('report.fileRequired')} value="" multiple={field.multiple}
                     onChange={name => onFileNameChange(Array.isArray(name) ? name.join('\n') : name)}
                     suffixes={fileAcceptToInputAccept(normalizeFileAccept(field.raw.file_type, { mediaEnabled: !!appConfig.enableMediaUpload }))}
+                    onUploadStateChange={busy => setUploading(previous => ({ ...previous, [field.key]: busy }))}
                     onFileChange={value => onChange(Array.isArray(value) ? value : value ? [value] : [])} />;
                 if (field.type !== 'select') return null;
                 const options = field.options.map(text => ({ label: text, value: text }));

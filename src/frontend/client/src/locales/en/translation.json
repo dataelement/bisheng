@@ -2905,5 +2905,8 @@
     "checking": "Checking knowledge space access…",
     "failed": "Could not load knowledge space permissions. Refresh the page to try again.",
     "revoked": "Access has expired for these knowledge spaces: {{names}}. Choose accessible spaces in Add context."
-  }
+  },
+  "com_archive_batch_limit": "An attachment batch containing ZIP files is limited to 20 files and 100 MiB.",
+  "com_archive_wait_upload": "Wait for file uploads to finish before running.",
+  "com_archive_remove_group": "Remove all files from this ZIP"
 }

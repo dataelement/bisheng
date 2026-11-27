@@ -241,3 +241,8 @@ class KnowledgeSpaceListNotSupportedError(BaseErrorCode):
 class KnowledgeCreationScopeChangedError(BaseErrorCode):
     Code: int = 10993
     Msg: str = "Your tenant has changed; reopen the knowledge-base creation form"
+
+
+class KnowledgeArchiveUploadError(BaseErrorCode):
+    Code: int = 10994
+    Msg: str = "ZIP processing failed: {reason}"

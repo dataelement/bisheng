@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { InputFileList } from './fileUploads/InputFileList';
+import { useUploadFileStatus } from './fileUploads/hooks/useUploadFileStatus';
+import { applyParseStatusToFile, checkFileType, createUploadPayload, logUploadStage,
+    normalizeParseStatusEntry, notifyUploadedFiles, unwrapUploadPayload } from './fileUploads/uploadUtils';
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { uploadArchive } from "~/api/archiveUpload";
 import { uploadChatFile } from "~/api/apps";
-import { checkFileParseStatus } from "~/api/linsight";
-import { isFileNameAccepted } from "~/common/chatAccept";
-import { MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
-import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
 import { AttachmentIcon } from "~/components/svg";
 import useLocalize from "~/hooks/useLocalize";
 import { useToastContext } from "~/Providers";
@@ -14,7 +15,6 @@ import {
     getMaxFileSizeBytesForFile,
     isHiddenPath,
     isMediaFileName,
-    resolveUploadSizeLimits,
     type UploadSizeLimits,
 } from "~/pages/knowledge/knowledgeUtils";
 import { MAX_MEDIA_FILES } from "~/pages/appChat/fileAcceptUtils";
@@ -29,77 +29,7 @@ import {
     captureVideoPosterFromFile,
     getMediaKind,
     readMediaDurationFromFile,
-    isMediaAttachmentFile,
 } from "~/utils/mediaAttachmentUtils";
-
-/** Isolated blob for XHR — avoids stalling when blob: preview URLs read the same File. */
-function createUploadPayload(file: File): File | Blob {
-    if (getMediaKind(file.name) === 'video') {
-        return file.slice(0, file.size, file.type || undefined);
-    }
-    return file;
-}
-
-/** Unwrap BiSheng API envelope `{ status_code, data }` to the upload payload. */
-const unwrapUploadPayload = (response: any) => {
-    if (response?.status_code != null && response?.data != null) {
-        return response.data;
-    }
-    if (response?.data?.filepath != null || response?.data?.file_path != null) {
-        return response.data;
-    }
-    return response ?? {};
-};
-
-const notifyUploadedFiles = (getUploadedFileIds: () => any[], onChange: (files: any) => void) => {
-    const uploaded = getUploadedFileIds();
-    onChange(uploaded.length ? uploaded : []);
-};
-
-const logUploadStage = (fileName: string, stage: string, startedAt: number, extra?: Record<string, unknown>) => {
-    const elapsedMs = Math.round(performance.now() - startedAt);
-    console.info(`[client.media_upload] STAGE ${stage} elapsed_ms=${elapsedMs} file=${fileName}`, extra ?? '');
-};
-
-const normalizeParseStatusEntry = (entry: unknown) => {
-    if (typeof entry === 'string') {
-        return { parsing_status: entry };
-    }
-    if (entry && typeof entry === 'object') {
-        return entry as { parsing_status?: string; cover_filepath?: string };
-    }
-    return null;
-};
-
-const applyParseStatusToFile = (file: any, entry: { parsing_status?: string; cover_filepath?: string }) => {
-    const nextStatus = entry.parsing_status;
-    if (!nextStatus || nextStatus === 'failed') {
-        return null;
-    }
-    const coverFilepath = entry.cover_filepath;
-    const next = {
-        ...file,
-        parsingStatus: nextStatus,
-        isUploading: false,
-        ...(coverFilepath ? { cover_filepath: coverFilepath } : {}),
-    };
-    if (coverFilepath && file.mediaCoverUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(file.mediaCoverUrl);
-        next.mediaCoverUrl = undefined;
-    }
-    return next;
-};
-
-const checkFileType = (file, accepts) => {
-    if (!accepts || accepts === '*') return true;
-    // 后缀名匹配与「退出任务模式」的附件清理共用同一个匹配器
-    if (isFileNameAccepted(file.name, accepts)) return true;
-    // MIME type (例如 image/*)
-    return accepts
-        .split(',')
-        .map(a => a.trim().toLowerCase())
-        .some(type => !type.startsWith('.') && file.type.match(new RegExp(type.replace('*', '.*'))));
-};
 
 // @accepts '.png,.jpg'
 // `hideTrigger` hides the built-in attachment icon; caller invokes
@@ -128,18 +58,16 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
     const resolvedLimits: UploadSizeLimits | null = uploadSizeLimits ?? null;
     const defaultFileSizeLimit = (size ?? 50) * 1024 * 1024;
     const defaultParsingStatus = uploadMode === 'linsight' ? 'running' : 'completed';
-    const isMediaFileParsing = (file) => {
-        if (!file?.parsingStatus || ['completed', 'failed'].includes(file.parsingStatus)) {
-            return false;
-        }
-        return uploadMode === 'linsight';
-    };
     // Folder upload is task-mode only — daily chat has no agent workspace to
     // rebuild a directory tree in. It is NOT inferable from `uploadMode`: task
     // mode inside a conversation still uploads through the shared ('workstation')
     // endpoint and only becomes a task at submit time. The caller knows whether
     // task mode is on; this component does not.
     const supportsFolderUpload = !!allowFolderUpload;
+    const publishFiles = () => {
+        if (filesRef.current.some(file => file.isUploading)) onChange(null);
+        else notifyUploadedFiles(getUploadedFileIds, onChange);
+    };
     const getUploadedFileIds = () => filesRef.current
         .filter((f) => f.id && !f.isUploading && f.filePath)
         .map((f) => ({
@@ -330,13 +258,19 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         remainingUploadsRef.current += validFiles.length;
 
         const uploadOne = ({ file, id }: { file: File; id: string }) => {
+            if (removedIdsRef.current.has(id) || !filesRef.current.some(item => item.id === id)) {
+                removedIdsRef.current.delete(id);
+                return Promise.resolve();
+            }
             const uploadStartedAt = performance.now();
             const uploadPayload = createUploadPayload(file);
             logUploadStage(file.name, 'queue', uploadStartedAt, { size: file.size, type: file.type });
             let lastLoggedProgress = -1;
             const controller = new AbortController();
             uploadControllersRef.current.set(id, controller);
-            return uploadChatFile(v, uploadPayload, (progress) => {
+            const requestTask = file.name.toLowerCase().endsWith('.zip')
+                ? uploadArchive(file, accepts, controller.signal).then(data => ({ status_code: 200, data: { archive_files: data.files } }))
+                : uploadChatFile(v, uploadPayload, (progress) => {
                 if (progress >= 100 && lastLoggedProgress < 100) {
                     logUploadStage(file.name, 'xhr_upload_complete', uploadStartedAt, { progress });
                     lastLoggedProgress = 100;
@@ -358,7 +292,8 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 filesRef.current = updatedFiles;
                 setFiles(updatedFiles);
                 onFilesStateChange?.(updatedFiles);
-            }, uploadMode, file.name, controller.signal).then(response => {
+            }, uploadMode, file.name, controller.signal);
+            return requestTask.then(response => {
                 if (removedIdsRef.current.has(id)) {
                     // Removed mid-flight: the upload landed, but the attachment is
                     // gone from the user's list and must not come back.
@@ -374,6 +309,24 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 const responseData = unwrapUploadPayload(response);
                 // Upload API returns `filepath` (no underscore). Keep `file_path` fallback
                 // for any caller/endpoint that still uses the snake-case form.
+                if (Array.isArray(responseData.archive_files)) {
+                    const others = filesRef.current.filter(f => f.id !== id);
+                    const children = responseData.archive_files.map(child => ({
+                        id: child.file_id, fileId: child.file_id, name: child.display_name,
+                        relativePath: child.relative_path, filePath: child.file_path, size: child.size,
+                        archiveId: child.archive_id, type: '', isUploading: false,
+                        parsingStatus: 'completed', progress: 100,
+                    }));
+                    if (others.length + children.length > 20 || [...others, ...children].reduce((sum,f) => sum + (f.size || 0),0) > 100*1024*1024) {
+                        throw new Error(t('com_archive_batch_limit'));
+                    }
+                    filesRef.current = [...others, ...children];
+                    setFiles(filesRef.current);
+                    onFilesStateChange?.(filesRef.current);
+                    remainingUploadsRef.current -= 1;
+                    publishFiles();
+                    return;
+                }
                 const filePath = responseData.filepath ?? responseData.file_path;
                 if (!filePath) {
                     throw new Error('upload response missing filepath');
@@ -411,7 +364,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 // selection handler above.
 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
-                notifyUploadedFiles(getUploadedFileIds, onChange);
+                publishFiles();
                 logUploadStage(file.name, 'state_committed', uploadStartedAt);
             }).catch((e) => {
                 if (removedIdsRef.current.has(id)) {
@@ -424,10 +377,8 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 }
                 logUploadStage(file.name, 'failed', uploadStartedAt, { error: String(e) });
                 console.log('e :>> ', e);
-                showToast({ message: t('com_inputfiles_upload_failed', { 0: file.name }), status: 'warning' })
+                showToast({ message: e instanceof Error ? e.message : t('com_inputfiles_upload_failed', { 0: file.name }), status: 'warning' })
                 handleFileRemove(id);
-                remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
-                notifyUploadedFiles(getUploadedFileIds, onChange);
             }).finally(() => {
                 uploadControllersRef.current.delete(id);
                 removedIdsRef.current.delete(id);
@@ -435,7 +386,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         };
 
         // Video uploads are serialized so the XHR body is not starved by parallel work.
-        const hasVideo = validFiles.some(({ file }) => getMediaKind(file.name) === 'video');
+        const hasVideo = validFiles.some(({ file }) => getMediaKind(file.name) === 'video' || file.name.toLowerCase().endsWith('.zip'));
         const uploadTask = hasVideo
             ? validFiles.reduce(
                 (chain, item) => chain.then(() => uploadOne(item)),
@@ -444,7 +395,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             : Promise.all(validFiles.map((item) => uploadOne(item)));
 
         uploadTask.then(() => {
-            notifyUploadedFiles(getUploadedFileIds, onChange);
+            publishFiles();
         });
     };
 
@@ -552,89 +503,14 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         }
     }));
 
-    // Release any live object URLs when the component unmounts so pinned image
-    // previews don't leak blobs.
-    useEffect(() => () => {
-        filesRef.current.forEach(f => {
-            if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
-            if (f.mediaPreviewUrl) URL.revokeObjectURL(f.mediaPreviewUrl);
-            if (f.mediaCoverUrl?.startsWith('blob:')) URL.revokeObjectURL(f.mediaCoverUrl);
-        });
-    }, []);
-
-    const mergeParseStatusUpdates = useCallback((updates: Map<string, { parsing_status?: string; cover_filepath?: string }>) => {
-        if (!updates.size) return;
-
-        // Derived from filesRef, not inside a setFiles updater: updaters run during
-        // render, and the parent notifications below would then update AiChatInput
-        // mid-render — React warns ("Cannot update a component while rendering a
-        // different component") and drops the update.
-        let changed = false;
-        const nextFiles = filesRef.current.reduce((result, file) => {
-            const fileId = file.fileId || file.file_id;
-            const entry = updates.get(fileId);
-            if (!entry) {
-                result.push(file);
-                return result;
-            }
-            if (entry.parsing_status === 'failed') {
-                changed = true;
-                return result;
-            }
-            const nextFile = applyParseStatusToFile(file, entry);
-            if (!nextFile) {
-                return result;
-            }
-            changed = changed
-                || nextFile.parsingStatus !== file.parsingStatus
-                || nextFile.cover_filepath !== file.cover_filepath;
-            result.push(nextFile);
-            return result;
-        }, []);
-
-        if (!changed) return;
-        filesRef.current = nextFiles;
-        setFiles(nextFiles);
-        onFilesStateChange?.(nextFiles);
-        notifyUploadedFiles(getUploadedFileIds, onChange);
-    }, [onChange, onFilesStateChange]);
-
-    // Poll linsight upload parse status (ASR, etc.) until completed.
-    useEffect(() => {
-        if (uploadMode !== 'linsight') return;
-
-        const pending = filesRef.current.filter((file) => {
-            const fileId = file.fileId || file.file_id;
-            return fileId && isMediaFileParsing(file);
-        });
-        if (!pending.length) return;
-
-        const intervalId = window.setInterval(async () => {
-            try {
-                const res = await checkFileParseStatus(
-                    pending.map((file) => String(file.fileId || file.file_id)),
-                );
-                const statusList = Array.isArray(res.data) ? res.data.filter(Boolean) : [];
-                const updates = new Map<string, { parsing_status?: string; cover_filepath?: string }>();
-                statusList.forEach((item: any) => {
-                    if (item?.file_id) {
-                        updates.set(String(item.file_id), item);
-                    }
-                });
-                mergeParseStatusUpdates(updates);
-            } catch (error) {
-                console.error('Media file parsing status check failed:', error);
-            }
-        }, 2000);
-
-        return () => window.clearInterval(intervalId);
-    }, [files, mergeParseStatusUpdates, uploadMode]);
+    useUploadFileStatus({ files, filesRef, setFiles, uploadMode, onFilesStateChange, publishFiles });
 
     // Keyed by the per-attachment client id, not by name. Two files from
     // different folders can share a name, and removing "the one called
     // summary.pdf" would then take both out.
     const handleFileRemove = (clientId) => {
         const removed = filesRef.current.find(file => String(file.id) === String(clientId));
+        if (!removed) return;
         // Claim the id BEFORE touching state: an upload still in flight has
         // callbacks queued that would otherwise write this attachment straight
         // back in, which is what made the X button look dead mid-upload.
@@ -650,59 +526,18 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         setFiles(res);
         onFilesStateChange?.(res);
 
-        // If we manually remove a file during upload, we decrease the remaining upload counter
-        remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
-
-        if (remainingUploadsRef.current === 0) {
-            // If no files remain, trigger onChange immediately
-            const uploadedFileIds = getUploadedFileIds();
-            onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
+        if (removed.isUploading) {
+            remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
         }
+        publishFiles();
     };
 
-    const renderInlineFileChip = (file, index) => {
-        const isMedia = isMediaAttachmentFile({ name: file.name });
-        const isParsing = isMediaFileParsing(file);
-
-        if (isMedia) {
-            return (
-                <MediaAttachmentChip
-                    key={file.id || index}
-                    file={{
-                        name: file.name,
-                        filepath: file.filePath,
-                        cover_filepath: file.cover_filepath,
-                        isUploading: file.isUploading || isParsing,
-                        mediaPreviewUrl: file.mediaPreviewUrl,
-                        mediaCoverUrl: file.mediaCoverUrl,
-                        mediaDurationSec: file.mediaDurationSec,
-                        parsingState: isParsing ? 'parsing' : undefined,
-                    }}
-                    onRemove={() => handleFileRemove(file.id)}
-                    variant="bar"
-                />
-            );
-        }
-
-        return (
-            <FileUploadThumbnail
-                key={file.id || index}
-                fileName={file.name}
-                previewUrl={/\.(png|jpe?g|bmp|gif|webp)$/i.test(file.name) ? file.previewUrl : undefined}
-                variant="bar"
-                isUploading={file.isUploading || isParsing}
-                onRemove={() => handleFileRemove(file.id)}
-            />
-        );
-    };
 
     return (
         <div hidden={hideTrigger && hideList}>
             {/* Displaying files */}
             {!hideList && !!files.length && (
-                <div className="flex max-w-full gap-2 overflow-x-auto overflow-y-hidden p-2 pb-3">
-                    {files.map(renderInlineFileChip)}
-                </div>
+                <InputFileList files={files} uploadMode={uploadMode} onRemove={handleFileRemove} />
             )}
 
             {/* File Upload Button — hidden when invoked from the "+" menu. */}

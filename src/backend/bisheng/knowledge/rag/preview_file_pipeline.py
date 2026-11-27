@@ -99,6 +99,8 @@ class PreviewFilePipeline(BaseFilePipeline):
         )
         if self.should_use_ppt_page_split():
             transformers.append(DirectChunkTransformer())
+        elif self.docflow_structure_splitter() is not None:
+            transformers.append(self.docflow_structure_splitter())
         elif self.should_use_hierarchical_split():
             transformers.append(
                 HierarchicalSplitterTransformer(

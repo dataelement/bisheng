@@ -123,8 +123,16 @@ function formatCitationLocation(detail: ChatCitation | null, itemId?: string) {
     const payload = detail?.sourcePayload;
     const item = getCitationItem(detail, itemId);
     const page = Number(item?.page ?? payload?.page);
+    let zeroBasedPage = parseCitationBBoxes(item?.bbox).length > 0;
+    if (!zeroBasedPage && item?.bbox) {
+        try {
+            zeroBasedPage = asRecord(JSON.parse(item.bbox) as unknown)?.page_base === 0;
+        } catch {
+            // Malformed legacy metadata has no explicit page-base contract.
+        }
+    }
     if (Number.isFinite(page)) {
-        if (parseCitationBBoxes(item?.bbox).length) {
+        if (zeroBasedPage) {
             if (page >= 0)
                 return localize('shared:app_chat.page', { 0: page + 1 });
         }

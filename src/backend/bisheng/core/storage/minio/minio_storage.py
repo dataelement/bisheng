@@ -445,7 +445,6 @@ class MinioStorage(BaseStorage, ABC):
         content_type: str = "application/octet-stream",
         **kwargs,
     ) -> None:
-
         if bucket_name is None:
             bucket_name = self.bucket
 
@@ -519,7 +518,6 @@ class MinioStorage(BaseStorage, ABC):
 
     @_metered("get")
     def get_object_sync(self, bucket_name: str | None = None, object_name: str = None) -> bytes | None:
-
         if bucket_name is None:
             bucket_name = self.bucket
 
@@ -596,12 +594,15 @@ class MinioStorage(BaseStorage, ABC):
 
                 raise StorageSharingFallbackError() from e2
 
-    async def object_exists(self, bucket_name: str | None = None, object_name: str = None) -> bool:
+    async def get_object_metadata(self, bucket_name: str, object_name: str) -> dict:
+        """Read durable upload ownership metadata without downloading the object."""
+        stat = await asyncio.to_thread(self.minio_client_sync.stat_object, bucket_name, object_name)
+        return {str(key).lower(): str(value) for key, value in (stat.metadata or {}).items()}
 
+    async def object_exists(self, bucket_name: str | None = None, object_name: str = None) -> bool:
         return await asyncio.to_thread(self.object_exists_sync, bucket_name=bucket_name, object_name=object_name)
 
     def object_exists_sync(self, bucket_name: str | None = None, object_name: str = None) -> bool:
-
         if not bucket_name:
             bucket_name = self.bucket
 
@@ -632,7 +633,6 @@ class MinioStorage(BaseStorage, ABC):
     async def copy_object(
         self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
     ) -> None:
-
         return await asyncio.to_thread(
             self.copy_object_sync,
             source_bucket=source_bucket,
@@ -644,7 +644,6 @@ class MinioStorage(BaseStorage, ABC):
     def copy_object_sync(
         self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
     ) -> None:
-
         if source_bucket is None:
             source_bucket = self.tmp_bucket
 

@@ -17,3 +17,11 @@ export function getWorkspaceClientUrl(path = '/') {
 
     return joinUrlPath(__APP_ENV__.BASE_URL || '', workspacePath);
 }
+
+export function getWorkspaceRedirectUrl(pathname: string, search = '') {
+    const platformBasePath = String(__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+    const relativePath = platformBasePath && (pathname === platformBasePath || pathname.startsWith(`${platformBasePath}/`))
+        ? pathname.slice(platformBasePath.length) || '/'
+        : pathname;
+    return getWorkspaceClientUrl(`${relativePath}${search}`);
+}

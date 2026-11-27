@@ -16,6 +16,7 @@ import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 import { Tooltip, TooltipProvider } from "@bisheng/ui";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Separator } from "../components/bs-ui/separator";
 import { darkContext } from "../contexts/darkContext";
@@ -205,7 +206,7 @@ export default function MainLayout() {
                                 menu={
                                     <>
                                         {hasWorkbenchEntry && (
-                                            <DropdownItem icon={<GanttChartIcon />} onSelect={() => window.open("/workspace/")}>
+                                            <DropdownItem icon={<GanttChartIcon />} onSelect={() => window.open(getWorkspaceClientUrl('/'))}>
                                                 {t("menu.workspace")}
                                             </DropdownItem>
                                         )}

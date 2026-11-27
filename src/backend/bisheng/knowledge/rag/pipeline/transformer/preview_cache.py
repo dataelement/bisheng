@@ -13,10 +13,16 @@ class PreviewCacheTransformer(BaseDocumentTransformer):
         self.preview_cache_key = preview_cache_key
         self.file_metadata = file_metadata
 
-    def transform_documents(
-            self, documents: Sequence[Document], **kwargs: Any
-    ) -> Sequence[Document]:
-        all_chunk_info = KnowledgeUtils.get_preview_cache(self.preview_cache_key) if self.preview_cache_key else None
+    def transform_documents(self, documents: Sequence[Document], **kwargs: Any) -> Sequence[Document]:
+        cache_key = self.preview_cache_key
+        scope = KnowledgeUtils.preview_provider_scope()
+        if cache_key and (
+            (scope and not cache_key.startswith(f"preview_file_chunk:{scope}"))
+            or (not scope and cache_key.startswith("preview_file_chunk:docflow:"))
+        ):
+            logger.warning("Ignoring preview chunks from a different DocFlow configuration")
+            cache_key = None
+        all_chunk_info = KnowledgeUtils.get_preview_cache(cache_key) if cache_key else None
         knowledge_metadata_fields = {one.field_name for one in KNOWLEDGE_RAG_METADATA_SCHEMA}
         if all_chunk_info:
             logger.info("get file chunk from preview cache")

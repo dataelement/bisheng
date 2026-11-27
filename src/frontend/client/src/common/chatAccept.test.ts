@@ -9,6 +9,7 @@ describe("buildChatAccept", () => {
             expect(isFileNameAccepted(`clipboard.${extension}`, accept)).toBe(true);
         }
         expect(isFileNameAccepted('report.pdf', accept)).toBe(true);
+        expect(isFileNameAccepted('bundle.zip', accept)).toBe(true);
     });
 
     it("is unchanged by taskMode:false", () => {
@@ -73,7 +74,7 @@ describe("isFileNameAccepted", () => {
 
     it("rejects what the list does not name", () => {
         expect(isFileNameAccepted("setup.exe", accept)).toBe(false);
-        expect(isFileNameAccepted("bundle.zip", accept)).toBe(false);
+        expect(isFileNameAccepted("bundle.zip", accept)).toBe(true);
         expect(isFileNameAccepted("", accept)).toBe(false);
     });
 

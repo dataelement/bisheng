@@ -4,6 +4,7 @@ import { notification } from '@bisheng/ui';
 import { generateUUID } from "@/components/bs-ui/utils";
 import Loading from "@/components/ui/loading";
 import { locationContext } from "@/contexts/locationContext";
+import { uploadArchive } from "@/controllers/API/archiveUpload";
 import { uploadChatFile } from "@/controllers/API/flow";
 import { showApiError } from '@/controllers/request';
 import { MAX_MEDIA_FILES,isMediaFileName } from "@/util/fileAcceptUtils";
@@ -46,6 +47,9 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
     const remainingUploadsRef = useRef(0);
+    const controllers = useRef(new Map<string, AbortController>());
+    const publishFiles = () => onChange(filesRef.current.some(f => f.isUploading)
+        ? null : filesRef.current.filter(f => f.filePath).map(f => ({path:f.filePath,name:f.name})));
     const { appConfig } = useContext(locationContext);
     // const fileAccepts = useMemo(() => appConfig.libAccepts.map((ext) => `.${ext}`), [appConfig.libAccepts]);
 
@@ -122,16 +126,18 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
             };
         });
 
-        setFiles(prevFiles => {
-            const res = [...prevFiles, ...filesWithProgress];
-            filesRef.current = res;
-            return res;
-        });
+        filesRef.current = [...filesRef.current, ...filesWithProgress];
+        setFiles(filesRef.current);
 
         remainingUploadsRef.current += validFiles.length;
 
-        const uploadPromises = validFiles.map(({ file, id }) => {
-            return uploadChatFile(v, file, (progress) => {
+        const uploadFactories = validFiles.map(({ file, id }) => () => {
+            if (!filesRef.current.some(f => f.id === id)) return Promise.resolve();
+            const controller = new AbortController();
+            controllers.current.set(id, controller);
+            const uploadTask = file.name.toLowerCase().endsWith('.zip')
+                ? uploadArchive(file, accepts, controller.signal).then(children => ({ archive_files: children }))
+                : uploadChatFile(v, file, (progress) => {
                 setFiles((prevFiles) => {
                     const updatedFiles = prevFiles.map(f => {
                         if (f.id === id) {
@@ -142,8 +148,26 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
                     filesRef.current = updatedFiles;
                     return updatedFiles;
                 });
-            }).then(response => {
-                if (!filesRef.current.some(file => file.id === id)) return;
+            });
+            return uploadTask.then(response => {
+                if (!filesRef.current.some(f => f.id === id)) return;
+                if (Array.isArray(response.archive_files)) {
+                    const others = filesRef.current.filter(f => f.id !== id);
+                    const children = response.archive_files.map(child => ({
+                        id: child.file_id, name: child.display_name, filePath: child.file_path,
+                        size: child.size, archiveId: child.archive_id, isUploading: false, progress: 100,
+                    }));
+                    if (others.length + children.length > 20 || [...others,...children].reduce((sum,f) => sum+(f.size||0),0)>100*1024*1024) {
+                        notification.open({ type: 'error', description: t('chat.archiveBatchLimit') });
+                        handleFileRemove(id);
+                        return;
+                    }
+                    filesRef.current = [...others, ...children];
+                    setFiles(filesRef.current);
+                    remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
+                    publishFiles();
+                    return;
+                }
                 const filePath = response.file_path;
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
@@ -155,23 +179,27 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
 
                 remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
                 if (remainingUploadsRef.current === 0) {
-                    const uploadedFileIds = filesRef.current.filter(f => !f.isUploading && f.filePath).map(f => ({ path: f.filePath, name: f.name }));
-                    onChange(uploadedFileIds);
+                    publishFiles();
                 }
             }).catch((error) => {
+                if (!filesRef.current.some(file => file.id === id)) return;
                 showApiError(error);
-                handleFileRemove(file.name);
+                handleFileRemove(id);
+            }).finally(() => {
+                controllers.current.delete(id);
             });
         });
 
-        void Promise.all(uploadPromises).catch(showApiError);
+        void uploadFactories.reduce((chain, upload) => chain.then(upload), Promise.resolve()).catch(showApiError);
     };
 
-    const handleFileRemove = (fileName) => {
-        const removed = filesRef.current.filter(file => file.name === fileName);
+    const handleFileRemove = (fileId) => {
+        const removed = filesRef.current.filter(file => file.id === fileId);
         if (!removed.length) return;
         const pendingRemoved = removed.filter(file => file.isUploading).length;
-        const res = filesRef.current.filter(file => file.name !== fileName);
+        controllers.current.get(fileId)?.abort();
+        controllers.current.delete(fileId);
+        const res = filesRef.current.filter(file => file.id !== fileId);
         filesRef.current = res
         setFiles(res);
 
@@ -180,8 +208,7 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => !f.isUploading && f.filePath).map(f => ({ path: f.filePath, name: f.name }));
-            onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
+            publishFiles();
         }
     };
 
@@ -214,7 +241,7 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
                     <div key={index} className="group relative flex items-center space-x-3 bg-gray-100 p-2 rounded-xl cursor-default">
                         {/* Remove button */}
                         <span
-                            onClick={() => handleFileRemove(file.name)}
+                            onClick={() => handleFileRemove(file.id)}
                             className="hidden group-hover:block absolute -right-1 -top-1 bg-gray-50 border-2 border-gray-300 text-gray-600 rounded-full cursor-pointer"
                         >
                             <Outlined.Close size={14} />

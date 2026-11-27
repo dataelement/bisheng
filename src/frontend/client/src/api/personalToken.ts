@@ -46,12 +46,13 @@ type RequestErrorOptions = NonNullable<Parameters<typeof request.get>[1]>;
 const rejectBusinessErrors: RequestErrorOptions = { skip403Redirect: true };
 
 export function getPersonalTokenGuideUrls(origin: string) {
+  const workspaceBaseUrl = (__APP_ENV__.BASE_URL || "/workspace").replace(/\/$/, "");
   return {
     skillPackUrl: new URL(
-      "/api/v1/open-api/skill-packs/knowledge-search",
+      `${workspaceBaseUrl}/api/v1/open-api/skill-packs/knowledge-search`,
       origin,
     ).href,
-    tokenPageUrl: new URL("/workspace/settings/ai-access?connect=1", origin).href,
+    tokenPageUrl: new URL(`${workspaceBaseUrl}/settings/ai-access?connect=1`, origin).href,
   };
 }
 

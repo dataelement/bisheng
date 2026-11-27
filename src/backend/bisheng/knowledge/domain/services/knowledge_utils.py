@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import time
@@ -22,6 +23,24 @@ class KnowledgeUtils(BaseService):
     schema_ready_wait_seconds = 20
     schema_ready_poll_interval = 0.5
     preview_active_key_ttl = 86400
+
+    @classmethod
+    def preview_provider_scope(cls) -> str:
+        from bisheng.common.services.config_service import settings
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.knowledge.docflow.client import DocFlowError
+        from bisheng.knowledge.docflow.converter import CONVERTER_VERSION
+
+        knowledge = settings.get_knowledge()
+        if knowledge.loader_provider != "docflow":
+            return ""
+        tenant = get_current_tenant_id()
+        if tenant is None:
+            raise DocFlowError("DocFlow preview requires a tenant context")
+        digest = hashlib.sha256(
+            json.dumps([knowledge.docflow.model_dump(), CONVERTER_VERSION], sort_keys=True).encode()
+        ).hexdigest()
+        return f"docflow:{tenant}:{digest}:"
 
     @classmethod
     def build_split_fingerprint(cls, split_rule) -> str | None:
@@ -50,7 +69,7 @@ class KnowledgeUtils(BaseService):
             md5_value = md5_hash(file_path)
         if split_fingerprint:
             md5_value = md5_hash(f"{md5_value}:{split_fingerprint}")
-        return f"preview_file_chunk:{knowledge_id}:{md5_value}"
+        return f"preview_file_chunk:{cls.preview_provider_scope()}{knowledge_id}:{md5_value}"
 
     @classmethod
     def preview_cache_key_for_split_rule(
@@ -69,7 +88,7 @@ class KnowledgeUtils(BaseService):
 
     @classmethod
     def _preview_active_key_index(cls, knowledge_id: int, file_path: str) -> str:
-        return f"preview_file_active_key:{knowledge_id}:{md5_hash(file_path)}"
+        return f"preview_file_active_key:{cls.preview_provider_scope()}{knowledge_id}:{md5_hash(file_path)}"
 
     @classmethod
     async def async_bind_preview_cache_key(cls, knowledge_id: int, file_path: str, cache_key: str) -> None:

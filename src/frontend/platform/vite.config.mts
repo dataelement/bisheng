@@ -6,7 +6,7 @@ import path from "path";
 import { createRequire } from "node:module";
 import postcss from "postcss";
 import tailwindcss from "tailwindcss";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
@@ -17,7 +17,10 @@ import svgr from "vite-plugin-svgr";
  * 开启后一般外层网管匹配【custom】时直接透传转到内层网关
  * 内层网关访问 api或者前端静态资源需要去掉【custom】前缀
  */
-const app_env = { BASE_URL: '' } // /custom
+function normalizeBaseUrl(value: string): string {
+  const normalized = value.trim().replace(/^\/+|\/+$/g, '');
+  return normalized ? `/${normalized}` : '';
+}
 
 
 /** Compile the public UI preset only inside this feature, preserving the legacy app theme. */
@@ -87,56 +90,6 @@ function dshContentSafetyStyles(): Plugin {
   };
 }
 
-const commonProxyOptions = {
-  changeOrigin: true,
-  secure: false,
-  ws: true
-};
-
-// Emit one loud, actionable warning the first time MinIO answers a proxied
-// object request with 403. For presigned (SigV4) URLs to the public bucket a
-// 403 is almost always SignatureDoesNotMatch: changeOrigin rewrites Host to the
-// proxy target host, but the URL was signed for the backend `sharepoint` host.
-// The classic trap is `127.0.0.1` vs `localhost` (not interchangeable for
-// signing). Without this, the only symptom is silently broken images.
-let warnedMinio403 = false;
-const warnMinioSignatureMismatch = (targetHost: string, requestUrl: string) => {
-  if (warnedMinio403) return;
-  warnedMinio403 = true;
-  console.warn(
-    `\n\x1b[33m[bisheng:minio-proxy] ⚠️  MinIO returned 403 for "${requestUrl}".\n` +
-    `  Almost certainly a SigV4 host mismatch: the dev proxy forwards Host=${targetHost},\n` +
-    `  but the presigned URL was signed for a different host.\n` +
-    `  Fix: set VITE_MINIO_PROXY_TARGET so its host EXACTLY equals backend config.yaml\n` +
-    `  object_storage.minio.sharepoint  (note: 127.0.0.1 ≠ localhost).\x1b[0m\n`,
-  );
-};
-
-const createProxyConfig = (target: string, rewrite = true, isMinio = false, verbose = false) => ({
-  ...commonProxyOptions,
-  target,
-  ...(rewrite && {
-    rewrite: (p: string) => p.replace(new RegExp(`^${app_env.BASE_URL}`), '')
-  }),
-  configure: (proxy: import('http-proxy').ProxyServer) => {
-    // Per-request logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
-    // dozens of lines per page load and buries the warnings that matter.
-    if (verbose) {
-      proxy.on('proxyReq', (proxyReq) => {
-        console.log('Proxying request to:', proxyReq.path);
-      });
-    }
-    if (isMinio) {
-      const targetHost = new URL(target).host;
-      proxy.on('proxyRes', (proxyRes, req) => {
-        if (proxyRes.statusCode === 403) {
-          warnMinioSignatureMismatch(targetHost, req.url || '');
-        }
-      });
-    }
-  }
-});
-
 const apiRoutes = ["/api/", "/health"];
 const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
 
@@ -171,6 +124,7 @@ export default defineConfig(({ command, mode }) => {
   // 必须从 .env.development.local 等文件加载；仅用 process.env 时配置阶段读不到 VITE_ 变量，会回落到 7860，
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadFrontendEnv(mode, __dirname);
+  const baseUrl = normalizeBaseUrl(env.VITE_BASE_URL || '');
   const target = resolveApiTarget(env);
   // Gateway-owned `/api/license/*` (F037/F067 status). Must not fall through to
   // FastAPI. Override with VITE_GATEWAY_PROXY_TARGET when 115 is not the lab GW.
@@ -186,7 +140,7 @@ export default defineConfig(({ command, mode }) => {
     console.log(`[bisheng:gateway-proxy] /api/license -> ${gatewayTarget}`);
   }
   const app_env_define = {
-    ...app_env,
+    BASE_URL: baseUrl,
     WORKSPACE_ORIGIN: env.VITE_WORKSPACE_ORIGIN || '',
     // Origin the OnlyOffice Document Server can reach us at. It downloads the report
     // template and POSTs the save callback server-side, so `location.origin`
@@ -196,29 +150,29 @@ export default defineConfig(({ command, mode }) => {
   };
 
   const proxyLog = env.VITE_PROXY_LOG === '1';
-  const rewrite = (url: string) => app_env.BASE_URL && url.startsWith(app_env.BASE_URL) ? url.slice(app_env.BASE_URL.length) : url;
+  const rewrite = (url: string) => baseUrl && url.startsWith(baseUrl) ? url.slice(baseUrl.length) : url;
   const apiProxyConfig = createFrontendProxy(target, { rewrite, verbose: proxyLog });
   const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
   const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
   const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
-  proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
+  proxyTargets[`${baseUrl}/api/license`] = gatewayProxyConfig;
   // This target must expose the app entry (nginx/gateway/app-proxy), not only
   // FastAPI. Keep the browser URL on the current origin, including WebSockets.
-  proxyTargets[`${app_env.BASE_URL}/apps/`] = createFrontendProxy(
+  proxyTargets[`${baseUrl}/apps/`] = createFrontendProxy(
     env.VITE_APP_PROXY_TARGET || target,
     { rewrite, verbose: proxyLog },
   );
   apiRoutes.forEach(route => {
-    proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
+    proxyTargets[`${baseUrl}${route}`] = apiProxyConfig;
   });
   fileServiceRoutes.forEach(route => {
-    proxyTargets[`${app_env.BASE_URL}${route}`] = fileServiceProxyConfig;
+    proxyTargets[`${baseUrl}${route}`] = fileServiceProxyConfig;
   });
 
   return {
-    base: app_env.BASE_URL || '/',
+    base: baseUrl ? `${baseUrl}/` : '/',
     // Strip all console.* / debugger from production bundles so no debug data
     // (API payloads, tokens, filenames) leaks to the browser console — same
     // policy as the client app's terser drop_console. Dev keeps them.
@@ -274,8 +228,8 @@ export default defineConfig(({ command, mode }) => {
           data: {
             // `command` is vite's own signal; process.env.NODE_ENV isn't reliably
             // set during the config phase.
-            aceScriptSrc: `<script src="${command === 'build' ? app_env.BASE_URL : ''}/node_modules/ace-builds/src-min-noconflict/ace.js" type="text/javascript"></script>`,
-            baseUrl: app_env.BASE_URL
+            aceScriptSrc: `<script src="${command === 'build' ? baseUrl : ''}/node_modules/ace-builds/src-min-noconflict/ace.js" type="text/javascript"></script>`,
+            baseUrl
           }
         }
       }),

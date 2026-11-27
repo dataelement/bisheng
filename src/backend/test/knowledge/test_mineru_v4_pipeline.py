@@ -87,7 +87,11 @@ def test_explicit_new_provider_with_missing_address_fails(tmp_path):
 
 def test_preview_cache_uses_existing_user_visible_text():
     visible = {"0": {"text": "Approved preview body", "metadata": {}}}
-    utils = SimpleNamespace(get_preview_cache=lambda _: visible, aggregate_chunk_metadata=lambda text, metadata: text)
+    utils = SimpleNamespace(
+        get_preview_cache=lambda _: visible,
+        aggregate_chunk_metadata=lambda text, metadata: text,
+        preview_provider_scope=lambda: "",
+    )
     with patch("bisheng.knowledge.rag.pipeline.transformer.preview_cache.KnowledgeUtils", utils):
         result = PreviewCacheTransformer("same-key", {}).transform_documents(
             [Document(page_content="New provider body", metadata={})]

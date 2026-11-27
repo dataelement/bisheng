@@ -1,6 +1,7 @@
 import { Button } from '@bisheng/ui';
 
 import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { handleUiRequest } from "@/controllers/request";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +9,7 @@ import { useTranslation } from "react-i18next";
 export default function Preview({ onBeforView }) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
-    const benchUrl = location.origin + "/workspace/";
+    const benchUrl = getWorkspaceClientUrl('/');
 
     const handleClick = async () => {
         const res = await onBeforView();

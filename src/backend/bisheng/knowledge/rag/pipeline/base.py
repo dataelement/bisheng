@@ -7,22 +7,25 @@ from langchain_core.documents import BaseDocumentTransformer, Document
 from langchain_core.vectorstores import VectorStore
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
-from bisheng.knowledge.rag.pipeline.types import PipelineStage, PipelineResult, PipelineConfig
+from bisheng.knowledge.rag.pipeline.types import PipelineConfig, PipelineResult, PipelineStage
 
 
 class BasePipeline(ABC):
-    def __init__(self,
-                 loader: BaseBishengLoader = None,
-                 transformers: List[BaseDocumentTransformer] = None,
-                 vector_store: List[VectorStore] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        loader: BaseBishengLoader = None,
+        transformers: List[BaseDocumentTransformer] = None,
+        vector_store: List[VectorStore] = None,
+        **kwargs,
+    ):
         self.loader = loader
         self.transformers = transformers or []
         self.vector_store = vector_store or []
 
     @staticmethod
-    def _make_result(stage: PipelineStage = PipelineStage.INGEST, docs: List[Document] = None,
-                     start: float = 0) -> PipelineResult:
+    def _make_result(
+        stage: PipelineStage = PipelineStage.INGEST, docs: List[Document] = None, start: float = 0
+    ) -> PipelineResult:
         result = PipelineResult(
             stage_reached=stage,
             documents=docs,
@@ -56,8 +59,12 @@ class NormalPipeline(BasePipeline):
             return self._make_result(stage=PipelineStage.TRANSFORMER, docs=docs, start=start)
 
         # insert vector
-        for vectorstore in self.vector_store:
-            vectorstore.add_documents(docs)
+        ingest = getattr(self.loader, "ingest_documents", None)
+        if ingest is not None:
+            ingest(docs, self.vector_store)
+        else:
+            for vectorstore in self.vector_store:
+                vectorstore.add_documents(docs)
 
         return self._make_result(stage=PipelineStage.INGEST, docs=docs, start=start)
 
@@ -75,7 +82,11 @@ class NormalPipeline(BasePipeline):
         if config.stop_at == PipelineStage.TRANSFORMER:
             return self._make_result(stage=PipelineStage.TRANSFORMER, docs=docs, start=start)
 
-        for vectorstore in self.vector_store:
-            await vectorstore.aadd_documents(docs)
+        ingest = getattr(self.loader, "ingest_documents", None)
+        if ingest is not None:
+            await asyncio.to_thread(ingest, docs, self.vector_store)
+        else:
+            for vectorstore in self.vector_store:
+                await vectorstore.aadd_documents(docs)
 
         return self._make_result(stage=PipelineStage.INGEST, docs=docs, start=start)

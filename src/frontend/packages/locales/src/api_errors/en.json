@@ -702,5 +702,6 @@
   "25025": "A permission model with this name already exists.",
   "25026": "The last owner of this resource cannot be removed.",
   "19704": "The tenant view changed. Refresh the page before continuing.",
-  "19705": "No valid tenant view is available. Contact an administrator."
+  "19705": "No valid tenant view is available. Contact an administrator.",
+  "10994": "ZIP processing failed. Check the file types, paths, count and size, or retry later."
 }

@@ -1,5 +1,9 @@
 # AGENTS.md
 
+> 本分支为 `feat/zhgyl-3.0-beat1` 定制线，主版升级合入 `feat/3.0.0`。
+> 定制功能不能回流主版；合并前先读 [`docs/zhgyl-merge-playbook.md`](docs/zhgyl-merge-playbook.md)，
+> 合并后逐项核对 DocFlow、ZIP 上传、安全守卫和部署前缀，更新手册中的长期合并规则。
+
 ---
 
 ## 1. Project Identity

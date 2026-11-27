@@ -40,7 +40,12 @@ class SplitterTransformer(BaseDocumentTransformer):
         documents = self.text_splitter.split_documents(documents)
         for index, one in enumerate(documents):
             one.metadata["chunk_index"] = index
-            one.metadata["bbox"] = json.dumps({"chunk_bboxes": one.metadata.get("chunk_bboxes", "")})
+            bbox = {"chunk_bboxes": one.metadata.get("chunk_bboxes", "")}
+            if "page_base" in one.metadata:
+                # Keep the provider convention inside an already indexed field;
+                # workflow temp ingestion drops unregistered metadata fields.
+                bbox["page_base"] = one.metadata["page_base"]
+            one.metadata["bbox"] = json.dumps(bbox)
             one.metadata["page"] = (
                 one.metadata["chunk_bboxes"][0].get("page")
                 if one.metadata.get("chunk_bboxes", None)

@@ -1,6 +1,6 @@
 import { MessageFrame, WorkflowFileField, WorkflowForm } from '@bisheng/chat';
 import { normalizeFormFields, type RawMessage } from '@bisheng/chat/core';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useRecoilValue } from 'recoil';
 import { Select } from '@bisheng/ui';
 import useSelectCopy from '~/hooks/useSelectCopy';
@@ -17,8 +17,10 @@ export function InputForm({ data, flow, logo }: InputFormProps) {
     const selectCopy = useSelectCopy();
     const config = useRecoilValue(bishengConfState);
     const { showToast } = useToastContext();
+    const [uploadingFields, setUploadingFields] = useState<Record<string, boolean>>({});
     return <MessageFrame title={flow.name} logo={logo}>
         <WorkflowForm key={String(data.node_id)} fields={normalizeFormFields(data.value)} canExecute
+            submitDisabled={Object.values(uploadingFields).some(Boolean)}
             submitLabel={localize('com_ui_start')}
             requiredMessage={field => localize('com_ui_required_field', { field })}
             onInvalid={errors => showToast({ message: errors.join('\n'), status: 'warning' })}
@@ -28,6 +30,7 @@ export function InputForm({ data, flow, logo }: InputFormProps) {
                     renderControl={props => <WorkflowFileField {...props} id={id} />}
                     placeholder={localize('com_file_current_empty')} value="" multiple={field.multiple}
                     onChange={onFileNameChange}
+                    onUploadStateChange={busy => setUploadingFields(previous => ({ ...previous, [field.key]: busy }))}
                     suffixes={fileAcceptToInputAccept(normalizeFileAccept(field.raw.file_type, { mediaEnabled: !!config?.enable_media_upload }))}
                     onFileChange={value => onChange(Array.isArray(value) ? value : value ? [value] : [])} />;
                 if (field.type !== 'select') return null;

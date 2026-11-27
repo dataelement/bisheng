@@ -44,7 +44,7 @@ _CITATION_SEP = ""
 _CITATION_END = ""
 
 _HANDLE = r"S\d{1,4}"
-_GROUP = rf"\[\s*{_HANDLE}(?:\s*[,，、]\s*{_HANDLE})*\s*\]"
+_GROUP = rf"\[\s*{_HANDLE}(?:\s*[,，、]\s*{_HANDLE})*\s*\]"  # noqa: RUF001
 # One or more adjacent groups (``[S3][S7]``); never the label of a markdown
 # link (``[S3](url)``) and never glued to a word or another bracket.
 # ASCII-only lookbehind: Python's \w matches CJK, and a handle glued to a
@@ -53,7 +53,7 @@ _RUN_RE = re.compile(rf"(?<![A-Za-z0-9_\[]){_GROUP}(?:\s*{_GROUP})*(?!\s*\()")
 _HANDLE_RE = re.compile(_HANDLE)
 # ``[S3]: 知识库·规则`` — a definition line the model wrote on its own; not a
 # citation, only counted.
-_DEF_LINE_RE = re.compile(rf"^[ \t]*{_GROUP}[ \t]*[:：]", re.M)
+_DEF_LINE_RE = re.compile(rf"^[ \t]*{_GROUP}[ \t]*[:：]", re.M)  # noqa: RUF001
 # Fenced blocks and inline code are never rewritten.
 _CODE_RE = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]*`)", re.S)
 
@@ -117,15 +117,19 @@ def _item_location(item: Any) -> str:
     return ""
 
 
-def _has_layout_boxes(bbox: Any) -> bool:
-    """Whether a chunk carries PDF layout boxes (``{"chunk_bboxes": [...]}``)."""
+def _uses_zero_based_pages(bbox: Any) -> bool:
+    """Honor an explicit normalized origin, with legacy layout-box detection."""
     if not bbox:
         return False
     try:
         parsed = json.loads(bbox) if isinstance(bbox, str) else bbox
     except (TypeError, ValueError):
         return False
-    boxes = parsed.get("chunk_bboxes") if isinstance(parsed, dict) else None
+    if not isinstance(parsed, dict):
+        return False
+    if type(parsed.get("page_base")) is int and parsed["page_base"] == 0:
+        return True
+    boxes = parsed.get("chunk_bboxes")
     return isinstance(boxes, list) and len(boxes) > 0
 
 
@@ -136,14 +140,15 @@ def _location_label(page: Any, chunk_index: Any, bbox: Any = None) -> str:
     office files converted to PDF) carry bboxes, and their page is the
     zero-based page index the bboxes use — the first page is ``0``. Chunks
     without a layout carry a one-based page (slides) or ``0`` for "not
-    paginated" (docx / xlsx / md). The chunk index is zero-based too.
+    paginated" (docx / xlsx / md), unless page_base explicitly marks their
+    citation coordinates as normalized. The chunk index is zero-based too.
     """
     try:
         page_no = int(page) if page is not None else None
     except (TypeError, ValueError):
         page_no = None
     if page_no is not None:
-        if _has_layout_boxes(bbox):
+        if _uses_zero_based_pages(bbox):
             if page_no >= 0:
                 return f"第 {page_no + 1} 页"
         elif page_no > 0:

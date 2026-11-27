@@ -205,6 +205,7 @@ def test_input_node_selects_purpose_before_parsing_and_keeps_output_limit(monkey
     """AC-03, AC-09: parser purpose is per file, and extraction still caps the body."""
     node = InputNode.__new__(InputNode)
     node.id, node.workflow_id = "input", "workflow"
+    node.user_id = 1
     node._image_ext = ["png", "jpg"]
     node._vector_client, node._es_client = MagicMock(), MagicMock()
     node.init_vector_clients = MagicMock()

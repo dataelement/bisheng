@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/.vite
+**/.cache
+**/.env
+**/.env.*
+**/build
+**/dist

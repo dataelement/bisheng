@@ -49,3 +49,7 @@
 | 2026-10-14 | 建立契约，登记 F076 | 本文件 |
 | 2026-10-20 | 本版本不再纳入实时语音识别 | 本文件 |
 | 2026-10-19 | F076 个人技能错误码从 11061 起，跳过已有文案的 11060、11070，段位延伸到 11079；11073、11074 为 `SKILL.md` 过大和条目过多 | 本文件 |
+
+## zhgyl DocFlow OCR
+
+DocFlow OCR is an opt-in knowledge-file provider. Existing providers and file formats retain their defaults. No credentials are shipped. SQL models must support MySQL and DM8. This change does not deploy or migrate a running environment.

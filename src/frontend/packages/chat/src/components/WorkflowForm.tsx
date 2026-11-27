@@ -15,6 +15,7 @@ export interface WorkflowFormFieldBinding {
 export interface WorkflowFormProps {
   fields: readonly WorkflowFormField[];
   canExecute: boolean;
+  submitDisabled?: boolean;
   submitLabel: string;
   requiredMessage: (label: string) => string;
   renderField?: (binding: WorkflowFormFieldBinding) => ReactNode;
@@ -23,7 +24,7 @@ export interface WorkflowFormProps {
   onError?: (error: unknown) => void;
 }
 /** Client form validation and submission; hosts only bind upload/select services. */
-export function WorkflowForm({ fields, canExecute, submitLabel, requiredMessage, renderField, onSubmit, onInvalid, onError }: WorkflowFormProps) {
+export function WorkflowForm({ fields, canExecute, submitDisabled = false, submitLabel, requiredMessage, renderField, onSubmit, onInvalid, onError }: WorkflowFormProps) {
   const formId = useId();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const names = useRef<Record<string, string>>({});
@@ -32,7 +33,7 @@ export function WorkflowForm({ fields, canExecute, submitLabel, requiredMessage,
   const locked = useRef(false);
   const disabled = !canExecute || pending || submitted;
   const handleSubmit = async () => {
-    if (!canExecute || locked.current || submitted) return;
+    if (!canExecute || submitDisabled || locked.current || submitted) return;
     const errors = validateFormValues(fields, values, requiredMessage);
     if (errors.length) { onInvalid?.(errors); return; }
     locked.current = true; setPending(true);
@@ -53,6 +54,6 @@ export function WorkflowForm({ fields, canExecute, submitLabel, requiredMessage,
             onFileNameChange: name => { if (!disabled) names.current[field.key] = name; } })}
       </div>
     </div>)}
-    <div className="flex justify-end"><Button onClick={() => void handleSubmit()} disabled={disabled} loading={pending}>{submitLabel}</Button></div>
+    <div className="flex justify-end"><Button onClick={() => void handleSubmit()} disabled={disabled || submitDisabled} loading={pending}>{submitLabel}</Button></div>
   </div>;
 }

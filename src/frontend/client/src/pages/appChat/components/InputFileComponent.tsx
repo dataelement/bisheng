@@ -2,6 +2,7 @@
 import type { WorkflowFileFieldProps } from '@bisheng/chat';
 import type { ReactNode } from 'react';
 
+import { uploadArchive } from "~/api/archiveUpload";
 import { FileSearch2, Loader2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { bishengConfState } from "../store/atoms";
@@ -21,6 +22,7 @@ interface InputFileComponentProps {
     fileTypes?: unknown;
     placeholder?: string;
     onFileChange: (value: unknown) => void;
+    onUploadStateChange?: (busy: boolean) => void;
     editNode?: boolean;
     isSSO?: boolean;
     multiple?: boolean;
@@ -34,6 +36,7 @@ export default function InputFileComponent({
     fileTypes,
     placeholder = 'The current file is empty',
     onFileChange,
+    onUploadStateChange,
     editNode = false,
     isSSO = false,
     multiple = false,
@@ -43,6 +46,7 @@ export default function InputFileComponent({
     const t = useLocalize()
     const [myValue, setMyValue] = useState(value);
     const [loading, setLoading] = useState(false);
+    const setBusy = (busy: boolean) => { setLoading(busy); onUploadStateChange?.(busy); };
     useEffect(() => {
         if (disabled) {
             setMyValue("");
@@ -95,18 +99,29 @@ export default function InputFileComponent({
 
     const singleUpload = (file: File | undefined) => {
         if (!file) return;
-        setLoading(true);
+        setBusy(true);
+
+        if (file.name.toLowerCase().endsWith('.zip')) {
+
+            uploadArchive(file, acceptAttr).then(result => {
+                setMyValue(result.files.map(f => f.display_name).join(', '));
+                onChange(result.files.map(f => f.display_name).join(', '));
+                onFileChange(result.files.map(f => f.file_path));
+            }).catch(error => { onFileChange([]); showToast({message: String(error.message || error), status:'error'}); })
+                .finally(() => setBusy(false));
+            return;
+        }
 
         {
             const errorMsg = checkFileSize(file)
             if (errorMsg) {
                 showToast({ message: errorMsg, status: 'warning' });
 
-                return setLoading(false);
+                return setBusy(false);
             }
             // Types are validated by the picker handler before an upload starts.
-            isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
-                setLoading(false);
+            (isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
+                setBusy(false);
                 
                 if (typeof res === 'string') return showToast({ message: res, status: 'warning' });
                 const { file_path } = res;
@@ -126,18 +141,21 @@ export default function InputFileComponent({
                     onChange(file.name);
                     // sets the value that goes to the backend
                     onFileChange(file_path);
-                    setLoading(false);
-                })
+                    setBusy(false);
+                }))
                 .catch(() => {
                     console.error("Error occurred while uploading file");
-                    setLoading(false);
+                })
+                .finally(() => {
+                    setBusy(false);
                 });
         }
     };
 
     const batchUpload = (_files: readonly File[] | null) => {
         {
-            setLoading(true);
+            setBusy(true);
+
 
             if (_files && _files.length > 0) {
                 const filePaths = []; // This will hold the file paths after successful upload
@@ -155,14 +173,17 @@ export default function InputFileComponent({
 
                     // Stop when every selected file exceeds the size limit.
                     if (errorMsgs.length === _files.length) {
-                        return setLoading(false);
+                        return setBusy(false);
                     }
                 }
 
                 const fileNames = Array.from(files).map(file => file.name); // Extract file names
 
                 // Perform the upload for each file
-                const uploadPromises = Array.from(files).map(file => {
+                const uploadPromises = Array.from(files).map(file => () => {
+                    if (file.name.toLowerCase().endsWith('.zip')) {
+                        return uploadArchive(file, acceptAttr).then(result => result.files.map(f => f.file_path));
+                    }
                     return isSSO
                         ? uploadFileWithProgress(file, (progress) => { }) // Adjust upload method if needed
                             .then(res => {
@@ -170,7 +191,7 @@ export default function InputFileComponent({
                                     // setErrorData({ title: "Error", list: [res] });
                                     showToast({ message: res, status: 'warning' });
 
-                                    setLoading(false);
+                                    setBusy(false);
                                     throw new Error(res); // Exit the upload if error occurs
                                 }
                                 return res.file_path
@@ -182,23 +203,23 @@ export default function InputFileComponent({
                 });
 
                 // Wait for all file uploads to finish
-                Promise.all(uploadPromises)
+                uploadPromises.reduce((chain, upload) => chain.then(async results => [...results, await upload()]), Promise.resolve([]))
                     .then((filePaths) => {
                         // After all files are uploaded successfully, update the state
                         setMyValue(fileNames.join(",")); // Join file names with commas
-                        onChange(fileNames); // Pass an array of file names
-                        onFileChange(filePaths); // Pass an array of file paths
+                        onChange(fileNames.join(", ")); // Preserve the shared form's display-name contract.
+                        onFileChange(filePaths.flat()); // Pass an array of file paths
 
-                        setLoading(false); // Hide loading state
+                        setBusy(false); // Hide loading state
                     })
                     .catch((error) => {
                         console.error("Error occurred while uploading files", error);
-                        setLoading(false); // Hide loading state if an error occurs
+                        setBusy(false); // Hide loading state if an error occurs
                     });
             } else {
                 showToast({ message: t('com_inputfile_no_file_selected'), status: 'warning' });
 
-                setLoading(false); // Hide loading state if no files were selected
+                setBusy(false); // Hide loading state if no files were selected
             }
         }
     };

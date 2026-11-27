@@ -24,13 +24,14 @@ class MarkTaskBase(SQLModelSerializable):
     status: int | None = Field(index=False, default=1)
     tenant_id: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
     )
-    create_time: datetime | None = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: datetime | None = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
 
 class MarkTask(MarkTaskBase, table=True):
@@ -43,6 +44,21 @@ class MarkTaskRead(MarkTaskBase):
 
 
 class MarkTaskDao(MarkTaskBase):
+    @classmethod
+    def get_user_tasks(cls, user_id: int, tenant_id: int) -> list[MarkTask]:
+        """Load exact CSV assignee matches in one tenant for history authorization."""
+        uid = str(int(user_id))
+        with get_sync_db_session() as session:
+            statement = select(MarkTask).where(
+                MarkTask.tenant_id == tenant_id,
+                or_(
+                    MarkTask.process_users == uid,
+                    MarkTask.process_users.like(f"{uid},%"),
+                    MarkTask.process_users.like(f"%,{uid},%"),
+                    MarkTask.process_users.like(f"%,{uid}"),
+                ),
+            )
+            return list(session.exec(statement).all())
 
     @classmethod
     def create_task(cls, task_info: MarkTask) -> MarkTask:
@@ -54,10 +70,10 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def create_task_with_assignments(
-            cls,
-            task_info: MarkTask,
-            app_ids: list[str],
-            user_ids: list[int],
+        cls,
+        task_info: MarkTask,
+        app_ids: list[str],
+        user_ids: list[int],
     ) -> MarkTask:
         from bisheng.database.models.mark_app_user import MarkAppUser
 
@@ -95,7 +111,7 @@ class MarkTaskDao(MarkTaskBase):
     @classmethod
     def get_task(cls, user_id: int) -> MarkTask:
         with get_sync_db_session() as session:
-            statement = select(MarkTask).where(MarkTask.process_users.like(f'%{user_id}%'))
+            statement = select(MarkTask).where(MarkTask.process_users.like(f"%{user_id}%"))
             return session.exec(statement).first()
 
     @classmethod
@@ -113,13 +129,13 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def get_all_task(
-            cls,
-            page_size: int = 10,
-            page_num: int = 1,
+        cls,
+        page_size: int = 10,
+        page_num: int = 1,
     ):
         with get_sync_db_session() as session:
             statement = select(MarkTask)
-            total_count_query = select(func.count()).select_from(statement.alias('subquery'))
+            total_count_query = select(func.count()).select_from(statement.alias("subquery"))
             statement = statement.order_by(MarkTask.create_time.desc())
             total_count = session.execute(total_count_query).scalar()
             statement = statement.limit(page_size).offset((page_num - 1) * page_size)
@@ -127,12 +143,12 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def get_task_list(
-            cls,
-            status: int,
-            create_id: int | None,
-            user_id: int | None,
-            page_size: int = 10,
-            page_num: int = 1,
+        cls,
+        status: int,
+        create_id: int | None,
+        user_id: int | None,
+        page_size: int = 10,
+        page_num: int = 1,
     ):
         with get_sync_db_session() as session:
             statement = select(MarkTask)
@@ -157,7 +173,7 @@ class MarkTaskDao(MarkTaskBase):
                 statement = statement.filter(or_(and_(*filter), and_(*filter_or)))
 
             # Calculate total tasks
-            total_count_query = select(func.count()).select_from(statement.alias('subquery'))
+            total_count_query = select(func.count()).select_from(statement.alias("subquery"))
             statement = statement.order_by(MarkTask.create_time.desc())
             total_count = session.execute(total_count_query).scalar()
             statement = statement.limit(page_size).offset((page_num - 1) * page_size)

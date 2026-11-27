@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { Button, notification } from '@bisheng/ui';
 import { locationContext } from "@/contexts/locationContext";
 import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
+import { uploadArchive } from "@/controllers/API/archiveUpload";
+import { showApiError } from "@/controllers/request";
 import { FileSearch2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -24,6 +26,7 @@ export default function InputFileComponent({
   fileTypes,
   placeholder = 'The current file is empty',
   onFileChange,
+  onUploadStateChange,
   editNode = false,
   isSSO = false,
   multiple = false,
@@ -32,6 +35,7 @@ export default function InputFileComponent({
   const { t } = useTranslation();
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
+  const setBusy = (busy: boolean) => { setLoading(busy); onUploadStateChange?.(busy); };
   // Callers pass either a suffix array (node params) or an `.a,.b` accept string (form input).
   const suffixList = Array.isArray(suffixes)
     ? suffixes
@@ -79,21 +83,32 @@ export default function InputFileComponent({
     input.multiple = false; // Allow only one file selection
 
     input.onchange = (e: Event) => {
-      setLoading(true);
+      setBusy(true);
+
 
       // Get the selected file
       const file = (e.target as HTMLInputElement).files?.[0];
 
+      if (!file) return setBusy(false);
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        uploadArchive(file, suffixList.join(',')).then(children => {
+          setMyValue(children.map(child => child.display_name).join(', '));
+          onChange(children.map(child => child.display_name));
+          onFileChange(children.map(child => child.file_path));
+        }).catch(error => { onFileChange([]); showApiError(error); })
+          .finally(() => setBusy(false));
+        return;
+      }
+
       const errorMsg = checkFileSize(file)
       if (errorMsg) {
         notification.open({ type: 'error', description: String(errorMsg ?? '') })
-        return setLoading(false);
+        return setBusy(false);
       }
       // Check if the file type is correct
       // if (file && checkFileType(file.name)) {
       // Upload the file
-      isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
-        setLoading(false);
+      const upload = isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
         if (typeof res === 'string') return notification.open({ type: 'error', description: String(res ?? '') })
         const { file_path } = res;
         setMyValue(file.name);
@@ -112,12 +127,8 @@ export default function InputFileComponent({
           onChange(file.name);
           // sets the value that goes to the backend
           onFileChange(file_path);
-          setLoading(false);
-        })
-        .catch(() => {
-          console.error("Error occurred while uploading file");
-          setLoading(false);
         });
+      void upload.catch(showApiError).finally(() => setBusy(false));
       // } else {
       //   // Show an error if the file type is not allowed
       //   setErrorData({
@@ -125,7 +136,7 @@ export default function InputFileComponent({
       //       "请选择有效文件。只允许使用这些文件类型：",
       //     list: fileTypes,
       //   });
-      //   setLoading(false);
+      //   setBusy(false);
       // }
     };
 
@@ -142,7 +153,8 @@ export default function InputFileComponent({
     input.multiple = true; // Allow multiple file selection
 
     input.onchange = (e: Event) => {
-      setLoading(true);
+      setBusy(true);
+
 
       // Get the selected files
       const _files = (e.target as HTMLInputElement).files;
@@ -161,7 +173,7 @@ export default function InputFileComponent({
           notification.open({ type: 'error', description: errorMsgs.filter(Boolean).join('\n') })
           // 文件都不符合要求 结束上传
           if (errorMsgs.length === _files.length) {
-            return setLoading(false);
+            return setBusy(false);
           }
         }
 
@@ -170,20 +182,23 @@ export default function InputFileComponent({
         // the picked batch — a form field replaces its value rather than appending.
         if (files.filter((file) => isMediaFileName(file.name)).length > MAX_MEDIA_FILES) {
           notification.open({ type: 'error', description: String(t('chat.mediaFileTooMany') ?? '') })
-          return setLoading(false);
+          return setBusy(false);
         }
 
         const fileNames = Array.from(files).map(file => file.name); // Extract file names
 
         // Perform the upload for each file
-        const uploadPromises = Array.from(files).map(file => {
+        const uploadPromises = Array.from(files).map(file => () => {
+          if (file.name.toLowerCase().endsWith('.zip')) {
+            return uploadArchive(file, suffixList.join(',')).then(children => children.map(f => f.file_path));
+          }
           return isSSO
             ? uploadFileWithProgress(file, (progress) => { }) // Adjust upload method if needed
               .then(res => {
                 if (typeof res === 'string') {
                   setErrorData({ title: "Error", list: [res] });
                   notification.open({ type: 'error', description: String(res ?? '') })
-                  setLoading(false);
+                  setBusy(false);
                   throw new Error(res); // Exit the upload if error occurs
                 }
                 return res.file_path
@@ -195,22 +210,20 @@ export default function InputFileComponent({
         });
 
         // Wait for all file uploads to finish
-        Promise.all(uploadPromises)
+        uploadPromises.reduce((chain, upload) => chain.then(async results => [...results, await upload()]), Promise.resolve([]))
           .then((filePaths) => {
             // After all files are uploaded successfully, update the state
             setMyValue(fileNames.join(",")); // Join file names with commas
             onChange(fileNames); // Pass an array of file names
-            onFileChange(filePaths); // Pass an array of file paths
+            onFileChange(filePaths.flat()); // Pass an array of file paths
 
-            setLoading(false); // Hide loading state
+            setBusy(false); // Hide loading state
           })
-          .catch((error) => {
-            console.error("Error occurred while uploading files", error);
-            setLoading(false); // Hide loading state if an error occurs
-          });
+          .catch(showApiError)
+          .finally(() => setBusy(false));
       } else {
         notification.open({ type: 'error', description: String(t('chat.noFileSelected') ?? '') })
-        setLoading(false); // Hide loading state if no files were selected
+        setBusy(false); // Hide loading state if no files were selected
       }
     };
 

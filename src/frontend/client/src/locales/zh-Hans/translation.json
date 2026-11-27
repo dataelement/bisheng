@@ -2833,5 +2833,8 @@
     "checking": "正在核验知识空间访问权限…",
     "failed": "知识空间权限加载失败，请刷新页面后重试。",
     "revoked": "以下知识空间的访问权限已失效：{{names}}。请在“添加上下文”中重新选择可访问的空间。"
-  }
+  },
+  "com_archive_batch_limit": "含ZIP的附件批次最多20个文件、合计100 MiB。",
+  "com_archive_wait_upload": "请等待文件上传完成后再执行。",
+  "com_archive_remove_group": "移除此压缩包的全部文件"
 }

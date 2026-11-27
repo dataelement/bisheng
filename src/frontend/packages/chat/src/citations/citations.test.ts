@@ -5,6 +5,19 @@ import type { ChatCitation } from './types';
 const localize=(key:string,options?:Record<string,unknown>)=>key+String(options?.[0]??'');
 const utils=createCitationUtilities(localize);
 const detail:ChatCitation={citationId:'knowledgeSearch_doc',type:'knowledgeSearch',sourcePayload:{documentId:12,documentName:'policy.pdf',items:[{itemId:'a',page:0,bbox:JSON.stringify({chunk_bboxes:[{page:0,bbox:[1,2,3,4]}]})},{itemId:'b',chunkIndex:3}]}};
+it.each([
+ {page:0,bbox:JSON.stringify({page_base:0}),expected:'shared:app_chat.page1'},
+ {page:2,bbox:JSON.stringify({page_base:0,chunk_bboxes:[]}),expected:'shared:app_chat.page3'},
+ {page:0,bbox:JSON.stringify({page_base:0,chunk_bboxes:[{page:0,bbox:null}]}),expected:'shared:app_chat.page1'},
+ {page:0,bbox:JSON.stringify({chunk_bboxes:[{page:0,bbox:[1,2,3,4]}]}),expected:'shared:app_chat.page1'},
+ {page:2,bbox:JSON.stringify({page_base:1}),expected:'shared:app_chat.page2'},
+ {page:2,bbox:JSON.stringify({page_base:'0'}),expected:'shared:app_chat.page2'},
+ {page:0,bbox:JSON.stringify({chunk_bboxes:[]}),expected:''},
+ {page:2,bbox:'malformed',expected:'shared:app_chat.page2'},
+])('formats page $page with metadata $bbox without changing legacy page bases',({page,bbox,expected})=>{
+ const citation:ChatCitation={...detail,sourcePayload:{...detail.sourcePayload,items:[{itemId:'page',page,bbox}]}};
+ expect(utils.formatCitationLocation(citation,'page')).toBe(expected);
+});
 it('preserves old marker numbering and groups every cited chunk in first-source order',()=>{
  const content='xknowledgeSearch_doc:awebSearch_site:1yknowledgeSearch_doc:bknowledgeSearch_doc:a';
  const refs=utils.buildCitationReferenceItems({content,citations:[detail]});

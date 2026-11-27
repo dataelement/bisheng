@@ -154,6 +154,8 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             )
         if self.should_use_ppt_page_split():
             abstract_transformers.append(DirectChunkTransformer())
+        elif self.docflow_structure_splitter() is not None:
+            abstract_transformers.append(self.docflow_structure_splitter())
         elif self.should_use_hierarchical_split():
             abstract_transformers.append(
                 HierarchicalSplitterTransformer(

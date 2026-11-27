@@ -48,7 +48,7 @@ export default function FileViewPanne({ file }) {
 
     const fileView = () => {
         const previewFileUrl = file.fileUrl;
-        const newVersion = ["etl4lm", "un_etl4lm", "mineru", "mineru_v4"].includes(file.parse_type);
+        const newVersion = ["etl4lm", "un_etl4lm", "mineru", "mineru_v4", "docflow"].includes(file.parse_type);
         if (!newVersion) {
             if (suffix === "pdf" || file.parse_type === "uns") {
                 return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />;
@@ -67,7 +67,7 @@ export default function FileViewPanne({ file }) {
             case "ofd":
                 return (
                     previewFileUrl && (
-                        <MemoizedFileView startIndex={0} scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
+                        <MemoizedFileView startIndex={file.parse_type === 'docflow' ? 1 : 0} scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
                     )
                 );
             case "csv":

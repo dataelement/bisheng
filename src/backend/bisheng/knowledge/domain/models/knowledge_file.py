@@ -67,6 +67,7 @@ class ParseType(Enum):
     MINERU = "mineru"
     MINERU_V4 = "mineru_v4"
     PADDLE_OCR = "paddle_ocr"
+    DOCFLOW = "docflow"
 
 
 class FileSource(Enum):

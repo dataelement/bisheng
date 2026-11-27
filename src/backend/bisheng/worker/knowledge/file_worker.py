@@ -22,6 +22,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.services.docflow_file_guard import docflow_file_guard
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 from bisheng_langchain.vectorstores import Milvus
@@ -292,6 +293,7 @@ def insert_es(li: list, target: ElasticsearchStore, index_name: str):
 
 
 @bisheng_celery.task(acks_late=True)
+@docflow_file_guard
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """Asynchronously parse one incoming file."""
     from bisheng.common.services.config_service import settings
@@ -400,6 +402,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
 
 
 @bisheng_celery.task(acks_late=True)
+@docflow_file_guard
 def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """Re-parse a file: clear old vectors, then either parse inline (legacy)
     or re-enqueue through the fair scheduler (when enabled).
@@ -410,8 +413,13 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     trace_id_var.set(f"retry_knowledge_file_{file_id}")
     logger.info("retry_knowledge_file_celery start file_id={}", file_id)
 
+    db_files = KnowledgeFileDao.get_file_by_ids([file_id])
+    docflow_resume = (
+        db_files and db_files[0].parse_type == "docflow" and settings.get_knowledge().loader_provider == "docflow"
+    )
     try:
-        delete_knowledge_file_vectors(file_ids=[file_id], clear_minio=False)
+        if not docflow_resume:
+            delete_knowledge_file_vectors(file_ids=[file_id], clear_minio=False)
     except Exception as e:
         logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
         KnowledgeFileDao.update_file_status(
@@ -437,6 +445,10 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         )
         return
 
+    # DocFlow's ingestion service resumes confirmed index stages, and owns any
+    # cleanup needed after an interrupted write. Keep the file eligible to retry.
+    if docflow_resume:
+        KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.WAITING)
     # Legacy path — parse inline as before.
     knowledge = None
     try:
