@@ -130,7 +130,7 @@ Cookie: access_token_cookie=<本地超管Cookie>
 | --- | --- | --- | --- |
 | `connection_id` | `string` | 是 | `1 ~ 128` 字符，非空白且首尾不能有空格；须与系统配置 `sso_sync.kunlian.connection_id` 一致（例如 `104` 环境当前为 `"kunlian-workflow-test"`） |
 | `integration_id` | `string` | 是 | `1 ~ 128` 字符，非空白且首尾不能有空格（例如 `"kunlian"`） |
-| `tenant_ids` | `string[]` | 是 | `1 ~ 1000` 项，每项 `1 ~ 128` 字符且首尾无空格（服务端自动按序去重）；填允许访问的**昆联外部租户 ID** 列表 |
+| `tenant_ids` | `string[]` | 是 | `1 ~ 1000` 项，每项 `1 ~ 128` 字符且首尾无空格（服务端自动按序去重）；填允许访问的**昆联外部租户 ID** 列表，或传 `["*"]` 表示授权全部已映射外部租户 |
 | `capabilities` | `string[]` | 是 | `1 ~ 5` 项，仅允许枚举值 `read`、`write`、`publish`、`invoke`、`grant` |
 | `expires_at` | `string \| null` | 否 | ISO-8601 时间戳或 `null`（默认永不过期）；非 `null` 时**必须晚于当前 UTC 时间** |
 
@@ -252,8 +252,18 @@ curl --silent --show-error \
 ```
 
 **调用 `/api/v2/kunlian/*` 强制规范：**
-1. 必须有且仅有一个查询参数 `user_account`（严格匹配毕昇活跃用户的 `User.user_name`，且其所属昆联外部租户在 Key 的 `tenant_ids` 白名单中）；
+1. 必须有且仅有一个查询参数 `user_account`（严格匹配毕昇活跃用户的 `User.user_name`，且目标外部租户在 Key 的 `tenant_ids` 允许范围内或 Key 为 `["*"]`）；
 2. **严禁**携带 `Cookie`、`X-On-Behalf-Of`、`X-End-User`、`X-User-Id`、`X-Tenant-Id` 请求头，以及 `external_tenant_id` / `external_user_id` 查询参数（出现即返回 `422`）。
+3. **多租户账号消歧与可选请求头 `X-Kunlian-Tenant-Id`**：
+   - 若用户归属单个租户，直接解析通过，无需额外参数。
+   - 若同一 `user_account` 归属多个租户，服务端依次按 **API Key `tenant_ids`（非 `["*"]` 时自动收窄）→ 请求头 `X-Kunlian-Tenant-Id` → URL 路径 `{workflow_id}` 自动定位工作流所属租户** 收敛至唯一有效身份。
+   - 使用 `["*"]`（或包含多租户的）Key 访问**不含 `workflow_id` 的接口**（如 `GET /workflows`、`POST /workflows`、`POST /workflow-runs`）且命中多个租户时，需显式携带 `-H "X-Kunlian-Tenant-Id: <昆联外部租户ID>"`（1～64 字符、单值、无首尾空白）；未指定且仍存在多租户歧义时返回 `403`，格式非法或传多值返回 `422`（注意区分：指定外部租户应使用 `X-Kunlian-Tenant-Id`，禁止使用被拦截的 `X-Tenant-Id`）：
+     ```bash
+     curl --silent --show-error \
+       -H "Authorization: Bearer $KL_API_KEY" \
+       -H "X-Kunlian-Tenant-Id: kunlian-tenant-001" \
+       "$PUBLIC_ORIGIN/api/v2/kunlian/workflows?user_account=$USER_ACCOUNT"
+     ```
 
 ---
 

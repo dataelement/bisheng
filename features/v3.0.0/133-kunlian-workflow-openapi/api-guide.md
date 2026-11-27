@@ -10,11 +10,18 @@
 Authorization: Bearer <API_KEY>
 ```
 
-所有业务请求均在 Query 提供唯一的操作人身份参数：
+所有业务请求均在 Query 提供唯一的操作人身份参数，并在需要时按多租户规则消歧：
 
-- `user_account`：必填，1～128字符，不接受空白或首尾空格；精确匹配毕昇登录账号 `user_name`，大小写不自动折叠；不是显示姓名、毕昇用户ID、成员ID或昆联 OIDC `sub`。旧 `external_tenant_id` / `external_user_id` Query 已移除，单独或混合传入均拒绝，不会被当成租户切换参数。
+- `user_account`：必填，1～128字符，不接受空白或首尾空格；精确匹配毕昇登录账号 `user_name`，大小写不自动折叠；不是显示姓名、毕昇用户ID、成员ID或昆联 OIDC `sub`。旧 `external_tenant_id` / `external_user_id` Query 已移除，单独或混合传入均拒绝（422），不会被当成租户切换参数。
+- `X-Kunlian-Tenant-Id`（可选 Header）：1～64字符，仅允许单值且不接受空白或首尾空格，取值为**昆联外部租户ID**。仅在账号关联多个有效租户且需显式指定目标租户时使用；格式非法或传多值均返回422，不在当前 Key `tenant_ids` 允许范围内或用户非该租户活跃成员均返回403。
 
-不再要求调用方提供 `external_tenant_id` / `external_user_id`。服务端按账号定位用户，并从有效成员关系唯一解析租户；无法唯一解析时拒绝，不允许调用方指定租户或回退默认租户。服务端仍验证Key绑定的可信连接、用户/租户映射及有效资格，并核对解析出的外部租户是否在Key的 `tenant_ids` 允许范围内，按实际用户权限操作；账号查询不意味着放开所有租户。不能混用Cookie、X-On-Behalf-Of、X-End-User或伪造本地身份参数。读与写统一传Query身份，JSON只承载业务数据。
+服务端仍按账号与可信连接定位候选用户与活跃租户成员关系；若同一 `user_account` 关联多个有效租户，按以下顺序收敛至唯一身份（不做默认租户回退）：
+1. **API Key 租户范围收窄**：若 Key 的 `tenant_ids` 非 `["*"]`，先限定在 `tenant_ids` 允许的外部租户集合内。
+2. **显式请求头指定**：若请求携带 `X-Kunlian-Tenant-Id`，优先收敛到该外部租户。
+3. **路径 `workflow_id` 自动定位**：未携带 `X-Kunlian-Tenant-Id` 但 URL 路径含 `workflow_id`（如详情、编辑、发布、版本、授权等）时，服务端自动识别该工作流所属内部租户并锁定对应账号（若用户非该租户有效成员，仍拒绝403）。
+4. **歧义保护（Fail-Closed）**：若以上消歧后仍同时命中多个有效租户（例如使用 `["*"]` Key 调用不带 `workflow_id` 的列表 `GET /workflows`、创建 `POST /workflows` 或运行控制接口 `POST /workflow-runs` 且未传 `X-Kunlian-Tenant-Id`），服务端拒绝请求（403），不会随机或默认选择一个租户。
+
+服务端始终验证 Key 绑定的可信连接、用户/租户映射及有效资格，并核对收敛后的外部租户是否在 Key 的 `tenant_ids`（或 `["*"]`）允许范围内，按实际用户权限操作；账号查询不意味着放开所有租户。不能混用 Cookie、`X-On-Behalf-Of`、`X-End-User`、`X-User-Id`、`X-Tenant-Id` 或伪造本地身份参数（出现即返422）。读与写统一传 Query 身份，JSON 只承载业务数据。
 
 返回统一包含 `status_code`、`status_message`、`data`。注意HTTP状态与五位业务错误码是不同字段。所有响应不缓存。
 
@@ -24,7 +31,7 @@ Authorization: Bearer <API_KEY>
 
 ### 公共必填项与表格约定
 
-- **业务公共必填（适用于01～20每一行）**：Header `Authorization: Bearer <API_KEY>`；Query `user_account`（非空，精确匹配毕昇 `user_name`）。租户由服务端从有效成员关系唯一解析，并继续校验内部映射和Key外部租户范围，不由Query传入。下表“必填参数”列列出这些公共项之外的全部必填项。
+- **业务公共必填（适用于01～20每一行）**：Header `Authorization: Bearer <API_KEY>`；Query `user_account`（非空，精确匹配毕昇 `user_name`）。单租户用户无需传租户参数；多租户用户依次按 Key `tenant_ids` 范围、可选 Header `X-Kunlian-Tenant-Id`（1～64字符昆联外部租户ID，仅单值）及路径 `workflow_id` 自动定位收敛至唯一有效租户，不由 Query 传入。下表“必填参数”列列出这些公共项之外的全部必填项。
 - **管理公共认证（适用于21～26每一行）**：毕昇本地全局超级管理员的有效登录态，并实时复核资格；不是昆联API Key，不传业务Query身份参数。具体会话凭据沿用现有平台登录机制。
 - `Path`＝URL路径参数，`Query`＝URL查询参数，`Header`＝请求头，`Body`＝JSON请求体。含Body的请求使用 `Content-Type: application/json`。
 - “Body必需、字段均可选”表示必须发送JSON对象（可为 `{}`），并不意味着每个字段都必填。表中可选字段、分页默认值均以当前代码为准；不把可选字段伪写成必填。
@@ -112,11 +119,12 @@ Authorization: Bearer <API_KEY>
 
 列表使用cursor/page_size（1–100）分页。普通详情与版本列表不返回编辑图，单版本图需要实际用户edit资格；仅Key含read能力不构成编辑图访问资格。已证实的SQL Agent数据库密码字段不会返回。
 
-创建示例：
+创建示例（多租户用户使用 `["*"]` 或覆盖多个租户的 Key 调用无 `workflow_id` 接口时，需补传 `X-Kunlian-Tenant-Id` 指定外部租户）：
 
 ```http
 POST /api/v2/kunlian/workflows?user_account=kunlian_user
 Authorization: Bearer <API_KEY>
+X-Kunlian-Tenant-Id: <仅多租户无歧义消解线索时可选>
 Content-Type: application/json
 
 {"name":"昆联测试工作流","description":"业务说明"}
@@ -218,7 +226,7 @@ Content-Type: application/json
 - POST `/{key_id}/revoke`撤销。
 - POST `/{key_id}/rotate`轮换，原Key撤销，新Key仅本次显示。
 
-capabilities为read/write/publish/invoke/grant。integration_id是平台维护的稳定接入方标识，不应为不同可信连接复用。`tenant_ids` 仍是Key允许的外部租户范围，不是毕昇本地租户ID；改用账号Query不删除该范围校验，也不允许所有租户。新租户/用户同步不会自动扩大Key范围。
+capabilities为read/write/publish/invoke/grant。integration_id是平台维护的稳定接入方标识，不应为不同可信连接复用。`tenant_ids` 为 Key 允许访问的**外部租户范围**（非毕昇本地租户ID），可填具体外部租户 ID 列表或通配符 `["*"]`（授权全部已映射外部租户）；使用具体列表时服务端只允许访问列表内租户并自动参与多租户账号消歧，新租户/用户同步不会自动扩大非通配符 Key 的范围。
 
 ## 6. 联调前置与验收
 
