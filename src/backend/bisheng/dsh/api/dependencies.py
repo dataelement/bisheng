@@ -13,7 +13,14 @@ async def desktop_principal(request: Request, runtime: DshRuntime = Depends(get_
     if len(request.headers.getlist("authorization")) != 1:
         raise DshInvalidAccessTokenError()
     principal = await runtime.access.authenticate(request.headers["authorization"])
-    request.state.authenticated_activity = DshSessionActivity(runtime.sessions, principal)
+    if principal.platform_reference is not None:
+        from bisheng.dsh.application.session_activity import DesktopPlatformActivity
+
+        request.state.authenticated_activity = DesktopPlatformActivity(
+            runtime.platform_sessions, request.headers["authorization"][7:]
+        )
+    else:
+        request.state.authenticated_activity = DshSessionActivity(runtime.sessions, principal)
     await record_authenticated_activity(request)
     return principal
 

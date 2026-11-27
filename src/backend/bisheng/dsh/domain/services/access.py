@@ -1,4 +1,4 @@
-"""DSH-only JWT validation and local session checks with explicit tenant scope."""
+"""Desktop platform sessions and legacy DSH validation with explicit tenant scope."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -21,6 +21,7 @@ class DshPrincipal(DshContract):
     session_id: str = Field(min_length=1)
     grant_version: int | None = Field(default=None, strict=True, ge=1)
     session_version: int = Field(default=1, strict=True, ge=1)
+    platform_reference: dict | None = None
 
 
 @contextmanager
@@ -44,11 +45,12 @@ def principal_scope(principal: DshPrincipal) -> Iterator[None]:
 
 
 class DshAccessService:
-    def __init__(self, issuer: str, keys, identities, sessions):
+    def __init__(self, issuer: str, keys, identities, sessions, *, platform_auth=None):
         self.issuer = issuer
         self.keys = keys
         self.identities = identities
         self.sessions = sessions
+        self.platform_auth = platform_auth
 
     async def decode(self, authorization: str) -> DshPrincipal:
         if not authorization.startswith("Bearer ") or len(authorization) > 16384:
@@ -56,6 +58,28 @@ class DshAccessService:
         token = authorization[7:]
         try:
             header = jwt.get_unverified_header(token)
+            if header.get("typ") == "bisheng-platform-access+jwt":
+                if self.platform_auth is None:
+                    raise DshInvalidAccessTokenError()
+                metadata = await self.platform_auth.inspect(token)
+                claims = self.platform_auth.decode(token)
+                if claims["client_id"] != "bisheng-desktop":
+                    raise DshInvalidAccessTokenError()
+                return DshPrincipal(
+                    tenant_id=str(claims["tenant_id"]),
+                    user_id=str(claims["sub"]),
+                    session_id=claims["session_id"],
+                    session_version=claims["session_version"],
+                    platform_reference={
+                        "kind": "platform_session",
+                        "user_id": int(claims["sub"]),
+                        "tenant_id": int(claims["tenant_id"]),
+                        "token_version": claims["token_version"],
+                        "expires_at": metadata["access_expires_at"],
+                        "session_id": claims["session_id"],
+                        "session_version": claims["session_version"],
+                    },
+                )
             if (
                 header.get("alg") != "HS256"
                 or header.get("typ") != "bisheng-dsh-access+jwt"
@@ -117,5 +141,8 @@ class DshAccessService:
                 raise DshUserDisabledError()
             if (identity.tenant_id, identity.user_id) != (principal.tenant_id, principal.user_id):
                 raise DshInvalidAccessTokenError()
-            await self.sessions.validate(principal)
+            if principal.platform_reference is not None:
+                await self.platform_auth.validate_reference(principal.platform_reference)
+            else:
+                await self.sessions.validate(principal)
         return principal
