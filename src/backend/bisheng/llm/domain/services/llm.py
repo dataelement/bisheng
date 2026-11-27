@@ -1408,6 +1408,56 @@ class LLMService:
         return BishengLLM(**kwargs)
 
     @classmethod
+    async def get_optional_chat_title_llm(
+        cls, user_id: int, app_name: str, *, tenant_id: int | None = None
+    ) -> BaseChatModel | None:
+        """Load the optional title model without making it a prerequisite for chat.
+
+        Knowledge spaces and applications skip automatic naming without it.
+        The workbench's own resolver instead falls back to its chat model.
+        Model admission still checks the configured slot's tenant and status.
+        """
+        try:
+            config = await cls.get_workbench_llm(tenant_id=tenant_id, slots=("chat_title_llm.id",))
+            model_id = config.chat_title_llm.id if config and config.chat_title_llm else None
+            if not model_id:
+                return None
+            return await cls.get_bisheng_llm(
+                model_id=model_id,
+                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_name=app_name,
+                app_type=ApplicationTypeEnum.DAILY_CHAT,
+                user_id=user_id,
+            )
+        except Exception:
+            # Naming is optional: invalid configuration or model loading must
+            # never reject the user's actual conversation.
+            logger.opt(exception=True).warning("Optional conversation title model unavailable for {}", app_name)
+            return None
+
+    @classmethod
+    def get_optional_chat_title_llm_sync(
+        cls, user_id: int, app_name: str, *, tenant_id: int | None = None
+    ) -> BaseChatModel | None:
+        """The workflow thread's optional title model; no fallback for applications."""
+        try:
+            config = cls.get_workbench_llm_sync(tenant_id=tenant_id, slots=("chat_title_llm.id",))
+            model_id = config.chat_title_llm.id if config and config.chat_title_llm else None
+            if not model_id:
+                return None
+            return cls.get_bisheng_llm_sync(
+                model_id=model_id,
+                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_name=app_name,
+                app_type=ApplicationTypeEnum.DAILY_CHAT,
+                user_id=user_id,
+            )
+        except Exception:
+            # Workflow execution does not depend on a generated session name.
+            logger.opt(exception=True).warning("Optional conversation title model unavailable for {}", app_name)
+            return None
+
+    @classmethod
     async def get_bisheng_linsight_llm(cls, invoke_user_id: int, **kwargs) -> BaseChatModel:
         return await BishengLLM.get_bisheng_llm(
             app_id=ApplicationTypeEnum.LINSIGHT.value,
@@ -1624,6 +1674,13 @@ class LLMService:
             try:
                 await runtime.arequire_default_slot(key, reference.slot_key, login_user=login_user, session=session)
             except ResourceReferenceInvalidError as error:
+                if (
+                    key == "linsight_llm"
+                    and reference.slot_key == "chat_title_llm.id"
+                    and error.kwargs.get("reason") == "model_default_models_unavailable"
+                ):
+                    logger.warning("Ignoring unavailable optional title model in workbench candidates")
+                    continue
                 if error.kwargs.get("reason") != "reference_target_invalid":
                     raise
             else:
@@ -1649,6 +1706,12 @@ class LLMService:
             try:
                 runtime.require_default_slot("linsight_llm", reference.slot_key)
             except ResourceReferenceInvalidError as error:
+                if (
+                    reference.slot_key == "chat_title_llm.id"
+                    and error.kwargs.get("reason") == "model_default_models_unavailable"
+                ):
+                    logger.warning("Ignoring unavailable optional title model in workbench candidates")
+                    continue
                 if error.kwargs.get("reason") != "reference_target_invalid":
                     raise
             else:
@@ -1728,6 +1791,10 @@ class LLMService:
             try:
                 admitted_id = await runtime.arequire_default_slot("linsight_llm", f"{name}.id", login_user=login_user)
             except ResourceReferenceInvalidError as error:
+                if name == "chat_title_llm" and error.kwargs.get("reason") == "model_default_models_unavailable":
+                    logger.warning("Ignoring unavailable optional title model in workbench capabilities")
+                    setattr(projected, name, None)
+                    continue
                 if error.kwargs.get("reason") != "reference_target_invalid":
                     raise
                 setattr(projected, name, None)

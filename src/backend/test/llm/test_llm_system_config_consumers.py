@@ -121,7 +121,7 @@ def test_redis_callback_pops_tenant_id_kwarg_in_init():
 
 
 def test_redis_callback_session_title_uses_self_tenant():
-    assert forwards("worker/workflow/redis_callback.py", "self.tenant_id", "get_workbench_llm_sync")
+    assert forwards("worker/workflow/redis_callback.py", "self.tenant_id", "get_optional_chat_title_llm_sync")
 
 
 def test_linsight_task_exec_threads_session_tenant():
@@ -249,3 +249,44 @@ async def test_invalid_other_slot_does_not_block_actual_default_consumer(admitte
     monkeypatch.setattr(LLMService, "get_bisheng_llm_sync", model)
     assert LLMService.get_knowledge_source_llm(7, tenant_id=101) is model.return_value
     assert model.call_args.kwargs["model_id"] == 22
+
+
+@pytest.mark.parametrize("synchronous", [False, True])
+async def test_offline_title_model_does_not_block_workbench_candidates(admitted_defaults, synchronous):
+    with Session(admitted_defaults.engine) as session, session.begin():
+        native.seed_default(
+            session,
+            key="linsight_llm",
+            payload={"models": [{"id": "22"}], "chat_default_model_id": "22", "chat_title_llm": {"id": "11"}},
+        )
+        session.execute(update(LLMModel).where(LLMModel.id == 11).values(online=False))
+    config = (
+        LLMService.get_workbench_llm_candidates_sync()
+        if synchronous
+        else await LLMService.get_workbench_llm_candidates()
+    )
+    assert [model.id for model in config.models] == ["22"]
+    assert config.chat_default_model_id == "22"
+    assert config.chat_title_llm is None
+    # The user-facing configuration endpoint also projects raw metadata. Its
+    # optional title capability must not break loading the rest of the page.
+    metadata, _, _ = await LLMService.aget_workbench_llm_with_meta()
+    projected = await LLMService.project_workbench_runtime_capabilities(metadata)
+    assert projected.chat_title_llm is None
+    assert projected.chat_default_model_id == "22"
+    assert metadata.chat_title_llm.id == "11"
+    # Strict execution still rejects the offline model; only naming is optional.
+    with pytest.raises(ResourceReferenceInvalidError):
+        await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
+
+
+@pytest.mark.parametrize("synchronous", [False, True])
+async def test_offline_chat_model_still_fails_admission(admitted_defaults, synchronous):
+    with Session(admitted_defaults.engine) as session, session.begin():
+        native.seed_default(session, key="linsight_llm", payload={"chat_default_model_id": "11"})
+        session.execute(update(LLMModel).where(LLMModel.id == 11).values(online=False))
+    with pytest.raises(ResourceReferenceInvalidError):
+        if synchronous:
+            LLMService.get_workbench_llm_candidates_sync()
+        else:
+            await LLMService.get_workbench_llm_candidates()

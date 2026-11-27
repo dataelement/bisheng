@@ -825,16 +825,13 @@ class RedisCallback(BaseCallback):
                 return
             question = input_message[0].message
 
-        llm_conf = LLMService.get_workbench_llm_sync(tenant_id=self.tenant_id, slots=("chat_title_llm.id",))
-        if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
-            return
-        llm = LLMService.get_bisheng_llm_sync(
-            model_id=llm_conf.chat_title_llm.id,
-            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-            app_name="workflow_chat_title",
-            app_type=ApplicationTypeEnum.DAILY_CHAT,
+        llm = LLMService.get_optional_chat_title_llm_sync(
             user_id=self.user_id,
+            app_name="workflow_chat_title",
+            tenant_id=self.tenant_id,
         )
+        if llm is None:
+            return
         title = generate_conversation_title_sync(question=question, llm=llm)
         updated = MessageSessionDao.update_session_name_sync(
             session.chat_id, title, only_if_default=True, tenant_id=session.tenant_id

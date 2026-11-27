@@ -587,16 +587,9 @@ class ChatClient:
             return
         self.new_session.name = "New Chat"
 
-        llm_conf = await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
-        if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
+        llm = await LLMService.get_optional_chat_title_llm(user_id=self.user_id, app_name="assistant_chat_title")
+        if llm is None:
             return
-        llm = await LLMService.get_bisheng_llm(
-            model_id=llm_conf.chat_title_llm.id,
-            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-            app_name="assistant_chat_title",
-            app_type=ApplicationTypeEnum.DAILY_CHAT,
-            user_id=self.user_id,
-        )
         title = await generate_conversation_title_async(question=question, llm=llm)
         await MessageSessionDao.update_session_name(self.new_session.chat_id, title)
         self.new_session.name = title

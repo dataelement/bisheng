@@ -211,17 +211,9 @@ class KnowledgeSpaceChatService:
 
     @staticmethod
     async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str | None = None):
-        llm_conf = await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
-        if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
-            logger.debug("not found chat title llm")
+        llm = await LLMService.get_optional_chat_title_llm(user_id=user_id, app_name="knowledge_sapce_chat_title")
+        if llm is None:
             return
-        llm = await LLMService.get_bisheng_llm(
-            model_id=llm_conf.chat_title_llm.id,
-            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-            app_name="knowledge_sapce_chat_title",
-            app_type=ApplicationTypeEnum.DAILY_CHAT,
-            user_id=user_id,
-        )
         title = await generate_conversation_title_async(question=question, llm=llm)
         await MessageSessionDao.update_session_name(chat_id, title)
 
