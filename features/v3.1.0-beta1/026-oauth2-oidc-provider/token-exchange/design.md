@@ -8,6 +8,8 @@
 
 核心链路：A可信后端 → 原 /api/v1/oauth2/token 的新grant → 校验A、原凭证、A→B授权及身份 → 创建B独立会话和父会话关联 → ES256签发 aud=B → B校验并建立自身会话。
 
+权限边界说明（回应用户对“如何保证不扩权”的问题）：这里的范围是OAuth身份scope，毕昇在服务端要求requested_scope全部属于“原Token ∩ 原会话 ∩ 当前A允许范围 ∩ A→B策略 ∩ 当前B允许范围 ∩ {openid,profile,email}”；任一超出整体invalid_scope，不静默裁剪。B自己维护的角色、资源和业务动作不在这份scope交集中，也不会自动继承或被裁剪成A的业务权限；交换Token不携带A管理员/角色标记。B以已验签的(iss,sub,tenant_id)绑定本地账号后按自己的权限模型授权。如要比较A/B业务权限，需另定义共同权限语义或映射，本轮不隐含承诺。此说明不改变已接受规格AC-06与范围，仅澄清其含义。
+
 ## 2. 三个实现决策
 
 1. **复用标准Token接口和ES256/JWKS**，增加RFC8693 grant，而非另造登录接口或复用DSH模型令牌。现有keys服务已管理相同签名材料；输入只接受A所属毕昇OAuth Access Token。若未来需要外部IdP/B自签Token，重新设计信任链。
