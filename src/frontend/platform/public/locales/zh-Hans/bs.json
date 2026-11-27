@@ -4818,5 +4818,14 @@
   },
   "memory": {
     "operation": "记忆操作"
+  },
+  "platformAuth": {
+    "sessionEnded": "登录会话已结束，请重新登录",
+    "serviceUnavailable": "认证服务暂时不可用，请稍后重试",
+    "upgradeRequired": "请升级客户端后继续使用",
+    "hostReconnect": "请在客户端中恢复连接",
+    "localLogoutUnconfirmed": "本地已退出，服务端撤销未确认",
+    "retry": "重试",
+    "loading": "正在恢复登录状态…"
   }
 }

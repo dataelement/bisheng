@@ -143,7 +143,7 @@ class MobileAccessService:
             return _unavailable()
         return MobileResult(200, {"desktops": desktops})
 
-    async def rpc(self, user, desktop_id: str, body: dict) -> MobileResult:
+    async def rpc(self, user, desktop_id: str, body: dict, *, before_dispatch=None) -> MobileResult:
         parsed = parse_rpc(body)
         if parsed is None or DESKTOP_ID_PATTERN.fullmatch(desktop_id or "") is None:
             return _invalid()
@@ -156,6 +156,8 @@ class MobileAccessService:
             connection_id = await self.store.current_connection(desktop_id)
             if not connection_id:
                 return MobileResult(503, {"error": "offline"})
+            if before_dispatch is not None:
+                await before_dispatch()
             request_id = str(uuid4())
             deadline = time.time() + self.rpc_timeout
             await self.store.push_request(

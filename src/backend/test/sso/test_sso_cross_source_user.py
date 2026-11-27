@@ -172,12 +172,10 @@ def patches(monkeypatch):
         "aget_token_version",
         AsyncMock(return_value=0),
     )
-    monkeypatch.setattr(m, "AuthJwt", MagicMock(return_value=MagicMock()))
-    monkeypatch.setattr(
-        m.LoginUser,
-        "create_access_token",
-        MagicMock(return_value="jwt-token"),
-    )
+    from bisheng.user import platform_auth_runtime
+
+    issue = AsyncMock(return_value={"access_token": "jwt-token"})
+    monkeypatch.setattr(platform_auth_runtime, "platform_auth_service", lambda: SimpleNamespace(issue=issue))
 
     return m
 

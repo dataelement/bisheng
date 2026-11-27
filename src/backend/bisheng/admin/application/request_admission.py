@@ -34,6 +34,12 @@ async def authenticate_browser(connection):
     from bisheng.user.domain.services.auth import AuthJwt
 
     connection.state.require_current_super = True
+    from bisheng.user.domain.services.platform_identity import authenticate_platform, is_platform_token
+    from bisheng.user.domain.services.platform_transport import access_credential
+
+    candidate = access_credential(connection)
+    if is_platform_token(candidate):
+        return await authenticate_platform(connection, identity_class=UserPayload, token=candidate)
     if connection.scope["type"] == "websocket":
         return await UserPayload.get_login_user_from_ws(connection, AuthJwt())
     auth = AuthJwt(req=connection)
@@ -102,6 +108,9 @@ def bind_admitted_scope(admitted):
 async def admit(connection, kind):
     user = await authenticate_browser(connection)
     connection.state.admitted_login_user = user
+    from bisheng.core.session_activity import record_authenticated_activity
+
+    await record_authenticated_activity(connection)
     target = user.tenant_id
     source = "own"
     tenant_business = kind in {RequestScope.TENANT, RequestScope.PERSONAL}
@@ -165,6 +174,12 @@ class ScopedEndpoint:
             if scope["type"] == "websocket":
                 await connection.close(code=1008, reason=str(exc.code))
                 return
+            from bisheng.common.errcode.platform_auth import PlatformAuthError
+
+            if isinstance(exc, PlatformAuthError):
+                return await JSONResponse(
+                    exc.payload(), status_code=exc.http_status, headers={"Cache-Control": "no-store"}
+                )(scope, receive, send)
             status = {19701: 403, 19703: 400, 19704: 409, 19705: 503}.get(exc.code, 403)
             return await JSONResponse(exc.return_resp_instance().model_dump(), status_code=status)(scope, receive, send)
 
@@ -189,7 +204,22 @@ class ScopedEndpoint:
         token = admitted_request_scope.set(admitted)
         try:
             with bind_admitted_scope(admitted):
-                await self.app(scope, receive, scoped_send)
+                user = connection.state.admitted_login_user
+                reference = getattr(user, "_runtime_credential_reference", None)
+                if reference and reference.get("kind") == "platform_session":
+                    from bisheng.user.domain.services.platform_stream import run_platform_guarded
+                    from bisheng.user.platform_auth_runtime import get_platform_auth
+
+                    await run_platform_guarded(
+                        self.app,
+                        scope,
+                        receive,
+                        scoped_send,
+                        service=get_platform_auth(connection),
+                        reference=reference,
+                    )
+                else:
+                    await self.app(scope, receive, scoped_send)
         finally:
             admitted_request_scope.reset(token)
 

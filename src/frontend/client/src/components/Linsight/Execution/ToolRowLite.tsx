@@ -119,7 +119,7 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step, memorySearches }) => {
         >
             {!isMemoryStep && parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
             {memoryHits.length > 0 && (
-                <div className="mt-1 w-fit max-w-[560px] border-l-2 border-border-base py-0.5 pl-3">
+                <div className="mt-1">
                     <MemorySearchHits itemIds={memoryHits} />
                 </div>
             )}

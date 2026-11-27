@@ -193,6 +193,21 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
 
 @router.post("/user/logout", status_code=201)
 async def logout(auth_jwt: AuthJwt = Depends()):
+    from bisheng.user.domain.services.platform_identity import is_platform_token
+    from bisheng.user.domain.services.platform_transport import require_csrf, selected_sid
+    from bisheng.user.platform_auth_runtime import get_platform_auth
+
+    token = auth_jwt.request_access_token()
+    if is_platform_token(token):
+        service = get_platform_auth(auth_jwt.req)
+        require_csrf(auth_jwt.req, await service.logout_csrf(token))
+        await service.logout(token)
+        sid = selected_sid(auth_jwt.req)
+        if sid:
+            auth_jwt.res.delete_cookie(f"platform_access_{sid}", path="/")
+            auth_jwt.res.delete_cookie(f"platform_refresh_{sid}", path="/api/v1/auth")
+        auth_jwt.res.headers["Cache-Control"] = "no-store"
+        return resp_200()
     # F019 AC-10: clear any Redis admin-scope for this user before the JWT
     # disappears. Best-effort — a decode failure or Redis outage must not
     # prevent the cookie from being unset. Local import avoids a cross-

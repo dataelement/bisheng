@@ -179,6 +179,8 @@ export default defineConfig(({ command, mode }) => {
           secure: false,
           rewrite: (path) => path.replace(/^\/workspace/, '').replace(/^\/object/, ''),
         },
+        // Refresh cookies are scoped to the canonical auth path, independent of SPA base.
+        '/api/v1/auth': createFrontendProxy(apiTarget, { verbose: proxyLog }),
         '/workspace/api': createFrontendProxy(apiTarget, {
           verbose: proxyLog,
           rewrite: (url) => url.replace(/^\/workspace/, ''),

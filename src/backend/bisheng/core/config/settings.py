@@ -1151,6 +1151,44 @@ def _coerce_sandbox_env(annotation, raw: str):
     return raw
 
 
+class PlatformAuthSettings(BaseModel):
+    enabled: bool = True
+    reject_legacy_web_tokens: bool = False
+    mobile_cutover_ready: bool = False
+    minimum_client_version: str = "1.1.0"
+    public_origin: str | None = None
+    trusted_proxy_hosts: list[str] = Field(default_factory=lambda: ["127.0.0.1", "::1"])
+    access_ttl_seconds: int = Field(default=2592000, ge=60)
+    idle_ttl_seconds: int = Field(default=7776000, ge=60)
+    refresh_grace_seconds: int = Field(default=86400, ge=0)
+    absolute_ttl_seconds: int | None = Field(default=None, ge=60)
+
+    @model_validator(mode="after")
+    def validate_session_policy(self):
+        if self.public_origin:
+            from urllib.parse import urlsplit
+
+            origin = urlsplit(self.public_origin)
+            if (
+                origin.scheme not in {"http", "https"}
+                or not origin.netloc
+                or origin.username
+                or origin.password
+                or origin.path not in {"", "/"}
+                or origin.query
+                or origin.fragment
+            ):
+                raise ValueError("platform_auth.public_origin must be an HTTP(S) origin")
+            self.public_origin = self.public_origin.rstrip("/")
+        if self.idle_ttl_seconds < self.access_ttl_seconds:
+            raise ValueError("platform_auth idle TTL must cover the access TTL")
+        if self.reject_legacy_web_tokens and not self.mobile_cutover_ready:
+            raise ValueError("legacy token rejection requires mobile_cutover_ready")
+        if self.mobile_cutover_ready and not self.minimum_client_version.strip():
+            raise ValueError("mobile cutover requires a minimum client version")
+        return self
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -1194,6 +1232,7 @@ class Settings(BaseModel):
     # F072: no shipped default. Empty means "generate once and keep in the config
     # table" — see ``bisheng.user.domain.services.jwt_secret``.
     jwt_secret: str = ""
+    platform_auth: PlatformAuthSettings = Field(default_factory=PlatformAuthSettings)
     gpts: dict = {}
     openai_conf: dict = {}
     minio_conf: dict = {}

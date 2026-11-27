@@ -104,16 +104,24 @@ credential_has_old_data() {
 
 credential_prompt_secret() {
   local component="$1" label="$2" file="$3" entry="$4"
-  local credential_value credential_confirmation status deployment minimum
+  local credential_value credential_confirmation status deployment minimum hint='' generated=''
+  [[ ${5:-} != generate ]] || hint='[直接回车随机生成] '
   minimum=6
   [[ $component = minio ]] && minimum=8
   deployment=$(credential_deployment_identity)
   while true; do
     if [[ ! -f $file ]]; then
       [[ -t 0 ]] || die "当前不是交互终端，缺少${label}密码；请在交互终端重新执行原安装命令，或在.env配置BISHENG_CREDENTIAL_INPUTS_FILE供自动化使用"
-      credential_read_secret "请输入${label}密码（至少${minimum}位，输入隐藏）：" credential_value || die '输入已取消，请重新执行原安装命令继续'
-      credential_read_secret '请再次输入确认：' credential_confirmation || die '输入已取消，请重新执行原安装命令继续'
-      if [[ $credential_value != "$credential_confirmation" ]]; then
+      credential_read_secret "${hint}请输入${label}密码（至少${minimum}位，输入隐藏）：" credential_value || die '输入已取消，请重新执行原安装命令继续'
+      generated=''
+      if [[ -n $hint && -z $credential_value ]]; then
+        credential_value=$(head -c 9 /dev/urandom | base64 | tr '+/' '-_') || die '系统随机源读取失败，尚未设置密码'
+        [[ $credential_value =~ ^[A-Za-z0-9_-]{12}$ ]] || die '系统随机源输出不完整，尚未设置密码'
+        credential_value=${credential_value:0:10}
+        generated=$credential_value
+      elif ! credential_read_secret '请再次输入确认：' credential_confirmation; then
+        die '输入已取消，请重新执行原安装命令继续'
+      elif [[ $credential_value != "$credential_confirmation" ]]; then
         printf '两次输入不一致，请重新输入。\n'
         unset credential_value credential_confirmation
         continue
@@ -130,7 +138,13 @@ credential_prompt_secret() {
       fi
     fi
     printf 'version: 1\n%s:\n  %s: %s\n' "$component" "$entry" "$(basename "$file")" > "$credential_inputs/validate.yaml"
-    if credential_tool validate-inputs --inputs "$credential_inputs/validate.yaml" --key-file "$KEY_FILE" --deployment-id "$deployment"; then return; fi
+    if credential_tool validate-inputs --inputs "$credential_inputs/validate.yaml" --key-file "$KEY_FILE" --deployment-id "$deployment"; then
+      if [[ -n $generated ]]; then
+        credential_generated_labels+=("$label")
+        credential_generated_values+=("$generated")
+      fi
+      return 0
+    fi
     [[ -t 0 ]] || die "${label}密码文件未通过检查，请修正输入文件后重新执行原命令"
     printf '%s密码至少%s位，且不能使用占位符；请重新输入。\n' "$label" "$minimum"
     rm -f -- "$file"  # Only this attempt's private input, never a live bundle.
@@ -138,7 +152,7 @@ credential_prompt_secret() {
 }
 
 credential_collect_inputs() {
-  local supplied component label entry file
+  local supplied component label entry file eligible='' mode marker previous
   supplied=$(env_get "$ENV_FILE" BISHENG_CREDENTIAL_INPUTS_FILE)
   if [[ -n $supplied ]]; then
     [[ $supplied = /* && -f $supplied ]] || die '自动化密码输入文件必须是可读的绝对路径'
@@ -150,6 +164,21 @@ credential_collect_inputs() {
   mkdir -p "$credential_inputs"
   chmod 700 "$credential_inputs"
   credential_tool requirements --config "$credential_config" --env-file "$ENV_FILE" > "$credential_inputs/components" || die '基础配置读取失败，尚未启动服务'
+  marker="$credential_store/fresh-prompt.started"
+  if [[ -t 0 && ! -e $marker && ! -L $marker ]]; then
+    # Under the deployment lock. Old installers may already have saved inputs.
+    previous=false
+    for file in "$credential_inputs"/*.password; do [[ ! -e $file && ! -L $file ]] || previous=true; done
+    if [[ $previous = false ]]; then
+      if ! eligible=$(credential_tool requirements --fresh-generatable --config "$credential_config" --env-file "$ENV_FILE" 2>/dev/null); then
+        eligible=''  # Older compatible images retain their original manual workflow.
+      fi
+    fi
+    : > "$marker" || die '无法记录首次设密状态，尚未设置密码'
+    if [[ -n $eligible ]]; then
+      printf '可随机生成的组件会单独提示。回车生成的密码将在安装成功后显示在终端；请确认没有共享屏幕或录屏。\n' >&2
+    fi
+  fi
   printf 'version: 1\n' > "$credential_inputs/inputs.yaml"
   # Keep stdin on the terminal: password prompts must not read the component list.
   while IFS= read -r component <&3; do
@@ -164,7 +193,9 @@ credential_collect_inputs() {
       *) die '基础配置返回了不支持的组件，尚未启动服务' ;;
     esac
     file="$credential_inputs/$component.password"
-    credential_prompt_secret "$component" "$label" "$file" "$entry"
+    mode=manual
+    if [[ $component != telemetry_elasticsearch && $'\n'"$eligible"$'\n' == *$'\n'"$component"$'\n'* ]]; then mode=generate; fi
+    credential_prompt_secret "$component" "$label" "$file" "$entry" "$mode"
     printf '%s:\n  %s: %s\n' "$component" "$entry" "$(basename "$file")" >> "$credential_inputs/inputs.yaml"
     if [[ $component = minio ]]; then
       # Account identifiers are not passwords; retain the existing account when supplied.
@@ -176,6 +207,23 @@ credential_collect_inputs() {
     fi
   done 3< "$credential_inputs/components"
   credential_manifest="$credential_inputs/inputs.yaml"
+}
+
+credential_show_generated() {
+  [[ -n ${credential_generated_labels[0]:-} ]] || return 0
+  # Paths contain no secrets and remain available even if the terminal disappeared.
+  printf '请将本次生成的密码保存到密码管理器。可由部署管理员从当前生效目录取回：%s\n' "$BUNDLE"
+  printf '%s\n' 'MySQL、Redis、MinIO、Elasticsearch：查看目录内对应的 mysql.password、redis.password、minio.password、elasticsearch.password。' \
+    'Milvus：查看 milvus.yaml 中的 common.security.defaultRootPassword。改密后请以 .env 的 BISHENG_CREDENTIALS_DIR 为准。'
+  local i
+  # Use the controlling terminal only; the recovery instructions above are safe to log.
+  if [[ -t 0 ]] && { exec 4>/dev/tty; } 2>/dev/null; then
+    for i in "${!credential_generated_labels[@]}"; do
+      printf '%s：%s\n' "${credential_generated_labels[$i]}" "${credential_generated_values[$i]}" >&4 || break
+    done
+    exec 4>&-
+  fi
+  unset credential_generated_values credential_generated_labels
 }
 
 credential_initialize_store() {

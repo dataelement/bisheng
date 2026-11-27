@@ -883,5 +883,20 @@
   "reference_reason_workflow_mode": "The workflow execution mode is invalid. Reenter from application chat or the editor preview.",
   "reference_reason_sharing_result": "The model service’s sharing scope cannot be verified. Ask an administrator to check sharing settings and the permission service.",
   "reference_reason_configuration_guard": "The resource settings were saved without the required concurrency validation. Refresh and retry; contact an administrator if it persists.",
-  "reference_node_with_id": "Node “{{nodeName}}” ({{nodeId}}) references "
+  "reference_node_with_id": "Node “{{nodeName}}” ({{nodeId}}) references ",
+  "10650": "Invalid sign-in credentials. Please sign in again.",
+  "10651": "Your access token expired. Renewing your session.",
+  "10652": "Invalid refresh credentials. Please sign in again.",
+  "10653": "Refresh credential reuse detected. Please sign in again.",
+  "10654": "Your session expired. Please sign in again.",
+  "10655": "Your session ended. Please sign in again.",
+  "10656": "Sign-in has been updated. Please sign in again.",
+  "10657": "Sign-in is incomplete. Please try again.",
+  "10658": "Sign-in binding expired. Please sign in again.",
+  "10659": "Authentication is temporarily unavailable. Please try again later.",
+  "10660": "Security verification failed. Please reload and try again.",
+  "10661": "Conflicting credentials. Please sign in again.",
+  "10662": "Please upgrade your client to continue.",
+  "10663": "Invalid authentication request. Please try again.",
+  "10664": "Sign-in binding is complete. Please reload and try again."
 }

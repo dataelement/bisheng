@@ -54,6 +54,10 @@ class OperationsAuthentication:
         if type(tenant_id) is not int or tenant_id < 1 or not credential or len(credential) > 16384:
             raise PermissionError("A valid administrator credential and selected tenant are required")
         subject = self.decode(credential)
+        if "platform_session" in subject:
+            from bisheng.user.platform_auth_runtime import platform_auth_service
+
+            await platform_auth_service().inspect(credential)
         user_id = subject.get("user_id")
         version = subject.get("token_version", 0)
         if type(user_id) is not int or user_id < 1 or type(version) is not int:

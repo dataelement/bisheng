@@ -271,13 +271,12 @@ def patches(monkeypatch):
         AsyncMock(return_value=None),
     )
 
-    # JWT signer
-    monkeypatch.setattr(m, "AuthJwt", MagicMock(return_value=MagicMock()))
-    monkeypatch.setattr(
-        m.LoginUser,
-        "create_access_token",
-        MagicMock(return_value="jwt-token-xyz"),
-    )
+    # The gateway handoff now asks the platform issuer for a pending WEB
+    # credential. Identity/org policy collaborators remain unchanged.
+    from bisheng.user import platform_auth_runtime
+
+    platform_issue = AsyncMock(return_value={"access_token": "jwt-token-xyz"})
+    monkeypatch.setattr(platform_auth_runtime, "platform_auth_service", lambda: SimpleNamespace(issue=platform_issue))
 
     return SimpleNamespace(
         module=m,
@@ -288,6 +287,7 @@ def patches(monkeypatch):
         dept_execute=dept_execute,
         membership_add=membership_add,
         membership_remove=membership_remove,
+        platform_issue=platform_issue,
     )
 
 
@@ -311,6 +311,7 @@ class TestNewUserHappyPath:
         assert resp.user_id == 7
         assert resp.leaf_tenant_id == 15
         assert resp.token == "jwt-token-xyz"
+        patches.platform_issue.assert_awaited_once_with(7, 15, "bisheng-web", pending=True)
 
     async def test_sync_user_called_with_login_trigger(self, patches):
         from bisheng.sso_sync.domain.services.login_sync_service import (

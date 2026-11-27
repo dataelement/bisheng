@@ -165,12 +165,12 @@ credential_start_native() {
   for attempt in {1..60}; do
     ready=true
     for service in mysql redis elasticsearch etcd minio milvus; do
-      container=$(compose ps -q "$service")
+      container=$(compose ps --all -q "$service")
       [[ -n $container ]] || die "中间件容器未创建：$service"
-      state=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")
+      state=$(docker inspect --format '{{if and (eq .State.Status "running") .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")
       case "$state" in
         healthy|running) ;;
-        unhealthy|exited|dead) die "中间件尚未就绪：$service；请检查脱敏日志" ;;
+        unhealthy|exited|dead) die "中间件尚未就绪：$service（容器状态：$state）；请检查脱敏日志" ;;
         *) ready=false ;;
       esac
       if [[ $service = elasticsearch && $state = healthy ]]; then

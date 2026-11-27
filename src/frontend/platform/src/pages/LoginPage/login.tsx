@@ -20,7 +20,7 @@ import { consumeLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCaptchaApi, loginApi } from "../../controllers/API/user";
-import { showApiError } from "../../controllers/request";
+import { platformAuth, showApiError } from "../../controllers/request";
 import LoginBridge from "./loginBridge";
 import { handleEncrypt, handleLdapEncrypt } from "./utils";
 import { RegistrationForm } from './RegistrationForm';
@@ -256,16 +256,15 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
         (shouldUseLdap
                 ? ldapLoginApi(personId, encryptPwd)
                 : loginApi(personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
-            ).then((res: any) => {
+            ).then(async (res: any) => {
+                if (shouldUseLdap) await platformAuth.initialize(true);
                 // v2.5.1: leaf tenant is derived from the user's primary department.
                 // Ignore any stale "requires_tenant_selection" response fields.
                 if (res.requires_tenant_selection) {
                     sessionStorage.removeItem("pending_tenants");
                 }
 
-                window.self === window.top
-                    ? localStorage.removeItem("ws_token")
-                    : localStorage.setItem("ws_token", res.access_token);
+                localStorage.removeItem("ws_token");
                 localStorage.setItem("isLogin", "1");
                 // A 401 anywhere in the two SPAs stores where the user was; come
                 // back to it. Validated + consumed in one place so this path and
@@ -275,7 +274,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                     location.href = returnTo;
                 } else {
                     const entry = (res as { default_entry?: string }).default_entry;
-                    if (entry === "workspace") {
+                    if (entry === "workspace" || entry === "/workspace") {
                         location.href = getWorkspaceClientUrl("/");
                     } else {
                         // Both areas or admin-only: default to admin shell first.

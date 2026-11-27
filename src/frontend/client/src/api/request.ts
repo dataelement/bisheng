@@ -1,6 +1,10 @@
 // @ts-strict-ignore
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  BrowserAuthSession, requestHostAuthRenewal,
+  isPlatformAuthPath,
+  isAccessExpired, isDefinitiveAuthFailure,
+  AuthSessionError,
   BrowserScopeSession,
   needsBrowserScope,
   hasIndependentScope,
@@ -17,7 +21,6 @@ import { knowledgeProcessingConflictVariant } from "@bisheng/knowledge/processin
 import axios, { AxiosRequestConfig } from "axios";
 import i18next from "i18next";
 import { redirectToLogin } from "~/utils/loginRedirect";
-import * as endpoints from "~/api/chat/api-endpoints";
 import type * as t from "~/types/chat/types";
 
 // Controls automatic error notifications.
@@ -33,6 +36,11 @@ type ErrorOptions = {
 
 const customAxios = axios.create({
   baseURL: import.meta.env.BASE_URL,
+});
+
+export const platformAuth = new BrowserAuthSession(async (method, path, data, headers) => {
+  return await customAxios.request({ method, url: path, baseURL: window.location.origin, data, headers, withCredentials: true,
+    platformAuthTransport: true, timeout: 15000, validateStatus: () => true });
 });
 
 export const SERVICE_MAINTENANCE_EVENT = "bs:service-maintenance";
@@ -103,6 +111,10 @@ export async function prepareBrowserHeaders(method: string, url: string, headers
 }
 
 customAxios.interceptors.request.use(async config => {
+  if (config.platformAuthTransport || isPlatformAuthPath(config.url || '')) return config;
+  if (!hasIndependentScope(config.headers) && (needsBrowserScope(config.method || 'GET', config.url || '', window.location.origin, config.baseURL) || (config.url || '').includes('/user/info'))) {
+    await platformAuth.settled();
+  }
   const independent = (config as typeof config & ErrorOptions).managementContext === 'independent';
   const headers = independent ? {} : await prepareBrowserHeaders(config.method || 'GET', config.url || '', config.headers, config.baseURL);
   for (const [name, value] of Object.entries(headers)) config.headers.set(name, value);
@@ -188,7 +200,7 @@ async function _patch<T = unknown>(
 }
 
 const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> =>
-  _post(endpoints.refreshToken(retry));
+  platformAuth.refresh(Boolean(retry)).then(() => undefined);
 
 export const translateApiErrorMessage = (data: any) => {
   const referenceMessage = referenceErrorMessage(data, (key, values) => String(i18next.t(`api_errors.${key}`, values)));
@@ -289,6 +301,18 @@ const responsePresentation = new WeakMap<object, ErrorPresentation>();
 
 customAxios.interceptors.response.use(
   async (response) => {
+    if (response.config?.platformAuthTransport) return response;
+    if (isAccessExpired(response.data) && !response.config?.platformAuthRetry) {
+      if (await platformAuth.refresh()) return customAxios.request({ ...response.config, platformAuthRetry: true });
+      requestHostAuthRenewal();
+      return Promise.reject(new AuthSessionError(401, 10651, 'host_refresh_required', false));
+    }
+    if (isDefinitiveAuthFailure(response.data) && platformAuth.snapshot?.refresh_mode === 'host') {
+      requestHostAuthRenewal();
+      return Promise.reject(new AuthSessionError(401, 10651, 'host_refresh_required', false));
+    }
+    if (isDefinitiveAuthFailure(response.data)) platformAuth.invalidate();
+    if (response.headers?.['x-auth-activity-recorded']) platformAuth.noteBusinessActivity();
     const snapshot = scopeSnapshots.get(response.config);
     const confirmed = response.headers?.['x-management-tenant'];
     if (snapshot !== undefined && (snapshot !== browserScope.tenant || (confirmed !== undefined && Number(confirmed) !== snapshot))) {
@@ -371,6 +395,17 @@ customAxios.interceptors.response.use(
     return response;
   },
   async (error) => {
+    if (error?.config?.platformAuthTransport || error instanceof AuthSessionError) return Promise.reject(error);
+    if (isAccessExpired(error) && !error?.config?.platformAuthRetry) {
+      if (await platformAuth.refresh()) return customAxios.request({ ...error.config, platformAuthRetry: true });
+      requestHostAuthRenewal();
+      return Promise.reject(error);
+    }
+    if ((platformAuth.hostPending || platformAuth.snapshot?.refresh_mode === 'host') && error?.response?.status === 401) {
+      requestHostAuthRenewal();
+      return Promise.reject(error);
+    }
+    if (isDefinitiveAuthFailure(error)) platformAuth.invalidate();
     const originalRequest = error.config;
     const transportFailed = !error.response && (
       error.code === "ERR_NETWORK" || error.code === "ECONNABORTED" || error.code === "ETIMEDOUT"
@@ -480,11 +515,13 @@ async function normalizeRequestFailure(cause, response?) {
 // maintenance, token-refresh queues and their ordering remain in the first stage.
 customAxios.interceptors.response.use(
   async (response) => {
+    if (response.config?.platformAuthTransport) return response;
     const envelope = (await decodeErrorEnvelope(response.data)) ?? response.data;
     if (!isErrorEnvelope(envelope) || envelope.status_code === 200) return response;
     return Promise.reject(await normalizeRequestFailure(envelope, response));
   },
-  async (cause) => Promise.reject(await normalizeRequestFailure(cause)),
+  async (cause) => cause?.config?.platformAuthTransport || cause instanceof AuthSessionError
+    ? Promise.reject(cause) : Promise.reject(await normalizeRequestFailure(cause)),
 );
 
 // DEV only, opt-in: pad the workbench module lists with sample rows (~/mock/demo).

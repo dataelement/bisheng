@@ -626,8 +626,8 @@ class UserService:
             return None
 
     @classmethod
-    async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
-        from bisheng.api.services.audit_log import AuditLogService
+    async def authenticate_password(cls, request: Request, user: UserLogin):
+        """Validate password identity and Home policy without issuing credentials."""
 
         if await settings.aget_from_db("use_captcha"):
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
@@ -812,13 +812,68 @@ class UserService:
                     exc,
                 )
 
-        # Fetch fresh token_version (sync_user may have just bumped it) and
-        # embed in the JWT payload so the middleware can reject stale tokens.
-        fresh_token_version = 0
-        try:
-            fresh_token_version = await UserDao.aget_token_version(db_user.user_id)
-        except Exception as exc:
-            logger.debug("aget_token_version failed for %d: %s", db_user.user_id, exc)
+        from bisheng.user.domain.schemas.password_identity import PasswordLoginIdentity
+
+        fresh_token_version = await UserDao.aget_token_version(db_user.user_id)
+        return PasswordLoginIdentity(
+            user=db_user,
+            tenant_id=tenant_id or DEFAULT_TENANT_ID,
+            role_ids=tuple(login_role_ids),
+            is_department_admin=login_is_department_admin,
+            token_version=fresh_token_version,
+            requires_tenant_selection=requires_tenant_selection,
+            tenants_list=tenants_list,
+        )
+
+    @classmethod
+    async def complete_password_login(cls, request, identity):
+        from bisheng.api.services.audit_log import AuditLogService
+
+        login_user = await LoginUser.init_login_user(
+            identity.user.user_id, identity.user.user_name, role_ids=identity.role_ids
+        )
+        AuditLogService.user_login(login_user, get_request_ip(request))
+        await telemetry_service.log_event(
+            user_id=identity.user.user_id,
+            event_type=BaseTelemetryTypeEnum.USER_LOGIN,
+            trace_id=trace_id_var.get(),
+            event_data=UserLoginEventData(method="password"),
+        )
+        entry = await LoginUser.user_entry_payload_for_read(
+            identity.user, role_ids=identity.role_ids, is_department_admin=identity.is_department_admin
+        )
+        return entry, login_user.is_global_super
+
+    @classmethod
+    async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
+        """Compatibility adapter; identity validation is shared with /auth/login."""
+        from bisheng.api.services.audit_log import AuditLogService
+        from bisheng.user.domain.schemas.password_identity import PasswordLoginIdentity
+
+        identity = await cls.authenticate_password(request, user)
+        if not isinstance(identity, PasswordLoginIdentity):
+            return identity
+        db_user, tenant_id = identity.user, identity.tenant_id
+        login_role_ids = list(identity.role_ids)
+        login_is_department_admin = identity.is_department_admin
+        fresh_token_version = identity.token_version
+        requires_tenant_selection, tenants_list = identity.requires_tenant_selection, identity.tenants_list
+
+        if getattr(request, "headers", {}).get("origin") or settings.platform_auth.mobile_cutover_ready is True:
+            from bisheng.common.errcode.platform_auth import PlatformAuthError
+            from bisheng.user.domain.services.platform_transport import deliver, require_origin
+            from bisheng.user.platform_auth_runtime import platform_auth_service
+
+            if request.headers.get("origin"):
+                require_origin(request)
+            elif settings.platform_auth.mobile_cutover_ready:
+                raise PlatformAuthError(
+                    "client_upgrade_required", minimum_client_version=settings.platform_auth.minimum_client_version
+                )
+            issued = await platform_auth_service().issue(db_user.user_id, tenant_id or DEFAULT_TENANT_ID, "bisheng-web")
+            entry, _ = await cls.complete_password_login(request, identity)
+            issued["default_entry"] = entry.get("default_entry", issued["default_entry"])
+            return resp_200(deliver(auth_jwt.res, request, issued))
 
         # gen jwt token
         access_token = LoginUser.create_access_token(

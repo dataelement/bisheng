@@ -3270,5 +3270,21 @@
     "code": "コード",
     "params": "パラメータ",
     "output": "出力"
+  },
+  "platformAuth": {
+    "credentialsRequired": "アカウントとパスワードを入力してください",
+    "captchaRequired": "確認コードを入力してください",
+    "loginFailed": "ログインに失敗しました",
+    "captcha": "確認コード",
+    "refreshCaptcha": "コードを更新",
+    "signingIn": "ログイン中…",
+    "signIn": "ログイン",
+    "sessionEnded": "セッションが終了しました。再度ログインしてください。",
+    "serviceUnavailable": "認証サービスを一時的に利用できません。再試行してください。",
+    "upgradeRequired": "クライアントを更新してください。",
+    "hostReconnect": "クライアントで再接続してください。",
+    "localLogoutUnconfirmed": "端末からログアウトしました。サーバーでの無効化は確認できませんでした。",
+    "retry": "再試行",
+    "loading": "ログイン状態を復元しています…"
   }
 }

@@ -10,7 +10,9 @@ from starlette.websockets import WebSocket
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.dsh import DshInvalidRequestError
+from bisheng.common.request_scope import RequestScope, request_scope
 from bisheng.common.schemas.api import resp_200
+from bisheng.core.session_activity import business_activity, record_authenticated_activity
 from bisheng.dsh.api.dependencies import desktop_principal
 from bisheng.dsh.domain.services.access import DshPrincipal
 from bisheng.dsh.domain.services.mobile_access import MobileAccessService, MobileResult, MobileStream
@@ -49,6 +51,14 @@ class MobileStreamingResponse(StreamingResponse):
 
 
 async def mobile_sessions(request: Request) -> MobileSessionService:
+    from bisheng.common.services.config_service import settings
+
+    if settings.platform_auth.mobile_cutover_ready:
+        from bisheng.common.errcode.platform_auth import PlatformAuthError
+
+        raise PlatformAuthError(
+            "client_upgrade_required", minimum_client_version=settings.platform_auth.minimum_client_version
+        )
     override = getattr(request.app.state, "mobile_sessions", None)
     if override is not None:
         return override
@@ -184,6 +194,7 @@ async def revoke_mobile_session(
 
 
 @router.get("/dsh/mobile/desktops")
+@request_scope(RequestScope.IDENTITY)
 async def desktops(
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: MobileAccessService = Depends(mobile_service),
@@ -192,6 +203,20 @@ async def desktops(
 
 
 @router.post("/dsh/mobile/desktops/{desktop_id}/rpc")
+@request_scope(RequestScope.IDENTITY)
+@business_activity(
+    http=False,
+    rpc_methods=(
+        "session.prompt",
+        "session.create",
+        "session.cancel",
+        "interaction.answer",
+        "interaction.cancel",
+        "session.uploadStart",
+        "session.uploadChunk",
+        "session.uploadFinish",
+    ),
+)
 async def rpc(
     desktop_id: str,
     request: Request,
@@ -201,10 +226,17 @@ async def rpc(
     body = await _object_body(request)
     if body is None:
         return _invalid()
-    return _respond(await service.rpc(user, desktop_id, body))
+
+    async def before_dispatch():
+        reference = getattr(user, "_runtime_credential_reference", None)
+        if reference and reference.get("kind") == "platform_session":
+            await record_authenticated_activity(request, message=body)
+
+    return _respond(await service.rpc(user, desktop_id, body, before_dispatch=before_dispatch))
 
 
 @router.get("/dsh/mobile/desktops/{desktop_id}/session/stream")
+@request_scope(RequestScope.IDENTITY)
 async def session_stream(
     desktop_id: str,
     request: Request,

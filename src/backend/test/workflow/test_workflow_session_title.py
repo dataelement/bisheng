@@ -103,6 +103,23 @@ def test_existing_title_is_not_overwritten(title_context):
     assert title_context.received == []
 
 
+@pytest.mark.parametrize("failure", ["unset", "configuration", "model"])
+def test_optional_title_unavailable_does_not_raise(monkeypatch, title_context, failure):
+    def unavailable(**kwargs):
+        raise RuntimeError("title model offline")
+
+    if failure == "unset":
+        monkeypatch.setattr(
+            callback_module.LLMService, "get_workbench_llm_sync", lambda **kwargs: SimpleNamespace(chat_title_llm=None)
+        )
+    else:
+        method = "get_workbench_llm_sync" if failure == "configuration" else "get_bisheng_llm_sync"
+        monkeypatch.setattr(callback_module.LLMService, method, unavailable)
+    title_context.callback.generate_session_title()
+    assert title_context.session.name == ""
+    assert title_context.received == []
+
+
 @pytest.mark.parametrize("category,should_schedule", [("question", True), ("guide_word", False)])
 @pytest.mark.parametrize("session_exists", [False, True])
 def test_title_is_scheduled_after_question_not_session_creation(

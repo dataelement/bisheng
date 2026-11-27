@@ -71,7 +71,6 @@ from bisheng.tenant.domain.services.user_tenant_sync_service import (
     UserTenantSyncService,
 )
 from bisheng.user.domain.models.user import User, UserDao
-from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 from bisheng.user.domain.services.user import UserService
 
 _USER_LOCK_KEY = "user:sso_lock:{external_user_id}"
@@ -282,14 +281,10 @@ class LoginSyncService:
                         raise UserNoRoleForLoginError()
                     raise UserNoWebMenuForLoginError()
 
-                auth_jwt = AuthJwt()
-                token_version = await UserDao.aget_token_version(user.user_id)
-                access_token = LoginUser.create_access_token(
-                    user,
-                    auth_jwt,
-                    tenant_id=leaf_tenant.id,
-                    token_version=token_version,
-                )
+                from bisheng.user.platform_auth_runtime import platform_auth_service
+
+                issued = await platform_auth_service().issue(user.user_id, leaf_tenant.id, "bisheng-web", pending=True)
+                access_token = issued["access_token"]
             finally:
                 current_tenant_id.reset(token)
 

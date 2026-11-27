@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 import { paramsSerializer } from ".";
 import { ROLE, User } from "../../types/api/user";
-import axios from "../request";
+import axios, { platformAuth } from "../request";
 
 // 获取 key
 export const getPublicKeyApi = async (): Promise<{ public_key: string }> => {
@@ -18,16 +18,18 @@ export async function getUserInfo(): Promise<User> {
 }
 // 退出登录
 export async function logoutApi() {
-  return await axios.post(`/api/v1/user/logout`);
+  return await platformAuth.logout();
 }
 // 登录
 export async function loginApi(personId, pwd, captcha_key?, captcha?) {
-  return await axios.post(`/api/v1/user/login`, {
+  const session = await platformAuth.login({
     user_name: personId,
     password: pwd,
     captcha_key,
     captcha,
   });
+  if (!session) throw new Error('Authentication operation superseded');
+  return { ...await getUserInfo(), default_entry: session.default_entry };
 }
 // 注册
 export async function registerApi(userName, personId, pwd, captcha_key?, captcha?) {

@@ -1,7 +1,7 @@
 import { HeaderTenantScope } from "@/components/HeaderTenantScope";
 // @ts-strict-ignore
 import { resolveUserAvatarUrl } from '@bisheng/identity';
-import { Button, Dropdown, DropdownChevron, DropdownItem, DropdownSeparator, Select, UserAvatar } from '@bisheng/ui';
+import { notification, Button, Dropdown, DropdownChevron, DropdownItem, DropdownSeparator, Select, UserAvatar } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 import { GithubIcon } from "@/components/bs-icons";
@@ -62,7 +62,9 @@ export default function MainLayout() {
             desc: `${t("menu.logoutContent")}？`,
             okTxt: t("system.confirm"),
             onOk(next) {
-                return logoutApi().then((_) => {
+                return logoutApi().catch(() => {
+                    notification.open({ type: 'warning', description: String(t('platformAuth.localLogoutUnconfirmed')) });
+                }).then(() => {
                     const thirdPartyLogoutUrl = localStorage.getItem("THIRD_PARTY_LOGOUT_URL");
                     localStorage.removeItem("isLogin");
                     if (thirdPartyLogoutUrl) {

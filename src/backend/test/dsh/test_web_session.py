@@ -96,16 +96,31 @@ async def test_http_middleware_rejects_revoked_desktop_cookie():
 
 
 async def test_websocket_login_rechecks_desktop_cookie():
+    from starlette.websockets import WebSocket
+
     from bisheng.user.domain.services.auth import LoginUser
 
     subject = {"user_id": 42, "user_name": "Alice", "tenant_id": 2, "token_version": 3, "dsh_web_session": "x" * 43}
     auth = SimpleNamespace(get_subject=lambda **kwargs: subject)
+    websocket = WebSocket(
+        {
+            "type": "websocket",
+            "path": "/unit-dsh-bridge",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "ws",
+            "server": ("localhost", 80),
+            "client": ("127.0.0.1", 1000),
+        },
+        receive=AsyncMock(),
+        send=AsyncMock(),
+    )
     with (
         patch.object(web_session, "validate_web_session", AsyncMock(side_effect=DshInvalidAccessTokenError())),
         patch.object(LoginUser, "init_login_user", AsyncMock()) as initialize,
     ):
         with pytest.raises(DshInvalidAccessTokenError):
-            await LoginUser.get_login_user_from_ws(SimpleNamespace(), auth)
+            await LoginUser.get_login_user_from_ws(websocket, auth)
     initialize.assert_not_called()
 
 

@@ -43,7 +43,7 @@ export function needsBrowserScope(method: string, raw: string, origin: string, b
   if (path.startsWith('/api/v1/user/profile/')) return false;
   // These namespaces establish their own public, device or external credential.
   if (/^\/api\/(?:auth|oauth2|share|dsh|v2|v3)(?:\/|$)/.test(path)) return false;
-  if (/^\/api\/v1\/(?:public|internal|share_link)(?:\/|$)/.test(path)) return false;
+  if (/^\/api\/v1\/(?:auth|public|internal|share_link)(?:\/|$)/.test(path)) return false;
   if (method.toUpperCase() === 'GET' &&
       (path === '/api/v1/dsh/market/admin/plugins' || path === '/api/v1/dsh/market/admin/workbenches')) return true;
   if (/^\/api\/v1\/dsh(?:\/|$)/.test(path) && !/^\/api\/v1\/dsh\/admin(?:\/|$)/.test(path)) return false;

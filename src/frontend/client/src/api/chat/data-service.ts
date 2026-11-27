@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { JSEncrypt } from 'jsencrypt';
 import { resolveUserAvatarUrl } from '@bisheng/identity';
 import type { AxiosResponse } from 'axios';
 import * as endpoints from './api-endpoints';
 import * as config from '~/types/chat/config';
-import request from '~/api/request';
+import request, { platformAuth } from '~/api/request';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { canOpenPlatformAdminPanel, canOpenWorkbench } from '~/utils/platformAccess';
 import * as r from '~/types/chat/roles';
@@ -206,12 +207,18 @@ export const updateTokenCount = (text: string) => {
   return request.post(endpoints.tokenizer(), { arg: text });
 };
 
-export const login = (payload: t.TLoginUser): Promise<t.TLoginResponse> => {
-  return request.post(endpoints.login(), payload);
+export const login = async (payload: t.TLoginUser): Promise<t.TLoginResponse> => {
+  const response = await request.get('/api/v1/user/public_key');
+  const encrypt = new JSEncrypt();
+  encrypt.setPublicKey(response.data.public_key);
+  const password = encrypt.encrypt(payload.password);
+  if (!password) throw new Error('Password encryption failed');
+  await platformAuth.login({ user_name: payload.email, password });
+  return { user: await getUser(), token: undefined };
 };
 
 export const logout = (): Promise<m.TLogoutResponse> => {
-  return request.post(endpoints.logout());
+  return platformAuth.logout().then(() => ({ message: '' }));
 };
 
 export const register = (payload: t.TRegisterUser) => {

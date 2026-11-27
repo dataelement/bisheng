@@ -31,6 +31,7 @@ from bisheng.permission.application.identity import (
     set_current_permission_actor,
 )
 from bisheng.user.application.runtime_identity import resolve_web_runtime_identity
+from bisheng.user.domain.schemas.credential_reference import valid_browser_reference_shape
 
 _ACTIONS = frozenset({"edit", "rename", "move", "upload_file", "delete", "download"})
 _WEB_FIELDS = frozenset({"kind", "user_id", "tenant_id", "token_version", "expires_at"})
@@ -84,8 +85,7 @@ def _web_reference(reference, user=None) -> dict:
     try:
         if (
             not isinstance(reference, dict)
-            or set(reference) != _WEB_FIELDS
-            or reference["kind"] != "web_session"
+            or not valid_browser_reference_shape(reference)
             or any(type(reference[key]) is not int for key in ("user_id", "tenant_id", "token_version"))
             or reference["user_id"] <= 0
             or reference["tenant_id"] <= 0

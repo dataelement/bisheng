@@ -93,10 +93,39 @@ from bisheng.share_link.api.router import router as share_link_router
 from bisheng.sso_sync.api.router import router as sso_sync_router
 from bisheng.telemetry_search.api.router import router as telemetry_search_router
 from bisheng.tenant.api.router import router as tenant_router
+from bisheng.user.api.endpoints.platform_auth import router as platform_auth_router
+from bisheng.user.application.activity_policy import declare_platform_activity
 from bisheng.user_group.api.router import router as user_group_router
 from bisheng.workstation.api.endpoints.conversation_export import router as conversation_export_router
 
 # Mixed routers declare semantic exceptions once, by their actual endpoints.
+declare_platform_activity(
+    knowledge_router,
+    "upload_file",
+    "upload_knowledge_file",
+    "create_knowledge",
+    "process_knowledge_file",
+    "rebuild_knowledge_file",
+    "copy_knowledge",
+    "copy_qa_knowledge",
+    "delete_knowledge",
+    "delete_knowledge_file",
+    "post_import_file",
+)
+declare_platform_activity(
+    knowledge_space_router,
+    "create_space",
+    "update_space",
+    "delete_space",
+    "add_folder",
+    "upload_folder",
+    "rename_folder",
+    "delete_folder",
+    "add_file",
+    "import_web_link",
+    "confirm_deletion",
+)
+declare_platform_activity(endpoints_router, "create_upload_file", "upload_icon", "upload_icon_workflow")
 scope_query_variant(
     app_publish_v1_router,
     {"get_preview", "start_preview", "reclaim_preview"},
@@ -184,6 +213,7 @@ router.include_router(guest_link_router, request_scope=S.TENANT)
 router.include_router(role_router, request_scope=S.TENANT)
 router.include_router(org_sync_router, request_scope=S.PLATFORM)
 router.include_router(sso_sync_router, request_scope=S.CREDENTIAL)
+router.include_router(platform_auth_router, request_scope=S.CREDENTIAL)
 router.include_router(oauth2_public_router, request_scope=S.PUBLIC)
 router.include_router(oauth2_consent_router, request_scope=S.IDENTITY)
 router.include_router(oauth2_admin_router, request_scope=S.PLATFORM)
