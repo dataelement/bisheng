@@ -40,11 +40,14 @@ jobs:
     - name: Take docker/ from the version tag
       id: tag
       run: |
-        git fetch --depth 1 origin "refs/tags/${VERSION}:refs/tags/${VERSION}"
-        git archive "$VERSION" docker | tar -x -C "$RUNNER_TEMP"
+        # checkout may create a lightweight local ref for an annotated remote tag.
+        # Fetch into FETCH_HEAD instead of trying to overwrite that local tag.
+        git fetch --depth 1 origin "refs/tags/${VERSION}"
+        commit="$(git rev-parse 'FETCH_HEAD^{}')"
+        git archive "$commit" docker | tar -x -C "$RUNNER_TEMP"
         grep -q -- '--offline' "$RUNNER_TEMP/docker/install.sh" \
           || { echo "${VERSION} 的 docker/install.sh 还不识别 --offline"; exit 1; }
-        echo "commit=$(git rev-parse "${VERSION}^{}")" >> "$GITHUB_OUTPUT"
+        echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
     - uses: docker/login-action@v3
       with:

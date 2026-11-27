@@ -17,6 +17,7 @@ import subprocess
 import tarfile
 import tempfile
 import threading
+import textwrap
 import unittest
 
 
@@ -425,6 +426,44 @@ class OfflineDeployE2E(unittest.TestCase):
         self.execute(command)
         self.assertEqual(self.server.puts[-1], prefix + 'download.json')
         self.download(gateway=True)
+
+
+
+class AnnotatedTagRegression(unittest.TestCase):
+    def test_checkout_lightweight_ref_can_fetch_annotated_release(self):
+        """Test the actual workflow step against checkout's lightweight local tag layout."""
+        with tempfile.TemporaryDirectory(prefix='offline-tag-') as temporary:
+            root = Path(temporary)
+            source, checkout, output = [root / name for name in ('source', 'checkout', 'output')]
+            source.mkdir(); checkout.mkdir(); output.mkdir()
+            env = dict(os.environ, GIT_AUTHOR_NAME='Offline test', GIT_AUTHOR_EMAIL='offline@example.invalid',
+                       GIT_COMMITTER_NAME='Offline test', GIT_COMMITTER_EMAIL='offline@example.invalid',
+                       VERSION='v3.1.0-offline-test-fixture', RUNNER_TEMP=str(output), GITHUB_OUTPUT=str(root/'step-output'))
+            def git(cwd, *args, success=True):
+                result = subprocess.run(['git', *args], cwd=cwd, env=env, text=True, capture_output=True)
+                if success: self.assertEqual(result.returncode, 0, result.stderr)
+                return result
+            git(source, 'init', '--quiet')
+            (source / 'docker').mkdir()
+            (source / 'docker/install.sh').write_text('# --offline\n')
+            git(source, 'add', 'docker/install.sh')
+            git(source, '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'fixture')
+            git(source, '-c', 'tag.gpgsign=false', 'tag', '-a', env['VERSION'], '-m', 'fixture tag')
+            commit = git(source, 'rev-parse', 'HEAD').stdout.strip()
+            git(checkout, 'init', '--quiet')
+            git(checkout, 'remote', 'add', 'origin', str(source))
+            git(checkout, 'fetch', '--no-tags', '--depth', '1', 'origin', '+'+commit+':refs/tags/'+env['VERSION'])
+            git(checkout, 'checkout', '--detach', commit)
+            # Reproduce why the old fetch-to-the-same-ref fails for annotated tags.
+            rejected = git(checkout, 'fetch', '--depth', '1', 'origin', 'refs/tags/'+env['VERSION']+':refs/tags/'+env['VERSION'], success=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            workflow = (ROOT / '.github/workflows/offline-bundle.yml').read_text()
+            step = workflow.split('    - name: Take docker/ from the version tag',1)[1].split('    - uses:',1)[0]
+            code = textwrap.dedent(step.split('      run: |\n',1)[1])
+            result = subprocess.run(['bash','-e','-o','pipefail','-c',code],cwd=checkout,env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertTrue((output/'docker/install.sh').is_file())
+            self.assertEqual((root/'step-output').read_text().strip(),'commit='+commit)
 
 
 if __name__ == '__main__':
