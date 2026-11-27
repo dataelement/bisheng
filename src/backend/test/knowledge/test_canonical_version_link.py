@@ -678,3 +678,96 @@ async def test_manager_pair_with_publish_entry_cannot_associate(async_db_session
     entries = await entry_svc.cached(101, [row], limit=3, check_permissions=False)
     assert len(entries) == 1
     assert entries[0].can_associate is False
+
+
+async def test_undistributed_manager_can_link_into_distributed_manager_document(
+    enable_switch, async_db_session, monkeypatch
+):
+    from sqlalchemy import select as sa_select
+
+    seeded = await seed_managers(async_db_session)
+    # 目标 manager(100, doc=seeded.target) 已挂有 publish 分发入口(210)，源 manager(101, doc=seeded.source) 为独立单版本
+    async_db_session.add(
+        KnowledgeFile(
+            id=210,
+            tenant_id=1,
+            knowledge_id=2,
+            file_name="target_publish.doc",
+            status=2,
+            md5=None,
+            reference_document_id=seeded.target,
+            entry_type="publish",
+            entry_status="active",
+            projection_status="ready",
+            desired_content_generation=14,
+            applied_content_generation=14,
+            desired_entry_generation=1,
+            applied_entry_generation=1,
+        )
+    )
+    await async_db_session.commit()
+
+    svc = service(async_db_session, monkeypatch)
+    result = await svc.link_file_to_document(101, seeded.target)
+    assert result.document_id == seeded.target
+    assert result.new_version_no == 2
+
+    old_source_doc = await svc.doc_repo.find_by_id(seeded.source)
+    assert old_source_doc is not None and old_source_doc.lifecycle_status == "invalid"
+    tombstones = (
+        await async_db_session.execute(
+            sa_select(KnowledgeFile).where(
+                KnowledgeFile.reference_document_id == seeded.source,
+                KnowledgeFile.entry_type == "projection_tombstone",
+            )
+        )
+    ).scalars().all()
+    assert len(tombstones) == 1
+    assert tombstones[0].entry_status == "deleting"
+    new_manager = await svc.knowledge_file_repo.find_by_id(101)
+    assert new_manager is not None and new_manager.reference_document_id == seeded.target
+
+
+async def test_distributed_manager_can_merge_undistributed_manager_document(
+    enable_switch, async_db_session, monkeypatch
+):
+    from bisheng.knowledge.domain.services.knowledge_similarity_entry_service import KnowledgeSimilarityEntryService
+
+    seeded = await seed_managers(async_db_session)
+    async_db_session.add(
+        KnowledgeFile(
+            id=211,
+            tenant_id=1,
+            knowledge_id=2,
+            file_name="target_publish.doc",
+            status=2,
+            md5=None,
+            reference_document_id=seeded.target,
+            entry_type="publish",
+            entry_status="active",
+            projection_status="ready",
+            desired_content_generation=14,
+            applied_content_generation=14,
+            desired_entry_generation=1,
+            applied_entry_generation=1,
+        )
+    )
+    await async_db_session.commit()
+
+    svc = service(async_db_session, monkeypatch)
+    entry_svc = KnowledgeSimilarityEntryService(svc)
+    source_ctx = await entry_svc.resolve(await svc.knowledge_file_repo.find_by_id(101))
+    target_ctx = await entry_svc.resolve(await svc.knowledge_file_repo.find_by_id(100))
+    assert source_ctx is not None and target_ctx is not None
+    assert await entry_svc._can_associate_pair(source_ctx, target_ctx) is True
+    assert await entry_svc._can_associate_pair(target_ctx, source_ctx) is True
+
+    result = await svc.merge_source_document_into_current(100, seeded.source, force=True)
+    assert result.document_id == seeded.target
+    assert result.new_version_no == 2
+
+    new_manager = await svc.knowledge_file_repo.find_by_id(101)
+    old_manager = await svc.knowledge_file_repo.find_by_id(100)
+    assert new_manager is not None and new_manager.entry_type == "manager"
+    assert new_manager.reference_document_id == seeded.target
+    assert old_manager is not None and old_manager.entry_type is None

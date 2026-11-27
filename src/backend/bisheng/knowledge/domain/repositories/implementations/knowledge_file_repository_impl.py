@@ -1280,10 +1280,29 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
             KnowledgeFile.deleted_at.is_(None),
         )
+        # 补充尚未生成 KnowledgeDocumentVersion 的普通已解析单文件，避免内连接主版本时漏查历史/直拷普通文件
+        unversioned_stmt = (
+            select(KnowledgeFile)
+            .outerjoin(
+                KnowledgeDocumentVersion,
+                KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id,
+            )
+            .where(
+                KnowledgeFile.knowledge_id == knowledge_id,
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                KnowledgeFile.entry_type.is_(None),
+                KnowledgeFile.reference_document_id.is_(None),
+                KnowledgeFile.deleted_at.is_(None),
+                KnowledgeDocumentVersion.id.is_(None),
+            )
+        )
         if exclude_file_id is not None:
             stmt = stmt.where(KnowledgeFile.id != exclude_file_id)
+            unversioned_stmt = unversioned_stmt.where(KnowledgeFile.id != exclude_file_id)
         published = (await self.session.exec(stmt)).all()
-        return sorted({row.id: row for row in [*primary, *published]}.values(), key=lambda row: row.id)
+        unversioned = (await self.session.exec(unversioned_stmt)).all()
+        return sorted({row.id: row for row in [*primary, *published, *unversioned]}.values(), key=lambda row: row.id)
 
     async def store_similarity_state(self, file_id: int, snapshot: dict | None, has_candidates: bool) -> None:
         current = await self.find_by_id_for_update(file_id)

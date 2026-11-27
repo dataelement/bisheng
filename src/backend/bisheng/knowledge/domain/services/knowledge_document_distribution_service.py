@@ -190,6 +190,7 @@ class LinkOrdinaryFileToManagerResult:
     new_version_no: int
     content_generation: int
     idempotent: bool = False
+    cleanup_entry_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -1374,21 +1375,51 @@ class KnowledgeDocumentDistributionService:
                 idempotent=True,
             )
 
-        if source_file.reference_document_id is not None or source_file.entry_type is not None:
+        source_was_manager = source_file.entry_type == KnowledgeFileEntryType.MANAGER.value
+        if source_was_manager:
+            if (
+                source_file.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+                or source_file.reference_document_id is None
+                or source_file.projection_status != KnowledgeFileProjectionStatus.READY.value
+                or source_file.projection_lease_owner is not None
+                or source_file.projection_lease_until is not None
+            ):
+                raise KnowledgeDocumentEntryConflictError()
+        elif source_file.reference_document_id is not None or source_file.entry_type is not None:
             raise KnowledgeDocumentEntryConflictError()
 
         source_chain: list[KnowledgeDocumentVersion] = []
+        source_doc: KnowledgeDocument | None = None
         if source_version is not None:
             if int(source_version.document_id) == int(target_document_id):
+                raise KnowledgeDocumentEntryConflictError()
+            if source_was_manager and int(source_file.reference_document_id or 0) != int(source_version.document_id):
                 raise KnowledgeDocumentEntryConflictError()
             source_entries = await self.file_repository.find_distribution_entries_by_document_id(
                 int(source_version.document_id)
             )
-            if source_entries:
+            if source_was_manager:
+                if len(source_entries) != 1 or int(source_entries[0].id) != int(source_file.id):
+                    raise KnowledgeDocumentEntryConflictError()
+                source_doc = await self.document_repository.find_by_id(int(source_version.document_id))
+                if (
+                    source_doc is None
+                    or int(source_doc.tenant_id or 0) != int(tenant_id)
+                    or int(source_doc.knowledge_id) != int(target_doc.knowledge_id)
+                    or source_doc.lifecycle_status != "active"
+                    or source_doc.predecessor_logic_file_id is not None
+                    or int(source_doc.primary_version_id or 0) != int(source_version.id)
+                ):
+                    raise KnowledgeDocumentEntryConflictError()
+            elif source_entries:
                 raise KnowledgeDocumentEntryConflictError()
             source_chain = await self.version_repository.find_by_document_id(int(source_version.document_id))
             if len(source_chain) >= 2 and source_version.is_primary:
                 raise VersionLinkSourceMultiVersionError()
+            if source_was_manager and len(source_chain) != 1:
+                raise VersionLinkSourceMultiVersionError()
+        elif source_was_manager:
+            raise KnowledgeDocumentEntryConflictError()
 
         target_versions = await self.version_repository.find_by_document_id(target_document_id)
         target_primary = next((v for v in target_versions if int(v.id) == int(target_doc.primary_version_id)), None)
@@ -1415,6 +1446,11 @@ class KnowledgeDocumentDistributionService:
         )
 
         # 预写新 manager 权限，避免切换后失去目录/显式权限
+        old_source_parent_delete = (
+            self.permission_activation_service.build_parent_operation(source_file, action="delete")
+            if source_was_manager
+            else None
+        )
         explicit_snapshot = list(await self.permission_snapshot_loader(target_manager_file_id))
         manager_candidate = source_file.model_copy(
             update={
@@ -1452,6 +1488,18 @@ class KnowledgeDocumentDistributionService:
         ):
             raise KnowledgeDocumentDistributionError("target document state changed concurrently")
 
+        original_source_doc_id = int(source_version.document_id) if source_version is not None else None
+        old_source_doc: KnowledgeDocument | None = None
+        if source_was_manager and original_source_doc_id is not None:
+            old_source_doc = await self.document_repository.find_by_id_for_update(original_source_doc_id)
+            if (
+                old_source_doc is None
+                or old_source_doc.lifecycle_status != "active"
+                or old_source_doc.predecessor_logic_file_id is not None
+                or int(old_source_doc.primary_version_id or 0) != int(source_version.id)
+            ):
+                raise KnowledgeDocumentDistributionError("source document state changed concurrently")
+
         locked_files = await self.file_repository.find_by_ids_for_update(sorted(excluded_file_ids))
         file_map = {int(item.id): item for item in locked_files}
         target_manager = file_map.get(int(target_manager_file_id))
@@ -1462,9 +1510,25 @@ class KnowledgeDocumentDistributionService:
             or target_manager.entry_type != KnowledgeFileEntryType.MANAGER.value
             or target_manager.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
             or int(target_manager.reference_document_id or 0) != int(target_document_id)
-            or source_file.reference_document_id is not None
-            or source_file.entry_type is not None
         ):
+            raise KnowledgeDocumentDistributionError("ordinary link state changed concurrently")
+        if source_was_manager:
+            locked_source_entries = await self.file_repository.find_distribution_entries_by_document_id(
+                int(original_source_doc_id),
+                for_update=True,
+            )
+            if (
+                source_file.entry_type != KnowledgeFileEntryType.MANAGER.value
+                or source_file.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+                or int(source_file.reference_document_id or 0) != int(original_source_doc_id)
+                or source_file.projection_status != KnowledgeFileProjectionStatus.READY.value
+                or source_file.projection_lease_owner is not None
+                or source_file.projection_lease_until is not None
+                or len(locked_source_entries) != 1
+                or int(locked_source_entries[0].id) != int(source_file.id)
+            ):
+                raise KnowledgeDocumentDistributionError("ordinary link source manager state changed concurrently")
+        elif source_file.reference_document_id is not None or source_file.entry_type is not None:
             raise KnowledgeDocumentDistributionError("ordinary link state changed concurrently")
 
         version_result = await self.session.execute(
@@ -1514,7 +1578,6 @@ class KnowledgeDocumentDistributionService:
             version.is_primary = False
             self.session.add(version)
 
-        original_source_doc_id = int(source_version.document_id) if source_version is not None else None
         if source_version is not None:
             source_version = await self.session.get(
                 KnowledgeDocumentVersion,
@@ -1537,7 +1600,13 @@ class KnowledgeDocumentDistributionService:
         await self.session.flush()
 
         target_doc.primary_version_id = int(new_version.id)
-        target_doc.content_generation += 1
+        target_doc.content_generation = (
+            max(
+                int(target_doc.content_generation),
+                int(old_source_doc.content_generation) if old_source_doc is not None else 0,
+            )
+            + 1
+        )
 
         if source_file.original_uploader_id is None:
             source_file.original_uploader_id = origin_uploader
@@ -1551,9 +1620,13 @@ class KnowledgeDocumentDistributionService:
         source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
         source_file.similar_status = 2
         source_file.projection_previous_file_id = int(target_manager_file_id)
+        source_file.applied_content_generation = 0
         source_file.desired_entry_generation += 1
+        source_file.applied_entry_generation = 0
         source_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        source_file.projection_retry_count = 0
         source_file.projection_next_retry_at = None
+        source_file.projection_last_error = None
 
         active_entries = [
             item
@@ -1568,18 +1641,42 @@ class KnowledgeDocumentDistributionService:
 
         self.session.add(target_doc)
         self.session.add(source_file)
-        if (
+        cleanup: KnowledgeFile | None = None
+        if source_was_manager and old_source_doc is not None:
+            # 共享空间独立 manager 此前已有独立文档投影，需置失效并创建墓碑清理旧 ES/Milvus 投影
+            old_source_doc.primary_version_id = None
+            old_source_doc.lifecycle_status = "invalid"
+            old_source_doc.content_generation += 1
+            cleanup = KnowledgeFile(
+                tenant_id=tenant_id,
+                knowledge_id=int(target_doc.knowledge_id),
+                file_name=source_file.file_name,
+                file_type=FileType.FILE.value,
+                status=KnowledgeFileStatus.SUCCESS.value,
+                file_size=0,
+                object_name=None,
+                reference_document_id=int(old_source_doc.id),
+                entry_type=KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
+                entry_status=KnowledgeFileEntryStatus.DELETING.value,
+                projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+                projection_previous_file_id=int(source_file.id),
+                desired_content_generation=int(old_source_doc.content_generation),
+                desired_entry_generation=1,
+            )
+            self.session.add(old_source_doc)
+            self.session.add(cleanup)
+        elif (
             original_source_doc_id is not None
             and len(source_chain) == 1
             and original_source_doc_id != int(target_document_id)
         ):
-            old_source_doc = await self.session.get(
+            plain_source_doc = await self.session.get(
                 KnowledgeDocument,
                 original_source_doc_id,
                 with_for_update=True,
             )
-            if old_source_doc is not None:
-                await self.session.delete(old_source_doc)
+            if plain_source_doc is not None:
+                await self.session.delete(plain_source_doc)
 
         await self.session.flush()
         await self.file_repository.mark_document_entries_content_generation(
@@ -1588,17 +1685,18 @@ class KnowledgeDocumentDistributionService:
         )
         await self._commit()
 
+        cleanup_ops = [
+            old_parent_delete,
+            *self._retarget_explicit_operations(
+                explicit_snapshot,
+                target_file_id=int(target_manager_file_id),
+                action="delete",
+            ),
+        ]
+        if old_source_parent_delete is not None and old_source_parent_delete.user != target_parent.user:
+            cleanup_ops.append(old_source_parent_delete)
         try:
-            await self.permission_activation_service.tuple_writer(
-                [
-                    old_parent_delete,
-                    *self._retarget_explicit_operations(
-                        explicit_snapshot,
-                        target_file_id=int(target_manager_file_id),
-                        action="delete",
-                    ),
-                ]
-            )
+            await self.permission_activation_service.tuple_writer(cleanup_ops)
         except Exception:
             logger.exception(
                 "old manager permission cleanup deferred after ordinary link: "
@@ -1614,6 +1712,7 @@ class KnowledgeDocumentDistributionService:
             primary_version_id=int(new_version.id),
             new_version_no=new_no,
             content_generation=int(target_doc.content_generation),
+            cleanup_entry_id=int(cleanup.id) if cleanup is not None else None,
         )
 
     async def rename_manager_document(

@@ -311,3 +311,28 @@ async def test_projection_completion_requests_one_durable_refresh(async_db_sessi
         entry_id=90, lease_owner="worker", target_content_generation=2, target_entry_generation=3
     )
     assert len((await async_db_session.exec(select(KnowledgeBackgroundJob))).all()) == 1
+
+
+async def test_find_similarity_files_in_space_includes_unversioned_ordinary_files(async_db_session, monkeypatch):
+    svc = await setup_entries(async_db_session, monkeypatch)
+    ordinary = KnowledgeFile(
+        id=999,
+        tenant_id=1,
+        knowledge_id=3,
+        file_name="unversioned_copy.pdf",
+        file_type=1,
+        status=2,
+        entry_type=None,
+        reference_document_id=None,
+        file_encoding="GF-ZD-SC-202610000999",
+        file_subcategory_code="A",
+        simhash="ffffffffffffffff",
+    )
+    async_db_session.add(ordinary)
+    await async_db_session.commit()
+
+    repo = KnowledgeFileRepositoryImpl(async_db_session)
+    found_ids = {f.id for f in await repo.find_similarity_files_in_space(3)}
+    assert 999 in found_ids
+    ctx = await repo.resolve_similarity_file(999)
+    assert ctx is not None and ctx.valid is True

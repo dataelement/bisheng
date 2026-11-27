@@ -548,6 +548,20 @@ async def _dispatch_content_rebuild(
     )
 
 
+async def _dispatch_similarity_background_drain(tenant_id: int) -> None:
+    """投影完成后异步触发一次后台任务消费，避免等待 Beat 60s 轮询延迟；失败由 Beat 兜底。"""
+    try:
+        from bisheng.worker.knowledge.background_jobs import drain_knowledge_background_jobs
+
+        await asyncio.to_thread(
+            drain_knowledge_background_jobs.apply_async,
+            headers={"tenant_id": int(tenant_id)},
+            queue=DEFAULT_QUEUE,
+        )
+    except Exception as exc:
+        logger.warning("similarity background drain dispatch failed tenant_id=%s error=%s", tenant_id, exc)
+
+
 async def _process_projection_batch_async(
     tenant_id: int, entry_ids: list[int], owner: str, *,
     allow_content_rebuild: bool = False, handoff_owner: str | None = None,
@@ -605,6 +619,8 @@ async def _process_projection_batch_async(
         **loaders,
     )
     results = await service.run(tenant_id, entry_ids, owner)
+    if any(status == "ready" for status in results.values()):
+        await _dispatch_similarity_background_drain(tenant_id)
     logger.info("projection batch completed tenant_id=%s total=%s failed=%s", tenant_id, len(results),
                 sum(status in {"failed", "exhausted"} for status in results.values()))
     return {

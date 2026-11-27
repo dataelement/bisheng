@@ -272,6 +272,7 @@ class DocumentProjectionBatchRepository(KnowledgeFileRepositoryImpl, BatchReposi
                     KnowledgeFulltextFileRef(file_id=row.id, knowledge_id=row.knowledge_id, tenant_id=row.tenant_id)
                 )
         change_ids = list(changes)
+        ready_ids = [entry_id for entry_id, status in results.items() if status == "ready"]
         for offset in range(0, len(change_ids), 50):
             page = {entry_id: changes[entry_id] for entry_id in change_ids[offset : offset + 50]}
             fields = {field for values in page.values() for field in values}
@@ -294,6 +295,29 @@ class DocumentProjectionBatchRepository(KnowledgeFileRepositoryImpl, BatchReposi
             )
         if refs:
             await request_file_sync_intents(self.session, refs, trigger_type="document_projection_batch_applied")
+        if ready_ids:
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import (
+                KnowledgeBackgroundRepositoryImpl,
+            )
+
+            ready_entries = []
+            for offset in range(0, len(ready_ids), 500):
+                ready_entries.extend(
+                    (
+                        await self.session.exec(
+                            select(KnowledgeFile)
+                            .where(KnowledgeFile.id.in_(ready_ids[offset : offset + 500]))
+                            .execution_options(populate_existing=True)
+                        )
+                    ).all()
+                )
+            if ready_entries:
+                await self.session.run_sync(
+                    lambda sync: [
+                        KnowledgeBackgroundRepositoryImpl(sync).request_similarity_refresh(entry)
+                        for entry in ready_entries
+                    ]
+                )
         await self.session.commit()
         return results
 

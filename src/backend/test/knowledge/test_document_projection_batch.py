@@ -644,3 +644,37 @@ async def test_claimed_snapshots_remain_writable_after_session_close(batch_envir
         assert persisted.user_metadata == {"nested": {"value": "original"}}
         result = await repository.settle(context.claimed, "owner", {}, 4)
         assert result == {101: "ready", 102: "ready"}
+
+
+async def test_batch_settle_enqueues_similarity_refresh_for_ready_entries(batch_environment):
+    from sqlmodel import select
+
+    from bisheng.knowledge.domain.models.knowledge_background_job import KnowledgeBackgroundJob
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.services.document_projection_batch_service import DocumentProjectionBatchService
+
+    factory, _ = batch_environment
+    async with factory() as repository:
+        for entry_id in (101, 102):
+            row = await repository.find_by_id(entry_id)
+            row.status = 2
+            repository.session.add(row)
+        await repository.session.commit()
+
+    writer = make_writer(apply_projection_batch=AsyncMock(return_value={}))
+    service = DocumentProjectionBatchService(
+        repository_factory=factory,
+        writer=writer,
+        chunk_loader=AsyncMock(),
+        finalizer=AsyncMock(),
+    )
+    result = await service.run(7, [101, 102], "owner")
+    assert result == {101: "ready", 102: "ready"}
+    async with factory() as repository:
+        jobs = (
+            await repository.session.exec(
+                select(KnowledgeBackgroundJob).where(KnowledgeBackgroundJob.kind == "refresh_similarity")
+            )
+        ).all()
+        # 101 为 publish 入口应触发刷新，102 为 share 入口不参与相似推荐刷新
+        assert {job.payload["file_id"] for job in jobs} == {101}

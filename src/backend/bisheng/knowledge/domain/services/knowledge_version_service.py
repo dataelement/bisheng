@@ -487,6 +487,17 @@ class KnowledgeVersionService:
         )
         return response
 
+    async def _has_downstream_distribution(
+        self,
+        document_id: int,
+        doc: KnowledgeDocument | None = None,
+    ) -> bool:
+        target_doc = doc or await self.doc_repo.find_by_id(int(document_id))
+        if target_doc is not None and target_doc.predecessor_logic_file_id is not None:
+            return True
+        entries = await self.knowledge_file_repo.find_distribution_entries_by_document_id(int(document_id))
+        return len(entries) > 1
+
     async def _link_ordinary_file_into_manager_document(
         self,
         *,
@@ -506,6 +517,8 @@ class KnowledgeVersionService:
             KnowledgeDocumentDistributionError,
         )
 
+        if ordinary_file.entry_type == "manager":
+            await self._require_document_content_manager(ordinary_file)
         await self._require_document_content_manager(target_manager_file)
         if self.document_distribution_service is None:
             raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
@@ -589,6 +602,25 @@ class KnowledgeVersionService:
         if current_kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise VersionLinkFileNotReadyError()
         if current_kf.entry_type == "manager":
+            target_doc = await self.doc_repo.find_by_id(target_document_id)
+            if target_doc is not None and await self._has_downstream_distribution(int(target_document_id), target_doc):
+                if target_doc.primary_version_id is None:
+                    raise VersionLinkTargetUnavailableError()
+                target_primary_v = await self.version_repo.find_by_id(int(target_doc.primary_version_id))
+                if target_primary_v is None:
+                    raise VersionLinkTargetUnavailableError()
+                target_primary_kf = await self.knowledge_file_repo.find_by_id(int(target_primary_v.knowledge_file_id))
+                if target_primary_kf is None or target_primary_kf.status != KnowledgeFileStatus.SUCCESS.value:
+                    raise VersionLinkTargetUnavailableError()
+                if target_doc.knowledge_id != current_kf.knowledge_id:
+                    raise HTTPException(status_code=409, detail="target document belongs to a different space")
+                if target_primary_kf.entry_type == "manager":
+                    return await self._link_ordinary_file_into_manager_document(
+                        ordinary_file=current_kf,
+                        target_document_id=int(target_document_id),
+                        target_manager_file=target_primary_kf,
+                        before_version_no=int(target_primary_v.version_no),
+                    )
             return await self._link_manager_to_document(current_kf, target_document_id)
         if current_kf.reference_document_id is not None or current_kf.entry_type is not None:
             raise KnowledgeDocumentEntryConflictError()
@@ -1898,6 +1930,15 @@ class KnowledgeVersionService:
             raise HTTPException(status_code=409, detail="source document is not similar to current file")
 
         if source_kf.entry_type == "manager":
+            if current_kf.entry_type == "manager" and await self._has_downstream_distribution(int(target_doc_id)):
+                return await self._link_ordinary_file_into_manager_document(
+                    ordinary_file=source_kf,
+                    target_document_id=int(target_doc_id),
+                    target_manager_file=current_kf,
+                    before_version_no=int(current_v.version_no),
+                    action_code=FAVORITE_SOURCE_VERSION_ADDED,
+                    audit_file_name=source_kf.file_name,
+                )
             return await self._link_manager_to_document(
                 source_kf, int(target_doc_id), action_code=FAVORITE_SOURCE_VERSION_ADDED,
             )

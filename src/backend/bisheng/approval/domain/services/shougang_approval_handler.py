@@ -557,6 +557,13 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                 source_file_id=int(payload_snapshot["source_entry_id"]),
                 expected_document_id=int(payload_snapshot["canonical_document_id"]),
             )
+            target_document_id = payload_snapshot.get("target_document_id")
+            if not target_document_id and payload_snapshot.get("target_file_id"):
+                target_snapshot = await service.ensure_document_identity(
+                    tenant_id=int(payload_snapshot["tenant_id"]),
+                    source_file_id=int(payload_snapshot["target_file_id"]),
+                )
+                target_document_id = target_snapshot.document_id
             result = await service.publish_approved(
                 PublishKnowledgeDocumentCommand(
                     tenant_id=int(payload_snapshot["tenant_id"]),
@@ -571,9 +578,7 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                         payload_snapshot.get("target_folder_level") or 0
                     ),
                     target_document_id=(
-                        int(payload_snapshot["target_document_id"])
-                        if payload_snapshot.get("target_document_id")
-                        else None
+                        int(target_document_id) if target_document_id else None
                     ),
                 )
             )

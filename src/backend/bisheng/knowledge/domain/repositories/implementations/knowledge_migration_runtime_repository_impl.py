@@ -1184,6 +1184,7 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             fresh[key] != plan[key] for key in ("target_content", "knowledge_ids", "membership_generation", "entries")
         ):
             raise RuntimeError("migration destination changed during metadata projection")
+        updated_entries: list[KnowledgeFile] = []
         for entry_id, content_generation, entry_generation in plan["entries"]:
             entry = await self.session.get(KnowledgeFile, entry_id)
             entry.applied_content_generation = content_generation
@@ -1194,6 +1195,19 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             entry.projection_last_error = None
             entry.projection_previous_file_id = None
             self.session.add(entry)
+            updated_entries.append(entry)
+        await self.session.flush()
+        if updated_entries:
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import (
+                KnowledgeBackgroundRepositoryImpl,
+            )
+
+            await self.session.run_sync(
+                lambda sync: [
+                    KnowledgeBackgroundRepositoryImpl(sync).request_similarity_refresh(item)
+                    for item in updated_entries
+                ]
+            )
         await self._commit()
 
     async def prepare_preserve_link_folders(self, unit_id: int, *, attempt_id: int, execution_token: str):

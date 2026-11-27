@@ -165,6 +165,24 @@ class KnowledgeSimilarityEntryService:
         entries = await self.files.find_distribution_entries_by_document_id(int(context.document.id))
         return len(entries) == 1 and int(entries[0].id) == int(context.entry.id)
 
+    async def _is_single_version_undistributed(self, context: KnowledgeSimilarityContext) -> bool:
+        """判断条目是否为未向外分发过的单版本文件（普通文件或共享空间仅含单个 manager 入口的文件）。"""
+        if context.can_associate:
+            return await self._is_single_version_ordinary(context)
+        if (
+            context.entry.entry_type != "manager"
+            or context.entry.entry_status != "active"
+            or context.document is None
+            or context.document.predecessor_logic_file_id is not None
+            or context.entry.projection_status != "ready"
+            or context.entry.projection_lease_owner is not None
+        ):
+            return False
+        if not await self._has_only_manager_entry(context):
+            return False
+        chain = await self.owner.version_repo.find_by_document_id(int(context.document.id))
+        return len(chain) == 1
+
     async def _can_associate_pair(
         self, source: KnowledgeSimilarityContext, target: KnowledgeSimilarityContext
     ) -> bool:
@@ -173,17 +191,12 @@ class KnowledgeSimilarityEntryService:
             return False
         if source.can_associate and target.can_associate:
             return True
-        if source.can_associate and target.entry.entry_type == "manager":
-            return await self._is_single_version_ordinary(source)
-        if target.can_associate and source.entry.entry_type == "manager":
-            return await self._is_single_version_ordinary(target)
-        if source.entry.entry_type == "manager" and target.entry.entry_type == "manager":
-            if source.document is None or target.document is None:
-                return False
-            source_chain = await self.owner.version_repo.find_by_document_id(int(source.document.id))
-            if len(source_chain) != 1:
-                return False
-            return await self._has_only_manager_entry(source) and await self._has_only_manager_entry(target)
+        if target.entry.entry_type == "manager" or target.can_associate:
+            if await self._is_single_version_undistributed(source):
+                return True
+        if source.entry.entry_type == "manager" or source.can_associate:
+            if await self._is_single_version_undistributed(target):
+                return True
         return False
 
     async def cached(
