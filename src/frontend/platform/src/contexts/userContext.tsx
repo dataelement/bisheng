@@ -172,8 +172,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             let restored = false;
             return platformAuth.initialize(true).then(session => {
                 if (epoch !== identityEpoch) throw new Error('Identity changed');
-                useAuthSessionStore.setState({ phase: platformAuth.hostPending ? 'host' : 'ready', session });
-                setStartupReady(true);
+                useAuthSessionStore.setState({ phase: platformAuth.hostPending ? 'host' : 'loading', session });
                 restored = true;
                 return platformAuth.hostPending ? null : getUserInfo();
             }).then(res => {
@@ -284,6 +283,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     useAuthSessionStore.setState({ phase: 'unavailable' });
                 }
                 setUser(null)
+            }).finally(() => {
+                if (epoch !== identityEpoch) return;
+                // Identity and landing-route selection must finish before mounting routes.
+                if (useAuthSessionStore.getState().phase === 'loading') {
+                    useAuthSessionStore.setState({ phase: 'ready' });
+                }
+                setStartupReady(true);
             })
         };
         void loadIdentity();
@@ -294,6 +300,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             queryClient.clear();
             setUser(null);
             useAuthSessionStore.setState({ phase: event.type === 'login' ? 'loading' : 'ready', session: null });
+            if (event.type === 'logout') setStartupReady(true);
             if (event.type === 'login') void loadIdentity();
         });
         return () => { ++identityEpoch; unsubscribe(); };
@@ -305,10 +312,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 user, setUser, savedComponents, checkComponentsName, delComponent, addSavedComponent
             }}
         >
-            {startupReady && authPhase === 'ready' ? children : <div role="status">
-                {String(i18next.t(authPhase === 'host' ? 'platformAuth.hostReconnect' : authPhase === 'unavailable' ? 'platformAuth.serviceUnavailable' : 'platformAuth.loading'))}
-                {(authPhase === 'unavailable' || authPhase === 'host') && <button type="button" onClick={() => authPhase === 'host' ? requestHostAuthRenewal() : location.reload()}>{String(i18next.t('platformAuth.retry'))}</button>}
-            </div>}
+            {startupReady && authPhase === 'ready' ? children : (authPhase === 'unavailable' || authPhase === 'host') ? <div role="status">
+                {String(i18next.t(authPhase === 'host' ? 'platformAuth.hostReconnect' : 'platformAuth.serviceUnavailable'))}
+                <button type="button" onClick={() => authPhase === 'host' ? requestHostAuthRenewal() : location.reload()}>{String(i18next.t('platformAuth.retry'))}</button>
+            </div> : null}
         </userContext.Provider>
     );
 }

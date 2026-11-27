@@ -44,6 +44,8 @@ it('waits for shared initialization before the identity query or route consumers
   mount();
   expect(mockGetUser).not.toHaveBeenCalled();
   expect(screen.queryByText('anonymous|false')).not.toBeInTheDocument();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByText('platformAuth.loading')).not.toBeInTheDocument();
   await act(async () => { finish?.(null); });
   await screen.findByText('Alice|true');
 });

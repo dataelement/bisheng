@@ -1,4 +1,5 @@
 import { AuthSessionError, type AuthEnvironment, type AuthEvent } from './authTypes';
+import { v4 as uuid } from 'uuid';
 
 const LOCK_NAME = 'bisheng:platform-auth';
 const LEASE_MS = 15000;
@@ -42,7 +43,7 @@ export async function withAuthLock<T>(callback: (isCurrent: () => boolean) => Pr
     } catch (cause) { if (entered) throw cause; }
   }
   if (typeof indexedDB === 'undefined') throw new AuthSessionError(503, 10659, 'auth_service_unavailable', true);
-  const owner = crypto.randomUUID();
+  const owner = uuid();
   const deadline = Date.now() + 30000;
   let acquired: Lease | undefined;
   while (!acquired && Date.now() < deadline) {
@@ -118,7 +119,7 @@ export function browserAuthEnvironment(): AuthEnvironment {
     publish: event => {
       channel?.postMessage(event);
       if (!channel) {
-        try { localStorage.setItem(LOCK_NAME, JSON.stringify({ ...event, nonce: crypto.randomUUID() })); }
+        try { localStorage.setItem(LOCK_NAME, JSON.stringify({ ...event, nonce: uuid() })); }
         catch { /* Notifications do not provide mutual exclusion. */ }
       }
     },

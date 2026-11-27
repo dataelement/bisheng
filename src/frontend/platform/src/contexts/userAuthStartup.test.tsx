@@ -43,6 +43,8 @@ it('does not mount business consumers until gateway binding initialization compl
   mount();
   expect(mocks.business).not.toHaveBeenCalled();
   expect(mocks.getUser).not.toHaveBeenCalled();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByText('platformAuth.loading')).not.toBeInTheDocument();
   await act(async () => { finish?.(null); });
   await screen.findByText('Alice');
   expect(mocks.business).toHaveBeenCalledOnce();
@@ -55,6 +57,53 @@ it('clears cached business data and old identity on cross-tab logout', async () 
   await act(async () => { mocks.subscription?.({ type: 'logout', session: 'a'.repeat(32) }); });
   expect(screen.getByText('anonymous')).toBeInTheDocument();
   expect(client.getQueryData(['old-account-business'])).toBeUndefined();
+});
+it('keeps routes unmounted until the startup identity is available', async () => {
+  mocks.initialize.mockResolvedValue(null);
+  let finish: ((value: ReturnType<typeof profile>) => void) | undefined;
+  mocks.getUser.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  mount();
+  await waitFor(() => expect(finish).toBeDefined());
+  expect(mocks.business).not.toHaveBeenCalled();
+  expect(screen.queryByText('anonymous')).not.toBeInTheDocument();
+  expect(useAuthSessionStore.getState().phase).toBe('loading');
+  await act(async () => { finish?.(profile('Alice')); });
+  await screen.findByText('Alice');
+  expect(mocks.business).toHaveBeenCalledOnce();
+});
+it('does not remount the login route between successful login and identity completion', async () => {
+  mocks.initialize.mockResolvedValue(null);
+  mocks.getUser.mockRejectedValueOnce({ status: 401 });
+  mount();
+  await screen.findByText('anonymous');
+  expect(mocks.business).toHaveBeenCalledOnce();
+  let finishSession: ((value: null) => void) | undefined;
+  mocks.initialize.mockImplementationOnce(() => new Promise(resolve => { finishSession = resolve; }));
+  let finishProfile: ((value: ReturnType<typeof profile>) => void) | undefined;
+  mocks.getUser.mockImplementationOnce(() => new Promise(resolve => { finishProfile = resolve; }));
+  await act(async () => { mocks.subscription?.({ type: 'login', session: 'b'.repeat(32) }); });
+  expect(screen.queryByText('anonymous')).not.toBeInTheDocument();
+  await act(async () => { finishSession?.(null); });
+  await waitFor(() => expect(finishProfile).toBeDefined());
+  expect(screen.queryByText('anonymous')).not.toBeInTheDocument();
+  expect(mocks.business).toHaveBeenCalledOnce();
+  expect(useAuthSessionStore.getState().phase).toBe('loading');
+  await act(async () => { finishProfile?.(profile('Bob')); });
+  await screen.findByText('Bob');
+  expect(mocks.business).toHaveBeenCalledTimes(2);
+});
+it.each([null, 'a'.repeat(32)])('opens the anonymous route when startup rejects session %s', async session => {
+  let finish: ((value: null) => void) | undefined;
+  mocks.initialize.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  mount();
+  expect(mocks.business).not.toHaveBeenCalled();
+  await act(async () => {
+    mocks.subscription?.({ type: 'logout', session });
+    finish?.(null);
+  });
+  await screen.findByText('anonymous');
+  expect(mocks.getUser).not.toHaveBeenCalled();
+  expect(mocks.business).toHaveBeenCalledOnce();
 });
 it('reloads identity after cross-tab login and rejects a late old identity response', async () => {
   mocks.initialize.mockResolvedValue(null);
@@ -76,6 +125,28 @@ it('shows a retry action on service failure without mounting business consumers'
   mount();
   await screen.findByRole('button', { name: 'platformAuth.retry' });
   expect(mocks.business).not.toHaveBeenCalled();
+});
+it.each([{ kind: 'network' }, { httpStatus: 500 }])('keeps the retry gate when identity loading fails with %j', async error => {
+  mocks.initialize.mockResolvedValue(null);
+  mocks.getUser.mockRejectedValueOnce(error);
+  mount();
+  await screen.findByRole('button', { name: 'platformAuth.retry' });
+  expect(mocks.business).not.toHaveBeenCalled();
+  expect(screen.queryByText('anonymous')).not.toBeInTheDocument();
+  expect(useAuthSessionStore.getState().phase).toBe('unavailable');
+});
+it('does not restore an identity or reopen its startup gate after logout', async () => {
+  mocks.initialize.mockResolvedValue(null);
+  let finish: ((value: ReturnType<typeof profile>) => void) | undefined;
+  mocks.getUser.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  mount();
+  await waitFor(() => expect(finish).toBeDefined());
+  await act(async () => { mocks.subscription?.({ type: 'logout', session: 'a'.repeat(32) }); });
+  await screen.findByText('anonymous');
+  await act(async () => { finish?.(profile('Alice')); });
+  expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+  expect(screen.getByText('anonymous')).toBeInTheDocument();
+  expect(useAuthSessionStore.getState()).toMatchObject({ phase: 'ready', session: null });
 });
 
 it('keeps a cold host WebView behind the reconnect gate without identity or business queries', async () => {

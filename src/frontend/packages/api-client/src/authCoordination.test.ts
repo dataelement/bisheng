@@ -16,7 +16,13 @@ describe('browser authentication mutual exclusion', () => {
     await expect(withAuthLock(async current => current())).resolves.toBe(true);
     expect(request).toHaveBeenCalledOnce();
   });
-  it('serializes independent callers with an IndexedDB transaction', async () => {
+  it.each([true, false])('serializes independent callers with IndexedDB, native randomUUID=%s', async nativeUuid => {
+    if (!nativeUuid) {
+      const getRandomValues = crypto.getRandomValues.bind(crypto);
+      vi.stubGlobal('crypto', { getRandomValues });
+      expect(crypto.randomUUID).toBeUndefined();
+      await expect(withAuthLock(async current => current())).resolves.toBe(true);
+    }
     let release: (() => void) | undefined;
     const order: string[] = [];
     const first = withAuthLock(async current => {

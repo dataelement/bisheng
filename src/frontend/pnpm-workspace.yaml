@@ -10,6 +10,7 @@ packages:
 # New shared deps go here; app-specific deps stay in each app's package.json.
 # (Versions seeded from client to avoid any resolution drift on day one.)
 catalog:
+  uuid: ^11.1.0
   '@hello-pangea/dnd': 18.0.1
   react-window: 1.8.11
   xlsx: 0.20.3
