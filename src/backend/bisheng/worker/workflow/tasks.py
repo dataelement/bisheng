@@ -5,12 +5,14 @@ from loguru import logger
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode, encode_workflow_error
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
+from bisheng.dsh.domain.services import chat_credits
 from bisheng.memory.domain.ports import SCENE_WORKFLOW
 from bisheng.memory.domain.services.activity import MemoryActivity
 from bisheng.memory.domain.services.app_switch import workflow_memory_enabled_sync
@@ -128,26 +130,31 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
         # init workflow
         workflow_conf = settings.get_workflow_conf()
         workflow_name = workflow_info.name if workflow_info else workflow_id
-        workflow = Workflow(
-            workflow_id,
-            workflow_name,
-            user_id,
-            workflow_data,
-            False,
-            workflow_conf.max_steps,
-            workflow_conf.timeout,
-            redis_callback,
-            tenant_id=flow_tenant_id,
-            flow_user_id=flow_user_id,
-            chat_id=chat_id or "",
-            memory_enabled=memory_enabled,
-        )
-        redis_callback.workflow = workflow
-        _status, _reason = workflow.run()
+        with chat_credits.billing_context(source_type="workflow", source_id=str(workflow_id)):
+            workflow = Workflow(
+                workflow_id,
+                workflow_name,
+                user_id,
+                workflow_data,
+                False,
+                workflow_conf.max_steps,
+                workflow_conf.timeout,
+                redis_callback,
+                tenant_id=flow_tenant_id,
+                flow_user_id=flow_user_id,
+                chat_id=chat_id or "",
+                memory_enabled=memory_enabled,
+            )
+            redis_callback.workflow = workflow
+            _status, _reason = workflow.run()
         _judge_workflow_status(redis_callback, workflow)
     except IgnoreException as e:
         logger.warning(f"execute_workflow ignore error: {e}")
         redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, str(e))
+        _clear_workflow_obj(redis_callback.unique_id)
+    except BaseErrorCode as e:
+        logger.warning(f"execute_workflow error code {e.code}: {e.message}")
+        redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, encode_workflow_error(e))
         _clear_workflow_obj(redis_callback.unique_id)
     except Exception as e:
         logger.exception("execute_workflow error")
@@ -244,11 +251,16 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
         if not user_input:
             raise IgnoreException("workflow continue not found user input")
         redis_callback.set_workflow_status(WorkflowStatus.RUNNING.value)
-        _status, _reason = workflow.run(user_input)
+        with chat_credits.billing_context(source_type="workflow", source_id=str(workflow_id)):
+            _status, _reason = workflow.run(user_input)
         _judge_workflow_status(redis_callback, workflow)
     except IgnoreException as e:
         logger.warning(f"continue_workflow ignore error: {e}")
         redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, str(e))
+        _clear_workflow_obj(redis_callback.unique_id)
+    except BaseErrorCode as e:
+        logger.warning(f"continue_workflow error code {e.code}: {e.message}")
+        redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, encode_workflow_error(e))
         _clear_workflow_obj(redis_callback.unique_id)
     except Exception as e:
         logger.exception("continue_workflow error")

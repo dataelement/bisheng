@@ -331,6 +331,7 @@ class AssistantAgent(AssistantUtils):
             app_name=self.assistant.name,
             app_type=ApplicationTypeEnum.ASSISTANT,
             user_id=self.invoke_user_id,
+            admin_selected=True,
         )
 
     async def init_auto_update_llm(self):
@@ -349,6 +350,7 @@ class AssistantAgent(AssistantUtils):
             app_name=self.assistant.name,
             app_type=ApplicationTypeEnum.ASSISTANT,
             user_id=self.invoke_user_id,
+            admin_selected=True,
         )
 
     async def init_tools(self, callbacks: Callbacks = None):

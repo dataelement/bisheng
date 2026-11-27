@@ -59,6 +59,7 @@ _OPENAI_ERROR_BY_CODE: dict[int, tuple[str, str]] = {
     26019: ("invalid_request_error", "identity_header_not_accepted"),
     26030: ("server_error", "service_unavailable"),
     26031: ("server_error", "service_unavailable"),
+    26121: ("rate_limit_error", "credit_exhausted"),
 }
 
 

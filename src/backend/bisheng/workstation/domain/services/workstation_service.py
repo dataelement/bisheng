@@ -1197,6 +1197,7 @@ class WorkStationService(BaseService):
                     result["created_types"] += 1
                     child_type_by_name[child_type.name] = child_type
                 type_map[root_type.id] = child_type
+            created_pairs: list[tuple[int, int]] = []
             for root_tool in root_tools:
                 if root_tool.tool_key in child_tool_by_key:
                     result["skipped_tools"] += 1
@@ -1219,7 +1220,19 @@ class WorkStationService(BaseService):
                     extra=root_tool.extra,
                 )
                 session.add(new_tool)
+                await session.flush()
+                created_pairs.append((int(root_tool.id), int(new_tool.id)))
                 result["created_tools"] += 1
+            if created_pairs:
+                from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
+                await ToolPricingRepository.acopy_for_child_tools(
+                    session,
+                    source_tenant_id=DEFAULT_TENANT_ID,
+                    target_tenant_id=tenant_id,
+                    tool_id_pairs=created_pairs,
+                    actor_user_id=SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+                )
             await session.commit()
             system_types = tuple(child_type_by_name.values())
         if not settings.openfga.enabled:

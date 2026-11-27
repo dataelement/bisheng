@@ -5,8 +5,8 @@
 - {feature_dir}/spec.md（What 和 AC，校验 design 没有偏离需求）
 - {feature_dir}/tasks.md（若已存在；校验流水账与 design 现状一致）
 - features/_templates/design.md（模板结构基线）
-- features/v{X.Y.Z}/release-contract.md（确认关键约束、不变量、依赖契约对齐）
-- docs/constitution.md（架构铁律 C1–C7，用于 Constitution Check）
+- {feature_dir}/../release-contract.md（确认当前版本的关键约束、不变量、依赖契约对齐）
+- docs/constitution.md（当前架构铁律，用于 Constitution Check）
 
 **核心评判标准 — 接手测试**：
 > 想象一个新 agent 一个月后接手这个 feature 做扩展。他**只能读 design.md**，
@@ -23,8 +23,8 @@
 
 **§2 关键约束 + Constitution Check**：
 3. 是否只写**本功能特有**的约束（性能 / 容量 / 部署形态 / 上游数据格式依赖）？
-4. 全局架构铁律（双 DB / 多租户 / 权限 / 分层 / 错误码）是否**只引用 `docs/constitution.md` C1–C7、未重抄**（而非凭空写或抄一遍）？
-   - **Constitution Check（门禁）**：design 的方案是否违反 constitution 任一条 C1–C7？违反 → SEVERITY high（BLOCKER）。
+4. 全局架构铁律是否只引用 `docs/constitution.md` 中的相关条款？
+   - **Constitution Check（门禁）**：design 的方案是否违反当前架构宪章的任一适用条款？违反 → SEVERITY high（BLOCKER）。
 
 **§3 方案对比与选定（最高价值章节）**：
 5. 是否至少记录 1-3 条**关键设计决策**？（feature 完全无决策极少见）

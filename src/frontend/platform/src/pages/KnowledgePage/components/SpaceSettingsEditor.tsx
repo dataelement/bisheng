@@ -219,7 +219,7 @@ function SettingsEditor({
   const canSave =
     canEdit &&
     (basicChanged || processing.dirty) &&
-    (!basicChanged || (draft && validSpaceSettings(draft, saveTags))) &&
+    (!basicChanged || (draft && validSpaceSettings(draft, saveTags, original?.name))) &&
     (!processing.dirty || processing.valid);
   const handleSave = async () => {
     if (!active.current || locked.current || !canSave) return;
@@ -284,6 +284,7 @@ function SettingsEditor({
           />
           <div className="px-6 max-[768px]:px-0">
             <SpaceBasicFields
+              originalName={original?.name}
               mode="settings"
               compact
               name={draft.name}

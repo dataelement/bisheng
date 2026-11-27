@@ -10,9 +10,14 @@ import { DshUsageCalendar } from './DshUsageCalendar';
 interface DshDesktopPanelProps {
   downloadUrl: string | null;
   launchUrl: string;
+  creditBillingEnabled?: boolean;
 }
 
-export function DshDesktopPanel({ downloadUrl, launchUrl }: DshDesktopPanelProps) {
+export function DshDesktopPanel({
+  downloadUrl,
+  launchUrl,
+  creditBillingEnabled = true,
+}: DshDesktopPanelProps) {
   const t = useLocalize();
   const { user } = useAuthContext();
   // The launch is a protocol handover the page cannot observe, so the guidance
@@ -27,7 +32,7 @@ export function DshDesktopPanel({ downloadUrl, launchUrl }: DshDesktopPanelProps
     queryFn: ({ signal }) => getDshUsageSummary(signal),
   });
   const credits = useQuery({
-    queryKey: ['dsh-self-credits', user?.id], enabled: Boolean(user?.id), retry: false, staleTime: 0,
+    queryKey: ['dsh-self-credits', user?.id], enabled: creditBillingEnabled && Boolean(user?.id), retry: false, staleTime: 0,
     queryFn: ({ signal }) => getDshCredits(signal),
   });
   return <>
@@ -39,8 +44,8 @@ export function DshDesktopPanel({ downloadUrl, launchUrl }: DshDesktopPanelProps
       {t(downloadUrl ? 'dsh.launchHelp' : 'dsh.launchHelpNoDownload')}
     </p>}
     {/* Credits fail independently of the usage chart; a gap here never hides the chart. */}
-    {credits.isError ? <p role="alert">{t('dsh_load_error')} <Button variant="link" onClick={() => void credits.refetch()}>{t('dsh_retry')}</Button></p> :
-      credits.data && <DshCreditsCard credits={credits.data} />}
+    {creditBillingEnabled && (credits.isError ? <p role="alert">{t('dsh_load_error')} <Button variant="link" onClick={() => void credits.refetch()}>{t('dsh_retry')}</Button></p> :
+      credits.data && <DshCreditsCard credits={credits.data} />)}
     {usage.isLoading ? <p role="status">{t('dsh_loading')}</p> : usage.isError ?
       <p role="alert">{t('dsh_load_error')} <Button variant="link" onClick={() => void usage.refetch()}>{t('dsh_retry')}</Button></p> :
       usage.data && <DshUsageCalendar summary={usage.data} />}

@@ -49,7 +49,7 @@ def test_apply_workbench_models_returns_minimal_config_when_only_models_exist():
     assert result.models is not None
     assert result.models[0].id == "101"
     assert result.models[0].visual is True
-    assert result.systemPrompt is None
+    assert result.customSystemPrompt is None
     assert result.welcomeMessage == ""
     assert result.model_dump(exclude_unset=True) == {
         "models": [{"id": "101", "name": "qwen-max", "displayName": "Qwen Max", "visual": True}],

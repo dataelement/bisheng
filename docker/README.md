@@ -87,6 +87,16 @@ DSH 检测开关为 `dsh.content-safety.enabled`。仅设为 `false` 不会停�
 
 ARM 主机需要将每个启用服务的镜像替换为兼容 ARM 的 tag 或多架构镜像。Gateway 需使用经确认兼容 ARM 的版本，通过 `BISHENG_GATEWAY_IMAGE` 指定。Socket proxy 的 AMD64 tag 为 `0.3.0`，ARM64 部署需设置 `DOCKER_SOCKET_PROXY_IMAGE=cr.dataelem.com/tecnativa/docker-socket-proxy:0.3.0-arm64`；沙箱必须使用可用的对应架构镜像。
 
+## OnlyOffice 报告编辑的 JWT 配置
+
+使用报告编辑时，OnlyOffice 的 `JWT_ENABLED` 应设为 `"true"`，`JWT_SECRET` 与毕昇系统配置中的 `office_jwt_secret` 保持一致。
+
+`docker-compose-office.yml` 挂载 `office/config/local-production-linux.json`，仅对以 `/api/v1/report/callback` 或 `/api/v1/workflow/report/callback` 结尾的回调地址发送出站 JWT。规则兼容不同域名、IP、端口、部署路径前缀及回调查询参数。其他出站请求（包括文档下载）不附加 Bearer 头，避免与 MinIO 预签名 URL 的认证冲突；编辑器和命令接口的 JWT 校验继续保留。
+
+已有部署需合并这一文件挂载；自定义 `DOCKER_VOLUME_DIRECTORY` 时，先将覆盖文件复制到该目录的 `office/config/local-production-linux.json`。文件缺失会直接报错，不会自动创建同名目录。保留现有 `local.json`、密钥、插件及全部数据卷；覆盖文件只包含出站 URL 规则，不包含凭据。OnlyOffice 初始化会调整配置文件属主，因此该挂载保留可写。
+
+配置更新后只重建 `office` 服务，沿用原 Compose 项目与数据卷。验收需覆盖新建、导入、打开已有报告，以及编辑、保存后重新打开；同时确认回调签名校验仍然生效。回退时撤销该覆盖文件的挂载并重新加载原配置。
+
 ## 模型微调 bisheng-ft（可选）
 
 FT 默认关闭，通过同一 Compose 文件的 `ft` profile 部署。GPU 主机需要安装 NVIDIA 驱动和 NVIDIA Container Toolkit，确保 Docker 能使用 GPU。FT 使用独立版本 `cr.dataelem.com/dataelement/bisheng-ft:v0.5.0`，不要随平台版本修改；可在 `.env` 中用 `BISHENG_FT_IMAGE` 替换。2026-11-10 已只读确认该 CR tag 的 manifest 可获取，架构为 `linux/amd64`；本次未执行 GPU 训练验收。

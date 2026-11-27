@@ -1,9 +1,9 @@
+import { isValidSpaceName } from "@bisheng/knowledge";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
 import type { SpaceSettingsUpdate } from "@/controllers/API/knowledgeSpaceSettings";
-export const SPACE_NAME_LIMIT = 10;
 export const SPACE_DESCRIPTION_LIMIT = 200;
 
-// Match the client settings' full-width units: ASCII is half a unit.
+// Match the client description's full-width units: ASCII is half a unit.
 export function getSpaceTextLength(value: string): number {
   let length = 0;
   for (const character of value) {
@@ -21,10 +21,9 @@ export function truncateSpaceText(value: string, limit: number): string {
   }
   return value.slice(0, end);
 }
-export function validSpaceText(name: string, description: string): boolean {
+export function validSpaceText(name: string, description: string, originalName?: string): boolean {
   return (
-    Boolean(name.trim()) &&
-    getSpaceTextLength(name) <= SPACE_NAME_LIMIT &&
+    isValidSpaceName(name, originalName) &&
     getSpaceTextLength(description) <= SPACE_DESCRIPTION_LIMIT
   );
 }
@@ -70,9 +69,10 @@ export function parseSpaceTags(text: string): string[] {
 export function validSpaceSettings(
   value: SpaceSettingsDraft,
   tagsTouched: boolean,
+  originalName?: string,
 ): boolean {
   return (
-    validSpaceText(value.name, value.description) &&
+    validSpaceText(value.name, value.description, originalName) &&
     (!tagsTouched ||
       !value.autoTag ||
       (value.tagMode === "custom"
@@ -88,7 +88,7 @@ export function spaceSettingsPayload(
   tagsTouched: boolean,
 ): SpaceSettingsUpdate {
   return {
-    name: value.name.trim(),
+    name: value.name === original.name ? original.name : value.name.trim(),
     description: value.description.trim(),
     is_released: canShare
       ? value.auth === "private"

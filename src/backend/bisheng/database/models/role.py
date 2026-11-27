@@ -9,6 +9,7 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
     delete,
+    exists,
     func,
     or_,
     text,
@@ -253,8 +254,41 @@ class RoleDao(RoleBase):
                 and_(Role.role_type == "tenant", True if tenant_id is None else Role.tenant_id == tenant_id),
             ),
         )
-        if keyword:
-            stmt = stmt.where(Role.role_name.like(f"%{keyword}%"))
+        normalized_keyword = (keyword or "").strip()
+        if normalized_keyword:
+            from bisheng.common.subject_search import escape_like
+            from bisheng.database.models.department import UserDepartment
+            from bisheng.user.domain.models.user import User
+
+            like_pattern = f"%{escape_like(normalized_keyword)}%"
+            role_name_match = Role.role_name.like(like_pattern, escape="/")
+            # 部门管理员无任何可管理部门时，不参与关联用户匹配
+            if department_ids is not None and not department_ids:
+                stmt = stmt.where(role_name_match)
+            else:
+                user_match_conditions = [
+                    UserRole.role_id == Role.id,
+                    User.user_name.like(like_pattern, escape="/"),
+                ]
+                # 关联用户严格受当前管理视图租户隔离约束（防止共享角色命中其他租户用户）
+                if tenant_id is not None:
+                    user_match_conditions.append(UserRole.tenant_id == tenant_id)
+                if department_ids is not None:
+                    user_match_conditions.append(
+                        exists(
+                            select(1).where(
+                                UserDepartment.user_id == UserRole.user_id,
+                                UserDepartment.department_id.in_(department_ids),
+                            )
+                        )
+                    )
+                user_match_subquery = (
+                    select(1)
+                    .select_from(UserRole)
+                    .join(User, User.user_id == UserRole.user_id)
+                    .where(*user_match_conditions)
+                )
+                stmt = stmt.where(or_(role_name_match, exists(user_match_subquery)))
         if department_ids is not None:
             if not department_ids:
                 stmt = stmt.where(
@@ -302,7 +336,7 @@ class RoleDao(RoleBase):
             keyword,
             department_ids,
         )
-        stmt = stmt.order_by(Role.create_time.desc())
+        stmt = stmt.order_by(Role.create_time.desc(), Role.id.desc())
         if page and limit:
             stmt = stmt.offset((page - 1) * limit).limit(limit)
         with bypass_tenant_filter():

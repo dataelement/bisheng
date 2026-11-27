@@ -26,7 +26,7 @@ export const AppLostMessage = "11111";
 const unavailableCodes = new Set(["10421", "13002", "13010", AppLostMessage]);
 const wsMap = new Map<string, WebSocket>();
 // 会话运行时信息
-const sessionInfoMap = new Map<string, any>();
+const sessionInfoMap = new Map<string, { node_id?: string; message_id?: string | number }>();
 const restartCallbacks = new Map<string, () => void>();
 
 /**
@@ -287,6 +287,16 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
       const code = envelope.status_code;
       const message = envelope.status_message;
       const referenceMessage = referenceErrorMessage(envelope, (key, values) => localize(`api_errors.${key}`, values));
+      if (Number(code) === 26121 || envelope?.data?.error_type === "credit_exhausted") {
+        helpers.stopShow(false);
+        helpers.message.closeAllLogMsg?.(helpers.chatId);
+        helpers.message.closeAllMsg(helpers.chatId);
+        helpers.message.appendCreditExhaustedMsg?.(helpers.chatId, {
+          statusCode: Number(code) || 26121,
+          message,
+        });
+        return;
+      }
       if (unavailableCodes.has(String(code))) {
         unavailableRef.current[helpers.chatId] = String(code);
         restartCallbacks.delete(helpers.chatId);
@@ -408,9 +418,10 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
           _websocket.send(JSON.stringify(msg));
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error ?? "");
       showToast({
-        message: error.message,
+        message: msg,
         severity: NotificationSeverity.WARNING,
       });
     }

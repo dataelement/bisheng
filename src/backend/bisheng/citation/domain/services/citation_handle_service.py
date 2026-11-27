@@ -43,7 +43,9 @@ _CITATION_START = ""
 _CITATION_SEP = ""
 _CITATION_END = ""
 
-_HANDLE = r"S\d{1,4}"
+# Handles are issued upper-case; a model sometimes writes ``[s1]``. Accept either
+# case and normalize with :func:`run_handles` before the table lookup.
+_HANDLE = r"[Ss]\d{1,4}"
 _GROUP = rf"\[\s*{_HANDLE}(?:\s*[,，、]\s*{_HANDLE})*\s*\]"
 # One or more adjacent groups (``[S3][S7]``); never the label of a markdown
 # link (``[S3](url)``) and never glued to a word or another bracket.
@@ -51,11 +53,22 @@ _GROUP = rf"\[\s*{_HANDLE}(?:\s*[,，、]\s*{_HANDLE})*\s*\]"
 # Chinese word (``结论[S3]``) is the common case, not an identifier.
 _RUN_RE = re.compile(rf"(?<![A-Za-z0-9_\[]){_GROUP}(?:\s*{_GROUP})*(?!\s*\()")
 _HANDLE_RE = re.compile(_HANDLE)
+
 # ``[S3]: 知识库·规则`` — a definition line the model wrote on its own; not a
 # citation, only counted.
 _DEF_LINE_RE = re.compile(rf"^[ \t]*{_GROUP}[ \t]*[:：]", re.M)
 # Fenced blocks and inline code are never rewritten.
 _CODE_RE = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]*`)", re.S)
+
+
+def run_handles(run: str) -> list[str]:
+    """Handles of one ``[S3][s7]`` run, upper-cased, de-duplicated, in order."""
+    seen: list[str] = []
+    for handle in _HANDLE_RE.findall(run):
+        handle = handle.upper()
+        if handle not in seen:
+            seen.append(handle)
+    return seen
 
 
 @dataclass
@@ -413,10 +426,7 @@ def convert_handles_to_markers(text: str, handles: dict[str, str] | None) -> Con
         result.skipped_definitions += skipped
 
         def _replace(match: re.Match[str]) -> str:
-            seen: list[str] = []
-            for handle in _HANDLE_RE.findall(match.group(0)):
-                if handle not in seen:
-                    seen.append(handle)
+            seen = run_handles(match.group(0))
             known = [h for h in seen if h in handles]
             unknown = [h for h in seen if h not in handles]
             for h in unknown:

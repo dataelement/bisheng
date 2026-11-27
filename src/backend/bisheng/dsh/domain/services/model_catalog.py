@@ -38,7 +38,7 @@ async def read_visible_model_ids(user_id: int, model_ids: list[int]) -> set[int]
     return await asyncio.to_thread(read)
 
 
-async def user_workbench_models(user_id: int, config=None):
+async def visible_workbench_models(user_id: int, config=None):
     """Every online chat model of the tenant that this user may see.
 
     The workbench ``models`` entries only carry optional metadata (display name,
@@ -83,6 +83,11 @@ async def _project_visible_models(config, candidates, visible):
             )
         )
     return result
+
+
+async def user_workbench_models(user_id: int, config=None):
+    """Project platform visibility independently of the credit billing switch."""
+    return await visible_workbench_models(user_id, config)
 
 
 async def project_workbench_config(config, user_id: int, *, operator=None):

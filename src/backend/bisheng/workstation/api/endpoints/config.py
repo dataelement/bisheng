@@ -38,7 +38,7 @@ async def get_config(
     # follows whichever loader_provider is actually selected and configured.
     knowledge_conf = await bisheng_settings.async_get_knowledge()
     ret = ret.model_dump(exclude_unset=True) if ret else {}
-    if bisheng_settings.dsh.enabled and ret.get("models"):
+    if bisheng_settings.credit_billing.enabled and ret.get("models"):
         from bisheng.dsh.domain.services.pricing import workbench_pricing_hints
 
         # F016: response-only field; WSModel is also the stored config, so it never carries it.

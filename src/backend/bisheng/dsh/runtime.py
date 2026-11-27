@@ -168,8 +168,15 @@ async def get_model_runtime(runtime) -> ModelRuntime:
     from bisheng.dsh.domain.services.model_display import read_display_names
 
     audit = ModelAuditRuntime(config, redis)
+    async def read_visible_models(user_id: int) -> list[int]:
+        from bisheng.dsh.domain.services.model_catalog import visible_workbench_models
+
+        entries = await visible_workbench_models(user_id)
+        return [int(item["id"]) for item in entries]
+
     model = DshModelService(
         policy_reader=read_policy,
+        visible_models_reader=read_visible_models,
         model_loader=LLMService.get_dsh_model_snapshot,
         llm_builder=build,
         capabilities_for=capabilities,

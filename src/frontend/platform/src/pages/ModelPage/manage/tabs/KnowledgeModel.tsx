@@ -139,7 +139,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
 
     const [form, setForm] = useState({
         embeddingModelId: null,
-        sourceModelId: null,
         extractModelId: null,
         qaSimilarModelId: null,
         asrModelId: null,
@@ -151,7 +150,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
     const lastSaveFormDataRef = useRef(null)
     const hydratedConfig = useRef<unknown>(null)
     const unavailableModelFields = useMemo(() => normalizeKnowledgeModelIds({
-        embedding_model_id: form.embeddingModelId, source_model_id: form.sourceModelId,
+        embedding_model_id: form.embeddingModelId,
         extract_title_model_id: form.extractModelId, qa_similar_model_id: form.qaSimilarModelId,
         asr_model_id: form.asrModelId,
     }, { llmOptions, embeddings, asrModels: asrModel }).unavailableFields, [form, llmOptions, embeddings, asrModel])
@@ -167,7 +166,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             extract_title_model_id,
             qa_similar_model_id,
             asr_model_id,
-            source_model_id,
             abstract_enabled,
             auto_tag_enabled,
             abstract_prompt,
@@ -176,7 +174,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         const { modelIds } = normalizeKnowledgeModelIds(
             {
                 embedding_model_id,
-                source_model_id,
                 extract_title_model_id,
                 qa_similar_model_id,
                 asr_model_id,
@@ -185,7 +182,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         )
         setForm({
             embeddingModelId: modelIds.embedding_model_id,
-            sourceModelId: modelIds.source_model_id,
             extractModelId: modelIds.extract_title_model_id,
             qaSimilarModelId: modelIds.qa_similar_model_id,
             asrModelId: modelIds.asr_model_id,
@@ -200,6 +196,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             abstract_prompt: abstract_prompt || defalutPrompt,
             auto_tag_prompt: auto_tag_prompt || defaultAutoTagPrompt,
         }
+        delete lastSaveFormDataRef.current.source_model_id
     }, [asrModel, config, defaultAutoTagPrompt, embeddings, llmOptions]);
 
     // Draft edits retain the saved configuration provenance until persistence.
@@ -214,7 +211,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             extractModelId,
             qaSimilarModelId,
             asrModelId,
-            sourceModelId,
             abstractEnabled,
             autoTagEnabled,
             abstractPrompt,
@@ -237,7 +233,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             extract_title_model_id: extractModelId,
             qa_similar_model_id: qaSimilarModelId,
             asr_model_id: asrModelId || null,
-            source_model_id: sourceModelId,
             abstract_enabled: abstractEnabled,
             auto_tag_enabled: autoTagEnabled,
             abstract_prompt: abstractPrompt,
@@ -297,17 +292,10 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 close
                 required
                 label={t('model.defaultEmbeddingModel')}
+                tooltipText={t('model.defaultEmbeddingModelTooltip')}
                 value={form.embeddingModelId}
                 options={embeddings}
                 onChange={(val) => setFormDraft({ ...form, embeddingModelId: val })}
-            />
-            <ModelSelect
-                close
-                label={t('model.sourceTracingModel')}
-                tooltipText={t('model.sourceTracingModelTooltip')}
-                value={form.sourceModelId}
-                options={llmOptions}
-                onChange={(val) => setFormDraft({ ...form, sourceModelId: val })}
             />
             <ModelSelect
                 close

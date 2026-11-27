@@ -20,7 +20,11 @@ from test.dsh.test_unified_policy_repository import store as store
 def _dsh(monkeypatch, enabled: bool):
     from bisheng.common.services import config_service
 
-    monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=enabled)))
+    monkeypatch.setattr(
+        config_service,
+        "settings",
+        SimpleNamespace(credit_billing=SimpleNamespace(enabled=enabled), dsh=SimpleNamespace()),
+    )
 
 
 # ---- repository ---------------------------------------------------------------------------

@@ -9,9 +9,7 @@ from the task mode and live here:
   are converted *before* each delta goes out (:class:`HandleStreamConverter`),
   not once at completion.
 - **Prompt.** The daily chat has no deliverable files and no per-turn source
-  table; it gets its own rule text, and the legacy "copy the id verbatim"
-  section that tenants saved in their system prompt is swapped out at run time
-  (:func:`replace_legacy_citation_rules`).
+  table; it gets its own rule text (:func:`ensure_daily_handle_rules`).
 
 History replay maps stored markers back to handles (:func:`markers_to_handles`)
 so the model never sees two citation formats side by side.
@@ -49,7 +47,7 @@ STREAM_LEGACY_HOLD_LIMIT = 256
 
 # A (possibly unfinished) sequence of handle groups at the end of the text:
 # "[", "[S", "[S1", "[S12, S", "[S3] ", "[S3][S7". Fullmatch only.
-_OPEN_RUN_TAIL_RE = re.compile(r"(?:\[\s*(?:S\d{0,4}(?:\s*[,，、]\s*(?:S\d{0,4})?)*)?\s*\]?\s*)+")  # noqa: RUF001 - full-width comma is part of the grammar
+_OPEN_RUN_TAIL_RE = re.compile(r"(?:\[\s*(?:[Ss]\d{0,4}(?:\s*[,，、]\s*(?:[Ss]\d{0,4})?)*)?\s*\]?\s*)+")  # noqa: RUF001 - full-width comma is part of the grammar
 # The beginning of an escaped marker ("" written as six characters).
 _ESCAPE_TAIL_RE = re.compile(r"\\{1,4}(?:u(?:e(?:2(?:0)?)?)?)?$", re.IGNORECASE)
 _FENCE_RE = re.compile(r"^[ \t]*(```|~~~)", re.M)
@@ -271,36 +269,9 @@ def markers_to_handles(text: str, key_to_handle: dict[str, str] | None) -> str:
 # --------------------------------------------------------------------------
 _DAILY_RULES_CACHE: dict[str, str] = {}
 
-# Top-level heading of the legacy section in the three shipped default templates.
-_LEGACY_HEADING_RE = re.compile(r"^[ \t]*#[ \t]+(引用规则|Citation Rules|引用ルール)[ \t]*$", re.M | re.I)
-# Its sub-sections; anything else under the heading (e.g. "## 其他信息" holding
-# {cur_date}) is not part of the rules and must survive.
-_LEGACY_SUBSECTIONS = {
-    "来源 id",
-    "来源id",
-    "标记格式",
-    "使用要求",
-    "source id",
-    "format",
-    "requirements",
-    "ソースid",
-    "ソース id",
-    "フォーマット",
-    "要件",
-}
-_HEADING_RE = re.compile(r"^[ \t]*(#{1,6})[ \t]+(.+?)[ \t]*$", re.M)
-# Signs of the legacy contract when the heading was edited away.
-_LEGACY_HINT_RE = re.compile(r"<chunk_id>|citation_key|\\ue20[012]|[]", re.I)
-
-
-# Headings of the handle-rules section: the runtime rules (zh) plus the
-# translated copies in the shipped en / ja default templates. A prompt carrying
-# any of them already teaches handles and is left alone.
-DAILY_RULES_HEADERS = (HANDLE_RULES_HEADER, "# Source Numbers", "# ソース番号")
-
 
 def has_handle_rules(prompt: str | None) -> bool:
-    return bool(prompt) and any(header in prompt for header in DAILY_RULES_HEADERS)
+    return bool(prompt) and HANDLE_RULES_HEADER in prompt
 
 
 def load_daily_handle_rules() -> str:
@@ -316,36 +287,6 @@ def load_daily_handle_rules() -> str:
     return _DAILY_RULES_CACHE["rules"]
 
 
-def replace_legacy_citation_rules(prompt: str | None) -> str:
-    """Swap the saved "copy the id verbatim" section for the handle rules.
-
-    Only the legacy heading and its known sub-sections are replaced; other
-    sub-sections under the same heading (the date line) are kept. Prompts that
-    already carry the handle rules are returned unchanged. When the legacy
-    wording is present but its heading was edited away, the handle rules are
-    appended and win by their own "this section prevails" sentence.
-    """
-    prompt = prompt or ""
-    if has_handle_rules(prompt):
-        return prompt
-    rules = load_daily_handle_rules()
-    match = _LEGACY_HEADING_RE.search(prompt)
-    if match:
-        start = match.start()
-        end = len(prompt)
-        for heading in _HEADING_RE.finditer(prompt, match.end()):
-            level = len(heading.group(1))
-            title = heading.group(2).strip().lower()
-            if level == 1 or title not in _LEGACY_SUBSECTIONS:
-                end = heading.start()
-                break
-        head = prompt[:start].rstrip()
-        tail = prompt[end:].lstrip("\n")
-        parts = [p for p in (head, rules, tail) if p]
-        return "\n\n".join(parts)
-    return ensure_daily_handle_rules(prompt)
-
-
 def ensure_daily_handle_rules(prompt: str | None) -> str:
     """Append the daily rules once (idempotent on the shared header)."""
     prompt = prompt or ""
@@ -354,7 +295,3 @@ def ensure_daily_handle_rules(prompt: str | None) -> str:
     base = prompt.rstrip()
     rules = load_daily_handle_rules()
     return f"{base}\n\n{rules}" if base else rules
-
-
-def prompt_has_legacy_citation_wording(prompt: str | None) -> bool:
-    return bool(prompt) and bool(_LEGACY_HINT_RE.search(prompt))

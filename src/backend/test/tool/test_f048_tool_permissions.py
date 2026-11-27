@@ -495,4 +495,4 @@ async def test_delete_tool_checks_delete_then_projects_lifecycle(
         action="delete",
     )
     adapter.project_delete.assert_awaited_once()
-    delete_row.assert_awaited_once_with(10)
+    delete_row.assert_awaited_once_with(10, tenant_id=5)

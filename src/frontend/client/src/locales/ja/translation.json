@@ -1323,6 +1323,7 @@
       "joined": "参加中のスペース",
       "load_error": "ナレッジスペースを読み込めませんでした。再試行してください。",
       "more": "その他の操作",
+      "search_by_name": "ナレッジスペース名で検索",
       "sort_create_time": "作成日時順",
       "sort_name": "名前順",
       "sort_update_time": "更新日時順",

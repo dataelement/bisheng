@@ -178,7 +178,7 @@ class ModelMutationRepository:
             self._check(session, tenant, transaction)
             if ReferenceRepository.current_tenant_id() != tenant:
                 raise KnowledgeOperationPlanChangedError()
-            if settings.dsh.enabled:
+            if settings.credit_billing.enabled:
                 from bisheng.dsh.domain.repositories.new_model_visibility import initialize_new_model_visibility
 
                 await initialize_new_model_visibility(session, batch, actor_user_id)

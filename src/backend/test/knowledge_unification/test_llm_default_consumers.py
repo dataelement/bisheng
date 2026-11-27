@@ -49,8 +49,8 @@ async def consumers(reads, monkeypatch):
 @pytest.mark.parametrize(
     "key,payload,method,sync",
     [
-        ("knowledge_llm", {"source_model_id": 11}, "get_knowledge_llm", True),
-        ("knowledge_llm", {"source_model_id": 11}, "aget_knowledge_llm", False),
+        ("knowledge_llm", {"qa_similar_model_id": 11}, "get_knowledge_llm", True),
+        ("knowledge_llm", {"qa_similar_model_id": 11}, "aget_knowledge_llm", False),
         ("assistant_llm", {"auto_llm": {"model_id": 11}}, "get_assistant_llm", False),
         ("assistant_llm", {"auto_llm": {"model_id": 11}}, "sync_get_assistant_llm", True),
         ("evaluation_llm", {"model_id": 11}, "get_evaluation_llm", False),
@@ -91,17 +91,17 @@ async def test_existing_business_getters_reject_one_invalid_target_in_whole_key(
 
 async def test_original_knowledge_consumer_never_initializes_model_before_full_admission(consumers, monkeypatch):
     with Session(consumers.engine) as session, session.begin():
-        session.add(TenantSystemModelConfig(tenant_id=101, key="knowledge_llm", value='{"source_model_id":11}'))
+        session.add(TenantSystemModelConfig(tenant_id=101, key="knowledge_llm", value='{"qa_similar_model_id":11}'))
     model = Mock(return_value=object())
     monkeypatch.setattr(service.LLMService, "get_bisheng_llm_sync", model)
-    assert service.LLMService.get_knowledge_source_llm(7) is model.return_value
+    assert service.LLMService.get_knowledge_similar_llm(7) is model.return_value
     assert model.call_args.kwargs["model_id"] == 11
 
 
 @pytest.mark.parametrize(
     "key,endpoint,field,value",
     [
-        ("knowledge_llm", "get_knowledge_llm", "source_model_id", 777),
+        ("knowledge_llm", "get_knowledge_llm", "qa_similar_model_id", 777),
         ("assistant_llm", "get_assistant_llm", "auto_llm", {"model_id": 777}),
         ("evaluation_llm", "get_evaluation_llm", "model_id", 777),
         ("workflow_llm", "get_workflow_llm", "model_id", 777),

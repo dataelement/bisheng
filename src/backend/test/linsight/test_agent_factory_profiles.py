@@ -157,6 +157,7 @@ async def _run(
     thread_id: str = "t-profiles",
     script: list[AIMessage] | None = None,
     citation_scope=None,
+    custom_system_prompt: str | None = None,
 ) -> _ScriptedModel:
     """Build the real graph for ``profile`` and run one user turn."""
     from bisheng.core.config.settings import LinsightConf
@@ -182,6 +183,7 @@ async def _run(
         memory_prompt=memory_prompt,
         checkpointer=checkpointer,
         citation_scope=citation_scope,
+        custom_system_prompt=custom_system_prompt,
         **kwargs,
     )
     await agent.ainvoke(
@@ -198,7 +200,7 @@ async def test_direct_has_no_todos(monkeypatch: pytest.MonkeyPatch, tmp_path):
     for word in PLAN_WORDS:
         assert word not in system_text, word
     # The lean prompt is not the planning one with a line removed.
-    assert "深度研究任务智能体" not in system_text
+    assert "本次是深度研究任务" not in system_text
     assert "第 0 步" not in system_text
     assert system_text.count(LINSIGHT_DIRECT_BASE_PROMPT_ZH) == 1
     assert LINSIGHT_BASE_PROMPT_ZH not in system_text
@@ -426,3 +428,18 @@ def test_base_prompt_per_profile():
     assert with_base_prompt("主提示词", profile="direct") == f"主提示词\n\n{LINSIGHT_DIRECT_BASE_PROMPT_ZH}"
     assert "第 0 步" not in LINSIGHT_DIRECT_BASE_PROMPT_ZH
     assert "ask_user" not in LINSIGHT_DIRECT_BASE_PROMPT_ZH
+
+
+@pytest.mark.parametrize("profile", ["direct", "planned"])
+async def test_custom_system_prompt_leads_both_profiles(monkeypatch: pytest.MonkeyPatch, tmp_path, profile):
+    """F004 design 决策 15: the persona is first, once, and the main prompt names no identity."""
+    persona = "你是星河公司的智能助手。"
+    model = await _run(monkeypatch, tmp_path, profile=profile, custom_system_prompt=persona)
+
+    system_text = model.system_texts[0]
+    assert system_text.startswith("# 助手设定（由管理员配置）")
+    assert system_text.count(persona) == 1
+    assert "你是工作台助手" not in system_text
+    assert "你是深度研究任务智能体" not in system_text
+    # The language directive stays the absolute tail.
+    assert system_text.rstrip().endswith(agent_factory._LINSIGHT_LANGUAGE_DIRECTIVE_ZH.strip())

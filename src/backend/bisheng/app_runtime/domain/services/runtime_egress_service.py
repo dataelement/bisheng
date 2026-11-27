@@ -15,10 +15,13 @@ def destination(value, *, trusted=False):
     text = value if "://" in value else "https://" + value
     parsed = urlsplit(text)
     host = parsed.hostname
+    # The proxy represents a declared wildcard zone with a leading dot.
+    if host and host.startswith("*."):
+        host = host[1:]
     if (
         not host
         or parsed.scheme not in {"http", "https"}
-        or not re.fullmatch(r"\.?[A-Za-z0-9.-]+", host)
+        or not re.fullmatch(r"\.?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?", host)
         or (not trusted and (parsed.username or parsed.password))
     ):
         raise RuntimeConflict("egress_destination_invalid")

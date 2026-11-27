@@ -16,14 +16,65 @@ _runtimes = WeakKeyDictionary()
 # round are still admitted and settled in the ledger, but skip the monthly-limit
 # comparison, so an allowance that runs out mid-round never cuts the round off.
 _round_admitted: ContextVar[bool] = ContextVar("dsh_round_admitted", default=False)
+_billing_source_type: ContextVar[str | None] = ContextVar("dsh_billing_source_type", default=None)
+_billing_source_id: ContextVar[str | None] = ContextVar("dsh_billing_source_id", default=None)
+_open_api_unbilled: ContextVar[bool] = ContextVar("dsh_open_api_unbilled", default=False)
+
+
+@contextmanager
+def billing_context(
+    *,
+    source_type: str | None = None,
+    source_id: str | None = None,
+    open_api_unbilled: bool | None = None,
+):
+    """Propagate call attribution (source_type/source_id) and Open API exemption."""
+    tokens = []
+    if source_type is not None:
+        tokens.append(_billing_source_type.set(source_type))
+    if source_id is not None:
+        tokens.append(_billing_source_id.set(str(source_id)))
+    if open_api_unbilled is not None:
+        tokens.append(_open_api_unbilled.set(bool(open_api_unbilled)))
+    try:
+        yield
+    finally:
+        for token in reversed(tokens):
+            token.var.reset(token)
+
+
+def current_billing_source() -> tuple[str | None, str | None]:
+    return _billing_source_type.get(), _billing_source_id.get()
+
+
+def is_open_api_unbilled() -> bool:
+    return _open_api_unbilled.get()
+
+
+async def get_billing_runtime():
+    from bisheng.common.services.config_service import settings
+    from bisheng.dsh.runtime import get_model_runtime
+
+    loop = asyncio.get_running_loop()
+    runtime = _runtimes.setdefault(loop, SimpleNamespace(settings=settings.dsh))
+    service = await get_model_runtime(runtime)
+    await service.activate()
+    return service
 
 
 def governed(model) -> bool:
+    """Return True when this model invocation must go through the credit ledger."""
     from bisheng.common.services.config_service import settings
 
     # F016: knowledge-space Q&A (main chat and image view) is billed as well. rag_traceability
     # stays out because workflows use it too; the workbench passes daily_chat instead.
-    return settings.dsh.enabled and model.app_type in {"daily_chat", "linsight", "knowledge_space"}
+    # F001: assistant, workflow, and hosted-app model_gateway are also billed in real time.
+    app_type = getattr(model.app_type, "value", model.app_type)
+    return (
+        settings.credit_billing.enabled
+        and not _open_api_unbilled.get()
+        and app_type in {"daily_chat", "linsight", "knowledge_space", "assistant", "workflow", "model_gateway"}
+    )
 
 
 async def admit_round(model) -> None:
@@ -54,7 +105,6 @@ async def start(model, *, mode: str = ""):
     from bisheng.dsh.domain.services.pricing import billing_snapshot
     from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
     from bisheng.dsh.runtime import (
-        get_model_runtime,
         read_credit_setting,
         read_ledger_policy,
         read_model_pricing,
@@ -85,10 +135,7 @@ async def start(model, *, mode: str = ""):
     # F016: read prices fresh (never from the cached model_info) and freeze them for this call.
     # A model without a usable price is billed as free (never refused).
     pricing = billing_snapshot(await read_model_pricing(model_id), await read_credit_setting(), model_id=model_id)
-    loop = asyncio.get_running_loop()
-    runtime = _runtimes.setdefault(loop, SimpleNamespace(settings=settings.dsh))
-    service = await get_model_runtime(runtime)
-    await service.activate()
+    service = await get_billing_runtime()
     if pricing.free or administrator:
         if mode == "probe":
             # Free/admin probes do not compare a personal allowance or write a call.
@@ -98,6 +145,11 @@ async def start(model, *, mode: str = ""):
         mode = "unmetered"
     now = datetime.now(UTC)
     request_id = str(uuid4())
+    source_type, source_id = current_billing_source()
+    app_type_val = (
+        getattr(model.app_type, "value", model.app_type) if getattr(model, "app_type", None) is not None else None
+    )
+    app_id_val = getattr(model, "app_id", None)
     event = UsageEvent(
         request_id=request_id,
         trace_id=request_id,
@@ -113,6 +165,8 @@ async def start(model, *, mode: str = ""):
         event_version=1,
         status="RUNNING",
         started_at=now,
+        source_type=source_type or (str(app_type_val) if app_type_val else None),
+        source_id=source_id or (str(app_id_val) if app_id_val else None),
     )
     try:
         event = await service.usage.check_and_start(event, monthly_token_limit=policy.monthly_token_limit, mode=mode)

@@ -181,7 +181,7 @@ _DATA_ANALYST_TOOL_LINE_ZH = (
 # it anyway pushes the model to call a tool that isn't there -> the
 # "knowledge_id: Field required" failure. Keeping prompt and tool list in lockstep
 # removes the contradiction at the source.
-_LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH = """你是深度研究任务智能体，负责把用户的复杂任务拆解为可执行的待办清单并逐项完成，最终产出结构化、有依据的交付物。
+_LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH = """本次是深度研究任务：把用户的复杂任务拆解为可执行的待办清单并逐项完成，最终产出结构化、有依据的交付物。
 
 # 使用语言
 
@@ -479,16 +479,21 @@ def _to_unattended_prompt(template: str) -> str:
     return out
 
 
-def _with_workbench_prompt(prompt: str, workbench_prompt: str | None) -> str:
-    """Layer the administrator's daily-chat system prompt under the platform rules (direct profile)."""
+def _with_custom_system_prompt(prompt: str, custom_system_prompt: str | None) -> str:
+    """Put the administrator's custom system prompt first (both profiles, design 决策 15).
 
-    if not workbench_prompt:
+    First because it is the persona (the main prompts carry no "你是 X" line) and it
+    does not change within a tenant, so the cached prompt prefix stays stable.
+    """
+
+    if not custom_system_prompt:
         return prompt
     return (
-        prompt
-        + "\n\n# 管理员设定的回答要求\n\n"
-        + "以下是管理员为日常对话配置的要求；与上文平台规则冲突时，以平台规则为准。\n\n"
-        + workbench_prompt
+        "# 助手设定（由管理员配置）\n\n"
+        + "以下是管理员对助手身份与回答要求的设定；与下文平台规则冲突时，以平台规则为准。\n\n"
+        + custom_system_prompt.strip()
+        + "\n\n"
+        + prompt
     )
 
 
@@ -802,7 +807,7 @@ def _build_direct_system_prompt(
 
     asking = "、向用户的提问" if has_ask_user else ""
     parts: list[str] = [
-        "你是工作台助手，直接回答用户的问题、完成用户交代的事情。\n\n"
+        "本次是日常对话：直接回答用户的问题、完成用户交代的事情。\n\n"
         "# 使用语言\n\n"
         f"全程（**包括你的思考与推理过程（thinking）、工具调用前后的简短旁白、写入文件的内容{asking}和最终回复**）"
         "使用与用户输入一致的语言：用户用中文则全程中文，用户用英文则全程英文。\n\n"
@@ -939,6 +944,9 @@ def _build_direct_system_prompt(
         parts.append(_CODE_INTERPRETER_RULES_ZH)
     parts.append(
         "# 风格\n\n- 简洁，工具调用之间不加多余解释性文字。\n- 不要凭空编造事实；依据检索到的资料作答时以资料为准。\n"
+        # The chat renders echarts code blocks; this lived in the workbench template (design 决策 15).
+        "- 需要在回复里用图表展示数据时，输出以 ```echarts 开头的代码块，内容是 ECharts 的 option，"
+        "必须是合法 JSON（键名加双引号，不写函数和注释）。\n"
     )
     return "".join(parts)
 
@@ -1363,6 +1371,18 @@ def _is_web_citation_tool(tool: object) -> bool:
     return is_web_citation_tool(tool)
 
 
+# Grounding for knowledge / web results, both profiles (design 决策 15). It used to
+# live only in the workbench template an administrator could edit or clear.
+_GROUNDING_RULES_HEADER = "# 检索依据"
+_GROUNDING_RULES_ZH = (
+    f"\n\n{_GROUNDING_RULES_HEADER}\n\n"
+    "- 检索结果里有与问题明确相关、足以支撑结论的内容时，才据此作答。"
+    "检索结果为空、与问题无关或不足以回答时，如实说明没有找到可靠依据。\n"
+    "- 文档片段、图片和来源编号只取自检索结果；没有对应依据的内容，直接说明没有找到，"
+    "不写「根据检索结果」「资料显示」。"
+)
+
+
 def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False, daily: bool = False) -> str:
     """Append the citation rules when the run actually has a citable tool.
 
@@ -1380,14 +1400,19 @@ def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False, dail
         # wording of the same [Sn] contract (F075); both share one section header.
         from bisheng.citation.domain.services.daily_citation_handles import ensure_daily_handle_rules
 
-        return ensure_daily_handle_rules(prompt)
-    if handles:
+        ruled = ensure_daily_handle_rules(prompt)
+    elif handles:
         from bisheng.citation.domain.services.citation_handle_service import ensure_handle_rules
 
-        return ensure_handle_rules(prompt)
-    from bisheng.citation.domain.services.citation_prompt_helper import ensure_citation_rules
+        ruled = ensure_handle_rules(prompt)
+    else:
+        from bisheng.citation.domain.services.citation_prompt_helper import ensure_citation_rules
 
-    return ensure_citation_rules(prompt)
+        ruled = ensure_citation_rules(prompt)
+    # Idempotent like the rules themselves: the section is added once.
+    if _GROUNDING_RULES_HEADER in ruled:
+        return ruled
+    return ruled + _GROUNDING_RULES_ZH
 
 
 async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
@@ -1924,7 +1949,7 @@ async def create_linsight_agent(
     profile: ProfileName = "planned",
     inbox: AgentMiddleware | None = None,
     memory: MemoryWiring | None = None,
-    workbench_prompt: str | None = None,
+    custom_system_prompt: str | None = None,
     model_facts_sink: dict | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
@@ -1947,9 +1972,9 @@ async def create_linsight_agent(
             retrieval tools so the completion audit knows which sources were seen.
         context_window_sink: mutable dict filled with the context window this run
             uses (F087), so the caller can log it when the task fails.
-        workbench_prompt: ``direct`` profile only. The daily-chat system prompt
-            the administrator configured on the workbench; appended under the
-            platform rules. Ignored for ``planned``.
+        custom_system_prompt: both profiles. The workbench's custom system prompt
+            (persona and business requirements, or the built-in default); put
+            first in the main graph's system prompt. Subagents do not get it.
         memory_prompt: F132 long-term memory text of this round (tool guidance,
             resident and experience blocks), fixed at round start. Appended only
             when the memory tools are actually bound (prompt <-> tool lockstep).
@@ -2281,17 +2306,17 @@ async def create_linsight_agent(
             model=model,
             tools=main_tools,
             # Main graph only: subagents keep their own prompt (see base_prompt.py).
-            system_prompt=with_base_prompt(
-                _with_caller_instructions(
-                    _with_workbench_prompt(
+            system_prompt=_with_custom_system_prompt(
+                with_base_prompt(
+                    _with_caller_instructions(
                         _with_citation_rules(
                             main_prompt, has_kb or has_web, handles=citation_handles, daily=not planned
                         ),
-                        None if planned else workbench_prompt,
+                        caller_instructions(session_model),
                     ),
-                    caller_instructions(session_model),
+                    profile=profile,
                 ),
-                profile=profile,
+                custom_system_prompt,
             ),
             middleware=middlewares,
             subagents=subagents,

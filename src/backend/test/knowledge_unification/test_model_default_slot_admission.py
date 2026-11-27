@@ -28,11 +28,11 @@ async def test_same_model_in_multiple_slots_checks_only_selected_type_and_redact
         native.seed_default(
             session,
             key="knowledge_llm",
-            payload={"source_model_id": 11, "embedding_model_id": 11, "abstract_prompt": "keep"},
+            payload={"qa_similar_model_id": 11, "embedding_model_id": 11, "abstract_prompt": "keep"},
         )
-    value = await admit(reads, native_sync, "knowledge_llm", ("source_model_id",))
+    value = await admit(reads, native_sync, "knowledge_llm", ("qa_similar_model_id",))
     payload = json.loads(value.payload_json)
-    assert payload["source_model_id"] == 11 and payload["embedding_model_id"] is None
+    assert payload["qa_similar_model_id"] == 11 and payload["embedding_model_id"] is None
     assert payload["abstract_prompt"] == "keep"
     with pytest.raises(ResourceReferenceInvalidError):
         await admit(reads, native_sync, "knowledge_llm", ("embedding_model_id",))
@@ -56,7 +56,7 @@ async def test_same_model_in_multiple_slots_checks_only_selected_type_and_redact
 )
 async def test_stale_source_index_does_not_block_selected_valid_slot(reads, native_sync, field, value):
     with Session(reads.engine) as session, session.begin():
-        native.seed_default(session, key="knowledge_llm", payload={"source_model_id": 11, "embedding_model_id": 22})
+        native.seed_default(session, key="knowledge_llm", payload={"qa_similar_model_id": 11, "embedding_model_id": 22})
         session.execute(
             update(BusinessReferenceSet)
             .where(
@@ -66,14 +66,14 @@ async def test_stale_source_index_does_not_block_selected_valid_slot(reads, nati
             )
             .values(**{field: value})
         )
-    actual = await admit(reads, native_sync, "knowledge_llm", ("source_model_id",))
-    assert json.loads(actual.payload_json)["source_model_id"] == 11
+    actual = await admit(reads, native_sync, "knowledge_llm", ("qa_similar_model_id",))
+    assert json.loads(actual.payload_json)["qa_similar_model_id"] == 11
 
 
 @pytest.mark.parametrize("native_sync", [True, False])
 async def test_missing_known_slot_is_empty_unknown_slot_is_denied(reads, native_sync):
     with Session(reads.engine) as session, session.begin():
-        native.seed_default(session, key="knowledge_llm", payload={"source_model_id": 11})
+        native.seed_default(session, key="knowledge_llm", payload={"qa_similar_model_id": 11})
     value = await admit(reads, native_sync, "knowledge_llm", ("asr_model_id",))
     assert all(
         reference is None for name, reference in json.loads(value.payload_json).items() if name.endswith("model_id")
@@ -108,9 +108,11 @@ async def test_inherited_root_owner_does_not_authorize_child_and_revocation_is_f
 @pytest.mark.parametrize("native_sync", [True, False])
 async def test_offline_selected_slot_fails_without_blocking_other_slot(reads, native_sync):
     with Session(reads.engine) as session, session.begin():
-        native.seed_default(session, key="knowledge_llm", payload={"source_model_id": 11, "extract_title_model_id": 22})
+        native.seed_default(
+            session, key="knowledge_llm", payload={"qa_similar_model_id": 11, "extract_title_model_id": 22}
+        )
         session.execute(update(LLMModel).where(LLMModel.id == 22).values(online=False))
-    await admit(reads, native_sync, "knowledge_llm", ("source_model_id",))
+    await admit(reads, native_sync, "knowledge_llm", ("qa_similar_model_id",))
     with pytest.raises(ResourceReferenceInvalidError):
         await admit(reads, native_sync, "knowledge_llm", ("extract_title_model_id",))
 
@@ -199,7 +201,23 @@ async def test_native_management_http_keeps_invalid_inheritance_but_candidate_ex
 @pytest.mark.parametrize("native_sync", [True, False])
 async def test_selected_foreign_child_model_is_not_authorized_by_source_owner(reads, native_sync):
     with Session(reads.engine) as session, session.begin():
-        native.seed_default(session, key="knowledge_llm", payload={"source_model_id": 33, "extract_title_model_id": 11})
+        native.seed_default(
+            session, key="knowledge_llm", payload={"qa_similar_model_id": 33, "extract_title_model_id": 11}
+        )
     await admit(reads, native_sync, "knowledge_llm", ("extract_title_model_id",))
     with pytest.raises(ResourceReferenceInvalidError):
-        await admit(reads, native_sync, "knowledge_llm", ("source_model_id",))
+        await admit(reads, native_sync, "knowledge_llm", ("qa_similar_model_id",))
+
+
+async def test_inherited_knowledge_embedding_uses_root_model_and_rejects_it_offline(reads):
+    """F002 AC-07: a knowledge default uses the existing root model admission."""
+    with Session(reads.engine) as session, session.begin():
+        session.execute(update(LLMModel).where(LLMModel.id == 22).values(model_type="embedding"))
+        native.seed_default(session, tenant_id=1, key="knowledge_llm", payload={"embedding_model_id": 22})
+    value = await reads.facade.arequire_default_projection("knowledge_llm", ("embedding_model_id",))
+    assert value.source_key.tenant_id == 1
+    assert json.loads(value.payload_json)["embedding_model_id"] == 22
+    with Session(reads.engine) as session, session.begin():
+        session.execute(update(LLMModel).where(LLMModel.id == 22).values(online=False))
+    with pytest.raises(ResourceReferenceInvalidError):
+        await reads.facade.arequire_default_projection("knowledge_llm", ("embedding_model_id",))

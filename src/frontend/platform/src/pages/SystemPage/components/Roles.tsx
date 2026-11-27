@@ -1,5 +1,4 @@
 import { toast } from '@bisheng/ui';
-import { Switch } from "@bisheng/ui";
 import { RolesView } from "./RolesView";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -18,14 +17,12 @@ import {
 import { showApiError } from "@/controllers/request";
 import { DepartmentTreeNode } from "@/types/api/department";
 import { ROLE } from "@/types/api/user";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CHILD_DEPENDENTS,
   DEFAULT_ENABLED_MENU_IDS,
   normalizeRoleMenuSelection,
-  WORKBENCH_CHILD_MENUS,
-  WORKBENCH_PARENT_ID,
 } from "./roleMenuSelection";
 import {
   buildRoleQuotaConfig,
@@ -66,47 +63,20 @@ export function useRolesController() {
   const [initialEditSnapshot, setInitialEditSnapshot] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const WORKBENCH_MENU_OPTIONS = useMemo(
-    () => [
-      { id: "home", label: t("menu.workbenchHome") },
-      { id: "apps", label: t("menu.workbenchApps") },
-      { id: "subscription", label: t("menu.workbench1") },
-      { id: "knowledge_space", label: t("menu.workbench2") },
-    ],
-    [t],
-  );
-
-  const ADMIN_MENU_OPTIONS = useMemo(
-    () => [
-      { id: "board", label: t("menu.board") },
-      { id: "model", label: t("menu.models") },
-      { id: "log", label: t("menu.log") },
-      { id: "knowledge", label: t("menu.knowledge") },
-      { id: "create_knowledge", label: t("menu.createKnowledge"), parentMenuId: "knowledge" as const },
-      { id: "build", label: t("menu.skills") },
-      // `create_app` 依赖 `build`：只有当构建开启时渲染，关闭构建时级联移除。
-      { id: "create_app", label: t("menu.createApp"), parentMenuId: "build" as const },
-      { id: "evaluation", label: t("menu.evaluation") },
-      { id: "dataset", label: t("menu.dataset") },
-      { id: "mark_task", label: t("menu.annotation") },
-    ],
-    [t],
-  );
-
   const defaultMenuIds = useMemo(() => [...DEFAULT_ENABLED_MENU_IDS], []);
 
   const roleTableCols = useMemo(
     () => [
-      { defaultWidth: 180, minWidth: 120 },
-      { defaultWidth: 280, minWidth: 200 },
-      { defaultWidth: 140, minWidth: 100 },
-      { defaultWidth: 120, minWidth: 90 },
-      { defaultWidth: 160, minWidth: 120 },
+      { defaultWidth: 148, minWidth: 112 },
+      { defaultWidth: 166, minWidth: 120 },
       { defaultWidth: 100, minWidth: 80 },
-      { defaultWidth: 160, minWidth: 120 },
-      { defaultWidth: 170, minWidth: 140 },
-      { defaultWidth: 170, minWidth: 140 },
-      { defaultWidth: 168, minWidth: 120 },
+      { defaultWidth: 96, minWidth: 78 },
+      { defaultWidth: 112, minWidth: 88 },
+      { defaultWidth: 80, minWidth: 72 },
+      { defaultWidth: 108, minWidth: 90 },
+      { defaultWidth: 152, minWidth: 142 },
+      { defaultWidth: 152, minWidth: 142 },
+      { defaultWidth: 124, minWidth: 112 },
     ],
     [],
   );
@@ -145,8 +115,13 @@ export function useRolesController() {
     if (res) setDeptTree(res);
   };
 
+  const rolesRequestSeqRef = useRef(0);
+
   const loadRoles = async (nextPage = page, nextKeyword = keyword) => {
+    // 递增请求序号，快速搜索或连续翻页时仅采纳最新一次响应
+    const requestSeq = ++rolesRequestSeqRef.current;
     const res = await getRolesPageApi({ page: nextPage, limit: 20, keyword: nextKeyword || undefined });
+    if (requestSeq !== rolesRequestSeqRef.current) return;
     if (res) {
       setRoles(res.data || []);
       setTotal(res.total || 0);
@@ -297,22 +272,17 @@ export function useRolesController() {
   };
 
   const onDelete = (item: ROLE) => {
-    const n = item.user_count ?? 0;
-    const desc =
-      n > 0 ? (
-        <div className="space-y-2 text-left text-sm">
-          <p>
-            {t("system.confirmText")}「{item.role_name}」？
-          </p>
-          <p className="text-muted-foreground">{t("system.roleDeleteRevokeWarning", { count: n })}</p>
-        </div>
-      ) : (
-        `${t("system.confirmText")}「${item.role_name}」？`
-      );
+    const description = t("system.roleDeleteDescription");
     bsConfirm({
-      title: t("prompt"),
-      desc,
-      okTxt: t("delete"),
+      title: t("system.roleDeleteTitle", { name: item.role_name }),
+      desc: item.role_type === "global" ? (
+        <>
+          <span className="mb-2 block">{t("system.roleDeleteSharedScope")}</span>
+          <span className="block">{description}</span>
+        </>
+      ) : description,
+      canelTxt: t("system.deleteConfirmation.cancel"),
+      okTxt: t("system.deleteConfirmation.confirm"),
       onOk: async (next) => {
           await deleteRoleV2Api(item.id);
           await loadRoles();
@@ -356,29 +326,6 @@ export function useRolesController() {
       return Array.from(next);
     });
   };
-
-  /** One workbench child toggle (首页/应用/订阅/知识空间) — reused for the 首页
-      row above and the remaining-items row, so they stay visually identical. */
-  const renderWorkbenchChild = (m: { id: string; label: string }) => (
-    <label
-      key={m.id}
-      className={`inline-flex w-fit items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
-        !isMenuEnabled(WORKBENCH_PARENT_ID) ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-      }`}
-      onClick={() =>
-        isMenuEnabled(WORKBENCH_PARENT_ID) &&
-        toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, !isMenuEnabled(m.id))
-      }
-    >
-      <Switch
-        checked={isMenuEnabled(m.id)}
-        disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
-        onCheckedChange={(checked) => toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, checked)}
-        onClick={(e) => e.stopPropagation()}
-      />
-      <span>{m.label}</span>
-    </label>
-  );
 
   const scopeLabel = (el: ROLE) => {
     // 作用域以 department_id 为准；全路径优先用后端按 path 解析的字段（不受部门树裁剪影响）
@@ -479,16 +426,17 @@ export function useRolesController() {
     setWorkbenchApprovalMode,
     toggleMenuGroup,
     isMenuEnabled,
-    renderWorkbenchChild,
-    WORKBENCH_MENU_OPTIONS,
     toggleMenuItem,
     adminApprovalMode,
     setAdminApprovalMode,
-    ADMIN_MENU_OPTIONS,
     isSaving,
     submitRole,
   };
 }
-export default function Roles() {
-  return <RolesView controller={useRolesController()} />;
+interface RolesProps {
+  headerTarget?: HTMLDivElement | null;
+}
+
+export default function Roles({ headerTarget }: RolesProps) {
+  return <RolesView controller={useRolesController()} headerTarget={headerTarget} />;
 }

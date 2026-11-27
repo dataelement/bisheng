@@ -162,9 +162,19 @@ async def open_api_access_context(
             tenant_admin_tenant_ids=tenant_admin_tenant_ids,
             data_scope=pat_data_scope,
         )
+        from contextlib import nullcontext
+
+        from bisheng.dsh.domain.services import chat_credits
+
         principal_token = set_current_open_api_principal(principal)
         permission_token = set_current_permission_actor(actor)
-        yield principal
+        billing_scope = (
+            chat_credits.billing_context(open_api_unbilled=True)
+            if principal.actor_kind != HOSTED_APP_ACTOR_KIND
+            else nullcontext()
+        )
+        with billing_scope:
+            yield principal
     finally:
         if permission_token is not None:
             reset_current_permission_actor(permission_token)

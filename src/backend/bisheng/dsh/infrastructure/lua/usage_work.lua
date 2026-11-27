@@ -1,7 +1,7 @@
 -- Work remains durable while claimed. All retries use Redis time, never a worker clock.
 local now=redis.call('TIME'); local ms=tonumber(now[1])*1000+math.floor(tonumber(now[2])/1000)
 local function last_id(stream)
-  if redis.call('EXISTS',stream)==0 then return '' end
+  if redis.call('TYPE',stream).ok~='stream' then return '' end
   local info=redis.call('XINFO','STREAM',stream)
   for i=1,#info,2 do if info[i]=='last-generated-id' then return info[i+1] end end
   return ''
@@ -24,6 +24,9 @@ elseif ARGV[1]=='finish' then
     redis.call('ZADD',KEYS[1],ms+tonumber(ARGV[4]),KEYS[3])
   elseif last_id(KEYS[3])~=ARGV[3] then
     redis.call('ZADD',KEYS[1],ms,KEYS[3])
+  elseif redis.call('EXISTS',(string.gsub(KEYS[3],':events$',':tool_settlements')))==1 then
+    -- 领取后可能有新结算入队，此时事件流的最后 ID 尚未改变。
+    redis.call('ZADD',KEYS[1],ms+math.max(2000,tonumber(ARGV[4])),KEYS[3])
   elseif tonumber(ARGV[4])>0 then
     redis.call('ZADD',KEYS[1],ms+tonumber(ARGV[4]),KEYS[3])
   else

@@ -9,6 +9,11 @@ services:
       JWT_ENABLED: "false"
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
+      - type: bind
+        source: ${DOCKER_VOLUME_DIRECTORY:-.}/office/config/local-production-linux.json
+        target: /etc/onlyoffice/documentserver/local-production-linux.json
+        bind:
+          create_host_path: false
     command: bash -c "supervisorctl restart all"
     restart: on-failure
 

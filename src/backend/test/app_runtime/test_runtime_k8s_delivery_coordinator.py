@@ -145,11 +145,13 @@ async def test_v2_environment_satisfies_shipped_sdk_contract_and_preserves_other
     assert (await runtime_repo.get(type(op), op.id)).payload["sealed_env"] == saved.payload["sealed_env"]
 
 
-async def test_probe_freezes_runtime_health_and_does_not_allocate_a_version_number():
+@pytest.mark.parametrize("domains", [[], ["api.example.com", "*.example.com"]])
+async def test_probe_freezes_runtime_health_and_does_not_allocate_a_version_number(domains):
     """F119 覆盖 AC: AC-07, AC-08, AC-09, AC-10, AC-11."""
     from bisheng.app_publish.domain.schemas.app_manifest import AppManifest
 
     seen = []
+    environments = []
 
     class Repository:
         async def get_application(self, app_id):
@@ -164,7 +166,7 @@ async def test_probe_freezes_runtime_health_and_does_not_allocate_a_version_numb
             return SimpleNamespace(id="probe")
 
         async def inject_environment(self, *args, **kwargs):
-            pass
+            environments.append(kwargs)
 
         async def wake(self, op):
             pass
@@ -175,10 +177,12 @@ async def test_probe_freezes_runtime_health_and_does_not_allocate_a_version_numb
     deployment = SimpleNamespace(id="d", app_id="a", version_id="v", authorization_context={})
     await Coordinator(Repository()).probe(
         deployment,
-        AppManifest(name="test", runtime="node20", port=8081),
+        AppManifest(name="test", runtime="node20", port=8081, egress={"domains": domains}),
         SimpleNamespace(memory_mb=512, cpu_millicores=250),
     )
     assert seen[0]["payload"]["runtime"] == "node20"
     assert seen[0]["payload"]["health"] == {"path": "/"}
+    assert seen[0]["payload"]["egress_domains"] == domains
+    assert environments[0]["preview"] is True
     assert "version_no" not in seen[0]["payload"]
     assert seen[0]["version_id"] == "v"

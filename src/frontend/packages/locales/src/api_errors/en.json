@@ -119,7 +119,7 @@
   "10810": "Please configure the workbench embedding model.",
   "10811": "The daily mode default model must be one of the configured workbench chat models. Please select again.",
   "10900": "Knowledge base name already exists",
-  "10901": "Embedding model required",
+  "10901": "Select an embedding model, or set a default under Knowledge Models in system model settings.",
   "10902": "Summary model invalid. Reconfigure in system model settings.",
   "10903": "The embedding model for knowledge base \"{knowledge_name}\" is unavailable. Please check its configuration.",
   "10910": "This version does not support segmentation changes. Create a new knowledge base",
@@ -865,5 +865,14 @@
   "reference_reason_workflow_mode": "The workflow execution mode is invalid. Reenter from application chat or the editor preview.",
   "reference_reason_sharing_result": "The model service’s sharing scope cannot be verified. Ask an administrator to check sharing settings and the permission service.",
   "reference_reason_configuration_guard": "The resource settings were saved without the required concurrency validation. Refresh and retry; contact an administrator if it persists.",
-  "reference_node_with_id": "Node “{{nodeName}}” ({{nodeId}}) references "
+  "reference_node_with_id": "Node “{{nodeName}}” ({{nodeId}}) references ",
+  "10127": "The selected model does not support this data type or training method.",
+  "10128": "Training preflight failed. Check the service, model and parameters.",
+  "10129": "The dataset or media is invalid. Correct it using the validation details.",
+  "10130": "Fine-tuned model inference failed. Check the artifacts and service logs.",
+  "10131": "The training file could not be delivered to the training service. Check that the service is reachable and has free disk space, then submit again.",
+  "10132": "The training server cannot read the data source, so no task was created. Check the password or keys, and that the training server can reach the data source.",
+  "10133": "The training service is too old for this page: it lacks the interfaces the new fine-tuning page needs. Upgrade it to the version that supports text, image and video fine-tuning.",
+  "10134": "The temporary dataset upload is invalid or expired. Upload it again.",
+  "10135": "This temporary dataset has already been used by another task configuration. Upload it again."
 }

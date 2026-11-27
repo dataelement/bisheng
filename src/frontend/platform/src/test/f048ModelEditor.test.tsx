@@ -1,6 +1,7 @@
 import { ImpactDialog } from "@/pages/SystemPage/components/permission/ImpactDialog"
-import { ModelEditor } from "@/pages/SystemPage/components/permission/ModelEditor"
-import { fireEvent, render, screen, selectOption, waitFor } from "@/test/test-utils"
+import { ModelCatalogPanel } from "@/pages/SystemPage/components/permission/ModelEditor"
+import type { PermissionCatalogRelease } from "@/controllers/API/permission"
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const actions = [
@@ -115,40 +116,103 @@ vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: confirmSpy,
 }))
 
-describe("ModelEditor", () => {
+describe("ModelCatalogPanel", () => {
   const onCreateDraft = vi.fn()
   const onDeleteModel = vi.fn()
   const onReviewImpact = vi.fn()
-  const onInitializePreset = vi.fn()
+  const catalog: PermissionCatalogRelease = {
+    id: 12,
+    release_key: "release-12",
+    version: 12,
+    status: "PUBLISHED",
+    authorization_model_id: "fga-model-12",
+    checksum: "a".repeat(64),
+    actions,
+    models: [standardModel, customModel],
+    presets: [{ key: "reviewer", name: "Reviewer", action_codes: ["visible", "edit"] }],
+  }
+
+  function renderPanel(overrides: Partial<PermissionCatalogRelease> = {}) {
+    render(
+      <ModelCatalogPanel
+        catalog={{ ...catalog, ...overrides }}
+        onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+  }
+
+  function getRow(modelKey: string) {
+    return within(screen.getByTestId("permission-model-" + modelKey))
+  }
+
+  function editRow(modelKey: string) {
+    fireEvent.click(getRow(modelKey).getByRole("button", { name: "model.editNamed" }))
+    return getRow(modelKey)
+  }
+
+  function confirmEdit(modelKey: string) {
+    return getRow(modelKey).getByRole("button", { name: "confirm" })
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()
     onCreateDraft.mockResolvedValue(draft)
     onDeleteModel.mockResolvedValue(draft)
     confirmSpy.mockImplementation(
-      (params: { onOk?: (next: () => void) => void }) =>
-        params.onOk?.(() => {}),
+      ({ onOk }: { onOk?: (close: () => void) => unknown }) => onOk?.(() => {}),
     )
   })
 
-  it("keeps standard fields read-only but allows eligible same-level policy", async () => {
-    render(
-      <ModelEditor
-        model={standardModel}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
+  it("publishes standard action edits with same-level policy and keeps same-level-only saves working", async () => {
+    renderPanel()
+    const standardEdit = getRow(standardModel.key).getByRole("checkbox", { name: "model.action.edit" })
+    const customRow = getRow(customModel.key)
+    expect(standardEdit).toBeChecked()
+    expect(standardEdit).toBeDisabled()
+    expect(customRow.queryByRole("checkbox", { name: "model.action.edit" })).not.toBeInTheDocument()
 
-    expect(screen.getByLabelText("model.name")).toBeDisabled()
-    expect(screen.getByLabelText("model.action.edit")).toBeDisabled()
-    expect(screen.getByLabelText("model.active")).toBeDisabled()
-    expect(screen.getByLabelText("model.allowSameLevel")).toBeEnabled()
+    const row = editRow(standardModel.key)
+    const edit = row.getByRole("checkbox", { name: "model.action.edit" })
+    const save = confirmEdit(standardModel.key)
 
-    fireEvent.click(screen.getByLabelText("model.allowSameLevel"))
-    fireEvent.click(screen.getByRole("button", { name: "model.save" }))
+    expect(row.getByText("level.manager")).toBeInTheDocument()
+    expect(row.queryByRole("textbox", { name: "model.name" })).toBeNull()
+    expect(row.getByLabelText("model.active")).toBeDisabled()
+    expect(row.getByLabelText("model.allowSameLevel")).toBeEnabled()
+    expect(edit).toBeChecked()
+    expect(edit).toBeEnabled()
+    expect(customRow.queryByRole("checkbox", { name: "model.action.edit" })).not.toBeInTheDocument()
+    const customVisible = customRow.getByRole("checkbox", { name: "model.action.visible" })
+    expect(customVisible).toBeChecked()
+    expect(customVisible).toBeDisabled()
+
+    // 取消勾选 edit 并同时开启同级授予，提交 UPDATE_MODEL 草稿并打开编辑影响确认
+    fireEvent.click(edit)
+    fireEvent.click(row.getByLabelText("model.allowSameLevel"))
+    expect(edit).not.toBeChecked()
+    expect(edit).toBeEnabled()
+    expect(save).toBeEnabled()
+    fireEvent.click(save)
+
+    await waitFor(() => {
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "UPDATE_MODEL",
+          model_key: "manager",
+          action_codes: ["visible", "manage_permission"],
+          allow_same_level: true,
+        },
+      ])
+    })
+    expect(onReviewImpact).toHaveBeenCalledWith(draft, "modelEdit")
+
+    // 重新勾回 edit（恢复原操作集合）仅改同级授予，提交 SET_ALLOW_SAME_LEVEL
+    onCreateDraft.mockClear()
+    fireEvent.click(edit)
+    expect(edit).toBeChecked()
+    fireEvent.click(save)
 
     await waitFor(() => {
       expect(onCreateDraft).toHaveBeenCalledWith([
@@ -162,27 +226,24 @@ describe("ModelEditor", () => {
   })
 
   it("edits custom actions and recalculates the derived level in real time", async () => {
-    render(
-      <ModelEditor
-        model={customModel}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
+    renderPanel()
+    const rowCount = screen.getAllByRole("row").length
+    const row = editRow(customModel.key)
 
-    expect(screen.getByTestId("model-derived-level")).toHaveAttribute("data-level", "3")
-    expect(screen.queryByLabelText("model.action.unassigned")).not.toBeInTheDocument()
+    expect(screen.getAllByRole("row")).toHaveLength(rowCount)
+    expect(screen.queryByLabelText("model.preset.label")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "model.preset.apply" })).not.toBeInTheDocument()
+    expect(row.getByTestId("model-derived-level")).toHaveAttribute("data-level", "3")
+    expect(row.queryByLabelText("model.action.unassigned")).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText("model.name"), {
+    fireEvent.change(row.getByLabelText("model.name"), {
       target: { value: "Workflow collaborator" },
     })
-    fireEvent.click(screen.getByLabelText("model.action.edit"))
-    fireEvent.click(screen.getByLabelText("model.action.manage_permission"))
-    expect(screen.getByTestId("model-derived-level")).toHaveAttribute("data-level", "2")
-    fireEvent.click(screen.getByLabelText("model.active"))
-    fireEvent.click(screen.getByRole("button", { name: "model.save" }))
+    fireEvent.click(row.getByLabelText("model.action.edit"))
+    fireEvent.click(row.getByLabelText("model.action.manage_permission"))
+    expect(row.getByTestId("model-derived-level")).toHaveAttribute("data-level", "2")
+    fireEvent.click(row.getByLabelText("model.active"))
+    fireEvent.click(confirmEdit(customModel.key))
 
     await waitFor(() => {
       expect(onCreateDraft).toHaveBeenCalledWith([
@@ -196,126 +257,43 @@ describe("ModelEditor", () => {
         },
       ])
     })
-    expect(screen.getByTestId("model-derived-level")).toHaveAttribute("data-level", "2")
   })
 
-  it("disables same-level without manage_permission and copies preset actions", async () => {
-    render(
-      <ModelEditor
-        model={{
-          ...customModel,
-          action_codes: ["visible"],
-          derived_level: 1,
-        }}
-        actions={actions}
-        presets={[
-          {
-            key: "reviewer",
-            name: "Reviewer",
-            action_codes: ["visible", "edit"],
-          },
-        ]}
-        onInitializePreset={onInitializePreset}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
-
-    expect(screen.getByLabelText("model.allowSameLevel")).toBeDisabled()
-    await selectOption("model.preset.label", "Reviewer")
-    fireEvent.click(
-      screen.getByRole("button", { name: "model.preset.apply" }),
-    )
-    expect(onInitializePreset).toHaveBeenCalledWith({
-      key: "reviewer",
-      name: "Reviewer",
-      action_codes: ["visible", "edit"],
+  it("enables same-level only after the permission management action is selected", () => {
+    renderPanel({
+      models: [{ ...customModel, action_codes: ["visible"], derived_level: 1 }],
     })
-    expect(screen.getByLabelText("model.action.edit")).toBeChecked()
-    expect(screen.getByTestId("model-derived-level")).toHaveAttribute("data-level", "2")
+    const row = editRow(customModel.key)
+
+    expect(row.getByLabelText("model.allowSameLevel")).toBeDisabled()
+    fireEvent.click(row.getByLabelText("model.action.edit"))
+
+    expect(row.getByLabelText("model.action.edit")).toBeChecked()
+    expect(row.getByTestId("model-derived-level")).toHaveAttribute("data-level", "2")
+    expect(row.getByLabelText("model.allowSameLevel")).toBeDisabled()
+
+    fireEvent.click(row.getByLabelText("model.action.manage_permission"))
+    expect(row.getByLabelText("model.allowSameLevel")).toBeEnabled()
   })
 
-  it("offers a blank preset that clears the selection", async () => {
-    // Picking the placeholder only disabled the button, so a model could gain
-    // actions from a preset but never be emptied again.
-    render(
-      <ModelEditor
-        model={{
-          ...customModel,
-          action_codes: ["visible", "edit"],
-          derived_level: 2,
-        }}
-        actions={actions}
-        presets={[
-          { key: "reviewer", name: "Reviewer", action_codes: ["visible", "edit"] },
-        ]}
-        onInitializePreset={onInitializePreset}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
+  it("appends a new row and creates only a non-empty custom model", async () => {
+    renderPanel()
+    const rowCount = screen.getAllByRole("row").length
+    fireEvent.click(screen.getByRole("button", { name: "model.create" }))
+    const row = getRow("__new_custom_model__")
+    const save = row.getByRole("button", { name: "confirm" })
 
-    expect(screen.getByLabelText("model.action.edit")).toBeChecked()
-
-    await selectOption("model.preset.label", "model.preset.blank")
-    fireEvent.click(screen.getByRole("button", { name: "model.preset.apply" }))
-
-    expect(screen.getByLabelText("model.action.edit")).not.toBeChecked()
-    expect(screen.getByLabelText("model.action.visible")).not.toBeChecked()
-    expect(onInitializePreset).toHaveBeenCalledWith({
-      key: "__blank__",
-      name: "model.preset.blank",
-      action_codes: [],
-    })
-  })
-
-  it("offers the blank preset even when the server ships none", async () => {
-    render(
-      <ModelEditor
-        model={{ ...customModel, action_codes: ["edit"], derived_level: 2 }}
-        actions={actions}
-        presets={[]}
-        onInitializePreset={onInitializePreset}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
-
-    await selectOption("model.preset.label", "model.preset.blank")
-    fireEvent.click(screen.getByRole("button", { name: "model.preset.apply" }))
-
-    expect(screen.getByLabelText("model.action.edit")).not.toBeChecked()
-  })
-
-  it("creates only a non-empty custom model", async () => {
-    render(
-      <ModelEditor
-        createMode
-        model={{
-          ...customModel,
-          key: "__new_custom_model__",
-          name: "",
-          derived_level: null,
-          action_codes: [],
-          version: 0,
-        }}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
-
-    const save = screen.getByRole("button", { name: "model.save" })
+    const rows = screen.getAllByRole("row")
+    expect(rows).toHaveLength(rowCount + 1)
+    expect(rows.at(-1)).toBe(screen.getByTestId("permission-model-__new_custom_model__"))
+    expect(screen.queryByLabelText("model.preset.label")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "model.preset.apply" })).not.toBeInTheDocument()
     expect(save).toBeDisabled()
-    fireEvent.change(screen.getByLabelText("model.name"), {
+    fireEvent.change(row.getByLabelText("model.name"), {
       target: { value: "Reviewer" },
     })
     expect(save).toBeDisabled()
-    fireEvent.click(screen.getByLabelText("model.action.visible"))
+    fireEvent.click(row.getByLabelText("model.action.visible"))
     expect(save).toBeEnabled()
     fireEvent.click(save)
 
@@ -332,101 +310,169 @@ describe("ModelEditor", () => {
     })
   })
 
-  it("says a drafted change is unpublished instead of implying it landed", async () => {
-    // Saving drafts the change; nothing lands until it is published, and the
-    // strip used to report only the impact volume.
-    render(
-      <ModelEditor
-        model={{ ...customModel, active: false }}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
+  it("initializes a copy with the source actions and saves it as a new custom model", async () => {
+    renderPanel()
+    fireEvent.click(getRow(standardModel.key).getByRole("button", { name: "model.copyNamed" }))
+    const row = getRow("__new_custom_model__")
 
-    fireEvent.click(screen.getByLabelText("model.action.edit"))
-    fireEvent.click(screen.getByRole("button", { name: "model.save" }))
-
-    const status = await screen.findByRole("status")
-    expect(status).toHaveTextContent("impact.unpublished")
-    expect(
-      screen.getByRole("button", { name: "impact.publishChanges" }),
-    ).toBeInTheDocument()
-  })
-
-  it("keeps active as an assignability switch rather than a deletion precondition", async () => {
-    render(
-      <ModelEditor
-        model={customModel}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
-
-    const button = screen.getByRole("button", { name: "model.delete" })
-    expect(screen.getByText("model.activeHint")).toBeInTheDocument()
-    expect(screen.getByText("model.deleteRequirement")).toBeInTheDocument()
-    expect(button).toBeEnabled()
-    fireEvent.click(button)
+    expect(row.getByLabelText("model.action.visible")).toBeChecked()
+    expect(row.getByLabelText("model.action.edit")).toBeChecked()
+    expect(row.getByLabelText("model.action.manage_permission")).toBeChecked()
+    fireEvent.change(row.getByLabelText("model.name"), {
+      target: { value: "Manager copy" },
+    })
+    fireEvent.click(row.getByRole("button", { name: "confirm" }))
 
     await waitFor(() => {
-      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key)
-      expect(onReviewImpact).toHaveBeenCalledWith(draft)
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "CREATE_MODEL",
+          name: "Manager copy",
+          action_codes: ["visible", "edit", "manage_permission"],
+          active: true,
+          allow_same_level: false,
+        },
+      ])
     })
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "impact.pending",
-    )
+  })
+
+  it("opens the impact confirmation using the server draft after editing", async () => {
+    renderPanel()
+    const row = editRow(customModel.key)
+
+    fireEvent.click(row.getByLabelText("model.action.edit"))
+    fireEvent.click(confirmEdit(customModel.key))
+
+    await waitFor(() => expect(onReviewImpact).toHaveBeenCalledWith(draft, "modelEdit"))
+  })
+
+  it("cancels unchanged edits, new templates, and copies without a prompt", () => {
+    renderPanel()
+    const newRowId = "permission-model-__new_custom_model__"
+
+    const row = editRow(customModel.key)
+    fireEvent.click(row.getByRole("button", { name: "impact.cancel" }))
+    expect(row.queryByLabelText("model.name")).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "model.create" }))
+    fireEvent.click(getRow("__new_custom_model__").getByRole("button", { name: "impact.cancel" }))
+    expect(screen.queryByTestId(newRowId)).not.toBeInTheDocument()
+
+    fireEvent.click(getRow(standardModel.key).getByRole("button", { name: "model.copyNamed" }))
+    const copy = getRow("__new_custom_model__")
+    expect(copy.getByLabelText("model.action.edit")).toBeChecked()
+    fireEvent.click(copy.getByRole("button", { name: "impact.cancel" }))
+    expect(screen.queryByTestId(newRowId)).not.toBeInTheDocument()
+    expect(confirmSpy).not.toHaveBeenCalled()
     expect(onCreateDraft).not.toHaveBeenCalled()
   })
 
-  it("shows the zero-reference guidance when deletion draft creation is blocked", async () => {
-    onDeleteModel.mockRejectedValueOnce(new Error("25004"))
-    render(
-      <ModelEditor
-        model={{ ...customModel, active: false }}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
+  it("keeps a renamed template open until discard is confirmed", () => {
+    renderPanel()
+    confirmSpy.mockImplementationOnce(() => {})
+    const row = editRow(customModel.key)
+    const name = row.getByLabelText("model.name")
+    fireEvent.change(name, { target: { value: "Unsaved name" } })
+    fireEvent.click(row.getByRole("button", { name: "impact.cancel" }))
 
-    const button = screen.getByRole("button", { name: "model.delete" })
-    fireEvent.click(button)
+    expect(confirmSpy).toHaveBeenCalledWith(expect.objectContaining({
+      title: "model.unsavedTitle",
+      desc: "model.discardUnsavedDescription",
+      okTxt: "model.discard",
+      canelTxt: "organization.keepEditing",
+      variant: "default",
+    }))
+    const [[{ onCancel, onOk }]] = confirmSpy.mock.calls
+    expect(onCancel).toBeUndefined()
+    expect(name).toHaveValue("Unsaved name")
+    expect(onCreateDraft).not.toHaveBeenCalled()
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "model.deleteBlocked",
-    )
-    expect(onReviewImpact).not.toHaveBeenCalled()
+    const closePrompt = vi.fn()
+    act(() => onOk(closePrompt))
+    expect(closePrompt).toHaveBeenCalledOnce()
+    expect(row.queryByLabelText("model.name")).not.toBeInTheDocument()
+    expect(row.getByText(customModel.name)).toBeInTheDocument()
+    expect(onCreateDraft).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "model.action.edit",
+    "model.active",
+    "model.allowSameLevel",
+  ])("prompts when cancelling a changed %s and cancels directly once reverted", (label) => {
+    renderPanel()
+    confirmSpy.mockImplementationOnce(() => {})
+    const row = editRow(customModel.key)
+    const cancel = row.getByRole("button", { name: "impact.cancel" })
+    const control = row.getByLabelText(label)
+
+    fireEvent.click(control)
+    fireEvent.click(cancel)
+    expect(confirmSpy).toHaveBeenCalledOnce()
+    expect(row.getByLabelText("model.name")).toBeInTheDocument()
+
+    fireEvent.click(control)
+    fireEvent.click(cancel)
+    expect(confirmSpy).toHaveBeenCalledOnce()
+    expect(row.queryByLabelText("model.name")).not.toBeInTheDocument()
+    expect(onCreateDraft).not.toHaveBeenCalled()
+  })
+
+  it("keeps the edited row open until the unsaved changes prompt is resolved", () => {
+    renderPanel()
+    confirmSpy.mockImplementationOnce(() => {})
+    const row = editRow(customModel.key)
+
+    fireEvent.change(row.getByLabelText("model.name"), {
+      target: { value: "Unsaved name" },
+    })
+    editRow(standardModel.key)
+
+    expect(row.getByLabelText("model.name")).toHaveValue("Unsaved name")
+    expect(confirmSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "model.unsavedTitle" }))
+    expect(onCreateDraft).not.toHaveBeenCalled()
+
+    const [[{ onCancel }]] = confirmSpy.mock.calls
+    act(() => onCancel())
+
+    expect(row.queryByLabelText("model.name")).toBeNull()
+    expect(confirmEdit(standardModel.key)).toBeInTheDocument()
+    expect(onCreateDraft).not.toHaveBeenCalled()
+  })
+
+  it("can generate a deletion draft for an active custom model after confirmation", async () => {
+    renderPanel()
+    confirmSpy.mockImplementationOnce(() => {})
+    const row = getRow(customModel.key)
+    const remove = row.getByRole("button", { name: "model.deleteNamed" })
+
+    expect(remove).toBeEnabled()
+    fireEvent.click(remove)
+    expect(onDeleteModel).not.toHaveBeenCalled()
+
+    const [[{ onOk }]] = confirmSpy.mock.calls
+    await act(async () => onOk(() => {}))
+
+    expect(onDeleteModel).toHaveBeenCalledWith(customModel.key)
+    expect(onReviewImpact).toHaveBeenCalledWith(draft)
+    expect(onCreateDraft).not.toHaveBeenCalled()
   })
 
   it("blocks invalid custom selections until unavailable actions are removed", () => {
-    render(
-      <ModelEditor
-        model={{
-          ...customModel,
-          action_codes: ["unassigned"],
-          derived_level: null,
-        }}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
+    renderPanel({
+      models: [{ ...customModel, action_codes: ["unassigned"], derived_level: null }],
+    })
+    const rowCount = screen.getAllByRole("row").length
+    const row = editRow(customModel.key)
 
-    expect(screen.getByLabelText("model.action.unassigned")).toBeChecked()
-    expect(
-      screen.getByRole("button", { name: "model.save" }),
-    ).toBeDisabled()
-    fireEvent.click(screen.getByLabelText("model.action.unassigned"))
-    fireEvent.click(screen.getByLabelText("model.action.visible"))
-    expect(
-      screen.getByRole("button", { name: "model.save" }),
-    ).toBeEnabled()
+    expect(screen.getAllByRole("row")).toHaveLength(rowCount)
+    expect(row.getByLabelText("model.action.unassigned")).toBeChecked()
+    expect(row.getByRole("status")).toHaveTextContent("model.unavailableSelection")
+    expect(confirmEdit(customModel.key)).toBeDisabled()
+    fireEvent.click(row.getByLabelText("model.action.unassigned"))
+    expect(row.queryByRole("status")).not.toBeInTheDocument()
+    fireEvent.click(row.getByLabelText("model.action.visible"))
+    expect(confirmEdit(customModel.key)).toBeEnabled()
   })
 })
 
@@ -450,7 +496,9 @@ describe("ImpactDialog", () => {
     )
 
     expect(screen.getByTestId("impact-assignee-count")).toHaveTextContent("12")
+    expect(screen.getByText("actionLevel.pendingChanges")).toBeInTheDocument()
     expect(screen.getByText("impact.changeTitle")).toBeInTheDocument()
+    expect(screen.getByText("impact.actionLevelChanged")).toBeInTheDocument()
     expect(screen.getByText("level.manager")).toBeInTheDocument()
     expect(screen.getByText("Collaborator")).toBeInTheDocument()
     expect(screen.getByText("impact.customLevelOnly")).toBeInTheDocument()
@@ -497,5 +545,139 @@ describe("ImpactDialog", () => {
     expect(
       screen.getByRole("button", { name: "impact.publish" }),
     ).toBeDisabled()
+  })
+
+  it("shows the expiry warning at the deadline while the dialog is open", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })
+    vi.setSystemTime(new Date("2026-07-29T12:59:59Z"))
+    try {
+      render(
+        <ImpactDialog
+          open
+          draft={draft}
+          onOpenChange={vi.fn()}
+          onPublish={onPublish}
+        />,
+      )
+
+      const publish = screen.getByRole("button", { name: "impact.publish" })
+      expect(publish).toBeEnabled()
+      expect(screen.queryByText("impact.expiresAt")).not.toBeInTheDocument()
+      expect(screen.queryByText("impact.expired")).not.toBeInTheDocument()
+
+      act(() => vi.advanceTimersByTime(1000))
+
+      expect(screen.getByText("impact.expired")).toBeInTheDocument()
+      expect(publish).toBeDisabled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("shows deduplicated affected users with cross-tenant labels, pagination, retry, and expiry handling", async () => {
+    const loadMore = vi.fn()
+      .mockRejectedValueOnce(new Error("network timeout"))
+      .mockResolvedValueOnce({
+        draft_id: draft.draft_id,
+        total: 3,
+        page: 2,
+        page_size: 20,
+        has_more: false,
+        cross_tenant: true,
+        items: [{ user_id: 201, username: "alice", tenant_id: 2, tenant_name: "East subsidiary" }],
+      })
+
+    render(
+      <ImpactDialog
+        open
+        variant="modelEdit"
+        draft={{
+          ...draft,
+          impact: {
+            ...draft.impact,
+            affected_user_count: 3,
+            affected_users_has_more: true,
+            affected_users_cross_tenant: true,
+            affected_users: [
+              { user_id: 101, username: "alice", tenant_id: 1, tenant_name: "Root tenant" },
+              { user_id: 102, username: "bob", tenant_id: 1, tenant_name: "Root tenant" },
+            ],
+          },
+        }}
+        onOpenChange={vi.fn()}
+        onPublish={onPublish}
+        onLoadAffectedUsers={loadMore}
+        now={new Date("2026-07-29T12:00:00Z")}
+      />,
+    )
+
+    expect(screen.getByTestId("impact-affected-user-count")).toHaveTextContent("3")
+    const list = screen.getByTestId("impact-affected-users-list")
+    expect(within(list).getByText("alice")).toBeInTheDocument()
+    expect(within(list).getByText("bob")).toBeInTheDocument()
+    expect(within(list).getAllByText("Root tenant")).toHaveLength(2)
+
+    // A failed first page shows an error and supports retry.
+    fireEvent.click(within(list).getByRole("button", { name: "impact.loadMoreUsers" }))
+    expect(await within(list).findByText("impact.affectedUsersLoadFailed")).toBeInTheDocument()
+
+    // Retry appends the same-name user from another tenant, distinguished by #user_id.
+    fireEvent.click(within(list).getByRole("button", { name: "catalog.retry" }))
+    expect(await within(list).findByText("East subsidiary")).toBeInTheDocument()
+    expect(within(list).getByText("#101")).toBeInTheDocument()
+    expect(within(list).getByText("#201")).toBeInTheDocument()
+    expect(within(list).queryByRole("button", { name: "impact.loadMoreUsers" })).not.toBeInTheDocument()
+  })
+
+  it("handles zero affected users and marks draft expired when affected-users pagination reports expiry", async () => {
+    const expiredLoader = vi.fn().mockRejectedValue({ status_code: 25008, status_message: "Catalog draft has expired" })
+
+    const { rerender } = render(
+      <ImpactDialog
+        open
+        variant="modelEdit"
+        draft={{
+          ...draft,
+          impact: {
+            ...draft.impact,
+            affected_user_count: 0,
+            affected_users_has_more: false,
+            affected_users_cross_tenant: false,
+            affected_users: [],
+          },
+        }}
+        onOpenChange={vi.fn()}
+        onPublish={onPublish}
+        now={new Date("2026-07-29T12:00:00Z")}
+      />,
+    )
+    expect(screen.getByText("impact.noAffectedUsers")).toBeInTheDocument()
+    expect(screen.queryByTestId("impact-affected-users-list")).not.toBeInTheDocument()
+
+    rerender(
+      <ImpactDialog
+        open
+        variant="modelEdit"
+        draft={{
+          ...draft,
+          draft_id: 99,
+          impact: {
+            ...draft.impact,
+            affected_user_count: 25,
+            affected_users_has_more: true,
+            affected_users_cross_tenant: false,
+            affected_users: [{ user_id: 101, username: "alice", tenant_id: 1, tenant_name: "Root tenant" }],
+          },
+        }}
+        onOpenChange={vi.fn()}
+        onPublish={onPublish}
+        onLoadAffectedUsers={expiredLoader}
+        now={new Date("2026-07-29T12:00:00Z")}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "impact.loadMoreUsers" }))
+    expect(await screen.findByText("impact.expired")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "model.confirmEdit" })).toBeDisabled()
   })
 })

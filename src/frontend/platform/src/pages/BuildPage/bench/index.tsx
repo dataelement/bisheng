@@ -29,7 +29,7 @@ export interface FormErrors {
   taskModeName: string;
   inputPlaceholder: string;
   modelNames: string[] | string[][];
-  systemPrompt: string;
+  customSystemPrompt: string;
   model: string;
   kownledgeBase: string;
   applicationCenterWelcomeMessage: string;
@@ -42,7 +42,7 @@ export interface ChatConfigForm {
   homeMenuDisplayName: string;
 
   appCenterMenuDisplayName: string;
-  systemPrompt: string;
+  customSystemPrompt: string;
   sidebarIcon: {
     enabled: boolean;
     image: string;
@@ -100,7 +100,7 @@ interface UseChatConfigProps {
   taskModeNameRef: React.RefObject<HTMLDivElement>;
   knowledgeBaseRef: React.RefObject<HTMLDivElement>;
   modelRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
-  systemPromptRef: React.RefObject<HTMLDivElement>;
+  customSystemPromptRef: React.RefObject<HTMLDivElement>;
   modelManagementContainerRef: React.RefObject<HTMLDivElement>; // New
 }
 
@@ -114,7 +114,7 @@ export const useChatConfig = (
   const [formData, setFormData] = useState<ChatConfigForm>({
     // menuShow: true,
     // Fresh-deployment default — overwritten by API value when present.
-    systemPrompt: t("chatConfig.systemPrompt2"),
+    customSystemPrompt: t("chatConfig.customSystemPromptDefault"),
     // Blank until configured — the input placeholder shows the default name
     homeMenuDisplayName: "",
     appCenterMenuDisplayName: "",
@@ -218,12 +218,12 @@ export const useChatConfig = (
           const mergeObj = (a: any, b: any) => (b != null && typeof b === "object" ? { ...a, ...b } : a);
 
           // Fresh deployment: no WORKSTATION config row yet. Seed both
-          // systemPrompt and web_search from defaults; leave other fields
+          // customSystemPrompt and web_search from defaults; leave other fields
           // at their initial-state values.
           if (!cfg) {
             return {
               ...prev,
-              systemPrompt: t("chatConfig.systemPrompt2"),
+              customSystemPrompt: t("chatConfig.customSystemPromptDefault"),
               tools: buildDefaultTools(),
             };
           }
@@ -238,10 +238,10 @@ export const useChatConfig = (
 
           // Treat empty string as "not configured" so the default prompt
           // fills in instead of an empty textarea.
-          const cfgSystemPrompt =
-            typeof cfg.systemPrompt === "string" && cfg.systemPrompt.trim()
-              ? cfg.systemPrompt
-              : t("chatConfig.systemPrompt2");
+          const cfgCustomSystemPrompt =
+            typeof cfg.customSystemPrompt === "string" && cfg.customSystemPrompt.trim()
+              ? cfg.customSystemPrompt
+              : t("chatConfig.customSystemPromptDefault");
 
           return {
             ...prev,
@@ -257,7 +257,7 @@ export const useChatConfig = (
             applicationCenterDescription:
               cfg.applicationCenterDescription ?? prev.applicationCenterDescription,
             maxTokens: typeof cfg.maxTokens === "number" ? cfg.maxTokens : prev.maxTokens,
-            systemPrompt: cfgSystemPrompt,
+            customSystemPrompt: cfgCustomSystemPrompt,
             sidebarIcon: mergeObj(prev.sidebarIcon, cfg.sidebarIcon),
             assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
             knowledgeBase: mergeObj(prev.knowledgeBase, cfg.knowledgeBase),
@@ -290,7 +290,7 @@ export const useChatConfig = (
     kownledgeBase: "",
     model: "",
     modelNames: [],
-    systemPrompt: "",
+    customSystemPrompt: "",
     applicationCenterWelcomeMessage: "",
     applicationCenterDescription: "",
   });
@@ -357,7 +357,7 @@ export const useChatConfig = (
       modelNames: [],
       applicationCenterWelcomeMessage: "",
       applicationCenterDescription: "",
-      systemPrompt: "",
+      customSystemPrompt: "",
     };
 
     if (isMenuNameTooLong(formData.homeMenuDisplayName)) {
@@ -404,9 +404,9 @@ export const useChatConfig = (
       isValid = false;
     }
 
-    if (formData.systemPrompt?.length > 30000) {
-      newErrors.systemPrompt = t("chatConfig.errors.maxCharacters", { count: 30000 });
-      if (!firstErrorRef) firstErrorRef = refs.systemPromptRef;
+    if (formData.customSystemPrompt?.length > 30000) {
+      newErrors.customSystemPrompt = t("chatConfig.errors.maxCharacters", { count: 30000 });
+      if (!firstErrorRef) firstErrorRef = refs.customSystemPromptRef;
       isValid = false;
     }
 
@@ -497,7 +497,7 @@ export const useChatConfig = (
       applicationCenterDescription:
         formData.applicationCenterDescription.trim() || t("chatConfig.appCenterDescriptionPlaceholder"),
       maxTokens: formData.maxTokens || 15000,
-      systemPrompt: formData.systemPrompt,
+      customSystemPrompt: formData.customSystemPrompt,
       knowledgeBase: formData.knowledgeBase,
       fileUpload: formData.fileUpload,
       skillEntry: formData.skillEntry,

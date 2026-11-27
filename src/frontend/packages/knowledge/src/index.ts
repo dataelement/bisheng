@@ -20,3 +20,4 @@ export { KnowledgeDialogTable } from './KnowledgeDialogTable';
 export { BATCH_OPERATION_DIALOG_CLASS } from './batchOperationDialogStyles';
 export { KnowledgeDeletionItems, KnowledgeReferenceTables } from './KnowledgeDeletionTables';
 export { directoryLoadingStyles, directoryTitleClass } from './directoryStyles';
+export { SPACE_NAME_LIMIT, isValidSpaceName, spaceNameLength, truncateSpaceName } from './spaceName';

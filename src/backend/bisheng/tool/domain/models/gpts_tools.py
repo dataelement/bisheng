@@ -288,13 +288,28 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     def delete_tool(cls, data: GptsTools) -> GptsTools:
         data.is_delete = 1
-        return cls.update_tools(data)
+        with get_sync_db_session() as session:
+            session.add(data)
+            if data.id is not None:
+                from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
+                ToolPricingRepository.delete_for_tool_ids_sync(
+                    session, tenant_id=data.tenant_id, tool_ids=[int(data.id)]
+                )
+            session.commit()
+            session.refresh(data)
+            return data
 
     @classmethod
     def delete_tool_by_ids(cls, tool_ids: list[int]) -> None:
+        if not tool_ids:
+            return
         with get_sync_db_session() as session:
+            from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
             statement = update(GptsTools).where(GptsTools.id.in_(tool_ids)).values(is_delete=1)
             session.exec(statement)
+            ToolPricingRepository.delete_for_tool_ids_sync(session, tenant_id=None, tool_ids=[int(x) for x in tool_ids])
             session.commit()
 
     @classmethod
@@ -645,14 +660,22 @@ class GptsToolsDao(GptsToolsBase):
                 # Update tool category data
                 session.add(data)
                 # Delete a list of tools that don't exist
-                delete_old_tools = (
-                    update(GptsTools)
-                    .where(
-                        GptsTools.tenant_id == data.tenant_id, GptsTools.type == data.id, GptsTools.id.in_(del_tool_ids)
+                if del_tool_ids:
+                    from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
+                    delete_old_tools = (
+                        update(GptsTools)
+                        .where(
+                            GptsTools.tenant_id == data.tenant_id,
+                            GptsTools.type == data.id,
+                            GptsTools.id.in_(del_tool_ids),
+                        )
+                        .values(is_delete=1)
                     )
-                    .values(is_delete=1)
-                )
-                await session.exec(delete_old_tools)
+                    await session.exec(delete_old_tools)
+                    await ToolPricingRepository.adelete_for_tool_ids(
+                        session, tenant_id=data.tenant_id, tool_ids=[int(x) for x in del_tool_ids]
+                    )
                 # Add Tool List
                 for one in add_tool_list:
                     one.tenant_id = data.tenant_id
@@ -681,24 +704,30 @@ class GptsToolsDao(GptsToolsBase):
             await session.commit()
 
     @classmethod
-    async def delete_tool_type(cls, tool_type_id: int) -> None:
-        """
-        Delete Tool Category
-        """
-        statement = (
-            update(GptsToolsType)
-            .where(col(GptsToolsType.id) == tool_type_id, col(GptsToolsType.is_preset) != ToolPresetType.PRESET.value)
-            .values(is_delete=1)
+    async def delete_tool_type(cls, tool_type_id: int, *, tenant_id: int) -> None:
+        from bisheng.dsh.domain.repositories.tool_pricing import ToolPricingRepository
+
+        group_scope = (
+            GptsToolsType.id == tool_type_id,
+            GptsToolsType.tenant_id == tenant_id,
+            GptsToolsType.is_preset != ToolPresetType.PRESET.value,
         )
-        tool_statement = (
-            update(GptsTools)
-            .where(col(GptsTools.type) == tool_type_id, col(GptsTools.is_preset) != ToolPresetType.PRESET.value)
-            .values(is_delete=1)
+        child_scope = (
+            GptsTools.type == tool_type_id,
+            GptsTools.tenant_id == tenant_id,
+            GptsTools.is_preset != ToolPresetType.PRESET.value,
         )
-        async with get_async_db_session() as session:
-            await session.exec(statement)
-            await session.exec(tool_statement)
-            await session.commit()
+        with tenant_execution_scope(tenant_id), strict_tenant_filter():
+            async with get_async_db_session() as session:
+                # 锁定已鉴权的工具组。查询和更新使用相同的租户及工具组条件。
+                group = await session.exec(select(GptsToolsType.id).where(*group_scope).with_for_update())
+                if group.first() is None:
+                    return
+                tool_ids = (await session.exec(select(GptsTools.id).where(*child_scope))).all()
+                await session.exec(update(GptsToolsType).where(*group_scope).values(is_delete=1))
+                await session.exec(update(GptsTools).where(*child_scope).values(is_delete=1))
+                await ToolPricingRepository.adelete_for_tool_ids(session, tenant_id=tenant_id, tool_ids=list(tool_ids))
+                await session.commit()
 
     @classmethod
     def get_tool_key(cls, tool_type_id: int, gpt_tool: GptsTools) -> str:

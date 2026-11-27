@@ -1965,3 +1965,15 @@ in one transaction; FGA writes and recovery use those original journals. Apply/r
 all selected SQL provenance and physical objects, then exercises permission-version readback.
 This script does not support arbitrary cross-tenant ownership transfer or invent authorization
 for missing/ambiguous historical records.
+
+## F025 数据集目录兼容登记
+
+`register_f025_dataset_catalog.py` 在指定租户内检查旧目录和历史训练版本，保留原文件，补分类、来源和目录/版本关联；不读取推理媒体，不恢复已软删除目录。默认仅 dry-run。
+
+```bash
+cd src/backend
+uv run python scripts/register_f025_dataset_catalog.py --tenant-id <目标租户ID>
+uv run python scripts/register_f025_dataset_catalog.py --tenant-id <目标租户ID> --apply
+```
+
+先执行本次 Alembic 加列迁移，使用目标部署现有配置、密钥文件和对象存储连接。核对 dry-run 的 registered/skipped/errors 后再 apply。支持按同一租户重复执行；有错误时退出码为 1，输出对应目录或版本 ID 及异常类型，不输出连接密码。不能读取或无法识别的旧数据保留原状，应按错误清单核对，不把未知格式强行标为新版文本。回退应用时保留新增列和原文件，不用删除数据的方式回退。

@@ -419,7 +419,7 @@ function EditSpaceForm({
     if (
       busy ||
       !read.current.current ||
-      !isValidSpaceBasic(name, description) ||
+      !isValidSpaceBasic(name, description, read.value?.name) ||
       typeof originalPublication !== "boolean"
     )
       return;
@@ -466,7 +466,7 @@ function EditSpaceForm({
           disabled={
             busy ||
             !read.value ||
-            !isValidSpaceBasic(name, description) ||
+            !isValidSpaceBasic(name, description, read.value.name) ||
             typeof originalPublication !== "boolean"
           }
           onClick={() => {
@@ -480,6 +480,7 @@ function EditSpaceForm({
       {read.value ? (
         <SpaceBasicFields
           name={name}
+          originalName={read.value.name}
           description={description}
           onNameChange={setName}
           onDescriptionChange={setDescription}

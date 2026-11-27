@@ -1,5 +1,6 @@
 import { Alert, Button, Input } from "@bisheng/ui";
 import { isApiError } from "@bisheng/api-client";
+import { isValidSpaceName, SPACE_NAME_LIMIT, spaceNameLength, truncateSpaceName } from "@bisheng/knowledge";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog } from "@/components/bs-ui/dialog";
@@ -28,8 +29,10 @@ export function SpaceCopyDialog({
   const { t } = useTranslation("knowledge");
   const suffix = t("copySuffix");
   const [name, setName] = useState(
-    () => source.name.slice(0, Math.max(0, 200 - suffix.length)) + suffix,
+    () => truncateSpaceName(source.name, Math.max(0, SPACE_NAME_LIMIT - spaceNameLength(suffix))) + suffix,
   );
+  const nameLength = spaceNameLength(name);
+  const validName = isValidSpaceName(name);
   const [busy, setBusy] = useState(false);
   const alive = useRef(true),
     locked = useRef(false);
@@ -41,7 +44,7 @@ export function SpaceCopyDialog({
     };
   }, []);
   const handleCreate = async () => {
-    if (!alive.current || locked.current || !name.trim() || name.length > 200) return;
+    if (!alive.current || locked.current || !validName) return;
     locked.current = true;
     setBusy(true);
     try {
@@ -100,7 +103,7 @@ export function SpaceCopyDialog({
             </Button>
             <Button
               loading={busy}
-              disabled={busy || !name.trim() || name.length > 200}
+              disabled={busy || !validName}
               onClick={() => {
                 void handleCreate();
               }}
@@ -116,7 +119,8 @@ export function SpaceCopyDialog({
               <span className="font-medium">{t("space_copy_ui.name")}</span>
               <Input
                 value={name}
-                maxLength={200}
+                status={nameLength > SPACE_NAME_LIMIT ? "error" : undefined}
+                suffix={`${nameLength}/${SPACE_NAME_LIMIT}`}
                 disabled={busy || Boolean(pending.current)}
                 onChange={(event) => setName(event.target.value)}
               />

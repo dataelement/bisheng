@@ -47,7 +47,7 @@ if ARGV[1]=='install' then
     return result
   end
   -- A new model starts at zero only after the intact component sum proves no missing usage.
-  for key=3,#KEYS,2 do
+  for key=3,#KEYS,3 do
     if redis.call('TYPE',KEYS[key]).ok~='hash' or redis.call('TYPE',KEYS[key+1]).ok~='hash' then return {'DENY','missing_ledger'} end
     local used=redis.call('HGET',KEYS[key],'used'); local total='0'
     local components=redis.call('HGETALL',KEYS[key+1])
@@ -55,6 +55,17 @@ if ARGV[1]=='install' then
       if components[i]~='_initialized' then
         if not integer(components[i+1]) then return {'DENY','bad_counter'} end
         total=add(total,components[i+1])
+      end
+    end
+    local tt=redis.call('TYPE',KEYS[key+2]).ok
+    if tt~='none' and tt~='hash' then return {'DENY','bad_counter'} end
+    if tt=='hash' then
+      local tcomp=redis.call('HGETALL',KEYS[key+2])
+      for i=1,#tcomp,2 do
+        if tcomp[i]~='_initialized' then
+          if not integer(tcomp[i+1]) then return {'DENY','bad_counter'} end
+          total=add(total,tcomp[i+1])
+        end
       end
     end
     if total~=used then return {'DENY','incomplete_model_ledger'} end
@@ -69,7 +80,7 @@ if ARGV[1]=='install' then
     end
   end
   if not integer(total) then return {'DENY','quota_total_overflow'} end
-  for key=3,#KEYS,2 do redis.call('HSETNX',KEYS[key+1],model,'0') end
+  for key=3,#KEYS,3 do redis.call('HSETNX',KEYS[key+1],model,'0') end
   if ARGV[10]=='1' then
     redis.call('HSET',KEYS[1],'model:'..model,'1','limit:'..model,ARGV[8])
   else

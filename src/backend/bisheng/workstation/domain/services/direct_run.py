@@ -112,6 +112,7 @@ from bisheng.linsight.domain.services import run_metrics
 from bisheng.linsight.domain.services.run_event_stream import EventWriter, RunEventStream
 from bisheng.linsight.domain.services.unattended_run import OPEN_API_CHANNEL
 from bisheng.workstation.domain.services import direct_attachments, direct_run_turn
+from bisheng.workstation.domain.services.custom_system_prompt import custom_system_prompt
 from bisheng.workstation.domain.services.direct_attachments import AttachmentIntake, AttachmentView
 from bisheng.workstation.domain.services.run_dispatch import EXPIRED_REASON, RunDispatchService
 from bisheng.workstation.domain.services.run_lease import LEASE_SECONDS, RENEW_INTERVAL_SECONDS, RunLeaseService
@@ -138,31 +139,6 @@ _WORK_BLOCKED = "blocked"
 
 EventHook = Callable[[dict], Awaitable[None] | None]
 EventHookFactory = Callable[["DirectRunContext"], EventHook]
-
-
-async def workbench_system_prompt() -> str | None:
-    """The daily-chat system prompt the administrator saved on the workbench.
-
-    Prepared the way the legacy daily chat used it: ``{cur_date}`` is replaced
-    (plain ``replace``: admin prompts may hold ``{...}`` JSON), and a saved
-    "copy the id verbatim" citation section becomes the handle rules.
-    """
-    from datetime import datetime
-
-    from bisheng.citation.domain.services.daily_citation_handles import (
-        prompt_has_legacy_citation_wording,
-        replace_legacy_citation_rules,
-    )
-    from bisheng.workstation.domain.services.workstation_service import WorkStationService
-
-    config = await WorkStationService.aget_config()
-    prompt = (getattr(config, "systemPrompt", None) or "").strip() if config is not None else ""
-    if not prompt:
-        return None
-    prompt = prompt.replace("{cur_date}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    if prompt_has_legacy_citation_wording(prompt):
-        prompt = replace_legacy_citation_rules(prompt)
-    return prompt
 
 
 async def log_daily_chat_telemetry(ctx: DirectRunContext, started_at: float) -> None:
@@ -501,7 +477,7 @@ class DirectRunner:
                          raises to refuse the run.
     ``safety_scanner(ctx)``  output scanner of the run, or None when scanning is off.
     ``mark_violation(ctx)``  marks the conversation and the question row after a hit.
-    ``workbench_prompt()``  the administrator's daily-chat system prompt, or None.
+    ``custom_prompt()``  the administrator's custom system prompt (or the built-in default).
     ``log_telemetry(ctx, started_at)``  application telemetry of a finished or failed run.
 
     ``build_agent`` also receives ``backend=`` and ``skills_present=`` when it
@@ -532,7 +508,7 @@ class DirectRunner:
         department_slot: Callable[[DirectRunContext], AbstractAsyncContextManager] | None = None,
         safety_scanner: Callable[[DirectRunContext], Any] | None = None,
         mark_violation: Callable[[DirectRunContext], Awaitable[None]] | None = None,
-        workbench_prompt: Callable[[], Awaitable[str | None]] | None = None,
+        custom_prompt: Callable[[], Awaitable[str | None]] | None = None,
         log_telemetry: Callable[[DirectRunContext, float], Awaitable[None]] | None = None,
         stop_poll_seconds: float = STOP_POLL_SECONDS,
         recursion_limit: int | None = None,
@@ -558,7 +534,7 @@ class DirectRunner:
         self._department_slot = department_slot or self._default_department_slot
         self._safety_scanner = safety_scanner or self._default_safety_scanner
         self._mark_violation = mark_violation or self._default_mark_violation
-        self._workbench_prompt = workbench_prompt or workbench_system_prompt
+        self._custom_prompt = custom_prompt or custom_system_prompt
         self._log_telemetry = log_telemetry or log_daily_chat_telemetry
         self._stop_poll_seconds = stop_poll_seconds
         self._recursion_limit_override = recursion_limit
@@ -1414,7 +1390,7 @@ class DirectRunner:
         """Same rule as deep research: one quota check when the run starts (AC-37)."""
         from bisheng.common.services.config_service import settings
 
-        if not settings.dsh.enabled:
+        if not settings.credit_billing.enabled:
             return
         from bisheng.dsh.domain.services.chat_credits import admit_round
         from bisheng.linsight.domain.services import agent_factory
@@ -1605,7 +1581,7 @@ class DirectRunner:
             # T059: citation rules and memory follow what the turn actually has.
             citation_scope=turn.scope if turn is not None else None,
             memory=turn.memory_wiring if turn is not None else None,
-            workbench_prompt=await self._workbench_prompt(),
+            custom_system_prompt=await self._custom_prompt(),
         )
 
     def _default_attachment_source(self, ctx: DirectRunContext) -> Any:

@@ -29,7 +29,7 @@ model_owner_tenant = writes.model_owner_tenant
 @pytest.mark.parametrize(
     "key,payload",
     [
-        ("knowledge_llm", {"source_model_id": 11}),
+        ("knowledge_llm", {"qa_similar_model_id": 11}),
         ("assistant_llm", {"auto_llm": {"model_id": 11}}),
         ("workflow_llm", {"model_id": 11}),
         ("evaluation_llm", {"model_id": 11}),

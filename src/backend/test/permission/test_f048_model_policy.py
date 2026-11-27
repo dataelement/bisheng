@@ -104,16 +104,53 @@ def test_standard_fields_are_immutable_but_eligible_same_level_is_mutable() -> N
         manager,
         replace(manager, allow_same_level=True),
     )
+    validate_standard_model_update(
+        manager,
+        replace(manager, selected_action_codes=("download",), action_codes=("download",), derived_level=1),
+    )
     with pytest.raises(ValueError, match="immutable"):
         validate_standard_model_update(manager, replace(manager, name="renamed"))
     with pytest.raises(ValueError, match="immutable"):
-        validate_standard_model_update(
-            manager,
-            replace(manager, action_codes=("download",)),
-        )
+        validate_standard_model_update(manager, replace(manager, active=False))
+    with pytest.raises(ValueError, match="at least one effective action"):
+        validate_standard_model_update(manager, replace(manager, action_codes=()))
     with pytest.raises(ValueError, match="manage_permission"):
         with_allow_same_level(models["viewer"], True)
     assert with_allow_same_level(manager, True).allow_same_level is True
+
+
+def test_standard_explicit_action_selection_and_dynamic_level() -> None:
+    # 显式勾选支持跨档位，风险等级按最高有效操作动态推导；调级不覆盖清单，停用后再启用可恢复
+    release = derive_permission_models(
+        _action_release(),
+        standard_action_codes={"viewer": ("download", "share")},
+    )
+    viewer = _by_key(release)["viewer"]
+    assert set(viewer.action_codes) == {"download", "share"}
+    assert viewer.derived_level == 3
+
+    raised = derive_permission_models(
+        _action_release(level_overrides={"share": 4}),
+        standard_action_codes={"viewer": ("download", "share")},
+    )
+    viewer_raised = _by_key(raised)["viewer"]
+    assert set(viewer_raised.action_codes) == {"download", "share"}
+    assert viewer_raised.derived_level == 4
+
+    disabled = derive_permission_models(
+        _action_release(inactive=frozenset({"share"})),
+        standard_action_codes={"viewer": ("download", "share")},
+    )
+    viewer_disabled = _by_key(disabled)["viewer"]
+    assert set(viewer_disabled.action_codes) == {"download"}
+    assert set(viewer_disabled.selected_action_codes) == {"download", "share"}
+    assert viewer_disabled.derived_level == 1
+
+    reenabled = derive_permission_models(
+        _action_release(),
+        standard_action_codes={"viewer": viewer_disabled.selected_action_codes},
+    )
+    assert set(_by_key(reenabled)["viewer"].action_codes) == {"download", "share"}
 
 
 def test_custom_level_uses_only_explicit_effective_actions() -> None:

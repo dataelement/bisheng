@@ -60,7 +60,7 @@ async def test_original_creation_menu_can_read_initial_values_without_admin_or_e
     initial.web.menu.assert_awaited_once()
     initial.web.scope.assert_not_awaited()
     initial.web.service._require_action.assert_not_awaited()
-    initial.read.assert_awaited_once_with("linsight_llm", login_user=initial.web.context.user, session=initial.session)
+    initial.read.assert_awaited_once_with("knowledge_llm", login_user=initial.web.context.user, session=initial.session)
     initial.runtime.arequire_default.assert_not_awaited()
     assert initial.entered == [initial.session]
 
@@ -69,7 +69,9 @@ async def test_original_creation_menu_can_read_initial_values_without_admin_or_e
 async def test_saved_embedding_id_is_preserved_without_execution_admission_or_secret_projection(initial, model_id):
     initial.read.return_value.payload_json = json.dumps(
         {
-            "embedding_model": {"id": model_id, "name": "old embedding", "config": {"secret": "hidden"}},
+            "embedding_model_id": model_id,
+            "source_model_id": "retired-invalid-model",
+            "qa_similar_model_id": "unrelated-invalid-model",
             "models": [{"id": "999", "name": "unrelated-invalid-chat"}],
             "chat_title_llm": {"id": "998", "name": "unrelated-invalid-title"},
             "provider_config": {"api_key": "hidden"},
@@ -79,7 +81,7 @@ async def test_saved_embedding_id_is_preserved_without_execution_admission_or_se
     assert response.status_code == 200
     result = response.json()
     assert result["status_code"] == 200
-    assert result["data"]["embedding_model"] == {"id": model_id, "name": "old embedding"}
+    assert result["data"]["embedding_model"] == {"id": model_id, "name": ""}
     assert "hidden" not in response.text
     assert "unrelated-invalid" not in response.text
     initial.runtime.arequire_default.assert_not_awaited()
@@ -112,6 +114,15 @@ async def test_global_super_keeps_home_identity_while_reading_selected_tenant(in
     user._runtime_credential_reference = {"kind": "web_session", "user_id": 7, "tenant_id": 1}
     response = await get_settings(initial)
     assert response.status_code == 200 and response.json()["status_code"] == 200
-    initial.read.assert_awaited_once_with("linsight_llm", login_user=user, session=initial.session)
+    initial.read.assert_awaited_once_with("knowledge_llm", login_user=user, session=initial.session)
     assert user.tenant_id == 1
     initial.web.menu.assert_not_awaited()
+
+
+@pytest.mark.parametrize("invalid", [True, {"secret": "hidden"}, ["hidden"]])
+async def test_malformed_saved_default_does_not_leak_or_coerce_to_model_one(initial, invalid):
+    """F002 AC-02: repair display never projects an object or bool as a model ID."""
+    initial.read.return_value.payload_json = json.dumps({"embedding_model_id": invalid})
+    response = await get_settings(initial)
+    assert response.json()["data"]["embedding_model"] is None
+    assert "hidden" not in response.text

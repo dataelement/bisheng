@@ -1,24 +1,25 @@
-import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
-import { Alert, Button, Select } from '@bisheng/ui';
-
-import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
-import { Switch } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
-
-
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/bs-ui/dialog";
 import type {
-PermissionActionLevel,
-PermissionCatalogAction,
-PermissionCatalogChange,
-PermissionCatalogDraft,
+  PermissionActionLevel,
+  PermissionCatalogAction,
+  PermissionCatalogChange,
+  PermissionCatalogDraft,
 } from "@/controllers/API/permission";
 import { cn } from "@/utils";
-
-import { useCallback,useEffect,useMemo,useState } from "react";
+import { Alert, Button, Switch, Tooltip, TooltipProvider } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { actionLabel,resourceTypeLabel } from "./actionLabels";
+import { actionLabel, resourceTypeLabel } from "./actionLabels";
 
 interface ActionLevelBoardProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   actions: PermissionCatalogAction[]
   disabled?: boolean
   onCreateDraft: (
@@ -27,9 +28,9 @@ interface ActionLevelBoardProps {
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
-type ActionLevelValue = PermissionActionLevel | null
-
-const LEVELS: ActionLevelValue[] = [null, 1, 2, 3, 4]
+const LEVELS: PermissionActionLevel[] = [1, 2, 3, 4]
+// Keep legacy unassigned cards reachable without assuming a lower risk level.
+const UNASSIGNED_DISPLAY_LEVEL = 4
 
 function uniqueActions(
   actions: PermissionCatalogAction[],
@@ -43,13 +44,9 @@ function uniqueActions(
   return Array.from(unique.values())
 }
 
-const UNASSIGNED_KEY = "unassigned"
-
-function levelKey(level: ActionLevelValue): string {
-  return level === null ? UNASSIGNED_KEY : String(level)
-}
-
 export function ActionLevelBoard({
+  open,
+  onOpenChange,
   actions,
   disabled = false,
   onCreateDraft,
@@ -57,12 +54,12 @@ export function ActionLevelBoard({
 }: ActionLevelBoardProps) {
   const { t } = useTranslation("permission")
   const normalizedActions = useMemo(() => uniqueActions(actions), [actions])
-  const [levels, setLevels] = useState<Record<string, ActionLevelValue>>({})
+  const [levels, setLevels] = useState<Record<string, PermissionActionLevel | null>>({})
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({})
   const [submitting, setSubmitting] = useState(false)
   const [draftErrorMessage, setDraftErrorMessage] = useState<string | null>(null)
-  const [showChangeList, setShowChangeList] = useState(false)
   const [draggingCode, setDraggingCode] = useState<string | null>(null)
+  const previousFocus = useRef<HTMLElement | null>(null)
 
   const resetToRelease = () => {
     setLevels(
@@ -76,23 +73,9 @@ export function ActionLevelBoard({
       ),
     )
     setDraftErrorMessage(null)
-    setShowChangeList(false)
   }
 
   useEffect(resetToRelease, [normalizedActions])
-
-  const levelName = useCallback(
-    (level: ActionLevelValue) =>
-      level === null
-        ? t("actionLevel.unassigned")
-        : t("actionLevel.level", { level }),
-    [t],
-  )
-  const selectLabels = useSelectLabels()
-  const levelOptions = useMemo(
-    () => LEVELS.map((option) => ({ value: levelKey(option), label: levelName(option) })),
-    [levelName],
-  )
 
   // Derived from the diff against the published release rather than accumulated
   // per edit, so moving a card back where it came from drops the change instead
@@ -101,7 +84,7 @@ export function ActionLevelBoard({
     const changes: PermissionCatalogChange[] = []
     for (const action of normalizedActions) {
       const level = levels[action.code]
-      if (level !== undefined && level !== action.level) {
+      if (level != null && level !== action.level) {
         changes.push({
           type: "ASSIGN_ACTION_LEVEL",
           action_code: action.code,
@@ -120,37 +103,13 @@ export function ActionLevelBoard({
     return changes
   }, [normalizedActions, levels, activeStates])
 
-  // "3 changes" tells the author how much is pending but not what it is, and the
-  // impact dialog only counts affected resources. Spell each edit out before
-  // anyone commits to publishing it.
-  const changeSummaries = useMemo(() => {
-    const byCode = new Map(
-      normalizedActions.map((action) => [action.code, action]),
-    )
-    return pendingChanges.map((change) => {
-      const action = byCode.get(change.action_code!)
-      const name = action
-        ? actionLabel(t, action.code, action.name)
-        : change.action_code!
-      if (change.type === "ASSIGN_ACTION_LEVEL") {
-        return t("actionLevel.changeSummary.level", {
-          name,
-          from: levelName(action?.level ?? null),
-          to: levelName(change.level ?? null),
-        })
-      }
-      return t(
-        change.active
-          ? "actionLevel.changeSummary.enabled"
-          : "actionLevel.changeSummary.disabled",
-        { name },
-      )
-    })
-  }, [levelName, normalizedActions, pendingChanges, t])
-
-  const handleLevelChange = (actionCode: string, level: ActionLevelValue) => {
+  const handleLevelChange = (actionCode: string, level: PermissionActionLevel) => {
     if (disabled || submitting || levels[actionCode] === level) return
     setDraftErrorMessage(null)
+    // A legacy unassigned action is effectively disabled even if its stored flag is true.
+    if (levels[actionCode] === null) {
+      setActiveStates((current) => ({ ...current, [actionCode]: false }))
+    }
     setLevels((current) => ({ ...current, [actionCode]: level }))
   }
 
@@ -160,7 +119,13 @@ export function ActionLevelBoard({
     setActiveStates((current) => ({ ...current, [actionCode]: active }))
   }
 
-  const handlePublishChanges = async () => {
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (submitting) return
+    if (!nextOpen) resetToRelease()
+    onOpenChange(nextOpen)
+  }
+
+  const handleReviewChanges = async () => {
     if (submitting || pendingChanges.length === 0) return
     setSubmitting(true)
     setDraftErrorMessage(null)
@@ -178,226 +143,153 @@ export function ActionLevelBoard({
   }
 
   return (
-    <section
-      aria-label={t("actionLevel.title")}
-      className="flex h-full min-h-0 flex-col gap-4"
-    >
-      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">
-            {t("actionLevel.title")}
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {t("actionLevel.description")}
-          </p>
-          {/* The page's whole reason for existing: without this, a level is just
-              a column number and nobody knows what dragging a card costs. */}
-          <p className="mt-1 max-w-4xl text-xs leading-5 text-muted-foreground/80">
-            {t("actionLevel.descriptionMore")}
-          </p>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        close={false}
+        aria-describedby={undefined}
+        className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-6xl flex-col gap-4 rounded-2xl border-border-base bg-bg-page p-4 shadow-modal dark:bg-bg-page sm:rounded-2xl"
+        onOpenAutoFocus={() => {
+          previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!previousFocus.current?.isConnected) return
+          event.preventDefault()
+          previousFocus.current.focus()
+        }}
+      >
+        <DialogTitle className="shrink-0 text-h4 text-text-1">
+          {t("actionLevel.configure")}
+        </DialogTitle>
+
+        <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain">
+          {draftErrorMessage && <Alert type="error" description={draftErrorMessage} live />}
+
+          <TooltipProvider>
+            <div className="overflow-x-auto">
+              <div className="grid min-w-[672px] grid-cols-4 gap-3">
+                {LEVELS.map((level) => {
+                  const levelName = t(`actionLevel.riskLevels.${level}`)
+                  const zoneActions = normalizedActions.filter(
+                    (action) => (levels[action.code] ?? action.level ?? UNASSIGNED_DISPLAY_LEVEL) === level,
+                  )
+                  const isDropTarget = draggingCode !== null && levels[draggingCode] !== level
+                  return (
+                    <div
+                      key={level}
+                      data-testid={`action-level-zone-${level}`}
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = "move"
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault()
+                        const actionCode = event.dataTransfer.getData("text/plain")
+                        if (actionCode) handleLevelChange(actionCode, level)
+                        setDraggingCode(null)
+                      }}
+                      className={cn(
+                        "flex min-h-72 min-w-0 flex-col gap-2 rounded-xl border border-border-base bg-bg-page px-3 pb-3 pt-2 transition-colors",
+                        isDropTarget && "border-blue-500 bg-blue-50",
+                      )}
+                      role="region"
+                      aria-label={levelName}
+                    >
+                      <div className="flex min-h-7 items-center">
+                        <h3 className={cn("text-body font-medium text-text-1", level === 4 && "text-danger")}>
+                          {levelName}
+                        </h3>
+                      </div>
+
+                      {zoneActions.map((action) => {
+                        const unassigned = (levels[action.code] ?? action.level) === null
+                        const active = !unassigned && (activeStates[action.code] ?? action.active)
+                        const name = actionLabel(t, action.code, action.name)
+                        const appliesTo = action.resource_types
+                          .map((resourceType) => resourceTypeLabel(t, resourceType))
+                          .join(t("impact.actionSeparator"))
+                        return (
+                          <Tooltip
+                            key={action.code}
+                            side="right"
+                            content={
+                              <>
+                                <p className="font-medium">{name}</p>
+                                {action.code === "manage_permission" && <p>{t("actionLevel.managePermissionHint")}</p>}
+                                <p>{t("actionLevel.appliesTo")} · {appliesTo}</p>
+                                {unassigned && <p>{t("actionLevel.assignLevelHint")}</p>}
+                              </>
+                            }
+                          >
+                            <article
+                              data-testid={`permission-action-${action.code}`}
+                              data-model-eligible={String(active)}
+                              tabIndex={0}
+                              aria-label={name}
+                              draggable={!disabled && !submitting}
+                              onDragStart={(event) => {
+                                event.dataTransfer.effectAllowed = "move"
+                                event.dataTransfer.setData("text/plain", action.code)
+                                setDraggingCode(action.code)
+                              }}
+                              onDragEnd={() => setDraggingCode(null)}
+                              className={cn(
+                                "rounded-md border border-transparent bg-fill-1 px-2 py-1.5 outline-none hover:border-border-deep focus-within:border-border-deep focus-visible:shadow-focus",
+                                !active && "border-dashed border-border-base",
+                              )}
+                            >
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <Outlined.Drag aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-text-3" />
+                                <span className="min-w-0 flex-1 truncate text-body-sm font-medium text-text-1">
+                                  {name}
+                                </span>
+                                <Switch
+                                  size="small"
+                                  aria-label={`${t("actionLevel.active")} · ${name}`}
+                                  checked={active}
+                                  disabled={disabled || submitting || unassigned}
+                                  onCheckedChange={(checked) => handleActiveChange(action.code, checked)}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5 pl-5">
+                                <p className="min-w-0 flex-1 truncate text-caption text-text-3">{appliesTo}</p>
+                                {!active && (
+                                  <span className="shrink-0 text-caption text-text-3">
+                                    {t(unassigned ? "actionLevel.unassigned" : "actionLevel.inactive")}
+                                  </span>
+                                )}
+                              </div>
+                            </article>
+                          </Tooltip>
+                        )
+                      })}
+
+                      {zoneActions.length === 0 && (
+                        <p className="flex flex-1 items-center justify-center py-8 text-center text-caption text-text-3">
+                          {t("actionLevel.empty")}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </TooltipProvider>
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outlined" disabled={pendingChanges.length === 0 || submitting} onClick={resetToRelease} color="default">
+
+        <DialogFooter className="shrink-0 flex-row flex-wrap items-center gap-3 sm:justify-between sm:space-x-0">
+          <Button type="button" color="default" variant="outlined" disabled={pendingChanges.length === 0 || submitting} onClick={resetToRelease}>
             {t("actionLevel.discardChanges")}
           </Button>
-          <Button type="button" disabled={pendingChanges.length === 0 || submitting} onClick={() => void handlePublishChanges()}>
-            {t("actionLevel.publishChanges")}
-          </Button>
-        </div>
-      </div>
-
-      {pendingChanges.length > 0 && (
-        <div
-          className="shrink-0 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-foreground"
-          role="status"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Outlined.Info aria-hidden="true" className="size-4 shrink-0 text-primary" />
-            <span>
-              {t("actionLevel.pendingChanges", {
-                count: pendingChanges.length,
-              })}
-            </span>
-            <Button variant="text" size="small" type="button" className="underline-offset-2 hover:underline" aria-expanded={showChangeList} onClick={() => setShowChangeList((current) => !current)} color="primary">
-              {showChangeList
-                ? t("actionLevel.hideChangeList")
-                : t("actionLevel.showChangeList")}
+          <div className="flex items-center gap-3 max-sm:ml-auto">
+            <Button type="button" color="default" variant="outlined" disabled={submitting} onClick={() => handleOpenChange(false)}>
+              {t("impact.cancel")}
+            </Button>
+            <Button type="button" loading={submitting} disabled={disabled || pendingChanges.length === 0} onClick={() => void handleReviewChanges()}>
+              {t("actionLevel.publishChanges")}
             </Button>
           </div>
-          {showChangeList && (
-            <ul className="mt-2 space-y-1 pl-6 text-muted-foreground">
-              {changeSummaries.map((summary) => (
-                <li key={summary} className="list-disc text-xs">
-                  {summary}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {draftErrorMessage && (
-        <Alert
-          type="error"
-          className="shrink-0"
-          description={draftErrorMessage}
-          live
-        />
-      )}
-
-      {/* The only scroll area on this tab: the level columns, header and banners stay put. */}
-      <SharedTooltipProvider delayDuration={200}><div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 xl:grid-cols-5">
-          {LEVELS.map((level) => {
-            const key = levelKey(level)
-            const zoneActions = normalizedActions.filter(
-              (action) => levels[action.code] === level,
-            )
-            const isDropTarget =
-              draggingCode !== null && levels[draggingCode] !== level
-            return (
-              <div
-                key={key}
-                data-testid={`action-level-zone-${key}`}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = "move"
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  const actionCode = event.dataTransfer.getData("text/plain")
-                  if (actionCode) handleLevelChange(actionCode, level)
-                  setDraggingCode(null)
-                }}
-                className={cn(
-                  "flex min-h-56 flex-col rounded-xl border bg-muted/30 p-3 transition-colors",
-                  // Unassigned is a normal state, not a warning — it reads as one
-                  // more column, distinguished by a dashed edge alone.
-                  level === null ? "border-dashed" : "border-border",
-                  isDropTarget && "border-primary bg-primary/5",
-                )}
-                role="region"
-                aria-label={levelName(level)}
-              >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {levelName(level)}
-                  </h3>
-                  {/* The count was redundant — five cards at most, all visible.
-                      The header slot now carries the one fact the page was missing. */}
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {t(`actionLevel.zoneHint.${key}`)}
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  {zoneActions.map((action) => {
-                    const active = activeStates[action.code] ?? action.active
-                    const appliesTo = action.resource_types
-                      .map((resourceType) => resourceTypeLabel(t, resourceType))
-                      .join("、")
-                    return (
-                      <article
-                        key={action.code}
-                        data-testid={`permission-action-${action.code}`}
-                        data-model-eligible={String(level !== null && active)}
-                        draggable={!disabled && !submitting}
-                        onDragStart={(event) => {
-                          event.dataTransfer.effectAllowed = "move"
-                          event.dataTransfer.setData("text/plain", action.code)
-                          setDraggingCode(action.code)
-                        }}
-                        onDragEnd={() => setDraggingCode(null)}
-                        className={cn(
-                          "group rounded-lg border bg-background p-2.5 shadow-sm transition-opacity",
-                          submitting && "opacity-60",
-                          !active && "border-dashed",
-                        )}
-                      >
-                        {/* Name and the on/off switch are the whole card. Everything
-                            else earned its own affordance: the resource types sit in
-                            a tooltip, and the level lives in the drag handle's menu —
-                            a full-width select repeated the drag target on every card
-                            and doubled the card's height. */}
-                        <div className="flex items-center gap-1.5">
-                          <Outlined.Drag
-                            aria-hidden="true"
-                            className="size-4 shrink-0 cursor-grab text-muted-foreground"
-                          />
-
-                          <SharedTooltip  content={<><p className="font-medium">
-                                {actionLabel(t, action.code, action.name)}
-                              </p><p className="mt-0.5 opacity-80">{action.code}</p><p className="mt-1 opacity-80">
-                                {t("actionLevel.appliesTo")}:{" "}
-                                {action.resource_types
-                                  .map((resourceType) =>
-                                    resourceTypeLabel(t, resourceType),
-                                  )
-                                  .join("、")}
-                              </p></>} ><p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                                {actionLabel(t, action.code, action.name)}
-                              </p></SharedTooltip>
-
-                          <Switch
-                            aria-label={`${t("actionLevel.active")}.${action.code}`}
-                            checked={active}
-                            disabled={disabled || submitting}
-                            onCheckedChange={(checked) =>
-                              handleActiveChange(action.code, checked)
-                            }
-                          />
-                        </div>
-
-                        {/* Dragging is the fast path; this is the same move for a
-                            keyboard, a touch screen, or anyone who would rather
-                            pick than aim. Compact so it does not dominate the card. */}
-                        <div className="mt-1.5 flex items-center gap-2 pl-[22px]">
-                          <Select
-                            {...selectLabels}
-                            size="small"
-                            className="w-28 shrink-0"
-                            aria-label={`${t("actionLevel.change")}.${action.code}`}
-                            disabled={disabled || submitting}
-                            options={levelOptions}
-                            value={levelKey(level)}
-                            onChange={(value) =>
-                              handleLevelChange(
-                                action.code,
-                                value == null || value === UNASSIGNED_KEY
-                                  ? null
-                                  : (Number(value) as PermissionActionLevel),
-                              )
-                            }
-                          />
-
-                          {!active && (
-                            <span className="text-xs text-muted-foreground">
-                              {t("actionLevel.inactive")}
-                            </span>
-                          )}
-                          {/* Which resources this operation even applies to used to
-                              live in a tooltip nobody hovers. It fits in the row the
-                              level dropdown already occupies, so the card stays put. */}
-                          <span
-                            className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground"
-                            title={appliesTo}
-                          >
-                            {appliesTo}
-                          </span>
-                        </div>
-                      </article>
-                    )
-                  })}
-
-                  {zoneActions.length === 0 && (
-                    <p className="rounded-lg border border-dashed px-3 py-8 text-center text-xs text-muted-foreground">
-                      {t("actionLevel.empty")}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div></SharedTooltipProvider>
-    </section>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

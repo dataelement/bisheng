@@ -12,15 +12,22 @@ elseif command=='reset' then
   for _,v in ipairs(cjson.decode(ARGV[4])) do redis.call('SADD',KEYS[5],v) end
 elseif command=='month' then
   redis.call('DEL',KEYS[3],KEYS[4])
+  if #KEYS>=5 then redis.call('DEL',KEYS[5]) end
   redis.call('HSET',KEYS[3],'used',ARGV[5],'epoch',ARGV[4],'state','READY')
   redis.call('HSET',KEYS[4],'_initialized','1')
   for k,v in pairs(cjson.decode(ARGV[6])) do redis.call('HSET',KEYS[4],k,v) end
+  if #KEYS>=5 and #ARGV>=7 then
+    redis.call('HSET',KEYS[5],'_initialized','1')
+    for k,v in pairs(cjson.decode(ARGV[7])) do redis.call('HSET',KEYS[5],k,v) end
+  end
   redis.call('HSET',KEYS[2],'month:'..ARGV[3],'1')
 elseif command=='events' then
   for i,event in ipairs(cjson.decode(ARGV[3])) do
     local key=KEYS[i+5]
-    redis.call('HSET',key,'event',event.event,'version',event.version,'status',event.status,'month',event.month,'model',event.model,'epoch',event.epoch,'identity',event.identity)
-    local id=redis.call('XADD',KEYS[3],'*','event',event.event)
+    local event_kind=event.event_kind or 'model'
+    redis.call('HSET',key,'event',event.event,'event_kind',event_kind,'version',event.version,'status',event.status,'month',event.month,'model',event.model,'epoch',event.epoch,'identity',event.identity)
+    if event_kind=='tool' then redis.call('HSET',key,'billed_tokens',event.billed_tokens) end
+    local id=redis.call('XADD',KEYS[3],'*','event',event.event,'event_kind',event_kind)
     redis.call('HSET',key,'latest_stream_id',id)
     redis.call('HINCRBY',key,'retained_stream_count',1)
     if event.status=='RUNNING' then redis.call('ZADD',KEYS[4],event.started,event.id) end

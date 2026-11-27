@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from fastapi import Depends, Request
 
-from bisheng.common.errcode.dsh import DshDshDisabledError
 from bisheng.dsh.config import DshSettings
 from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
 from bisheng.dsh.domain.repositories.local_session import DshSessionRepository
@@ -54,8 +53,6 @@ async def get_logout_runtime(request: Request, config: DshSettings = Depends(get
 
 
 async def get_runtime(request: Request, config: DshSettings = Depends(get_settings)) -> DshRuntime:
-    if not config.enabled:
-        raise DshDshDisabledError()
     await DshSettingsService().require_enabled()
     return await get_logout_runtime(request, config)
 

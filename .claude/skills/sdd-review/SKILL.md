@@ -1,7 +1,7 @@
 ---
 name: sdd-review
 description: 对 BiSheng 项目的 SDD 文档执行审查。
-  - spec：写完 spec.md 后调用，同时检查 PRD gap 和架构合规性，生成报告供用户参考
+  - spec：写完 spec.md 后调用，检查需求覆盖、验收标准和功能边界
   - design：写完 design.md 后调用，检查"接手测试"四要素（现状/决策/坑/契约），生成报告供用户参考
   - tasks：写完 tasks.md 后自动调用，检查 AC 追溯、任务拆解质量和技术债预防
   用法：/sdd-review <feature_dir> <doc_type>，doc_type 为 spec / design / tasks。
@@ -32,22 +32,22 @@ description: 对 BiSheng 项目的 SDD 文档执行审查。
 
 若参数缺失或无效，向用户报告错误后停止。
 
+三个模式均从特性所属版本目录读取版本契约（`<feature_dir>/../release-contract.md`）。如果缺失，报告缺失路径，标明相关检查未完成。
+
 ---
 
 ### spec 模式（辅助审查，不自动推进）
 
-spec.md 合并了需求规范和技术设计，因此 spec 审查同时覆盖需求覆盖和架构合规检查。
+`spec.md` 只定义要做什么、如何验收和范围边界。技术方案和架构合规留到 design 模式。
 
-**第二步（spec）：执行合并审查**
+**第二步（spec）：审查需求**
 
 读取文件：
 - `<feature_dir>/spec.md`（已写的规格文档）
 - spec.md 中"关联 PRD"字段指向的文件（若未标注，读取 `docs/PRD/` 下与特性名最相关的文件）
-- `features/v2.5.0/release-contract.md`（不变量约束，确认 spec 未越界）
-- `docs/architecture/02-backend-modules.md`（后端模块架构）
-- `docs/architecture/10-permission-rbac.md`（权限体系）
+- 当前版本的 `release-contract.md`（领域归属和可观测的业务不变量）
 
-按 `references/spec-checklist.md` 中的检查清单执行 14 项检查。
+按 `references/spec-checklist.md` 审查。
 
 **第三步（spec）：展示报告，等待用户确认**
 
@@ -55,7 +55,7 @@ spec.md 合并了需求规范和技术设计，因此 spec 审查同时覆盖需
 - 无 gap / 无问题：告知"审查通过，可继续确认"
 - 有 gap / 有问题：展示每个问题（MISSING / FORMAT / CONFLICT / ISSUE），供用户决定是否修改
 
-**等待用户确认**（唯一手动暂停点）。用户确认后，将 `<feature_dir>/tasks.md` 状态表中 spec.md 行更新为 `✅ 已评审`。
+**等待用户确认**。确认后，将 `tasks.md` 状态表中 spec.md 行记为 `✅ 已评审`。如果尚未创建 `tasks.md`，在任务拆解阶段补录这次确认。
 
 ---
 
@@ -70,7 +70,7 @@ design.md 是"现状快照 + 关键决策"文档，决定新 agent 接手时能�
 - `<feature_dir>/spec.md`（校验 design 没偏离需求）
 - `<feature_dir>/tasks.md`（若存在；校验偏差记录已回写）
 - `features/_templates/design.md`（模板结构基线）
-- `features/v{X.Y.Z}/release-contract.md`（关键约束、不变量）
+- 当前版本的 `release-contract.md`（关键约束、不变量）
 
 按 `references/design-checklist.md` 中的检查清单执行 24 项检查。
 
@@ -80,7 +80,7 @@ design.md 是"现状快照 + 关键决策"文档，决定新 agent 接手时能�
 - 无问题：告知"审查通过，可继续确认"
 - 有问题：展示每个问题（ISSUE 含 SEVERITY 和 LOC），供用户决定是否修改
 
-**等待用户确认**（唯一手动暂停点）。用户确认后，将 `<feature_dir>/tasks.md` 状态表中 design.md 行更新为 `✅ 已评审`（若状态表尚无该行，提示用户补一行 `| design.md | 🔲 草稿 | ... |`）。
+**等待用户确认**。确认后，将 `tasks.md` 状态表中 design.md 行记为 `✅ 已评审`。如果尚未创建 `tasks.md`，在任务拆解阶段补录这次确认。
 
 ---
 
@@ -90,8 +90,9 @@ design.md 是"现状快照 + 关键决策"文档，决定新 agent 接手时能�
 
 读取文件：
 - `<feature_dir>/tasks.md`
-- `<feature_dir>/spec.md`（验收标准 + 技术方案）
-- `features/v2.5.0/release-contract.md`（领域归属 + 不变量）
+- `<feature_dir>/spec.md`（验收标准）
+- `<feature_dir>/design.md`（已确认的技术方案，所选流程要求时）
+- 当前版本的 `release-contract.md`（领域归属和不变量）
 
 按 `references/tasks-checklist.md` 中的检查清单执行 21 项检查。
 

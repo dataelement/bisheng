@@ -6,7 +6,6 @@ from hashlib import sha256
 
 from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeNoEmbeddingError
-from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -44,23 +43,18 @@ class LegacyDocumentsApplication:
             if model_id <= 0:
                 raise KnowledgeNoEmbeddingError()
         service = self.space_service or KnowledgeSpaceService(request, identity)
-        try:
-            created = await service.create_knowledge_space(
-                name=command.name,
-                description=command.description,
-                auth_type=command.auth_type,
-                is_released=command.is_released,
-                auto_tag_enabled=command.auto_tag_enabled,
-                auto_tag_library_id=command.auto_tag_library_id,
-                embedding_model_id=model_id,
-                web_creation_context=web_creation_context,
-                entry_kind=entry_kind,
-                initial_metadata_fields=command.metadata_fields,
-            )
-        except WorkbenchEmbeddingError as exc:
-            if command.type != 0:
-                raise
-            raise KnowledgeNoEmbeddingError() from exc
+        created = await service.create_knowledge_space(
+            name=command.name,
+            description=command.description,
+            auth_type=command.auth_type,
+            is_released=command.is_released,
+            auto_tag_enabled=command.auto_tag_enabled,
+            auto_tag_library_id=command.auto_tag_library_id,
+            embedding_model_id=model_id,
+            web_creation_context=web_creation_context,
+            entry_kind=entry_kind,
+            initial_metadata_fields=command.metadata_fields,
+        )
         # Enrich while the target still has its actual business type. The
         # legacy type is only a projection of the completed public response.
         converted = await KnowledgeService.aconvert_knowledge_read(identity, [created])

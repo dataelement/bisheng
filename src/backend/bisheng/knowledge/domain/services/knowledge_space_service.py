@@ -27,7 +27,11 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.admin_scope import AdminScopeTenantRequiredError
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError, KnowledgeSpaceTagLibraryInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeNoEmbeddingError,
+    KnowledgeOperationPlanChangedError,
+    KnowledgeSpaceTagLibraryInvalidError,
+)
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpacePrivateError,
     KnowledgeSpaceInvalidCursorError,
@@ -49,7 +53,6 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceTagExistsError,
     SpaceTenantMismatchError,
 )
-from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.errcode.permission import PermissionDeniedError, PermissionEnumerationIncompleteError
 from bisheng.common.models.space_channel_member import (
     MembershipStatusEnum,
@@ -1326,10 +1329,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._assert_space_creation_quota()
 
             if selected_model_id is None:
-                workbench_llm = await LLMService.get_workbench_llm(slots=("embedding_model.id",))
-                if not workbench_llm or not workbench_llm.embedding_model:
-                    raise WorkbenchEmbeddingError()
-                selected_model_id = workbench_llm.embedding_model.id
+                knowledge_llm = await LLMService.aget_knowledge_llm(slots=("embedding_model_id",))
+                if not knowledge_llm or not knowledge_llm.embedding_model_id:
+                    raise KnowledgeNoEmbeddingError()
+                selected_model_id = knowledge_llm.embedding_model_id
 
         # Defence-in-depth: a tenant with the feature flag off must not be able to
         # configure auto-tag by hand-crafting requests. Normalize before hashing
@@ -1367,7 +1370,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 initial_permissions=initial_permissions,
             )
         if selected_model_id is None:
-            raise WorkbenchEmbeddingError()
+            raise KnowledgeNoEmbeddingError()
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
         # a private library, so defer the auto-tag fields until after insert.
@@ -1711,9 +1714,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if self.prospective_grant_application is None:
             raise RuntimeError("F050 Prospective Grant application is not configured")
         await self._assert_space_creation_quota()
-        workbench_llm = await LLMService.get_workbench_llm(slots=("embedding_model.id",))
-        if not workbench_llm or not workbench_llm.embedding_model:
-            raise WorkbenchEmbeddingError()
         return (
             self.prospective_grant_application,
             await self._permission_actor(),

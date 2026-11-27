@@ -23,7 +23,6 @@ const REQUIRED_KEYS = [
   "actionLevel.level",
   "model.kind.standard",
   "model.kind.custom",
-  "model.preset.label",
   "mode.inherit",
   "mode.custom",
   "mode.label",

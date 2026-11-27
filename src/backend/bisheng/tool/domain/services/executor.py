@@ -95,6 +95,9 @@ class ToolExecutor(BaseTool):
     tool_is_preset: int = Field(..., description="kind of the Tool, api、mcp、preset")
     tool_name: str = Field(..., description="Tool Name")
     tool_key: str = Field(default="", description="Stable preset tool identity")
+    tool_group_id: int = Field(default=0, description="Tool Group ID")
+    tool_group_name: str | None = Field(default=None, description="Tool Group Name")
+    tool_engine: str | None = Field(default=None, description="Optional preset tool engine identifier")
 
     # langchain tool fields
     name: str = Field(..., description="Tool Name for llm")
@@ -151,6 +154,8 @@ class ToolExecutor(BaseTool):
         app_name: str,
         app_type: ApplicationTypeEnum,
         user_id: int,
+        tool_group_name: str | None = None,
+        tool_engine: str | None = None,
     ) -> BaseTool:
         return cls(
             name=base_tool.name,
@@ -165,6 +170,9 @@ class ToolExecutor(BaseTool):
             tool_is_preset=tool.is_preset,
             tool_name=tool.name,
             tool_key=getattr(tool, "tool_key", ""),
+            tool_group_id=getattr(tool, "type", 0) or 0,
+            tool_group_name=tool_group_name,
+            tool_engine=tool_engine,
         )
 
     @staticmethod
@@ -620,54 +628,130 @@ class ToolExecutor(BaseTool):
     def _run(
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
+        from bisheng.dsh.domain.services import chat_credits
+        from bisheng.dsh.domain.services.tool_billing import prepare_tool_billing, settle_tool_billing
 
         image_tool = self.tool_key in IMAGE_TOOL_KEYS and self.tool_is_preset == ToolPresetType.PRESET.value
         instance = run_async_safe(self._current_image_tool()) if image_tool else self.tool_instance
+        resolved_group_id = getattr(self, "tool_group_id", 0)
+        resolved_group_name = getattr(self, "tool_group_name", None)
         if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
             if not image_tool:
-                run_async_safe(self._require_current_use())
+                checked = run_async_safe(self._require_current_use())
+                if isinstance(checked, tuple) and len(checked) == 2:
+                    t_obj, g_obj = checked
+                    resolved_group_id = getattr(t_obj, "type", resolved_group_id) or resolved_group_id
+                    resolved_group_name = getattr(g_obj, "name", resolved_group_name) or resolved_group_name
             UserToolAvailabilityService(self.user_id).ensure_enabled_sync(self.tool_id)
         if signature(instance._run).parameters.get("config"):
             kwargs["config"] = config
         if signature(instance._run).parameters.get("run_manager"):
             kwargs["run_manager"] = run_manager
-        return instance._run(*args, **kwargs)
+        mode_flag = chat_credits._call_mode()
+        source_ctx = chat_credits.current_billing_source()
+        source_override = source_ctx if (source_ctx[0] is not None or source_ctx[1] is not None) else None
+        unbilled_flag = chat_credits.is_open_api_unbilled()
+        prepared = run_async_safe(
+            prepare_tool_billing(
+                tool_id=self.tool_id,
+                tool_key=self.tool_key,
+                tool_group_id=resolved_group_id,
+                tool_group_name=resolved_group_name,
+                user_id=self.user_id,
+                app_type=self.app_type,
+                app_id=getattr(self, "app_id", None),
+                engine=getattr(self, "tool_engine", None),
+                mode_override=mode_flag,
+                source_override=source_override,
+                open_api_unbilled_override=unbilled_flag,
+            )
+        )
+        call_result = "success"
+        try:
+            return instance._run(*args, **kwargs)
+        except TimeoutError:
+            call_result = "timeout"
+            raise
+        except Exception:
+            call_result = "failed"
+            raise
+        finally:
+            if prepared is not None:
+                run_async_safe(settle_tool_billing(prepared, result=call_result))
 
     @wrapper_tool
     async def _arun(
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
+        import asyncio
+
+        from bisheng.dsh.domain.services.tool_billing import prepare_tool_billing, settle_tool_billing
+
         image_tool = self.tool_key in IMAGE_TOOL_KEYS and self.tool_is_preset == ToolPresetType.PRESET.value
         instance = await self._current_image_tool() if image_tool else self.tool_instance
+        resolved_group_id = getattr(self, "tool_group_id", 0)
+        resolved_group_name = getattr(self, "tool_group_name", None)
         if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
             if not image_tool:
-                await self._require_current_use()
+                checked = await self._require_current_use()
+                if isinstance(checked, tuple) and len(checked) == 2:
+                    t_obj, g_obj = checked
+                    resolved_group_id = getattr(t_obj, "type", resolved_group_id) or resolved_group_id
+                    resolved_group_name = getattr(g_obj, "name", resolved_group_name) or resolved_group_name
             await UserToolAvailabilityService(self.user_id).ensure_enabled(self.tool_id)
         if signature(instance._run).parameters.get("config"):
             kwargs["config"] = config
         if signature(instance._run).parameters.get("run_manager"):
             kwargs["run_manager"] = run_manager
-        # Linsight resilience (F035): a single tool failure must NOT crash the
-        # whole task. The deepagents ToolNode re-raises non-ToolException errors,
-        # which kills the run. For LINSIGHT only (daily/workflow behaviour is
-        # unchanged) we convert any tool exception into a soft error string so the
-        # agent sees "tool failed", can react, and the task keeps going.
-        if self.app_type == ApplicationTypeEnum.LINSIGHT:
+        prepared = await prepare_tool_billing(
+            tool_id=self.tool_id,
+            tool_key=self.tool_key,
+            tool_group_id=resolved_group_id,
+            tool_group_name=resolved_group_name,
+            user_id=self.user_id,
+            app_type=self.app_type,
+            app_id=getattr(self, "app_id", None),
+            engine=getattr(self, "tool_engine", None),
+        )
+        call_result = "success"
+        # Linsight resilience (F035): capture true failure before soft JSON conversion.
+        try:
+            if self.app_type == ApplicationTypeEnum.LINSIGHT:
+                try:
+                    return await instance._arun(*args, **kwargs)
+                except asyncio.CancelledError:
+                    call_result = "cancelled"
+                    raise
+                except TimeoutError:
+                    call_result = "timeout"
+                    raise
+                except Exception as e:
+                    call_result = "failed"
+                    from loguru import logger as _logger
+
+                    _logger.warning(f"linsight tool '{getattr(self, 'tool_name', self.tool_key)}' failed: {e}")
+                    return json.dumps(
+                        {
+                            "状态": "失败",
+                            "错误信息": FailureContextAdapter.safe_detail(e),
+                            **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
+                        },
+                        ensure_ascii=False,
+                    )
             try:
                 return await instance._arun(*args, **kwargs)
-            except Exception as e:
-                from loguru import logger as _logger
-
-                _logger.warning(f"linsight tool '{self.tool_name}' failed: {e}")
-                return json.dumps(
-                    {
-                        "状态": "失败",
-                        "错误信息": FailureContextAdapter.safe_detail(e),
-                        **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
-                    },
-                    ensure_ascii=False,
-                )
-        return await instance._arun(*args, **kwargs)
+            except asyncio.CancelledError:
+                call_result = "cancelled"
+                raise
+            except TimeoutError:
+                call_result = "timeout"
+                raise
+            except Exception:
+                call_result = "failed"
+                raise
+        finally:
+            if prepared is not None:
+                await asyncio.shield(settle_tool_billing(prepared, result=call_result))
 
     def __getattr__(self, item):
         return getattr(self.tool_instance, item)

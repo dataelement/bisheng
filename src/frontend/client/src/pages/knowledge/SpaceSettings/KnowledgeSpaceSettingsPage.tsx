@@ -1,4 +1,5 @@
 import { KnowledgeSpaceAccessMode } from "./KnowledgeSpaceAccessMode";
+import { isValidSpaceName, SPACE_NAME_LIMIT, spaceNameLength } from "@bisheng/knowledge";
 import { Outlined } from "bisheng-icons";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -29,7 +30,7 @@ import { Textarea } from "@bisheng/ui";
 import { useAuthContext, useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
 import { useToastContext } from "~/Providers";
-import { getFullWidthLength, truncateByFullWidth } from "~/utils";
+import { truncateByFullWidth } from "~/utils";
 import { showApiError } from "~/api/request";
 import { MODULE_PAGE_DESKTOP_COLUMN, MODULE_PAGE_DESKTOP_FRAME } from "~/components/ModuleHome";
 import settingsLayout from "~/components/ModuleHome/ModuleSettingsLayout.module.css";
@@ -40,7 +41,6 @@ import {
   useKnowledgeSpaceSettingsForm,
 } from "./useKnowledgeSpaceSettingsForm";
 
-const MAX_NAME_LENGTH = 10;
 const MAX_DESCRIPTION_LENGTH = 200;
 
 export function KnowledgeSpaceSettingsPage() {
@@ -61,8 +61,10 @@ export function KnowledgeSpaceSettingsPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [activeSubjectType, setActiveSubjectType] = useState<SubjectType>("user");
   const customTagsInputRef = useRef<HTMLInputElement | null>(null);
-  const nameComposingRef = useRef(false);
   const descriptionComposingRef = useRef(false);
+  const nameLength = spaceNameLength(settings.form.name);
+  const validName = isValidSpaceName(settings.form.name, settings.originalName);
+  const nameTooLong = !validName && nameLength > SPACE_NAME_LIMIT;
 
   const isPrivate = settings.form.visibility === VisibilityType.PRIVATE;
   const relationModels = useMemo(
@@ -148,6 +150,7 @@ export function KnowledgeSpaceSettingsPage() {
   };
 
   const handleSubmit = async () => {
+    if (!validName) return;
     if (settings.autoTagFeatureVisible && settings.form.autoTagEnabled) {
       if (settings.form.autoTagMode === "library" && !settings.form.autoTagLibraryId) {
         showToast({
@@ -260,29 +263,17 @@ export function KnowledgeSpaceSettingsPage() {
                     <Input
                       value={settings.form.name}
                       disabled={disabled}
-                      onCompositionStart={() => {
-                        nameComposingRef.current = true;
-                      }}
-                      onCompositionEnd={(event) => {
-                        nameComposingRef.current = false;
-                        settings.updateForm(
-                          "name",
-                          truncateByFullWidth(event.currentTarget.value, MAX_NAME_LENGTH),
-                        );
-                      }}
-                      onChange={(event) =>
-                        settings.updateForm(
-                          "name",
-                          nameComposingRef.current
-                            ? event.target.value
-                            : truncateByFullWidth(event.target.value, MAX_NAME_LENGTH),
-                        )
-                      }
+                      onChange={(event) => settings.updateForm("name", event.target.value)}
+                      status={nameTooLong ? "error" : undefined}
+                      aria-describedby="knowledge-space-name-count"
                       placeholder={localize("com_subscription.enter_knowledge_space_name")}
                       className="h-8 rounded-md bg-white pr-14 placeholder:text-text-3"
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-text-3">
-                      {Math.ceil(getFullWidthLength(settings.form.name))}/{MAX_NAME_LENGTH}
+                    <span
+                      id="knowledge-space-name-count"
+                      className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-body-sm ${nameTooLong ? "text-danger" : "text-text-3"}`}
+                    >
+                      {nameLength}/{SPACE_NAME_LIMIT}
                     </span>
                   </div>
                 </div>
@@ -458,7 +449,7 @@ export function KnowledgeSpaceSettingsPage() {
           onCancel={cancel}
           onSubmit={() => void handleSubmit()}
           submitting={settings.submitting}
-          disabled={!settings.form.name.trim() || (!settings.canEdit && !settings.canManagePermissions)}
+          disabled={!validName || (!settings.canEdit && !settings.canManagePermissions)}
         />
       </div>
 

@@ -24,15 +24,36 @@ Not every change runs the full pipeline. Match track to scope:
 
 | Track | When | Steps |
 |---|---|---|
-| **Hotfix / trivial** | bug fix, copy/text change, dep bump, ≲ 1 file of logic, **no contract change** | branch → fix → arch-guard + smoke pass → `/sdd-code-review` → merge. No spec/design/tasks. |
+| **Hotfix / trivial** | bug fix, copy/text change, dep bump, ≲ 1 file of logic, **no contract change** | branch → fix → arch-guard + smoke pass → one hotfix review (see below) → merge. No spec/design/tasks. |
 | **Small feature** | single module, no cross-feature contract, low uncertainty | lightweight `spec.md` (AC list) → implement → `/e2e-test` → review. Decisions/gotchas: record in the PR, or a short `design.md` if non-trivial. |
 | **Full SDD** | new capability, cross-module, new/changed contract, or touches a constitution clause | full pipeline (§2) |
 
-**Rule of thumb**: if you'd change a **contract others depend on**, or **revisit a constitution law (C1–C7)**, it's Full SDD. When unsure, ask the user which track.
+**Rule of thumb**: if you'd change a **contract others depend on** or **revisit a law in the [constitution](constitution.md)**, use Full SDD. When unsure, ask the user which track.
+
+**Hotfix review:** For low-risk changes, use [Ponytail Review](../.claude/skills/ponytail-review/SKILL.md) as the single review step, applying relevant project rules to the diff against the target branch. Hotfixes with higher risk, such as changes affecting permission checks, tenant isolation, or stored data, still use `/sdd-code-review` if they qualify for the hotfix track.
+
+**Small changes:** fix the requested behavior and directly affected code. Handle unrelated cleanup separately. For low-risk copy or style edits, check the affected page or locales. For a behavior change, run the most relevant existing check and add a regression case when the existing checks miss a meaningful risk. Changes affecting permissions, tenant isolation, or stored data need a targeted check of the relevant denial, isolation, or failure path. Apply the checks required by the selected track and CI.
+
+### 1.1 Ponytail in the development workflow
+
+The root [`AGENTS.md`](../AGENTS.md) defines when to load the core skill. Use the other skills below as needed. The table uses Codex's explicit skill names.
+
+| When | Skill | How to use it |
+|---|---|---|
+| Starting implementation | [`$ponytail`](../.claude/skills/ponytail/SKILL.md) | Look for existing code to reuse and choose the smallest change that satisfies the task and any approved design. |
+| Reviewing a hotfix or small PR | [`$ponytail-review`](../.claude/skills/ponytail-review/SKILL.md) | Follow the hotfix review rule above. Outside that case, use it when an extra review of the diff and its callers helps. |
+| Preparing a refactor | [`$ponytail-audit`](../.claude/skills/ponytail-audit/SKILL.md) | Name one module or workflow. Use the ranked findings to decide what to include in the refactor. |
+| Planning maintenance | [`$ponytail-debt`](../.claude/skills/ponytail-debt/SKILL.md) | List existing `shortcut:` comments and check whether their limits or upgrade triggers have been reached. |
+| Looking up the upstream evidence | [`$ponytail-gain`](../.claude/skills/ponytail-gain/SKILL.md) | View Ponytail's published benchmark. Its figures describe the upstream experiment. |
+| Looking up commands | [`$ponytail-help`](../.claude/skills/ponytail-help/SKILL.md) | View the commands for this project installation. |
+
+The project ships the skill files only. You can also invoke a skill explicitly in chat. For a different level, state it in the request, for example `$ponytail lite`.
 
 ---
 
 ## 2. Full pipeline
+
+Keep `spec.md`, `design.md`, `test-cases.md`, and `tasks.md` under `features/v{X.Y.Z}/{NNN}-{name}/`. Start from [the feature templates](../features/_templates/).
 
 ```
 0. (version's first feature only) release-contract.md  +  read docs/constitution.md
@@ -40,7 +61,7 @@ Not every change runs the full pipeline. Match track to scope:
 2. spec.md  (What only; no tech stack; [待澄清] markers; EARS-style testable AC 🚧)
         →  /sdd-review <dir> spec  →  ★ user confirms
 3. design.md  (only this feature's How; global laws → reference constitution)
-        →  /sdd-review <dir> design  (Constitution Check gate, §5 🚧)  →  ★ user confirms
+        →  /sdd-review <dir> design  (Constitution Check gate, §5)  →  ★ user confirms
         →  generate and validate test-cases.md (QA reference, see §2.1)
 4. tasks.md  (vertical slices; dependency waves 🚧)  →  /sdd-review <dir> tasks
 5. branch: feat/<version>/{NNN}-{name}   (create EARLY — docs + code live on the branch)
@@ -109,9 +130,9 @@ This is **not** history-keeping — it's a **guardrail so the next person doesn'
 
 ---
 
-## 5. Constitution gate 🚧
+## 5. Constitution gate
 
-**Target**: `/sdd-review design` runs a **Constitution Check** — does the design violate any law C1–C7 in `docs/constitution.md`? A violation is a **BLOCKER**. To be folded into the existing `design-checklist.md` (not a separate gate). **Not yet implemented.**
+`/sdd-review design` uses the [design review checklist](../.claude/skills/sdd-review/references/design-checklist.md) to check the design against the current [constitution](constitution.md). The checklist treats a violation as a blocker.
 
 ---
 
@@ -126,7 +147,8 @@ The harness lets the agent run a long stretch without the human relaying results
 - ✅ **Circuit breaker** — any hook can be disabled fast (env flag / settings comment) if it misfires.
 
 **Test tiers** (the split is "external dependency or not"):
-- **PR gate** (every PR, fast, no external deps): backend unit + frontend component (Vitest) + ruff + arch-guard. → can be wired now without middleware; 🚧 CI job not yet added.
+- **Path-specific PR checks:** CI already configures [frontend quality checks](../.github/workflows/frontend-quality.yml) and [tenant context regression checks](../.github/workflows/tenant-context-quality.yml) for their respective paths.
+- **Unified fast PR gate** (planned, no external dependencies): backend unit tests, frontend component tests, Ruff, and the architecture guard. 🚧
 - **Central regression** (pre-release / periodic, needs full env): DM8 full + middleware integration + API e2e + Playwright. → **not in per-feature gates by design** (constitution C2). 🚧
 
 ---
@@ -146,18 +168,18 @@ Biggest drift risk: **hotfixes that skip SDD** — code changes, nobody updates 
 - **All three feature templates on the new model**: spec = What-only, P0/complex AC in EARS form (small features use table form); design = decisions+gotchas referencing constitution + deviation tiering; tasks = wave organization + one-line deviation log.
 - arch-guard hook feeding violations back to the agent (verified end-to-end).
 - Track selection (§1); three fixed pause points (§3); circuit breaker; `/sdd-review` · `/task-review` · `/e2e-test`.
+- The design review checklist includes the Constitution Check (§5).
 
 **🚧 Planned (not active — do not assume):**
-- Constitution Check folded into `design-checklist.md` (§5). `/sdd-review spec` does not yet enforce EARS on P0 specs (convention only for now).
+- `/sdd-review spec` does not yet enforce EARS on P0 specs (convention only for now).
 - Stop hook self-fix; adversarial review subagent; Playwright frontend tests; CI auto-review; doc-drift subagent (§6, §7).
-- **CI today only builds/pushes images — no test/lint/arch-guard gate yet.** The PR fast-test gate (backend unit + frontend component + ruff + arch-guard) can be wired now without middleware; DM8 / integration / e2e wait for the central-regression env (see constitution C2).
+- The unified fast PR gate and central regression environment are planned (§6).
 - Deviation re-confirm / drift enforcement is tooling-only-planned — templates already prompt it, nothing enforces it yet.
 
 **Open decisions:**
 - ~~EARS enforcement scope~~ — **decided: EARS for P0/complex features, table form for small ones.**
 - tasks dependency format (markdown waves vs JSON) — leaning markdown.
 - Visual-regression testing — deferred.
-- CI must bring up the full middleware stack (+ DM8) before the CI/Stop-hook items can land.
 
 > Each 🚧 item should land with a minimal eval (does it actually reduce human intervention?) before being treated as ✅ — see §0 lesson.
 

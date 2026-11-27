@@ -192,7 +192,7 @@ class LLMDao:
                     should_record_new_model_visibility,
                 )
 
-                if should_record_new_model_visibility(settings.dsh.enabled):
+                if should_record_new_model_visibility(settings.credit_billing.enabled):
                     await initialize_new_model_visibility(session, models, server.user_id)
             await session.commit()
             await session.refresh(server)
@@ -307,7 +307,7 @@ class LLMDao:
                     should_record_new_model_visibility,
                 )
 
-                if should_record_new_model_visibility(settings.dsh.enabled):
+                if should_record_new_model_visibility(settings.credit_billing.enabled):
                     await initialize_new_model_visibility(
                         session, add_models, operator.user_id if operator else server.user_id
                     )

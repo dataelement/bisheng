@@ -236,6 +236,7 @@ class DshPolicyRepository:
         """Initialize a user ledger only when every model is an uncommitted placeholder."""
         from bisheng.dsh.domain.models.model_call import DshModelCall
         from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
+        from bisheng.dsh.domain.models.tool_call import DshToolCall
 
         operation, policy = self._owned(operation_id, generation, now=now)
         if operation.committed_at is not None or operation.expected_policy_version != 0 or policy.version != 0:
@@ -243,7 +244,7 @@ class DshPolicyRepository:
         if any(row.version > 0 for row in self.rows(policy.user_id)):
             return None
         with strict_tenant_filter():
-            for model in (DshModelCall, DshMonthlyUsage):
+            for model in (DshModelCall, DshToolCall, DshMonthlyUsage):
                 if self.session.exec(select(model).where(model.user_id == policy.user_id).limit(1)).first() is not None:
                     return None
         return {

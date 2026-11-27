@@ -250,6 +250,8 @@ class RuntimeDeliveryCoordinator:
         return rows[0]
 
     async def probe(self, deployment, manifest, tier):
+        from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
+
         app = await self.repo.get_application(deployment.app_id)
         delivery = await self.delivery(app.id, deployment.version_id)
         from bisheng.app_publish.domain.services.schema_evolution_service import migration_plan, tables_of
@@ -260,6 +262,7 @@ class RuntimeDeliveryCoordinator:
             "resolved_delivery": delivery.content,
             "migration_plan": migration_plan([], tables_of(manifest)),
             "slug": app.slug,
+            "egress_domains": egress_domains_of(manifest.model_dump(mode="json")),
             "port": manifest.port,
             "tier": {"memory_mb": tier.memory_mb, "cpu_millicores": tier.cpu_millicores},
         }

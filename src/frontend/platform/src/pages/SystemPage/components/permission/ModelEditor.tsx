@@ -1,477 +1,558 @@
-import { Alert, Button, Input, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-
-
-import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import type {
-PermissionCatalogAction,
-PermissionCatalogChange,
-PermissionCatalogDraft,
-PermissionCatalogModel,
+  PermissionActionLevel,
+  PermissionCatalogAction,
+  PermissionCatalogChange,
+  PermissionCatalogDraft,
+  PermissionCatalogModel,
+  PermissionCatalogRelease,
 } from "@/controllers/API/permission";
-import { Checkbox,Switch } from "@bisheng/ui";
-import { useEffect,useMemo,useState } from "react";
+import { cn } from "@/utils";
+import { Button, Checkbox, Input, Switch, Tag, Tooltip, TooltipProvider, toast } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { actionLabel } from "./actionLabels";
 
-const BLANK_PRESET_KEY = "__blank__"
+const NEW_MODEL: PermissionCatalogModel = {
+  key: "__new_custom_model__",
+  name: "",
+  kind: "CUSTOM",
+  config_scope: "PLATFORM",
+  derived_level: null,
+  active: true,
+  allow_same_level: false,
+  action_codes: [],
+  version: 0,
+};
 
-interface PermissionModelPreset {
-  key: string
-  name: string
-  action_codes: string[]
+const RISK_COLORS = { 1: "default", 2: "success", 3: "warning", 4: "danger" } as const;
+const COLUMN_WIDTHS = { name: 112, risk: 120, active: 80, grant: 96 };
+const PERMISSION_COLUMN_WIDTH = 80;
+const NAME_COLUMN = "xl:sticky xl:left-0";
+const RISK_COLUMN = "xl:sticky xl:left-[var(--permission-risk-left)]";
+const ACTIVE_COLUMN = "xl:sticky xl:right-[var(--permission-active-right)]";
+const GRANT_COLUMN = "xl:sticky xl:right-[var(--permission-grant-right)]";
+const OPERATIONS_COLUMN = "xl:sticky xl:right-0";
+const HEADER_CELL = "sticky top-0 z-[2] border-b border-border-base bg-fill-1 px-2 text-center text-body font-medium text-text-1";
+const ROW_CELL = "h-14 px-2 align-middle";
+const GROUP_DIVIDER = "border-l border-border-base";
+// On the pinned left edge, paint on the same side as the moving separators.
+const LEFT_EDGE_DIVIDER = "border-r border-border-base xl:border-r-0 xl:after:pointer-events-none xl:after:absolute xl:after:inset-y-0 xl:after:left-full xl:after:w-px xl:after:bg-border-base";
+const TOOLTIP_CONTROL = "inline-flex align-middle [&>button:disabled]:pointer-events-none";
+
+interface ModelForm {
+  model: PermissionCatalogModel;
+  name: string;
+  active: boolean;
+  allowSameLevel: boolean;
+  selected: Set<string>;
+  creating: boolean;
 }
 
-interface ModelEditorProps {
-  model: PermissionCatalogModel
-  actions: PermissionCatalogAction[]
-  presets?: PermissionModelPreset[]
-  createMode?: boolean
-  disabled?: boolean
-  onInitializePreset?: (preset: PermissionModelPreset) => void
-  onCreateDraft: (
-    changes: PermissionCatalogChange[],
-  ) => Promise<PermissionCatalogDraft>
-  onDeleteModel: (modelKey: string) => Promise<PermissionCatalogDraft>
-  onReviewImpact: (draft: PermissionCatalogDraft) => void
+interface ModelCatalogPanelProps {
+  catalog: PermissionCatalogRelease;
+  headerTarget?: HTMLDivElement | null;
+  onConfigureRisk?: () => void;
+  onCreateDraft: (changes: PermissionCatalogChange[]) => Promise<PermissionCatalogDraft>;
+  onDeleteModel: (modelKey: string) => Promise<PermissionCatalogDraft>;
+  onReviewImpact: (draft: PermissionCatalogDraft, variant?: "modelEdit") => void;
 }
 
-function selectedActionCodes(
-  actions: PermissionCatalogAction[],
-  selected: Set<string>,
-): string[] {
-  return [...actions]
-    .sort((left, right) => left.sort_order - right.sort_order)
-    .filter((action) => action.level !== null && selected.has(action.code))
-    .map((action) => action.code)
+function createModelForm(model: PermissionCatalogModel): ModelForm {
+  return {
+    model,
+    name: model.name,
+    active: model.active,
+    allowSameLevel: model.allow_same_level,
+    selected: new Set(model.action_codes),
+    creating: model.key === NEW_MODEL.key,
+  };
 }
 
-export function ModelEditor({
-  model,
-  actions,
-  presets = [],
-  createMode = false,
-  disabled = false,
-  onInitializePreset,
+function canGrantSameLevel(actions: PermissionCatalogAction[], selected: Set<string>) {
+  return selected.has("manage_permission") && actions.some(
+    (action) => action.code === "manage_permission" && action.active && action.level !== null,
+  );
+}
+
+interface RiskTagProps {
+  level: PermissionActionLevel | null;
+}
+
+function RiskTag({ level }: RiskTagProps) {
+  const { t } = useTranslation("permission");
+  return (
+    <span data-testid="model-derived-level" data-level={level ?? "unassigned"}>
+      <Tag size="small" color={level === null ? "default" : RISK_COLORS[level]}>
+        {level === null ? t("model.noRiskLevel") : t(`actionLevel.riskLevels.${level}`)}
+      </Tag>
+    </span>
+  );
+}
+
+export function ModelCatalogPanel({
+  catalog,
+  headerTarget,
+  onConfigureRisk,
   onCreateDraft,
   onDeleteModel,
   onReviewImpact,
-}: ModelEditorProps) {
-  const { t } = useTranslation("permission")
-  const selectLabels = useSelectLabels()
-  const [name, setName] = useState(model.name)
-  const [active, setActive] = useState(model.active)
-  const [allowSameLevel, setAllowSameLevel] = useState(
-    model.allow_same_level,
-  )
-  const [selected, setSelected] = useState(
-    () => new Set(model.action_codes),
-  )
-  const [selectedPreset, setSelectedPreset] = useState("")
-  const [draft, setDraft] = useState<PermissionCatalogDraft | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [deleteBlocked, setDeleteBlocked] = useState(false)
+}: ModelCatalogPanelProps) {
+  const { t, i18n } = useTranslation("permission");
+  const [editing, setEditing] = useState<ModelForm | null>(null);
+  const [saving, setSaving] = useState(false);
+  const newRowRef = useRef<HTMLTableRowElement>(null);
+  const newNameRef = useRef<HTMLInputElement>(null);
+  const creating = editing?.creating === true;
+  // Keep the column stable across row states while allowing room for the localized buttons and spinner.
+  const operationsWidth = (i18n.resolvedLanguage ?? i18n.language) === "zh-Hans" ? 128 : 176;
+  const scrollShadows = {
+    pinnedLeft: COLUMN_WIDTHS.name + COLUMN_WIDTHS.risk,
+    pinnedRight: COLUMN_WIDTHS.active + COLUMN_WIDTHS.grant + operationsWidth,
+  };
+  const stickyOffsets = {
+    "--permission-risk-left": `${COLUMN_WIDTHS.name}px`,
+    "--permission-active-right": `${COLUMN_WIDTHS.grant + operationsWidth}px`,
+    "--permission-grant-right": `${operationsWidth}px`,
+  };
 
-  const isStandard = model.kind === "STANDARD"
-  const eligibleActions = useMemo(
-    () =>
-      [...actions]
-        .sort((left, right) => left.sort_order - right.sort_order)
-        .filter(
-          (action) =>
-            action.level !== null ||
-            (!isStandard && selected.has(action.code)),
-        ),
-    [actions, isStandard, selected],
-  )
-  const effectiveSelectedActions = useMemo(
-    () =>
-      actions.filter(
-        (action) =>
-          action.active &&
-          action.level !== null &&
-          selected.has(action.code),
-      ),
-    [actions, selected],
-  )
-  const derivedLevel = isStandard
-    ? model.derived_level
-    : effectiveSelectedActions.reduce<number | null>(
-        (highest, action) =>
-          highest === null
-            ? action.level
-            : Math.max(highest, action.level ?? highest),
-        null,
-      )
-  // One group per level, in level order, with anything unusable (an action that
-  // lost its level or was switched off while this model still selects it) last.
+  useLayoutEffect(() => {
+    if (!creating) return;
+    newRowRef.current?.scrollIntoView?.({ block: "center", inline: "nearest" });
+    newNameRef.current?.focus({ preventScroll: true });
+  }, [creating]);
+
+  const actions = useMemo(
+    () => [...catalog.actions].sort((left, right) => left.sort_order - right.sort_order),
+    [catalog.actions],
+  );
   const actionGroups = useMemo(() => {
-    const groups = new Map<string, PermissionCatalogAction[]>()
-    for (const action of eligibleActions) {
-      const key = action.level === null ? "unassigned" : String(action.level)
-      const bucket = groups.get(key)
-      if (bucket) bucket.push(action)
-      else groups.set(key, [action])
-    }
-    return [...groups.entries()]
-      .sort(([left], [right]) => {
-        if (left === "unassigned") return 1
-        if (right === "unassigned") return -1
-        return Number(left) - Number(right)
+    const groupLevels = [1, 2, 3, 4, null] as const;
+    const assignedCodes = new Set(catalog.models.flatMap((model) => model.action_codes));
+    return groupLevels
+      .flatMap((level) => {
+        const members = actions.filter((action) => (
+          action.level === level && (level !== null || assignedCodes.has(action.code))
+        ));
+        return members.length ? [{ level, members }] : [];
       })
-      .map(([key, groupActions]) => ({
-        key,
-        title:
-          key === "unassigned"
-            ? t("actionLevel.unassigned")
-            : t("actionLevel.level", { level: Number(key) }),
-        actions: groupActions,
-        selectedCount: groupActions.filter((action) =>
-          selected.has(action.code),
-        ).length,
-      }))
-  }, [eligibleActions, selected, t])
+      .map((group, index) => ({ ...group, showDivider: index > 0 }));
+  }, [actions, catalog.models]);
+  const columns = actionGroups.flatMap(({ members, showDivider }) => (
+    members.map((action, index) => ({ action, showDivider: showDivider && index === 0 }))
+  ));
+  const columnCount = Math.max(1, columns.length) + 5;
+  const headerRowCount = columns.length > 0 ? 2 : 1;
 
-  const hasInvalidSelection = [...selected].some((actionCode) => {
-    const action = actions.find((item) => item.code === actionCode)
-    return !action || !action.active || action.level === null
-  })
-  const managePermissionAction = actions.find(
-    (action) => action.code === "manage_permission",
-  )
-  const canAllowSameLevel =
-    selected.has("manage_permission") &&
-    managePermissionAction?.active === true &&
-    managePermissionAction.level !== null
+  const isStandard = editing?.model.kind === "STANDARD";
+  const actionsChanged = Boolean(editing && (
+    editing.selected.size !== editing.model.action_codes.length
+    || editing.model.action_codes.some((code) => !editing.selected.has(code))
+  ));
+  const hasUnsavedChanges = Boolean(editing && (
+    editing.name !== editing.model.name
+    || editing.active !== editing.model.active
+    || editing.allowSameLevel !== editing.model.allow_same_level
+    || actionsChanged
+  ));
+  const selectedActions = actions.filter((action) => editing?.selected.has(action.code));
+  const effectiveActions = selectedActions.filter((action) => action.active && action.level !== null);
+  const hasInvalidSelection = Boolean(editing && effectiveActions.length !== editing.selected.size);
+  const derivedLevel = isStandard && !actionsChanged
+    ? editing.model.derived_level
+    : effectiveActions.reduce<PermissionActionLevel | null>(
+      (level, action) => (action.level !== null && action.level > (level ?? 0) ? action.level : level),
+      null,
+    );
+  const canConfirm = Boolean(
+    editing
+    && effectiveActions.length > 0
+    && !hasInvalidSelection
+    && (isStandard || editing.name.trim()),
+  );
+  const canSave = canConfirm;
 
-  useEffect(() => {
-    setName(model.name)
-    setActive(model.active)
-    setAllowSameLevel(model.allow_same_level)
-    setSelected(new Set(model.action_codes))
-    setSelectedPreset("")
-    setDraft(null)
-    setDeleteBlocked(false)
-  }, [model])
+  const handleCloseEditor = () => {
+    setEditing(null);
+  };
+
+  const handleCancelEditing = () => {
+    if (saving) return;
+    if (!hasUnsavedChanges) {
+      handleCloseEditor();
+      return;
+    }
+
+    bsConfirm({
+      title: t("model.unsavedTitle"),
+      desc: t("model.discardUnsavedDescription"),
+      canelTxt: t("organization.keepEditing", { ns: "bs" }),
+      okTxt: t("model.discard"),
+      variant: "default",
+      onOk: (close) => {
+        handleCloseEditor();
+        close();
+      },
+    });
+  };
+
+  const handleSave = async (closePrompt?: () => void) => {
+    if (!editing || !canSave || saving) return;
+    const effectiveAllowSameLevel = canGrantSameLevel(actions, editing.selected) && editing.allowSameLevel;
+    const change: PermissionCatalogChange = isStandard
+      ? (actionsChanged
+        ? {
+          type: "UPDATE_MODEL",
+          model_key: editing.model.key,
+          action_codes: effectiveActions.map((action) => action.code),
+          allow_same_level: effectiveAllowSameLevel,
+        }
+        : {
+          type: "SET_ALLOW_SAME_LEVEL",
+          model_key: editing.model.key,
+          allow_same_level: effectiveAllowSameLevel,
+        })
+      : {
+        type: editing.creating ? "CREATE_MODEL" : "UPDATE_MODEL",
+        ...(!editing.creating && { model_key: editing.model.key }),
+        name: editing.name.trim(),
+        action_codes: effectiveActions.map((action) => action.code),
+        active: editing.active,
+        allow_same_level: effectiveAllowSameLevel,
+      };
+
+    setSaving(true);
+    try {
+      const draft = await onCreateDraft([change]);
+      closePrompt?.();
+      onReviewImpact(draft, editing.creating ? undefined : "modelEdit");
+    } catch {
+      toast.show({ type: "error", message: t("model.saveFailed") });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRowIntent = (next: () => void) => {
+    if (saving) return;
+    if (!creating && !hasUnsavedChanges) {
+      handleCloseEditor();
+      next();
+      return;
+    }
+
+    bsConfirm({
+      title: t("model.unsavedTitle"),
+      desc: t(canSave ? "model.unsavedDescription" : "model.discardUnsavedDescription"),
+      canelTxt: canSave ? t("model.discard") : t("impact.cancel"),
+      okTxt: canSave ? t("model.saveDraft") : t("model.discard"),
+      variant: "default",
+      onCancel: canSave ? () => {
+        handleCloseEditor();
+        next();
+      } : undefined,
+      onOk: (close) => {
+        if (canSave) return handleSave(close);
+        close();
+        handleCloseEditor();
+        next();
+      },
+    });
+  };
 
   const handleActionChange = (actionCode: string, checked: boolean) => {
-    setSelected((current) => {
-      const next = new Set(current)
-      if (checked) next.add(actionCode)
-      else next.delete(actionCode)
-      return next
-    })
-    if (actionCode === "manage_permission" && !checked) {
-      setAllowSameLevel(false)
-    }
-  }
+    setEditing((current) => {
+      if (!current) return current;
+      const selected = new Set(current.selected);
+      if (checked) selected.add(actionCode);
+      else selected.delete(actionCode);
+      return {
+        ...current,
+        selected,
+        allowSameLevel: current.allowSameLevel && canGrantSameLevel(actions, selected),
+      };
+    });
+  };
 
-  const handleSave = async () => {
-    if (disabled || saving) return
-    const change: PermissionCatalogChange = isStandard
-      ? {
-          type: "SET_ALLOW_SAME_LEVEL",
-          model_key: model.key,
-          allow_same_level: allowSameLevel,
-        }
-      : createMode
-        ? {
-            type: "CREATE_MODEL",
-            name: name.trim(),
-            action_codes: selectedActionCodes(actions, selected),
-            active,
-            allow_same_level: canAllowSameLevel ? allowSameLevel : false,
-          }
-        : {
-          type: "UPDATE_MODEL",
-          model_key: model.key,
-          name: name.trim(),
-          action_codes: selectedActionCodes(actions, selected),
-          active,
-          allow_same_level: canAllowSameLevel ? allowSameLevel : false,
-          }
-
-    setSaving(true)
-    try {
-      setDraft(await onCreateDraft([change]))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleApplyPreset = () => {
-    // The blank option is the only way back to an empty selection: picking the
-    // placeholder just disabled the button, so a model could gain actions from a
-    // preset but never be cleared again.
-    if (selectedPreset === BLANK_PRESET_KEY) {
-      const blank = { key: BLANK_PRESET_KEY, name: t("model.preset.blank"), action_codes: [] }
-      setSelected(new Set())
-      setAllowSameLevel(false)
-      setDraft(null)
-      onInitializePreset?.(blank)
-      return
-    }
-    const preset = presets.find((item) => item.key === selectedPreset)
-    if (!preset) return
-    const initializedPreset = {
-      ...preset,
-      action_codes: [...preset.action_codes],
-    }
-    setSelected(new Set(initializedPreset.action_codes))
-    setAllowSameLevel(false)
-    setDraft(null)
-    onInitializePreset?.(initializedPreset)
-  }
-
-  const handleDelete = () => {
-    if (disabled || saving || createMode || isStandard) return
+  const handleDelete = (model: PermissionCatalogModel) => {
     bsConfirm({
-      desc: t("model.confirmDelete", { name: model.name }),
-      okTxt: t("model.delete"),
-      async onOk(next) {
-        setSaving(true)
-        setDeleteBlocked(false)
+      title: t("model.confirmDeleteTitle", { name: model.name }),
+      desc: t("model.confirmDeleteDescription"),
+      canelTxt: t("system.deleteConfirmation.cancel", { ns: "bs" }),
+      okTxt: t("system.deleteConfirmation.confirm", { ns: "bs" }),
+      async onOk(close) {
+        setSaving(true);
         try {
-          const deleteDraft = await onDeleteModel(model.key)
-          setDraft(deleteDraft)
-          onReviewImpact(deleteDraft)
+          const draft = await onDeleteModel(model.key);
+          close();
+          onReviewImpact(draft);
         } catch {
-          setDeleteBlocked(true)
+          // The catalog owner reports the specific deletion blocker.
+          close();
         } finally {
-          setSaving(false)
-          next()
+          setSaving(false);
         }
       },
-    })
-  }
+    });
+  };
 
-  return (
-    <section
-      aria-label={t("model.title")}
-      className="flex h-full min-h-0 flex-col rounded-xl border bg-background"
-    >
-      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b p-5">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-base font-semibold text-foreground">
-              {createMode ? t("model.create") : name || model.name}
-            </h2>
-            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              {t(`model.kind.${model.kind.toLowerCase()}`)}
+  const renderModelRow = (model: PermissionCatalogModel, index: number) => {
+    const form = editing?.model.key === model.key ? editing : null;
+    const isBuiltin = model.kind === "STANDARD";
+    const checkedActions = form?.selected ?? new Set(model.action_codes);
+    const canGrant = canGrantSameLevel(actions, checkedActions);
+    const rowBackground = index % 2 === 0 ? "bg-bg-page" : "bg-fill-1";
+    const visibleName = isBuiltin && ["viewer", "editor", "manager", "owner"].includes(model.key)
+      ? t(`level.${model.key}`, { defaultValue: model.name })
+      : model.name;
+
+    return (
+      <TableRow
+        key={model.key}
+        ref={form?.creating ? newRowRef : undefined}
+        data-testid={`permission-model-${model.key}`}
+        hoverable={false}
+        className={rowBackground}
+      >
+        <th scope="row" className={cn(ROW_CELL, NAME_COLUMN, "z-[1] text-left font-normal", rowBackground)}>
+          {form && !isBuiltin ? (
+            <Input
+              ref={form.creating ? newNameRef : undefined}
+              size="small"
+              aria-label={t("model.name")}
+              placeholder={t("model.name")}
+              value={form.name}
+              disabled={saving}
+              onChange={(event) => setEditing({ ...form, name: event.target.value })}
+            />
+          ) : <span className="break-words font-medium">{visibleName}</span>}
+        </th>
+        <td className={cn(ROW_CELL, RISK_COLUMN, LEFT_EDGE_DIVIDER, "z-[1] text-center", rowBackground)}>
+          <RiskTag level={form ? derivedLevel : model.derived_level} />
+        </td>
+        {columns.map(({ action, showDivider }) => {
+          const checked = checkedActions.has(action.code);
+          return (
+            <td key={action.code} className={cn(ROW_CELL, "text-center", showDivider && GROUP_DIVIDER)}>
+              {(form || checked) && (
+                <Tooltip content={actionLabel(t, action.code, action.name)}>
+                  <span className={TOOLTIP_CONTROL}>
+                    <Checkbox
+                      aria-label={`${t("model.action")}.${action.code}`}
+                      size="medium"
+                      checked={checked}
+                      disabled={!form || saving || (!checked && (!action.active || action.level === null))}
+                      onCheckedChange={form ? (value) => handleActionChange(action.code, value === true) : undefined}
+                    />
+                  </span>
+                </Tooltip>
+              )}
+            </td>
+          );
+        })}
+        {columns.length === 0 && <td aria-hidden />}
+        <td className={cn(ROW_CELL, ACTIVE_COLUMN, GROUP_DIVIDER, "z-[1] text-center", rowBackground)}>
+          <Switch
+            size="small"
+            checked={form?.active ?? model.active}
+            disabled={saving || isBuiltin}
+            aria-label={form ? t("model.active") : t("model.activeFor", { name: visibleName })}
+            onCheckedChange={(active) => {
+              if (form) setEditing({ ...form, active });
+              else handleRowIntent(() => setEditing({ ...createModelForm(model), active }));
+            }}
+          />
+        </td>
+        <td className={cn(ROW_CELL, GRANT_COLUMN, "z-[1] text-center", rowBackground)}>
+          <Tooltip content={t(canGrant ? "model.allowSameLevelHint" : "model.allowSameLevelUnavailable")}>
+            <span className={TOOLTIP_CONTROL}>
+              <Switch
+                size="small"
+                checked={form?.allowSameLevel ?? model.allow_same_level}
+                disabled={saving || !canGrant}
+                aria-label={form ? t("model.allowSameLevel") : t("model.allowSameLevelFor", { name: visibleName })}
+                onCheckedChange={(allowSameLevel) => {
+                  if (form) setEditing({ ...form, allowSameLevel });
+                  else handleRowIntent(() => setEditing({ ...createModelForm(model), allowSameLevel }));
+                }}
+              />
             </span>
-            {!createMode && !active && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                {t("model.inactive")}
-              </span>
+          </Tooltip>
+        </td>
+        <td className={cn(ROW_CELL, OPERATIONS_COLUMN, "z-[1] whitespace-nowrap", rowBackground)}>
+          <div className="flex items-center justify-end gap-1">
+            {form ? (
+              <>
+                <Button size="small" variant="text" color="default" disabled={saving} onClick={handleCancelEditing}>
+                  {t("impact.cancel")}
+                </Button>
+                <Button size="small" loading={saving} disabled={!canConfirm} onClick={() => void handleSave()}>
+                  {t("confirm", { ns: "bs" })}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Tooltip content={t("model.editRow")}>
+                  <Button
+                    type="button" size="small" variant="text" color="default" iconOnly
+                    aria-label={t("model.editNamed", { name: visibleName })}
+                    disabled={saving}
+                    onClick={() => handleRowIntent(() => setEditing(createModelForm(model)))}
+                  >
+                    <Outlined.Edit aria-hidden />
+                  </Button>
+                </Tooltip>
+                <span aria-hidden className="h-2 w-px shrink-0 bg-border-base" />
+                <Tooltip content={t("model.copyRow")}>
+                  <Button
+                    type="button" size="small" variant="text" color="default" iconOnly
+                    aria-label={t("model.copyNamed", { name: visibleName })}
+                    disabled={saving}
+                    onClick={() => handleRowIntent(() => setEditing(createModelForm({
+                      ...NEW_MODEL,
+                      action_codes: model.action_codes,
+                      active: model.active,
+                      allow_same_level: model.allow_same_level,
+                    })))}
+                  >
+                    <Outlined.Copy aria-hidden />
+                  </Button>
+                </Tooltip>
+                <span aria-hidden className="h-2 w-px shrink-0 bg-border-base" />
+                <Tooltip content={t("model.deleteRow")}>
+                  <Button
+                    type="button" size="small" variant="text" color="danger" iconOnly
+                    aria-label={t("model.deleteNamed", { name: visibleName })}
+                    disabled={saving || isBuiltin}
+                    onClick={() => handleRowIntent(() => handleDelete(model))}
+                  >
+                    <Outlined.Delete aria-hidden />
+                  </Button>
+                </Tooltip>
+              </>
             )}
           </div>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {isStandard
-              ? t("model.descriptionBuiltin")
-              : t("model.description")}
-          </p>
-        </div>
-        {/* A bare "3" said nothing. The level is derived from the highest action
-            in the selection, so name it and say where it came from. */}
-        <div className="shrink-0 text-right">
-          <p className="text-xs text-muted-foreground">
-            {t("model.derivedLevel")}
-          </p>
-          <p
-            data-testid="model-derived-level"
-            // The visible text is localized ("Level 3"); the raw tier stays
-            // readable here for anything asserting on the value itself.
-            data-level={derivedLevel ?? "unassigned"}
-            className="text-lg font-semibold tabular-nums text-foreground"
-          >
-            {derivedLevel === null || derivedLevel === undefined
-              ? t("actionLevel.unassigned")
-              : t("actionLevel.level", { level: derivedLevel })}
-          </p>
-        </div>
-      </div>
-
-      {/* Only the form scrolls, so the title and the save bar stay in place while
-          the action list — the tall part — moves. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5">
-        {!isStandard && (
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <div className="text-sm font-medium text-foreground">
-              <span className="mb-1 block">{t("model.preset.label")}</span>
-              <Select
-                {...selectLabels}
-                className="w-full"
-                options={[
-                  { value: BLANK_PRESET_KEY, label: t("model.preset.blank") },
-                  ...presets
-                    .filter((preset) => preset.key != null && preset.key !== "")
-                    .map((preset) => ({ value: preset.key, label: preset.name })),
-                ]}
-                value={selectedPreset || null}
-                disabled={disabled}
-                onChange={(value) => setSelectedPreset(value == null ? "" : String(value))}
-                placeholder={t("model.preset.select")}
-                aria-label={t("model.preset.label")}
-              />
-            </div>
-            <Button type="button" variant="outlined" className="self-end" disabled={disabled || !selectedPreset} onClick={handleApplyPreset} color="default">
-              {t("model.preset.apply")}
-            </Button>
-          </div>
-        )}
-
-        <label className="text-sm font-medium text-foreground">
-          <span className="mb-1 block">{t("model.name")}</span>
-          <Input aria-label={t("model.name")} value={name} disabled={disabled || isStandard} onChange={(event) => setName(event.target.value)} />
-        </label>
-
-        {/* Grouped by level, because the level is what the selection produces:
-            ticking anything in the "level 3" group makes this a level-3 model.
-            A flat list made the derived level in the header look arbitrary. */}
-        <fieldset className="grid gap-3">
-          <legend className="mb-1 text-sm font-medium text-foreground">
-            {t("model.actions")}
-          </legend>
-          {actionGroups.map((group) => (
-            <div key={group.key} className="rounded-lg border">
-              <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-1.5">
-                <span className="text-xs font-medium text-foreground">
-                  {group.title}
-                </span>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {group.selectedCount}/{group.actions.length}
-                </span>
-              </div>
-              <div className="divide-y">
-                {group.actions.map((action) => {
-                  const isChecked = selected.has(action.code)
-                  const actionDisabled =
-                    disabled || isStandard || (!action.active && !isChecked)
-                  return (
-                    <label
-                      key={action.code}
-                      className="flex items-center gap-3 px-3 py-2 text-sm has-[:disabled]:opacity-60"
-                    >
-                      <Checkbox
-                        aria-label={`${t("model.action")}.${action.code}`}
-                        checked={isChecked}
-                        disabled={actionDisabled}
-                        onCheckedChange={(checked) =>
-                          handleActionChange(action.code, checked === true)
-                        }
-                      />
-                      <span className="min-w-0 flex-1">
-                        {/* The API code matters to whoever wires up integrations,
-                            not to the admin ticking boxes — hover, not a second line. */}
-                        <span
-                          className="block font-medium text-foreground"
-                          title={action.code}
-                        >
-                          {actionLabel(t, action.code, action.name)}
-                        </span>
-                      </span>
-                      {action.level === null ? (
-                        <span className="text-xs text-destructive">
-                          {t("actionLevel.unassigned")}
-                        </span>
-                      ) : !action.active && (
-                        <span className="text-xs text-destructive">
-                          {t("actionLevel.inactive")}
-                        </span>
-                      )}
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </fieldset>
-
-        {/* Both switches carry a consequence the label alone never conveyed —
-            "allow same level" in particular decides whether a holder can hand
-            out their own tier. */}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex items-start justify-between gap-3 rounded-lg border p-3 text-sm">
-            <span className="min-w-0">
-              <span className="block font-medium text-foreground">
-                {t("model.active")}
-              </span>
-              <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                {t("model.activeHint")}
-              </span>
+          {form && hasInvalidSelection && (
+            <span role="status" className="mt-1 block whitespace-normal text-right text-caption text-warning">
+              {t("model.unavailableSelection")}
             </span>
-            <Switch
-              aria-label={t("model.active")}
-              checked={active}
-              disabled={disabled || isStandard}
-              onCheckedChange={setActive}
-            />
-          </label>
-          <label className="flex items-start justify-between gap-3 rounded-lg border p-3 text-sm">
-            <span className="min-w-0">
-              <span className="block font-medium text-foreground">
-                {t("model.allowSameLevel")}
-              </span>
-              <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                {canAllowSameLevel
-                  ? t("model.allowSameLevelHint")
-                  : t("model.allowSameLevelUnavailable")}
-              </span>
-            </span>
-            <Switch
-              aria-label={t("model.allowSameLevel")}
-              checked={allowSameLevel}
-              disabled={disabled || !canAllowSameLevel}
-              onCheckedChange={setAllowSameLevel}
-            />
-          </label>
-        </div>
-      </div>
+          )}
+        </td>
+      </TableRow>
+    );
+  };
 
-      {/* The draft notice used to sit at the end of the scrolling form, so the
-          button that publishes it was below the fold — the author saved and saw
-          nothing happen. It belongs beside the button that produced it. */}
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t p-4">
-        {draft && (
-          <Alert
-            className="mr-auto min-w-0 flex-1"
-            description={`${t("impact.unpublished")} · ${t("impact.pending", {
-                resources: draft.impact.resource_count,
-                grants: draft.impact.grant_count,
-              })}`}
-            actions={[{
-              label: t("impact.publishChanges"),
-              onClick: () => onReviewImpact(draft),
-            }]}
-            live
-          />
+  const header = (
+    <>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {onConfigureRisk && (
+          <Button type="button" variant="outlined" color="default" disabled={saving} onClick={() => handleRowIntent(onConfigureRisk)}>
+            {t("actionLevel.configure")}
+          </Button>
         )}
-        {!isStandard && !createMode && (
-          <div className="mr-auto flex min-w-0 items-center gap-2">
-            <Button type="button" variant="outlined" className="shrink-0" disabled={disabled || saving} onClick={handleDelete} color="danger">
-              {t("model.delete")}
-            </Button>
-            <span
-              className={deleteBlocked ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
-              role={deleteBlocked ? "alert" : undefined}
-            >
-              {deleteBlocked
-                ? t("model.deleteBlocked")
-                : t("model.deleteRequirement")}
-            </span>
-          </div>
-        )}
-        <Button type="button" disabled={
-            disabled ||
-            saving ||
-            (!isStandard &&
-              (name.trim().length === 0 ||
-                effectiveSelectedActions.length === 0 ||
-                hasInvalidSelection))
-          } onClick={() => void handleSave()}>
-          {saving ? t("model.saving") : t("model.save")}
+        <Button
+          type="button"
+          disabled={saving || creating}
+          onClick={() => handleRowIntent(() => setEditing(createModelForm(NEW_MODEL)))}
+        >
+          {t("model.create")}
         </Button>
       </div>
+      <p className="text-body text-text-2">{t("catalog.operationPermissionsDescription")}</p>
+    </>
+  );
+
+  return (
+    <section aria-label={t("model.title")} className="flex min-h-0 flex-1 flex-col gap-4">
+      {headerTarget ? createPortal(header, headerTarget) : headerTarget === undefined ? header : null}
+      <TooltipProvider>
+        <Table
+          aria-label={t("model.title")}
+          className="table-fixed border-spacing-0 text-text-1"
+          containerClassName="min-h-0 rounded-lg border border-border-base"
+          scrollShadows={scrollShadows}
+          style={{ ...stickyOffsets, minWidth: scrollShadows.pinnedLeft + scrollShadows.pinnedRight + Math.max(columns.length, 1) * PERMISSION_COLUMN_WIDTH }}
+        >
+          <colgroup>
+            <col style={{ width: COLUMN_WIDTHS.name }} />
+            <col style={{ width: COLUMN_WIDTHS.risk }} />
+          </colgroup>
+          {actionGroups.map(({ level, members }) => <colgroup key={level ?? "unassigned"} span={members.length} />)}
+          {columns.length === 0 && <colgroup span={1} />}
+          <colgroup>
+            <col style={{ width: COLUMN_WIDTHS.active }} />
+            <col style={{ width: COLUMN_WIDTHS.grant }} />
+            <col style={{ width: operationsWidth }} />
+          </colgroup>
+          <TableHeader>
+            <TableRow hoverable={false}>
+              <TableHead scope="col" rowSpan={headerRowCount} className={cn(HEADER_CELL, NAME_COLUMN, "xl:z-[3] text-left")}>
+                {t("model.name")}
+              </TableHead>
+              <TableHead scope="col" rowSpan={headerRowCount} aria-label={t("model.derivedLevel")} className={cn(HEADER_CELL, RISK_COLUMN, LEFT_EDGE_DIVIDER, "xl:z-[3]")}>
+                <span className="inline-flex items-center gap-1">
+                  <span>{t("model.derivedLevel")}</span>
+                  <Tooltip content={t("model.riskHint")}>
+                    <span role="img" aria-label={t("model.derivedLevel")} tabIndex={0} className="inline-flex shrink-0 rounded text-text-3 outline-none focus-visible:shadow-focus">
+                      <Outlined.Question aria-hidden size={14} />
+                    </span>
+                  </Tooltip>
+                </span>
+              </TableHead>
+              {actionGroups.map(({ level, members, showDivider }) => (
+                <TableHead
+                  key={level ?? "unassigned"} scope="colgroup" colSpan={members.length}
+                  className={cn(HEADER_CELL, "h-9", showDivider && GROUP_DIVIDER)}
+                >
+                  <span className="text-caption text-text-2">
+                    {level === null ? t("actionLevel.unassigned") : t(`actionLevel.riskLevels.${level}`)}
+                  </span>
+                </TableHead>
+              ))}
+              {columns.length === 0 && <TableHead rowSpan={headerRowCount} scope="col" className={HEADER_CELL}>{t("model.actions")}</TableHead>}
+              <TableHead scope="col" rowSpan={headerRowCount} className={cn(HEADER_CELL, ACTIVE_COLUMN, GROUP_DIVIDER, "xl:z-[3]")}>
+                {t("model.activeColumn")}
+              </TableHead>
+              <TableHead scope="col" rowSpan={headerRowCount} aria-label={t("model.allowSameLevel")} className={cn(HEADER_CELL, GRANT_COLUMN, "xl:z-[3]")}>
+                <span className="inline-flex items-center gap-1">
+                  <span>{t("model.allowSameLevel")}</span>
+                  <Tooltip content={t("model.allowSameLevelHint")}>
+                    <span role="img" aria-label={t("model.allowSameLevel")} tabIndex={0} className="inline-flex shrink-0 rounded text-text-3 outline-none focus-visible:shadow-focus">
+                      <Outlined.Question aria-hidden size={14} />
+                    </span>
+                  </Tooltip>
+                </span>
+              </TableHead>
+              <TableHead scope="col" rowSpan={headerRowCount} className={cn(HEADER_CELL, OPERATIONS_COLUMN, "xl:z-[3]")}>
+                {t("model.operations")}
+              </TableHead>
+            </TableRow>
+            {columns.length > 0 && (
+              <TableRow hoverable={false}>
+                {columns.map(({ action, showDivider }) => (
+                  <TableHead key={action.code} scope="col" className={cn(HEADER_CELL, "top-9 h-9 px-1", showDivider && GROUP_DIVIDER)}>
+                    <span className="text-body font-medium text-text-1">
+                      {actionLabel(t, action.code, action.name)}
+                    </span>
+                  </TableHead>
+                ))}
+              </TableRow>
+            )}
+          </TableHeader>
+          <TableBody>
+            {catalog.models.map(renderModelRow)}
+            {creating && renderModelRow(editing.model, catalog.models.length)}
+            {catalog.models.length === 0 && !creating && (
+              <TableRow hoverable={false}>
+                <td colSpan={columnCount} className="py-10 text-center text-text-2">{t("model.empty")}</td>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TooltipProvider>
     </section>
-  )
+  );
 }

@@ -48,7 +48,7 @@ async def create_role(
 
 @router.get("", response_model=UnifiedResponseModel)
 async def list_roles(
-    keyword: str = Query(None, description="Filter by role_name"),
+    keyword: str = Query(None, description="Filter by role_name or assigned user_name"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     login_user: LoginUser = Depends(LoginUser.get_login_user),

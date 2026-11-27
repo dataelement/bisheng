@@ -53,7 +53,12 @@ def _selection(snapshot):
     standard_policy = {
         model.model_key: model.allow_same_level for model in snapshot.model_release.models if model.kind == "STANDARD"
     }
-    return customs, standard_policy
+    standard_actions = {
+        model.model_key: model.selected_action_codes
+        for model in snapshot.model_release.models
+        if model.kind == "STANDARD"
+    }
+    return customs, standard_policy, standard_actions
 
 
 def _target(snapshot):
@@ -63,11 +68,16 @@ def _target(snapshot):
         replace(action, resource_types=action.resource_types | EDIT_TYPES) if action.code == "edit" else action
         for action in snapshot.action_release.actions
     )
-    customs, standard_policy = _selection(snapshot)
-    models = derive_permission_models(actions, custom_models=customs, standard_allow_same_level=standard_policy)
+    customs, standard_policy, standard_actions = _selection(snapshot)
+    models = derive_permission_models(
+        actions,
+        custom_models=customs,
+        standard_allow_same_level=standard_policy,
+        standard_action_codes=standard_actions or None,
+    )
     if models.blockers:
         raise PermissionPublishNotReadyError(msg="Catalog models are blocked: " + ", ".join(models.blockers))
-    return actions, models, customs, standard_policy
+    return actions, models, customs, standard_policy, standard_actions
 
 
 class KnowledgeEditScopeUpgrade:
@@ -81,7 +91,7 @@ class KnowledgeEditScopeUpgrade:
         """Read-only: bind the complete baseline and current impact to a digest."""
         current = await self.control.current_catalog()
         before = await self.state.load_snapshot(current.release_id)
-        actions, models, _, _ = _target(before)
+        actions, models, _, _, _ = _target(before)
         edit = next(action for action in before.action_release.actions if action.code == "edit")
         missing = tuple(sorted(EDIT_TYPES - edit.resource_types))
         action_impact = calculate_action_impact(
@@ -147,7 +157,7 @@ class KnowledgeEditScopeUpgrade:
             before = await self.state.load_snapshot(reservation.predecessor_id)
             if before.release_checksum != plan["base_checksum"]:
                 raise PermissionVersionConflictError(msg="Catalog baseline changed during reservation")
-            actions, _, customs, policy = _target(before)
+            actions, _, customs, policy, standard_actions = _target(before)
             draft = await self.service.build_draft(
                 CatalogDraftBuildInput(
                     release_id=reservation.release_id,
@@ -159,6 +169,7 @@ class KnowledgeEditScopeUpgrade:
                     actions=actions.actions,
                     custom_models=customs,
                     standard_allow_same_level=policy,
+                    standard_action_codes=standard_actions,
                     draft_owner_id=operator_id,
                     idempotency_key=key,
                     expires_at=_utc_now_naive() + timedelta(minutes=10),
@@ -177,7 +188,7 @@ class KnowledgeEditScopeUpgrade:
             raise PermissionVersionConflictError(msg="Upgrade draft belongs to another operation or operator")
         draft = await self.state.load_snapshot(draft_id)
         before = await self.state.load_snapshot(draft.predecessor_release_id)
-        actions, models, _, _ = _target(before)
+        actions, models, _, _, _ = _target(before)
         if draft.action_release != actions or draft.model_release != models:
             raise PermissionVersionConflictError(msg="Upgrade draft changes more than file/folder edit applicability")
         current = await self.state.current_release()

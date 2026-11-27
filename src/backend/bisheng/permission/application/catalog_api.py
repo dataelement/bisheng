@@ -47,6 +47,11 @@ from bisheng.permission.domain.models import (
     PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
 )
+from bisheng.permission.application.catalog_affected_users import (
+    DEFAULT_AFFECTED_USER_PAGE_SIZE,
+    AffectedUsersPage,
+    resolve_affected_users,
+)
 from bisheng.permission.domain.repositories.catalog_impact_repository import CatalogImpactRepository
 from bisheng.permission.domain.schemas import (
     CatalogChangeRequest,
@@ -923,10 +928,18 @@ class SqlCatalogState:
             if row.kind == "CUSTOM"
         )
         standard_policy = {row.model_key: bool(row.allow_same_level) for row in rows if row.kind == "STANDARD"}
+        standard_actions = {
+            row.model_key: tuple(
+                action.code for action in actions.actions if action.code in selected.get(int(row.id or 0), ())
+            )
+            for row in rows
+            if row.kind == "STANDARD"
+        }
         return derive_permission_models(
             actions,
             custom_models=customs,
             standard_allow_same_level=standard_policy,
+            standard_action_codes=standard_actions or None,
         )
 
     @staticmethod
@@ -1198,6 +1211,62 @@ class SqlCatalogImpact:
             after_actions=draft.action_release,
             before_models=before.model_release,
             after_models=draft.model_release,
+        )
+
+    async def describe_affected_users(
+        self,
+        draft: CatalogDraftSnapshot,
+        *,
+        page: int = 1,
+        page_size: int = DEFAULT_AFFECTED_USER_PAGE_SIZE,
+    ) -> AffectedUsersPage:
+        """按草稿变更范围展开并分页返回去重活跃受影响用户。"""
+        before = await self._state.load_snapshot(draft.predecessor_release_id)
+        if (
+            before.action_release is None
+            or before.model_release is None
+            or draft.action_release is None
+            or draft.model_release is None
+        ):
+            raise PermissionPublishNotReadyError()
+        from bisheng.permission.domain.services.catalog_policy import calculate_action_impact
+        from bisheng.permission.domain.services.model_policy import calculate_model_impact
+
+        custom_actions = {
+            model.model_key: frozenset(model.selected_action_codes)
+            for model in before.model_release.models
+            if model.kind == "CUSTOM"
+        }
+        custom_actions.update(
+            {
+                model.model_key: frozenset(model.selected_action_codes)
+                for model in draft.model_release.models
+                if model.kind == "CUSTOM"
+            }
+        )
+        action_impact = calculate_action_impact(
+            before.action_release,
+            draft.action_release,
+            custom_model_actions=custom_actions,
+        )
+        model_impact = calculate_model_impact(before.model_release, draft.model_release, grant_references={})
+        candidate_keys = set(action_impact.affected_model_keys)
+        candidate_keys.update(model_impact.changed_model_keys)
+        changed_actions = set(action_impact.changed_action_codes)
+        candidate_keys.update(
+            model.model_key
+            for model in (*before.model_release.models, *draft.model_release.models)
+            if changed_actions.intersection(model.action_codes)
+        )
+        return await resolve_affected_users(
+            session_factory=self._session_factory,
+            candidate_model_keys=candidate_keys,
+            before_actions=before.action_release,
+            after_actions=draft.action_release,
+            before_models=before.model_release,
+            after_models=draft.model_release,
+            page=page,
+            page_size=page_size,
         )
 
 
@@ -1561,7 +1630,7 @@ class F048CatalogApi:
         before = await self._state.load_snapshot(reservation.predecessor_id)
         if before.action_release is None or before.model_release is None:
             raise PermissionPublishNotReadyError()
-        actions, customs, standard_policy = await self._apply_changes(
+        actions, customs, standard_policy, standard_actions = await self._apply_changes(
             request.changes,
             before,
         )
@@ -1585,6 +1654,7 @@ class F048CatalogApi:
                     actions=actions,
                     custom_models=customs,
                     standard_allow_same_level=standard_policy,
+                    standard_action_codes=standard_actions,
                     grant_references=(await self._state.grant_references()),
                     model_reference_summaries=(await self._state.model_reference_summaries(deleted_model_keys)),
                     draft_owner_id=operator_id,
@@ -1615,6 +1685,47 @@ class F048CatalogApi:
         del operator_id
         return await self._draft_payload(await self._state.load_snapshot(draft_id))
 
+    async def list_draft_affected_users(
+        self,
+        *,
+        draft_id: int,
+        operator_id: int,
+        page: int = 1,
+        page_size: int = DEFAULT_AFFECTED_USER_PAGE_SIZE,
+    ) -> dict:
+        """返回绑定到指定草稿的去重受影响用户分页名单，校验状态、有效期与基准版本。"""
+        del operator_id
+        row = await self._state.release_row(draft_id)
+        if row.status != "DRAFT":
+            raise PermissionImpactExpiredError(msg="Catalog draft is no longer active")
+        draft = await self._state.load_snapshot(draft_id)
+        if draft.expires_at is not None and _as_utc(draft.expires_at) <= _as_utc(_utc_now_naive()):
+            raise PermissionImpactExpiredError(msg="Catalog draft has expired")
+        current = await self._state.current_release()
+        if int(current.id) != draft.predecessor_release_id:
+            raise PermissionVersionConflictError(msg="Catalog base release has changed")
+        impact = await self._impact.describe(draft)
+        if impact.checksum != draft.impact_checksum:
+            raise PermissionImpactExpiredError(msg="Catalog impact changed after draft creation")
+        users_page = await self._impact.describe_affected_users(draft, page=page, page_size=page_size)
+        return {
+            "draft_id": draft.release_id,
+            "total": users_page.total,
+            "page": users_page.page,
+            "page_size": users_page.page_size,
+            "has_more": users_page.has_more,
+            "cross_tenant": users_page.cross_tenant,
+            "items": [
+                {
+                    "user_id": item.user_id,
+                    "username": item.username,
+                    "tenant_id": item.tenant_id,
+                    "tenant_name": item.tenant_name,
+                }
+                for item in users_page.items
+            ],
+        }
+
     async def publish_draft(
         self,
         *,
@@ -1642,6 +1753,11 @@ class F048CatalogApi:
         impact = await self._impact.describe(draft)
         if impact.checksum != draft.impact_checksum:
             raise PermissionImpactExpiredError(msg="Catalog impact changed after draft creation")
+        affected_users = await self._impact.describe_affected_users(
+            draft,
+            page=1,
+            page_size=DEFAULT_AFFECTED_USER_PAGE_SIZE,
+        )
         expires_at = draft.expires_at or (_utc_now_naive() + timedelta(minutes=10))
         return {
             "draft_id": draft.release_id,
@@ -1651,6 +1767,18 @@ class F048CatalogApi:
                 "resource_count": impact.resource_count,
                 "grant_count": impact.grant_count,
                 "assignee_count": impact.assignee_count,
+                "affected_user_count": affected_users.total,
+                "affected_users_has_more": affected_users.has_more,
+                "affected_users_cross_tenant": affected_users.cross_tenant,
+                "affected_users": [
+                    {
+                        "user_id": item.user_id,
+                        "username": item.username,
+                        "tenant_id": item.tenant_id,
+                        "tenant_name": item.tenant_name,
+                    }
+                    for item in affected_users.items
+                ],
                 "expansion_count": impact.expansion_count,
                 "revocation_count": impact.revocation_count,
                 "action_changes": [
@@ -1771,6 +1899,8 @@ class F048CatalogApi:
         }
         standard_by_key = {model.model_key: model for model in before.model_release.models if model.kind == "STANDARD"}
         standard_policy = {key: model.allow_same_level for key, model in standard_by_key.items()}
+        standard_actions = {key: model.selected_action_codes for key, model in standard_by_key.items()}
+        explicitly_updated_standards: set[str] = set()
         touched_standard_keys: set[str] = set()
         for change in changes:
             kind = change.type
@@ -1808,16 +1938,31 @@ class F048CatalogApi:
                     allow_same_level=bool(change.allow_same_level),
                 )
             elif kind == CatalogChangeType.UPDATE_MODEL:
-                model = self._custom_model(change.model_key, custom_by_key)
-                custom_by_key[model.model_key] = replace(
-                    model,
-                    name=change.name if change.name is not None else model.name,
-                    action_codes=(change.action_codes if change.action_codes is not None else model.action_codes),
-                    active=(change.active if change.active is not None else model.active),
-                    allow_same_level=(
-                        change.allow_same_level if change.allow_same_level is not None else model.allow_same_level
-                    ),
-                )
+                if change.model_key and change.model_key in standard_by_key:
+                    standard_model = standard_by_key[change.model_key]
+                    # 内置模板保持名称与启用状态不可变，允许修改显式操作集合与同级授予策略
+                    if change.name is not None and change.name.strip() != standard_model.name:
+                        raise ImmutableStandardModelError(msg="Standard model name is immutable")
+                    if change.active is False:
+                        raise ImmutableStandardModelError(msg="Standard model cannot be deactivated")
+                    if change.action_codes is not None:
+                        if not change.action_codes:
+                            raise InvalidCatalogActionError(msg="Standard model must include at least one action")
+                        standard_actions[change.model_key] = tuple(change.action_codes)
+                        explicitly_updated_standards.add(change.model_key)
+                    if change.allow_same_level is not None:
+                        standard_policy[change.model_key] = change.allow_same_level
+                else:
+                    model = self._custom_model(change.model_key, custom_by_key)
+                    custom_by_key[model.model_key] = replace(
+                        model,
+                        name=change.name if change.name is not None else model.name,
+                        action_codes=(change.action_codes if change.action_codes is not None else model.action_codes),
+                        active=(change.active if change.active is not None else model.active),
+                        allow_same_level=(
+                            change.allow_same_level if change.allow_same_level is not None else model.allow_same_level
+                        ),
+                    )
             elif kind == CatalogChangeType.SET_MODEL_ACTIVE:
                 if change.active is None:
                     raise PermissionModelStateConflictError()
@@ -1846,14 +1991,24 @@ class F048CatalogApi:
             else:
                 raise InvalidCatalogActionError()
             if change.model_key and change.model_key in standard_by_key:
-                if change.type is not CatalogChangeType.SET_ALLOW_SAME_LEVEL:
+                if change.type not in {
+                    CatalogChangeType.SET_ALLOW_SAME_LEVEL,
+                    CatalogChangeType.UPDATE_MODEL,
+                }:
                     touched_standard_keys.add(change.model_key)
         try:
             action_release = derive_action_release(actions)
+            action_by_code = {action.code: action for action in action_release.actions}
+            for model_key in explicitly_updated_standards:
+                for code in standard_actions[model_key]:
+                    action = action_by_code.get(code)
+                    if action is None or not action.active or action.level is None:
+                        raise ValueError(f"standard model {model_key} selects unavailable action: {code}")
             derive_permission_models(
                 action_release,
                 custom_models=custom_by_key.values(),
                 standard_allow_same_level=standard_policy,
+                standard_action_codes=standard_actions,
             )
         except SameLevelGrantRequiresManagePermission as exc:
             raise SameLevelGrantRequiresManagePermissionError(
@@ -1874,6 +2029,7 @@ class F048CatalogApi:
             tuple(actions),
             tuple(custom_by_key[key] for key in sorted(custom_by_key)),
             standard_policy,
+            standard_actions,
         )
 
     @staticmethod

@@ -24,11 +24,12 @@ export function SidebarCredits({ onNavigate }: SidebarCreditsProps) {
     const navigate = useNavigate()
     const location = useLocation()
     const { user } = useAuthContext()
-    const { enabled } = useDshDesktop()
+    const { enabled, creditBillingEnabled } = useDshDesktop()
+    const billingEnabled = creditBillingEnabled ?? enabled
     // Same key as the settings card, so both always show one balance.
     const credits = useQuery({
         queryKey: ['dsh-self-credits', user?.id],
-        enabled: enabled && Boolean(user?.id),
+        enabled: billingEnabled && Boolean(user?.id),
         retry: false,
         staleTime: 0,
         refetchInterval: REFRESH_INTERVAL_MS,
@@ -51,7 +52,7 @@ export function SidebarCredits({ onNavigate }: SidebarCreditsProps) {
     }, [refetch])
 
     // An unreadable balance stays on the settings card, which explains it and offers a retry.
-    if (!enabled || !credits.data) return null
+    if (!billingEnabled || !credits.data) return null
     const { unlimited, remaining } = credits.data
     const value = unlimited
         ? t('dsh.creditsUnlimited')

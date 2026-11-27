@@ -15,6 +15,7 @@ from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
+from bisheng.dsh.domain.models.tool_call import DshToolCall
 from bisheng.dsh.domain.models.unified_policy import CreditRule, ModelVisibility, PersonalLedgerState
 from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
 from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
@@ -49,6 +50,7 @@ async def execution(managed_db, monkeypatch):
         CreditRule,
         PersonalLedgerState,
         DshModelCall,
+        DshToolCall,
         DshMonthlyUsage,
         DshAdminOperation,
     )

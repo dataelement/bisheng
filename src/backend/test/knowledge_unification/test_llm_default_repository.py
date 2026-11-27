@@ -141,7 +141,7 @@ def test_valid_empty_own_json_remains_own_source_while_null_uses_root(store):
 def test_reads_never_autoflush_pending_business_changes(store):
     repo = ModelDefaultRepository()
     with Session(store) as session:
-        pending = TenantSystemModelConfig(tenant_id=101, key="knowledge_llm", value='{"source_model_id":11}')
+        pending = TenantSystemModelConfig(tenant_id=101, key="knowledge_llm", value='{"qa_similar_model_id":11}')
         session.add(pending)
         assert repo.get_own(session, "knowledge_llm") is None and pending.id is None
         repo.resolve(session, "evaluation_llm")

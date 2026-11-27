@@ -14,6 +14,8 @@ from sqlmodel import SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.permission import (
+    ImmutableStandardModelError,
+    InvalidCatalogActionError,
     PermissionPublishNotReadyError,
     SameLevelGrantRequiresManagePermissionError,
 )
@@ -446,10 +448,12 @@ async def test_action_level_draft_rebuilds_every_standard_and_custom_model(
     by_model: dict[str, set[str]] = {}
     for model_key, action_code in selected:
         by_model.setdefault(str(model_key), set()).add(str(action_code))
-    assert "edit" not in by_model["editor"]
+    assert "edit" in by_model["editor"]
     assert "edit" in by_model["manager"]
     assert "edit" in by_model["owner"]
     assert "edit" in by_model["collaborator"]
+    editor = next(row for row in model_rows if row.model_key == "editor")
+    assert editor.derived_level == 3
     collaborator = next(row for row in model_rows if row.model_key == "collaborator")
     assert collaborator.derived_level == 3
     assert draft["impact"]["action_changes"] == [
@@ -478,9 +482,9 @@ async def test_action_level_draft_rebuilds_every_standard_and_custom_model(
             "model_name": "编辑者",
             "kind": "STANDARD",
             "before_level": 2,
-            "after_level": 2,
+            "after_level": 3,
             "added_action_codes": [],
-            "removed_action_codes": ["edit"],
+            "removed_action_codes": [],
             "affected_assignee_count": 0,
         },
     ]
@@ -537,14 +541,10 @@ async def test_action_level_draft_reports_same_level_policy_conflict(
                 base_release_id=int(current.id),
                 changes=(
                     CatalogChangeRequest(
-                        type=CatalogChangeType.SET_ALLOW_SAME_LEVEL,
+                        type=CatalogChangeType.UPDATE_MODEL,
                         model_key="manager",
+                        action_codes=("download", "edit"),
                         allow_same_level=True,
-                    ),
-                    CatalogChangeRequest(
-                        type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
-                        action_code="manage_permission",
-                        level=4,
                     ),
                 ),
             ),
@@ -600,13 +600,13 @@ async def test_catalog_publish_allows_visibility_only_grant_after_action_level_c
     api = _api(session_factory, fga, marker)
     draft = await api.create_draft(
         request=CatalogDraftRequest(
-            idempotency_key="raise-download",
+            idempotency_key="disable-download",
             base_release_id=int(current.id),
             changes=(
                 CatalogChangeRequest(
-                    type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                    type=CatalogChangeType.SET_ACTION_ACTIVE,
                     action_code="download",
-                    level=2,
+                    active=False,
                 ),
             ),
         ),
@@ -1173,3 +1173,184 @@ async def test_active_model_can_be_deleted_when_reference_audit_is_zero(
             ).scalars()
         )
     assert "collaborator" not in {row.model_key for row in rows}
+
+
+async def test_standard_model_explicit_actions_update_and_publish(
+    session_factory: SessionFactory,
+) -> None:
+    """验证内置模板支持显式勾选操作、同时改同级授予、动态风险等级以及保护限制。"""
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    source = GrantSourceService().canonicalize_source(
+        source_id=1,
+        subject_type="user",
+        subject_id="42",
+        source_type="DIRECT",
+    )
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            async with session.begin():
+                grant = PermissionGrant(
+                    tenant_id=1,
+                    resource_type="folder",
+                    resource_id="90001",
+                    model_key="viewer",
+                    state="ACTIVE",
+                    projection_state="CURRENT",
+                )
+                session.add(grant)
+                await session.flush()
+                session.add(
+                    PermissionGrantAssignee(
+                        tenant_id=1,
+                        grant_id=int(grant.id),
+                        subject_type=source.subject_type,
+                        subject_id=source.subject_id,
+                        userset_relation=source.userset_relation,
+                        include_children=source.include_children,
+                        source_type=source.source_type,
+                        source_ref=source.source_ref,
+                        source_locator=source.source_locator,
+                        source_fingerprint=source.source_fingerprint,
+                        projected_subject=source.projected_subject,
+                        protected=source.protected,
+                        state="ACTIVE",
+                    )
+                )
+
+    api = _api(session_factory, fga, marker)
+
+    # 1) 不允许清空内置模板操作、不允许改名/停用内置模板
+    with pytest.raises(InvalidCatalogActionError):
+        await api.create_draft(
+            request=CatalogDraftRequest(
+                idempotency_key="std-empty",
+                base_release_id=int(current.id),
+                changes=(
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.UPDATE_MODEL,
+                        model_key="viewer",
+                        action_codes=(),
+                    ),
+                ),
+            ),
+            operator_id=7,
+        )
+    with pytest.raises(ImmutableStandardModelError):
+        await api.create_draft(
+            request=CatalogDraftRequest(
+                idempotency_key="std-rename",
+                base_release_id=int(current.id),
+                changes=(
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.UPDATE_MODEL,
+                        model_key="viewer",
+                        name="新名称",
+                    ),
+                ),
+            ),
+            operator_id=7,
+        )
+    with pytest.raises(ImmutableStandardModelError):
+        await api.create_draft(
+            request=CatalogDraftRequest(
+                idempotency_key="std-disable",
+                base_release_id=int(current.id),
+                changes=(
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.UPDATE_MODEL,
+                        model_key="viewer",
+                        active=False,
+                    ),
+                ),
+            ),
+            operator_id=7,
+        )
+
+    # 2) viewer 跨档位勾选 manage_permission 并同时开启同级授予，同一草稿完成预览与发布
+    draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="std-viewer-upgrade",
+            base_release_id=int(current.id),
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.UPDATE_MODEL,
+                    model_key="viewer",
+                    action_codes=("download", "manage_permission"),
+                    allow_same_level=True,
+                ),
+            ),
+        ),
+        operator_id=7,
+    )
+    viewer_change = next(change for change in draft["impact"]["model_changes"] if change["model_key"] == "viewer")
+    assert viewer_change["before_level"] == 1
+    assert viewer_change["after_level"] == 3
+    assert viewer_change["added_action_codes"] == ["manage_permission"]
+    assert viewer_change["affected_assignee_count"] == 1
+
+    published = await api.publish_draft(
+        draft_id=draft["draft_id"],
+        request=CatalogPublishRequest(
+            expected_current_release_id=int(current.id),
+            idempotency_key="pub-std-viewer-upgrade",
+            confirmed=True,
+        ),
+        operator_id=7,
+    )
+    assert published["status"] == "CURRENT"
+
+    refreshed = await api.get_current()
+    viewer = next(model for model in refreshed["models"] if model["key"] == "viewer")
+    assert set(viewer["action_codes"]) == {"download", "manage_permission"}
+    assert viewer["derived_level"] == 3
+    assert viewer["allow_same_level"] is True
+
+    # 3) owner 移除 manage_permission 同时关闭同级授予可正常发布；若未关闭同级授予则报 25015
+    with pytest.raises(SameLevelGrantRequiresManagePermissionError):
+        await api.create_draft(
+            request=CatalogDraftRequest(
+                idempotency_key="std-owner-drop-mp-conflict",
+                base_release_id=int(published["release_id"]),
+                changes=(
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.UPDATE_MODEL,
+                        model_key="owner",
+                        action_codes=("download", "delete"),
+                    ),
+                ),
+            ),
+            operator_id=7,
+        )
+
+    owner_draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="std-owner-drop-mp-ok",
+            base_release_id=int(published["release_id"]),
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.UPDATE_MODEL,
+                    model_key="owner",
+                    action_codes=("download", "delete"),
+                    allow_same_level=False,
+                ),
+            ),
+        ),
+        operator_id=7,
+    )
+    owner_pub = await api.publish_draft(
+        draft_id=owner_draft["draft_id"],
+        request=CatalogPublishRequest(
+            expected_current_release_id=int(published["release_id"]),
+            idempotency_key="pub-std-owner-drop-mp-ok",
+            confirmed=True,
+        ),
+        operator_id=7,
+    )
+    assert owner_pub["status"] == "CURRENT"
+    refreshed2 = await api.get_current()
+    owner = next(model for model in refreshed2["models"] if model["key"] == "owner")
+    assert set(owner["action_codes"]) == {"download", "delete"}
+    assert owner["derived_level"] == 4
+    assert owner["allow_same_level"] is False

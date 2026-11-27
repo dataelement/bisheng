@@ -11,7 +11,12 @@ from loguru import logger
 
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.dsh.domain.schemas.unified_policy import MAX_TOKEN_LIMIT
-from bisheng.dsh.domain.schemas.usage import UsageEvent
+from bisheng.dsh.domain.schemas.usage import (
+    ToolUsageEvent,
+    UsageEvent,
+    parse_stream_usage_event,
+    parse_usage_event_json,
+)
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.usage_work import with_usage_schedule
 
@@ -58,16 +63,22 @@ class AutomaticQuotaRecovery:
         if month:
             months.add(month)
         for value in months:
-            totals, models = await asyncio.gather(
-                redis.hgetall(base + ":month:" + value), redis.hgetall(base + ":models:" + value)
+            totals, models, tools = await asyncio.gather(
+                redis.hgetall(base + ":month:" + value),
+                redis.hgetall(base + ":models:" + value),
+                redis.hgetall(base + ":tools:" + value),
             )
             if not totals or not models or totals.get("epoch") != gate.get("epoch"):
                 return False
-            if not _valid_counter(totals.get("used")) or any(
-                not _valid_counter(value) for key, value in models.items() if key != "_initialized"
+            if (
+                not _valid_counter(totals.get("used"))
+                or any(not _valid_counter(val) for key, val in models.items() if key != "_initialized")
+                or any(not _valid_counter(val) for key, val in tools.items() if key != "_initialized")
             ):
                 return False
-            if sum(int(v) for k, v in models.items() if k != "_initialized") != int(totals.get("used", -1)):
+            model_sum = sum(int(v) for k, v in models.items() if k != "_initialized")
+            tool_sum = sum(int(v) for k, v in tools.items() if k != "_initialized")
+            if model_sum + tool_sum != int(totals.get("used", -1)):
                 return False
             if any(key[6:] not in models for key in gate if key.startswith("model:")):
                 return False
@@ -108,13 +119,28 @@ class AutomaticQuotaRecovery:
             sql_only = set(inventory)
             surviving = set()
 
-            def merge(raw):
-                event = UsageEvent.model_validate_json(raw)
+            def merge(raw, event_kind: str | None = None):
+                event = parse_usage_event_json(raw, event_kind=event_kind)
                 if (event.tenant_id, event.user_id) != (tenant_id, user_id):
                     raise ValueError("Foreign request in Redis recovery partition")
                 surviving.add(event.request_id)
                 previous = inventory.get(event.request_id)
                 if previous is not None:
+                    if isinstance(previous, ToolUsageEvent) or isinstance(event, ToolUsageEvent):
+                        if type(previous) is not type(event):
+                            raise ValueError("Conflicting event kind during recovery")
+                        if event.request_id in sql_only:
+                            previous = self.restore_sql_timestamp(previous, event)
+                            # SQL 工具明细没有保存 Redis 账本代次。
+                            previous = previous.model_copy(update={"quota_epoch": event.quota_epoch})
+                            inventory[event.request_id] = previous
+                            sql_only.remove(event.request_id)
+                        if self.quota._identity(previous) != self.quota._identity(event):
+                            raise ValueError("Conflicting request identity during recovery")
+                        if previous.event_version > event.event_version:
+                            return
+                        inventory[event.request_id] = event
+                        return
                     if event.request_id in sql_only:
                         previous = self.restore_sql_timestamp(previous, event)
                         inventory[event.request_id] = previous
@@ -142,7 +168,7 @@ class AutomaticQuotaRecovery:
                 if not page:
                     break
                 for _, fields in page:
-                    merge(fields["event"])
+                    merge(fields["event"], fields.get("event_kind"))
                 cursor = "(" + page[-1][0]
                 await apply("renew")
             cursor = 0
@@ -157,7 +183,7 @@ class AutomaticQuotaRecovery:
                     break
             # A SQL-only RUNNING row lost its live request. Preserve its identity, never invent usage.
             for request_id, event in list(inventory.items()):
-                if event.status == "RUNNING" and request_id not in surviving:
+                if not isinstance(event, ToolUsageEvent) and event.status == "RUNNING" and request_id not in surviving:
                     inventory[request_id] = event.model_copy(
                         update={
                             "status": "USAGE_UNKNOWN",
@@ -167,10 +193,16 @@ class AutomaticQuotaRecovery:
                     )
             current_month = month or datetime.now(UTC).astimezone(ZoneInfo(self.billing_timezone)).strftime("%Y-%m")
             months = {current_month: {}}
+            tool_months = {}
             for event in inventory.values():
-                totals = months.setdefault(event.usage_month, {})
-                key = str(event.model_id)
-                totals[key] = totals.get(key, 0) + (event.billed_tokens or 0)
+                if isinstance(event, ToolUsageEvent):
+                    t_totals = tool_months.setdefault(event.usage_month, {})
+                    t_key = str(event.tool_id)
+                    t_totals[t_key] = t_totals.get(t_key, 0) + event.billed_tokens
+                else:
+                    totals = months.setdefault(event.usage_month, {})
+                    key = str(event.model_id)
+                    totals[key] = totals.get(key, 0) + (event.billed_tokens or 0)
             # Keep intact counters even if their individual Redis request has already been removed.
             cursor = 0
             while True:
@@ -180,6 +212,17 @@ class AutomaticQuotaRecovery:
                     for model, value in (await redis.hgetall(key)).items():
                         if model != "_initialized":
                             totals[model] = max(totals.get(model, 0), int(value))
+                await apply("renew")
+                if not cursor:
+                    break
+            cursor = 0
+            while True:
+                cursor, keys = await redis.scan(cursor, match=base + ":tools:*", count=100)
+                for key in keys:
+                    t_totals = tool_months.setdefault(key.rsplit(":", 1)[1], {})
+                    for tool_key, value in (await redis.hgetall(key)).items():
+                        if tool_key != "_initialized":
+                            t_totals[tool_key] = max(t_totals.get(tool_key, 0), int(value))
                 await apply("renew")
                 if not cursor:
                     break
@@ -226,16 +269,28 @@ class AutomaticQuotaRecovery:
                 [base + ":running", base + ":unknown_usage", base + ":blocks"],
                 [json.dumps(gate), json.dumps(blocks)],
             )
-            for value, totals in months.items():
+            for value in sorted(set(months) | set(tool_months)):
+                totals = months.get(value, {})
+                t_totals = tool_months.get(value, {})
                 for row in policy["rows"]:
                     totals.setdefault(str(row["model_id"]), 0)
-                total = sum(totals.values())
-                if total > 9223372036854775807 or any(used < 0 for used in totals.values()):
+                total = sum(totals.values()) + sum(t_totals.values())
+                if (
+                    total > 9223372036854775807
+                    or any(used < 0 for used in totals.values())
+                    or any(used < 0 for used in t_totals.values())
+                ):
                     raise ValueError("Invalid recovered token counter")
                 await apply(
                     "month",
-                    [base + ":month:" + value, base + ":models:" + value],
-                    [value, str(epoch), str(total), json.dumps({k: str(v) for k, v in totals.items()})],
+                    [base + ":month:" + value, base + ":models:" + value, base + ":tools:" + value],
+                    [
+                        value,
+                        str(epoch),
+                        str(total),
+                        json.dumps({k: str(v) for k, v in totals.items()}),
+                        json.dumps({k: str(v) for k, v in t_totals.items()}),
+                    ],
                 )
             items = list(inventory.values())
             for offset in range(0, len(items), 100):
@@ -254,10 +309,18 @@ class AutomaticQuotaRecovery:
                                 {
                                     "id": event.request_id,
                                     "event": event.model_dump_json(),
+                                    "event_kind": "tool" if isinstance(event, ToolUsageEvent) else "model",
+                                    **(
+                                        {"billed_tokens": str(event.billed_tokens)}
+                                        if isinstance(event, ToolUsageEvent)
+                                        else {}
+                                    ),
                                     "version": str(event.event_version),
                                     "status": event.status,
                                     "month": event.usage_month,
-                                    "model": str(event.model_id),
+                                    "model": str(
+                                        event.tool_id if isinstance(event, ToolUsageEvent) else event.model_id
+                                    ),
                                     "epoch": str(event.quota_epoch),
                                     "identity": self.quota._identity(event),
                                     "started": str(int(event.started_at.timestamp() * 1000)),
@@ -273,7 +336,7 @@ class AutomaticQuotaRecovery:
                 if not page:
                     break
                 for _, fields in page:
-                    event = UsageEvent.model_validate_json(fields["event"])
+                    event = parse_stream_usage_event(fields)
                     counts[event.request_id] = counts.get(event.request_id, 0) + 1
                 cursor = "(" + page[-1][0]
                 await apply("renew")

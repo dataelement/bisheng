@@ -13,7 +13,8 @@ import { useLoadingIndicatorRenderer } from '../../providers/LoadingIndicatorPro
  * plus `iconOnly` for icon buttons and `shape` (square/circle, circle being
  * icon-only). All colors go through semantic
  * tokens (`btn-*` in tailwind.config / style.css, brand via `blue-*`); hover
- * states are disabled on touch (§5.5) and disabled/loading are uniform (§5.2).
+ * states are disabled on touch (§5.5). Disabled colors are neutral, and
+ * icon-only danger text buttons keep a transparent background (§6.2).
  *
  * The legacy shadcn API (`variant="outline" | "ghost" | ...`, `size="sm" |
  * "icon" | ...`) still works through an automatic mapping (§6.3) so existing
@@ -39,11 +40,11 @@ type LegacyVariant =
 type LegacySize = 'default' | 'sm' | 'lg' | 'icon';
 
 const buttonStyles = cva(
-  // Disabled is uniform across every combo (§5.2) and must beat both the
-  // combo colors and legacy className overrides, hence the `!` importants.
+  // The shared disabled foreground and border override combo colors and
+  // legacy className values, so both use !important.
   // `relative` anchors the .btn-touch-hit ::after hot zone (style.css).
   // Weight 400 across all sizes/types (§3.1) — heavier weights are not a knob.
-  'relative inline-flex items-center justify-center whitespace-nowrap font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:!border-btn-disabled-border disabled:!bg-btn-disabled-bg disabled:!text-btn-disabled-text [&_svg]:shrink-0',
+  'relative inline-flex items-center justify-center whitespace-nowrap font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:!border-btn-disabled-border disabled:!text-btn-disabled-text [&_svg]:shrink-0',
   {
     variants: {
       // Color axis only carries what is combo-independent (focus ring, §5.2).
@@ -291,7 +292,11 @@ function resolveVariants({ color: rawColor, variant, size, shape, iconOnly }: Bu
 /** Class-only entry point (for <a>/Slot call sites); accepts both APIs. */
 export function buttonVariants(props: ButtonStyleProps & { className?: string } = {}) {
   const { className, ...styleProps } = props;
-  return buttonStyles({ ...resolveVariants(styleProps), className });
+  const variants = resolveVariants(styleProps);
+  const disabledBackground = variants.iconOnly && variants.color === 'danger' && variants.variant === 'text'
+    ? 'disabled:!bg-transparent'
+    : 'disabled:!bg-btn-disabled-bg';
+  return buttonStyles({ ...variants, className: [disabledBackground, className] });
 }
 
 export interface ButtonProps

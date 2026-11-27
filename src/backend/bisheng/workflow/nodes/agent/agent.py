@@ -294,6 +294,7 @@ class AgentNode(BaseNode):
             app_name=self.workflow_name,
             app_type=ApplicationTypeEnum.WORKFLOW,
             user_id=self.user_id,
+            admin_selected=True,
         )
 
         # Whether to output the results to the user

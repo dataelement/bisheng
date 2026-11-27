@@ -604,7 +604,7 @@
   },
   "src/controllers/API/finetune.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 29
+      "count": 28
     }
   },
   "src/controllers/API/flow.ts": {
@@ -1009,11 +1009,6 @@
   },
   "src/pages/BuildPage/bench/ConfigInheritanceBanner.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx": {
-    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -1520,7 +1515,7 @@
   },
   "src/pages/BuildPage/tools/ToolItem.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -1566,9 +1561,6 @@
     },
     "no-restricted-syntax": {
       "count": 7
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/pages/ChatAppPage/components/ResouceModal.tsx": {
@@ -1957,9 +1949,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "prefer-const": {
       "count": 1
     },
@@ -2125,11 +2114,6 @@
       "count": 1
     }
   },
-  "src/pages/ModelPage/components/CreateTaskList.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/pages/ModelPage/components/FinetuneHead.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2141,11 +2125,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
-    }
-  },
-  "src/pages/ModelPage/components/RTConfig.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
     }
   },
   "src/pages/ModelPage/components/UploadModal.tsx": {

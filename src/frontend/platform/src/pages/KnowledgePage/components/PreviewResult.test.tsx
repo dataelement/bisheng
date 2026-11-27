@@ -101,7 +101,7 @@ it('renders the specialized preview error from the original ApiError without ope
         { id: 'document', fileName: 'doc.pdf', fileType: 'file', suffix: 'pdf', filePath: '/doc.pdf' },
     ] }} previewCount={1} applyEachCell={false} cellGeneralConfig={{}}
         handlePreviewResult={onPreviewResult} onFileTypeChange={vi.fn()} /></MemoryRouter>)
-    await screen.findByText('mediaAsrRequestFailed')
+    expect(await screen.findByRole('alert')).toHaveTextContent('mediaAsrRequestFailed')
     expect(onPreviewResult).toHaveBeenCalledWith(false)
     expect(notice).not.toHaveBeenCalled()
 })

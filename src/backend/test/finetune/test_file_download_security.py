@@ -9,6 +9,13 @@ from bisheng.common.errcode.finetune import TrainFileNotExistError
 from bisheng.finetune.api import finetune as endpoint
 
 
+@pytest.fixture(autouse=True)
+def no_saved_catalog(monkeypatch):
+    from bisheng.finetune.domain.repositories.dataset_catalog import DatasetCatalogRepository
+
+    monkeypatch.setattr(DatasetCatalogRepository, "find_url", AsyncMock(return_value=None))
+
+
 async def test_arbitrary_key_denied_before_sdk(monkeypatch):
     storage = SimpleNamespace(bucket="bisheng", tmp_bucket="tmp-dir", get_share_link=AsyncMock(return_value="signed"))
     monkeypatch.setattr(endpoint, "get_minio_storage_sync", lambda: storage, raising=False)

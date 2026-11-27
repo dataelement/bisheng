@@ -74,3 +74,5 @@ class DshModelCall(SQLModelSerializable, table=True):
     error_code: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
     latency_ms: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     reconciliation_operation_id: str | None = Field(default=None, sa_column=Column(String(36), nullable=True))
+    source_type: str | None = Field(default=None, sa_column=Column(String(32), nullable=True))
+    source_id: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))

@@ -231,9 +231,7 @@ strict 时 `_resolve_visible_tenant_ids()` 返回 None，回落严格等值（`t
 
 ### 两个必须知道的限制
 
-**① 只拦 SELECT。** `:163-164` 对非 SELECT 直接 return——**批量 `update()` / `delete()` 与 `text()` 原生 SQL 一律无注入**，必须手写 tenant 条件。已导致两次跨租户泄漏（LLM 模块、F035）。
-
-需要手挂条件时用 `build_tenant_filter_clause(tenant_col)`（`:235-282`），逻辑与监听器一致。
+**① 自动注入只覆盖监听器能识别的 SELECT。** 联合查询等场景、批量写入和原生 SQL 的开发约束统一见 [C3](../constitution.md#c3-multi-tenant-data-isolation)。批量写入的隔离实现见上节。
 
 当前全仓原生 SQL 触及租户表的情况：3 处手写了条件（`tenant_mount_service.py:336,450-454`、`knowledge_rag.py:136`），**3 处没带**——`message.py:284`（靠 flow_id 间接约束）、`mark_record.py:94`（靠 task_id）、`role_service.py:879`（**只按 id 取、无租户条件**，三者中风险最高）。另 `quota_service.py:65-105` 的 `_RESOURCE_COUNT_TEMPLATES` 是一整套裸 SQL，手工把 `{col}` 填成 tenant_id，功能正确但属技术债（作者自陈于 `:698-701`）。
 
@@ -525,7 +523,7 @@ SUPPORTED_SHAREABLE_TYPES: set[str] = {'llm_server'}
 
 ## 18. 开发者注意事项
 
-- **原生 SQL / 批量 UPDATE·DELETE 无自动过滤**，手写条件或用 `build_tenant_filter_clause()`。见 §6①
+- **查询、批量写入和原生 SQL**按 [C3](../constitution.md#c3-multi-tenant-data-isolation) 限定租户范围。
 - **新增带 tenant_id 的模型时**，务必把模块加进 `_TENANT_AWARE_MODEL_MODULES`（`tenant_filter.py:41-104`），否则过滤是否生效取决于 import 时序。见 §6②
 - **配额/归属统计必须包 `strict_tenant_filter()`**。见 §5
 - **`bypass_tenant_filter()` 仅用于**：系统初始化、超管跨租户管理查询、登录注册（尚无上下文）、迁移脚本

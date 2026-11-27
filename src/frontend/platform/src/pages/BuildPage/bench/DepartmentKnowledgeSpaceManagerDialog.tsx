@@ -1,4 +1,5 @@
 import { Button, notification } from '@bisheng/ui';
+import { SPACE_NAME_LIMIT, truncateSpaceName } from '@bisheng/knowledge';
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department";
 
 import {
@@ -30,6 +31,9 @@ interface Props {
 }
 
 type Binding = { isHidden: boolean; name: string };
+
+// Reserve the same five characters as the backend's default space-name suffix.
+const DEPARTMENT_NAME_PREFIX_LIMIT = SPACE_NAME_LIMIT - 5;
 
 export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onChanged }: Props) {
     const { t } = useTranslation();
@@ -212,19 +216,22 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
                             key={deptId}
                             className="flex items-center justify-between rounded-md border border-[#E5E6EB] bg-white px-3 py-2"
                         >
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
                                     <span className={`size-1.5 shrink-0 rounded-full ${tone}`} />
-                                    <span className="truncate text-sm text-[#1D2129]">{nameOf(deptId)}</span>
+                                    <span className="truncate text-sm text-[#1D2129]" title={nameOf(deptId)}>
+                                        {nameOf(deptId)}
+                                    </span>
                                 </div>
                                 {withDefaultName && (
-                                    <div className="mt-1 pl-3.5 text-xs text-[#86909C]">
-                                        {t("bench.departmentKnowledgeSpaceDefaultName")}：
-                                        {`${nameOf(deptId)}的知识空间`}
+                                    <div className="mt-1 truncate pl-3.5 text-xs text-[#86909C]">
+                                        {t("bench.departmentKnowledgeSpaceDefaultName", {
+                                            departmentName: truncateSpaceName(nameOf(deptId), DEPARTMENT_NAME_PREFIX_LIMIT),
+                                        })}
                                     </div>
                                 )}
                             </div>
-                            <Button type="button" variant="text" onClick={() => toggleDept(deptId)} color="default">
+                            <Button type="button" className="shrink-0" variant="text" onClick={() => toggleDept(deptId)} color="default">
                                 <Outlined.Plus className="size-4 rotate-45" />
                             </Button>
                         </div>
@@ -236,12 +243,12 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[920px]">
+            <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[920px]">
                 <DialogHeader>
                     <DialogTitle>{t("bench.departmentKnowledgeSpaceManager")}</DialogTitle>
                     <DialogDescription>{t("bench.departmentKnowledgeSpaceManagerDesc2")}</DialogDescription>
                 </DialogHeader>
-                <div className="grid grid-cols-[1.1fr_0.9fr] gap-5 py-2">
+                <div className="grid min-h-0 grid-cols-1 gap-5 overflow-y-auto py-2 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                     <div className="flex h-[460px] flex-col rounded-lg border border-[#ECECEC] bg-white p-4">
                         <div className="mb-3 flex shrink-0 justify-end">
                             <Button variant="outlined" onClick={toggleSelectAll} color="default">

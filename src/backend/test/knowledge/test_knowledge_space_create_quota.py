@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.common.errcode.knowledge import KnowledgeNoEmbeddingError
 from bisheng.common.errcode.knowledge_space import SpaceLimitError
-from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 _SVC = "bisheng.knowledge.domain.services.knowledge_space_service"
@@ -175,9 +175,9 @@ class TestCreationGate:
         with (
             patch.object(service, "_existing_creation", new=AsyncMock(return_value=None)),
             patch.object(service, "_assert_space_creation_quota", new_callable=AsyncMock) as gate,
-            patch(f"{_SVC}.LLMService.get_workbench_llm", new=AsyncMock(return_value=None)),
+            patch(f"{_SVC}.LLMService.aget_knowledge_llm", new=AsyncMock(return_value=None)),
         ):
-            with pytest.raises(WorkbenchEmbeddingError):
+            with pytest.raises(KnowledgeNoEmbeddingError):
                 await service.create_knowledge_space(name="Space", skip_user_limit=True)
         gate.assert_not_awaited()
 
@@ -195,9 +195,7 @@ class TestCreationGate:
 
         # Match decorator lines only — the comment above the handler explains
         # why it is absent and mentions the name.
-        decorators = [
-            ln.strip() for ln in inspect.getsource(ep).splitlines() if ln.strip().startswith("@")
-        ]
+        decorators = [ln.strip() for ln in inspect.getsource(ep).splitlines() if ln.strip().startswith("@")]
         assert not any(d.startswith("@require_quota") for d in decorators), decorators
 
     async def test_gate_runs_before_the_embedding_lookup(self):
@@ -205,10 +203,8 @@ class TestCreationGate:
         service = _service()
         with (
             patch.object(service, "_existing_creation", new=AsyncMock(return_value=None)),
-            patch.object(
-                service, "_assert_space_creation_quota", new=AsyncMock(side_effect=SpaceLimitError())
-            ),
-            patch(f"{_SVC}.LLMService.get_workbench_llm", new_callable=AsyncMock) as llm,
+            patch.object(service, "_assert_space_creation_quota", new=AsyncMock(side_effect=SpaceLimitError())),
+            patch(f"{_SVC}.LLMService.aget_knowledge_llm", new_callable=AsyncMock) as llm,
         ):
             with pytest.raises(SpaceLimitError):
                 await service.create_knowledge_space(name="Space")

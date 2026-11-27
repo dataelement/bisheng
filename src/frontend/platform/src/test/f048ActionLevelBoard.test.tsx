@@ -1,6 +1,7 @@
 import { ActionLevelBoard } from "@/pages/SystemPage/components/permission/ActionLevelBoard"
-import { fireEvent, render, screen, selectOption, waitFor, within } from "@/test/test-utils"
+import { fireEvent, render, screen, waitFor, within } from "@/test/test-utils"
 import userEvent from "@testing-library/user-event"
+import type { ComponentProps } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const actions = [
@@ -53,6 +54,26 @@ const draft = {
   },
 }
 
+function OpenActionLevelBoard(props: Omit<ComponentProps<typeof ActionLevelBoard>, "open" | "onOpenChange">) {
+  return <ActionLevelBoard open onOpenChange={vi.fn()} {...props} />
+}
+
+function moveAction(actionCode: string, targetZone: string) {
+  const dragData = new Map<string, string>()
+  const dataTransfer = {
+    effectAllowed: "none",
+    dropEffect: "none",
+    setData: (format: string, value: string) => dragData.set(format, value),
+    getData: (format: string) => dragData.get(format) ?? "",
+  }
+  const card = screen.getByTestId(`permission-action-${actionCode}`)
+  const target = screen.getByTestId(`action-level-zone-${targetZone}`)
+
+  fireEvent.dragStart(card, { dataTransfer })
+  fireEvent.dragOver(target, { dataTransfer })
+  fireEvent.drop(target, { dataTransfer })
+}
+
 describe("ActionLevelBoard", () => {
   const onCreateDraft = vi.fn()
   const onReviewImpact = vi.fn()
@@ -62,59 +83,58 @@ describe("ActionLevelBoard", () => {
     onCreateDraft.mockResolvedValue(draft)
   })
 
-  it("renders unassigned plus levels 1-4 and keeps every action unique", () => {
+  it("renders four levels and shows legacy unassigned actions with a disabled switch", () => {
     render(
-      <ActionLevelBoard
+      <OpenActionLevelBoard
         actions={actions}
         onCreateDraft={onCreateDraft}
         onReviewImpact={onReviewImpact}
       />,
     )
 
-    for (const zone of ["unassigned", "1", "2", "3", "4"]) {
+    for (const zone of ["1", "2", "3", "4"]) {
       expect(
         screen.getByTestId(`action-level-zone-${zone}`),
       ).toBeInTheDocument()
     }
+    expect(screen.queryByTestId("action-level-zone-unassigned")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "actionLevel.clearLevel" })).not.toBeInTheDocument()
     expect(screen.getAllByTestId("permission-action-edit")).toHaveLength(1)
-    expect(screen.getByTestId("permission-action-edit")).toHaveAttribute(
-      "data-model-eligible",
-      "false",
-    )
+    const card = screen.getByTestId("permission-action-edit")
+    expect(screen.getByTestId("action-level-zone-4")).toContainElement(card)
+    expect(card).toHaveTextContent("actionLevel.unassigned")
+    expect(card).toHaveAttribute("data-model-eligible", "false")
+    expect(card).toHaveAttribute("draggable", "true")
+    const toggle = within(card).getByRole("switch", { name: "actionLevel.active · actionName.edit" })
+    expect(toggle).not.toBeChecked()
+    expect(toggle).toBeDisabled()
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^actionLevel\.change/)).not.toBeInTheDocument()
   })
 
-  it("keeps edits local until the whole batch is published", async () => {
+  it("prepares one draft for confirmation without displaying inline details", async () => {
     render(
-      <ActionLevelBoard
+      <OpenActionLevelBoard
         actions={actions}
         onCreateDraft={onCreateDraft}
         onReviewImpact={onReviewImpact}
       />,
     )
 
-    await selectOption("actionLevel.change.edit", 3)
+    moveAction("edit", "3")
     expect(
       screen.getByTestId("action-level-zone-3"),
     ).toContainElement(screen.getByTestId("permission-action-edit"))
+    const toggle = screen.getByRole("switch", { name: "actionLevel.active · actionName.edit" })
+    expect(toggle).toBeEnabled()
+    expect(toggle).not.toBeChecked()
 
-    const dataTransfer = {
-      setData: vi.fn(),
-      getData: vi.fn(() => "visible"),
-      effectAllowed: "move",
-    }
-    fireEvent.dragStart(screen.getByTestId("permission-action-visible"), {
-      dataTransfer,
-    })
-    fireEvent.drop(screen.getByTestId("action-level-zone-2"), {
-      dataTransfer,
-    })
+    moveAction("visible", "2")
 
     // Editing must not reach the server: one draft per edit meant publishing
     // applied only the last one and silently dropped the rest.
     expect(onCreateDraft).not.toHaveBeenCalled()
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "actionLevel.pendingChanges",
-    )
+    expect(screen.queryByRole("status")).not.toBeInTheDocument()
 
     fireEvent.click(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
@@ -125,65 +145,114 @@ describe("ActionLevelBoard", () => {
     expect(onCreateDraft).toHaveBeenCalledWith([
       { type: "ASSIGN_ACTION_LEVEL", action_code: "visible", level: 2 },
       { type: "ASSIGN_ACTION_LEVEL", action_code: "edit", level: 3 },
+      { type: "SET_ACTION_ACTIVE", action_code: "edit", active: false },
     ])
     expect(onReviewImpact).toHaveBeenCalledWith(draft)
   })
 
-  it("drops a change once the action is moved back where it started", async () => {
+  it("drops a change once the action is moved back where it started", () => {
     render(
-      <ActionLevelBoard
+      <OpenActionLevelBoard
         actions={actions}
         onCreateDraft={onCreateDraft}
         onReviewImpact={onReviewImpact}
       />,
     )
 
-    await selectOption("actionLevel.change.visible", 3)
-    expect(screen.getByRole("status")).toBeInTheDocument()
+    moveAction("visible", "3")
+    const confirm = screen.getByRole("button", { name: "actionLevel.publishChanges" })
+    expect(confirm).toBeEnabled()
 
-    // Re-query: moving zones remounts the card, so the old node is detached.
-    await selectOption("actionLevel.change.visible", 1)
-    expect(screen.queryByRole("status")).not.toBeInTheDocument()
-    expect(
-      screen.getByRole("button", { name: "actionLevel.publishChanges" }),
-    ).toBeDisabled()
+    moveAction("visible", "1")
+    expect(confirm).toBeDisabled()
   })
 
-  it("discards every pending change back to the published release", async () => {
+  it("discards every pending change back to the published release", () => {
     render(
-      <ActionLevelBoard
+      <OpenActionLevelBoard
         actions={actions}
         onCreateDraft={onCreateDraft}
         onReviewImpact={onReviewImpact}
       />,
     )
 
-    await selectOption("actionLevel.change.edit", 3)
-    fireEvent.click(screen.getByLabelText("actionLevel.active.delete"))
-    expect(screen.getByRole("status")).toBeInTheDocument()
+    moveAction("edit", "3")
+    fireEvent.click(screen.getByLabelText("actionLevel.active · actionName.delete"))
+    const restore = screen.getByRole("button", { name: "actionLevel.discardChanges" })
+    expect(restore).toBeEnabled()
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "actionLevel.discardChanges" }),
+    fireEvent.click(restore)
+
+    expect(restore).toBeDisabled()
+    expect(onCreateDraft).not.toHaveBeenCalled()
+    const card = screen.getByTestId("permission-action-edit")
+    expect(screen.getByTestId("action-level-zone-4")).toContainElement(card)
+    expect(card).toHaveTextContent("actionLevel.unassigned")
+    const toggle = within(card).getByRole("switch", { name: "actionLevel.active · actionName.edit" })
+    expect(toggle).toBeDisabled()
+    expect(toggle).not.toBeChecked()
+    expect(screen.getByRole("switch", { name: "actionLevel.active · actionName.delete" })).not.toBeChecked()
+  })
+
+  it("changes an assigned action's active state without moving it to another level", async () => {
+    render(
+      <OpenActionLevelBoard
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
     )
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument()
+    const toggle = screen.getByRole("switch", { name: "actionLevel.active · actionName.visible" })
+    fireEvent.click(toggle)
+    expect(toggle).not.toBeChecked()
+    expect(screen.getByTestId("action-level-zone-1")).toContainElement(
+      screen.getByTestId("permission-action-visible"),
+    )
     expect(onCreateDraft).not.toHaveBeenCalled()
-    expect(
-      screen.getByTestId("action-level-zone-unassigned"),
-    ).toContainElement(screen.getByTestId("permission-action-edit"))
+
+    fireEvent.click(screen.getByRole("button", { name: "actionLevel.publishChanges" }))
+    await waitFor(() => expect(onCreateDraft).toHaveBeenCalledWith([
+      { type: "SET_ACTION_ACTIVE", action_code: "visible", active: false },
+    ]))
+  })
+
+  it("assigns a legacy action dropped into its display column and supports explicit activation", async () => {
+    render(
+      <OpenActionLevelBoard
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    moveAction("edit", "4")
+
+    const card = screen.getByTestId("permission-action-edit")
+    expect(card).not.toHaveTextContent("actionLevel.unassigned")
+    const toggle = within(card).getByRole("switch", { name: "actionLevel.active · actionName.edit" })
+    expect(toggle).toBeEnabled()
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+    expect(toggle).toBeChecked()
+
+    fireEvent.click(screen.getByRole("button", { name: "actionLevel.publishChanges" }))
+    await waitFor(() => expect(onCreateDraft).toHaveBeenCalledWith([
+      { type: "ASSIGN_ACTION_LEVEL", action_code: "edit", level: 4 },
+    ]))
   })
 
   it("surfaces a failure to prepare the draft", async () => {
     onCreateDraft.mockRejectedValueOnce(new Error("boom"))
     render(
-      <ActionLevelBoard
+      <OpenActionLevelBoard
         actions={actions}
         onCreateDraft={onCreateDraft}
         onReviewImpact={onReviewImpact}
       />,
     )
 
-    await selectOption("actionLevel.change.edit", 3)
+    moveAction("edit", "3")
     fireEvent.click(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
     )
@@ -199,14 +268,14 @@ describe("ActionLevelBoard", () => {
       "Turn off same-level grants for Manager before moving permission management to a higher level.",
     )
     render(
-      <ActionLevelBoard
+      <OpenActionLevelBoard
         actions={actions}
         onCreateDraft={onCreateDraft}
         onReviewImpact={onReviewImpact}
       />,
     )
 
-    await selectOption("actionLevel.change.edit", 3)
+    moveAction("edit", "3")
     fireEvent.click(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
     )
@@ -218,11 +287,9 @@ describe("ActionLevelBoard", () => {
   })
 
   it("shows resource scope on the card and the inactive marker on the card", async () => {
-    // Scope used to be hover-only, which meant an admin who never hovered
-    // assumed every operation applied to every resource. It now sits on the
-    // card, in the row the level dropdown already occupies.
+    // Show the resource scope on the card as well as in the tooltip.
     render(
-      <ActionLevelBoard
+      <OpenActionLevelBoard
         actions={actions}
         onCreateDraft={onCreateDraft}
         onReviewImpact={onReviewImpact}
@@ -253,7 +320,7 @@ describe("action labels", () => {
     // "manage_permission" / "knowledge_file" at users. One column cannot serve
     // three languages, so the label is resolved from the code.
     render(
-      <ActionLevelBoard
+      <OpenActionLevelBoard
         actions={[
           {
             code: "manage_permission",
@@ -272,14 +339,12 @@ describe("action labels", () => {
     const card = screen.getByTestId("permission-action-manage_permission")
     expect(card).toHaveTextContent("actionName.manage_permission")
 
-    // The raw code and the resource scope moved into the tooltip: both are
-    // reference detail, not something to scan a column for.
     await userEvent.hover(
       within(card).getByText("actionName.manage_permission"),
     )
     const tip = await screen.findByRole("tooltip")
     expect(tip).toHaveTextContent("resourceTypeName.knowledge_file")
     expect(tip).toHaveTextContent("resourceTypeName.folder")
-    expect(tip).toHaveTextContent("manage_permission")
+    expect(tip).toHaveTextContent("actionLevel.managePermissionHint")
   })
 })

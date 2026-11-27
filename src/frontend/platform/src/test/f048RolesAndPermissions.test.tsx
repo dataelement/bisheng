@@ -5,7 +5,7 @@ import {
   publishPermissionCatalogDraftApi,
 } from "@/controllers/API/permission"
 import { RolesAndPermissions } from "@/pages/SystemPage/components/RolesAndPermissions"
-import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
+import { fireEvent, render, screen, waitFor, within } from "@/test/test-utils"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { ReactNode } from "react"
@@ -13,8 +13,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const childCalls = vi.hoisted(() => ({
   actionBoard: vi.fn(),
-  modelEditor: vi.fn(),
   impactDialog: vi.fn(),
+  confirm: vi.fn(),
   message: vi.fn(),
 }))
 
@@ -26,6 +26,7 @@ vi.mock(
   "@/pages/SystemPage/components/permission/ActionLevelBoard",
   () => ({
     ActionLevelBoard: (props: {
+      open: boolean
       onCreateDraft: (changes: {
         type: "ASSIGN_ACTION_LEVEL"
         action_code: string
@@ -34,6 +35,7 @@ vi.mock(
       onReviewImpact: (draft: unknown) => void
     }) => {
       childCalls.actionBoard(props)
+      if (!props.open) return null
       return (
         <button
           type="button"
@@ -55,31 +57,9 @@ vi.mock(
   }),
 )
 
-vi.mock("@/pages/SystemPage/components/permission/ModelEditor", () => ({
-  ModelEditor: (props: {
-    model: { key: string }
-    createMode?: boolean
-    onDeleteModel?: (modelKey: string) => Promise<{ draft_id: number }>
-    onReviewImpact: (draft: { draft_id: number }) => void
-  }) => {
-    childCalls.modelEditor(props)
-    return (
-      <div data-testid="model-editor">
-        {props.createMode ? "create" : props.model.key}
-        <button
-          type="button"
-          onClick={() =>
-            void props
-              .onDeleteModel?.(props.model.key)
-              .then((draft) => props.onReviewImpact(draft))
-              .catch(() => undefined)
-          }
-        >
-          model-editor.delete
-        </button>
-      </div>
-    )
-  },
+vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
+  bsConfirm: (params: { onOk?: (close: () => void) => unknown }) =>
+    childCalls.confirm(params),
 }))
 
 vi.mock("@/pages/SystemPage/components/permission/ImpactDialog", () => ({
@@ -114,13 +94,12 @@ vi.mock("@/pages/SystemPage/components/permission/ImpactDialog", () => ({
   },
 }))
 
-vi.mock('@bisheng/ui', async () => {
-const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
-const previous = await (() => ({
-  message: (...args: unknown[]) => childCalls.message(...args),
-}))();
-const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
-return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+vi.mock("@bisheng/ui", async () => {
+  const actual = await vi.importActual<typeof import("@bisheng/ui")>("@bisheng/ui")
+  return {
+    ...actual,
+    toast: { ...actual.toast, show: childCalls.message },
+  }
 })
 
 vi.mock("@/controllers/API/permission", () => ({
@@ -158,6 +137,17 @@ const catalog = {
       action_codes: ["edit"],
       version: 3,
     },
+    {
+      key: "reviewer",
+      name: "Reviewer",
+      kind: "CUSTOM" as const,
+      config_scope: "PLATFORM" as const,
+      derived_level: 2 as const,
+      active: true,
+      allow_same_level: false,
+      action_codes: ["edit"],
+      version: 1,
+    },
   ],
   published_at: "2026-07-29T12:00:00Z",
 }
@@ -188,9 +178,22 @@ function renderWithUser(
   )
 }
 
+function openOperationPermissions() {
+  const tab = screen.getByRole("tab", { name: "catalog.permissionConfiguration" })
+  fireEvent.mouseDown(tab)
+  fireEvent.click(tab)
+}
+
+async function getReviewerRow() {
+  return screen.findByTestId("permission-model-reviewer")
+}
+
 describe("F048 RolesAndPermissions", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    childCalls.confirm.mockImplementation(
+      ({ onOk }: { onOk?: (close: () => void) => unknown }) => onOk?.(() => {}),
+    )
     vi.mocked(getPermissionCatalogApi).mockResolvedValue(catalog)
     vi.mocked(createPermissionCatalogDraftApi).mockResolvedValue(draft)
     vi.mocked(publishPermissionCatalogDraftApi).mockResolvedValue({
@@ -205,27 +208,19 @@ describe("F048 RolesAndPermissions", () => {
     renderWithUser({ role: "admin", is_global_super: true })
 
     expect(screen.getByTestId("menu-roles")).toBeInTheDocument()
-    expect(
-      await screen.findByRole("tab", { name: "catalog.actions" }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole("tab", { name: "catalog.models" }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: "catalog.roleConfiguration", selected: true })).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: "catalog.permissionConfiguration" })).toBeInTheDocument()
+    expect(screen.getAllByRole("tab")).toHaveLength(2)
     expect(screen.queryByText("system.relationModelSelectTemplate")).toBeNull()
     expect(screen.queryByText("permission_id")).toBeNull()
-    expect(getPermissionCatalogApi).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(getPermissionCatalogApi).toHaveBeenCalledTimes(1))
   })
 
   it("keeps resource Catalog configuration hidden from delegated administrators", () => {
     renderWithUser({ role: "user", is_child_admin: true })
 
     expect(screen.getByTestId("menu-roles")).toBeInTheDocument()
-    expect(
-      screen.queryByRole("tab", { name: "catalog.actions" }),
-    ).toBeNull()
-    expect(
-      screen.queryByRole("tab", { name: "catalog.models" }),
-    ).toBeNull()
+    expect(screen.queryByRole("tab", { name: "catalog.permissionConfiguration" })).toBeNull()
     expect(getPermissionCatalogApi).not.toHaveBeenCalled()
   })
 
@@ -250,10 +245,9 @@ describe("F048 RolesAndPermissions", () => {
 
   it("binds draft impact and publish to the current server release", async () => {
     renderWithUser({ role: "admin", is_global_super: true })
-    await waitFor(() => expect(getPermissionCatalogApi).toHaveBeenCalled())
-    const actionsTab = screen.getByRole("tab", { name: "catalog.actions" })
-    fireEvent.mouseDown(actionsTab)
-    fireEvent.click(actionsTab)
+    openOperationPermissions()
+    expect(screen.queryByRole("button", { name: "action-board.create-draft" })).toBeNull()
+    fireEvent.click(await screen.findByRole("button", { name: "actionLevel.configure" }))
     fireEvent.click(
       screen.getByRole("button", { name: "action-board.create-draft" }),
     )
@@ -291,34 +285,21 @@ describe("F048 RolesAndPermissions", () => {
     })
   })
 
-  it("passes the selected server model to the model editor", async () => {
+  it("edits the selected server model inline and appends a new draft row", async () => {
     renderWithUser({ role: "admin", is_global_super: true })
-    await waitFor(() => expect(getPermissionCatalogApi).toHaveBeenCalled())
-    const modelsTab = screen.getByRole("tab", { name: "catalog.models" })
-    fireEvent.mouseDown(modelsTab)
-    fireEvent.click(modelsTab)
-
-    expect(await screen.findByTestId("model-editor")).toHaveTextContent(
-      "editor",
-    )
-    expect(childCalls.modelEditor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: expect.objectContaining({ key: "editor" }),
-        actions: catalog.actions,
-      }),
-    )
+    openOperationPermissions()
+    const reviewerRow = await getReviewerRow()
+    expect(within(reviewerRow).queryByRole("textbox")).toBeNull()
+    fireEvent.click(within(reviewerRow).getByRole("button", { name: "model.editNamed" }))
+    expect(within(await getReviewerRow()).getByRole("textbox", { name: "model.name" })).toHaveValue("Reviewer")
+    expect(within(await getReviewerRow()).getByRole("checkbox", { name: "model.action.edit" })).toBeChecked()
+    fireEvent.click(within(await getReviewerRow()).getByRole("button", { name: "impact.cancel" }))
 
     fireEvent.click(screen.getByRole("button", { name: "model.create" }))
-    expect(screen.getByTestId("model-editor")).toHaveTextContent("create")
-    expect(childCalls.modelEditor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        createMode: true,
-        model: expect.objectContaining({
-          key: "__new_custom_model__",
-          kind: "CUSTOM",
-        }),
-      }),
-    )
+    const newRow = await screen.findByTestId("permission-model-__new_custom_model__")
+    expect(within(newRow).getByRole("textbox", { name: "model.name" })).toHaveValue("")
+    expect(newRow.previousElementSibling).toBe(await getReviewerRow())
+    expect(screen.getByRole("button", { name: "model.create" })).toBeDisabled()
   })
 
   it("names the blocker when a model cannot be deleted", async () => {
@@ -334,12 +315,8 @@ describe("F048 RolesAndPermissions", () => {
     })
 
     renderWithUser({ role: "admin", is_global_super: true })
-    await waitFor(() => expect(getPermissionCatalogApi).toHaveBeenCalled())
-    const modelsTab = screen.getByRole("tab", { name: "catalog.models" })
-    fireEvent.mouseDown(modelsTab)
-    fireEvent.click(modelsTab)
-
-    fireEvent.click(await screen.findByText("model-editor.delete"))
+    openOperationPermissions()
+    fireEvent.click(within(await getReviewerRow()).getByRole("button", { name: "model.deleteNamed" }))
 
     await waitFor(() => {
       expect(childCalls.message).toHaveBeenCalledWith({
@@ -355,12 +332,8 @@ describe("F048 RolesAndPermissions", () => {
     )
 
     renderWithUser({ role: "admin", is_global_super: true })
-    await waitFor(() => expect(getPermissionCatalogApi).toHaveBeenCalled())
-    const modelsTab = screen.getByRole("tab", { name: "catalog.models" })
-    fireEvent.mouseDown(modelsTab)
-    fireEvent.click(modelsTab)
-
-    fireEvent.click(await screen.findByText("model-editor.delete"))
+    openOperationPermissions()
+    fireEvent.click(within(await getReviewerRow()).getByRole("button", { name: "model.deleteNamed" }))
 
     await waitFor(() => {
       expect(childCalls.message).toHaveBeenCalledWith({

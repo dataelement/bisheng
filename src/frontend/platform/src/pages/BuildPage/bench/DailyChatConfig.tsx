@@ -31,7 +31,7 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
     const taskModeNameRef = useRef<HTMLDivElement>(null);
     const knowledgeBaseRef = useRef<HTMLDivElement>(null);
     const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
-    const systemPromptRef = useRef<HTMLDivElement>(null);
+    const customSystemPromptRef = useRef<HTMLDivElement>(null);
     // New: ref for model management container
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
 
@@ -57,7 +57,7 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
             taskModeNameRef,
             knowledgeBaseRef,
             modelRefs,
-            systemPromptRef,
+            customSystemPromptRef,
             modelManagementContainerRef, // Pass in the new ref
         },
         scopeVersion,
@@ -186,15 +186,20 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange("maxTokens", v, 100)}
                             />
-                            <div ref={systemPromptRef}>
+                            <div ref={customSystemPromptRef}>
                                 <FormInput
-                                    label={<Label className="bisheng-label">{t("chatConfig.systemPrompt")}</Label>}
+                                    label={
+                                        <div>
+                                            <Label className="bisheng-label">{t("chatConfig.customSystemPrompt")}</Label>
+                                            <p className="mt-1 text-xs text-muted-foreground">{t("chatConfig.customSystemPromptHint")}</p>
+                                        </div>
+                                    }
                                     isTextarea
-                                    value={formData.systemPrompt}
-                                    error={errors.systemPrompt}
-                                    placeholder={`${t("chatConfig.systemPromptPlaceholder")}`}
+                                    value={formData.customSystemPrompt}
+                                    error={errors.customSystemPrompt}
+                                    placeholder={`${t("chatConfig.customSystemPromptPlaceholder")}`}
                                     maxLength={30000}
-                                    onChange={(val) => handleInputChange("systemPrompt", val, 30000)}
+                                    onChange={(val) => handleInputChange("customSystemPrompt", val, 30000)}
                                 />
                             </div>
                         </div>

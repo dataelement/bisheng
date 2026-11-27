@@ -93,11 +93,32 @@ export interface CreatePermissionCatalogDraftRequest {
   changes: PermissionCatalogChange[]
 }
 
+export interface PermissionCatalogAffectedUser {
+  user_id: number
+  username: string
+  tenant_id: number
+  tenant_name: string
+}
+
+export interface PermissionCatalogAffectedUsersPage {
+  draft_id: number
+  total: number
+  page: number
+  page_size: number
+  has_more: boolean
+  cross_tenant: boolean
+  items: PermissionCatalogAffectedUser[]
+}
+
 export interface PermissionCatalogImpact {
   checksum: string
   resource_count: number
   grant_count: number
   assignee_count: number
+  affected_user_count?: number
+  affected_users?: PermissionCatalogAffectedUser[]
+  affected_users_has_more?: boolean
+  affected_users_cross_tenant?: boolean
   expansion_count: number
   revocation_count: number
   action_changes?: PermissionCatalogActionChange[]
@@ -303,6 +324,17 @@ export async function getPermissionCatalogDraftApi(
   draftId: number,
 ): Promise<PermissionCatalogDraft> {
   return await axios.get(`/api/v1/permissions/catalog/drafts/${draftId}`)
+}
+
+export async function getPermissionCatalogDraftAffectedUsersApi(
+  draftId: number,
+  params: { page?: number; page_size?: number } = {},
+  config: { silent?: boolean } = {},
+): Promise<PermissionCatalogAffectedUsersPage> {
+  return await axios.get(`/api/v1/permissions/catalog/drafts/${draftId}/affected-users`, {
+    params,
+    silent: config.silent,
+  })
 }
 
 export async function publishPermissionCatalogDraftApi(

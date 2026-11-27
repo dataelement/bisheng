@@ -1,24 +1,34 @@
 import * as React from "react"
 import { cname } from "../utils"
+import { TableScrollFrame, type TableScrollShadows } from "./TableScrollFrame"
 
-const Table = React.forwardRef<
-    HTMLTableElement,
-    React.HTMLAttributes<HTMLTableElement> & { noScroll?: boolean; containerClassName?: string }
->(({ className, noScroll, containerClassName, ...props }, ref) => (
-    <div
-        className={cname(
-            "relative w-full max-w-full",
-            noScroll ? "overflow-x-auto" : "overflow-auto",
-            containerClassName
-        )}
-    >
-        <table
-            ref={ref}
-            className={cname("w-full caption-bottom text-sm border-separate border-spacing-y-1", className)}
-            {...props}
-        />
-    </div>
-))
+interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+    noScroll?: boolean
+    containerClassName?: string
+    scrollShadows?: TableScrollShadows
+}
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+    ({ className, noScroll, containerClassName, scrollShadows, ...props }, ref) => {
+        const viewportClassName = cname("relative w-full max-w-full", noScroll ? "overflow-x-auto" : "overflow-auto")
+        const table = (
+            <table
+                ref={ref}
+                className={cname("w-full caption-bottom text-sm border-separate border-spacing-y-1", className)}
+                {...props}
+            />
+        )
+        return scrollShadows ? (
+            <TableScrollFrame className={containerClassName} viewportClassName={viewportClassName} shadows={scrollShadows}>
+                {table}
+            </TableScrollFrame>
+        ) : (
+            <div className={cname(viewportClassName, containerClassName)}>
+                {table}
+            </div>
+        )
+    },
+)
 Table.displayName = "Table"
 
 const TableHeader = React.forwardRef<

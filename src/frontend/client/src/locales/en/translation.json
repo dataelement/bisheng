@@ -1398,6 +1398,7 @@
       "joined": "Joined spaces",
       "load_error": "Could not load knowledge spaces. Try again.",
       "more": "More actions",
+      "search_by_name": "Search knowledge spaces by name",
       "sort_create_time": "Creation time",
       "sort_name": "Name",
       "sort_update_time": "Last updated",

@@ -17,7 +17,7 @@ from test.dsh.pricing_fixtures import LEGACY_EQUIVALENT_PRICING
 def dsh_enabled(monkeypatch):
     from bisheng.common.services.config_service import settings
 
-    monkeypatch.setitem(settings.__dict__, "dsh", settings.dsh.model_copy(update={"enabled": True}))
+    monkeypatch.setattr(settings.credit_billing, "enabled", True)
 
 
 @pytest.mark.parametrize(
@@ -27,11 +27,11 @@ def dsh_enabled(monkeypatch):
         ("linsight", True),
         ("knowledge_space", True),  # F016
         ("rag_traceability", False),  # workflows use it too; the workbench passes daily_chat
-        ("workflow", False),
-        ("assistant", False),
+        ("workflow", True),
+        ("assistant", True),
         ("knowledge_base", False),
         ("evaluation", False),
-        ("model_gateway", False),
+        ("model_gateway", True),
         ("model_test", False),
     ],
 )
@@ -42,7 +42,7 @@ def test_governed_scenarios(dsh_enabled, app_type, billed):
 def test_nothing_is_governed_when_the_enterprise_client_is_off(monkeypatch):
     from bisheng.common.services.config_service import settings
 
-    monkeypatch.setitem(settings.__dict__, "dsh", settings.dsh.model_copy(update={"enabled": False}))
+    monkeypatch.setattr(settings.credit_billing, "enabled", False)
     assert not chat_credits.governed(SimpleNamespace(app_type="knowledge_space"))
 
 
@@ -92,36 +92,6 @@ async def test_unmetered_context_reaches_tasks_created_inside_and_resets():
         task = asyncio.create_task(observe())
     assert chat_credits._call_mode() == ""
     assert await task == "unmetered"
-
-
-async def test_knowledge_source_llm_defaults_to_traceability_and_is_admin_selected(monkeypatch):
-    from bisheng.llm.domain.services.llm import LLMService
-
-    created = AsyncMock(return_value="llm")
-    monkeypatch.setattr(LLMService, "aget_knowledge_llm", AsyncMock(return_value=SimpleNamespace(source_model_id=5)))
-    monkeypatch.setattr(LLMService, "get_bisheng_llm", created)
-    await LLMService.get_knowledge_source_llm_async(2)
-    assert created.await_args.kwargs["app_type"] is ApplicationTypeEnum.RAG_TRACEABILITY
-    assert created.await_args.kwargs["admin_selected"] is True
-    await LLMService.get_knowledge_source_llm_async(2, app_type=ApplicationTypeEnum.DAILY_CHAT)
-    assert created.await_args.kwargs["app_type"] is ApplicationTypeEnum.DAILY_CHAT
-    assert created.await_args.kwargs["app_id"] == "daily_chat"
-
-
-async def test_traceability_passes_the_scenario_through(monkeypatch):
-    from bisheng.common.chat import utils
-    from bisheng.llm.domain.services.llm import LLMService
-
-    monkeypatch.setattr(utils.ChatMessageDao, "aget_message_by_id", AsyncMock(return_value=SimpleNamespace(user_id=2)))
-    getter = AsyncMock(return_value=None)
-    monkeypatch.setattr(LLMService, "get_knowledge_source_llm_async", getter)
-    monkeypatch.setattr(utils, "extract_answer_keys_async", AsyncMock(return_value=[]))
-    document = SimpleNamespace(metadata={}, page_content="")
-    await utils.process_source_document([document], "chat", 1, "answer", app_type=ApplicationTypeEnum.DAILY_CHAT)
-    getter.assert_awaited_once_with(2, app_type=ApplicationTypeEnum.DAILY_CHAT)
-    getter.reset_mock()
-    await utils.process_source_document([document], "chat", 1, "answer")
-    getter.assert_awaited_once_with(2)
 
 
 async def test_image_view_model_is_admin_selected(monkeypatch):
