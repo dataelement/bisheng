@@ -420,7 +420,7 @@
     "scopeDept": "部門",
     "scopeTenant": "テナント",
     "scopeGlobalRole": "グローバル（部門に紐づけない）",
-    "roleSearchPlaceholder": "ロール名で検索",
+    "roleSearchPlaceholder": "ユーザーまたはロールを検索",
     "roleEditTitle": "ロールを編集",
     "roleCreateTitle": "ロールを作成",
     "roleScopeHint": "部門範囲とロール種別は別々に設定します。全部門はテナント間共有を意味しません。部門の業務上の所属を検証します。",

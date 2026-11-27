@@ -202,17 +202,53 @@ def _visibility_metadata(
 def _standard_models(
     action_release: CatalogActionRelease,
     standard_allow_same_level: Mapping[str, bool],
-) -> tuple[DerivedPermissionModel, ...]:
+    standard_action_codes: Mapping[str, tuple[str, ...]] | None = None,
+) -> tuple[tuple[DerivedPermissionModel, ...], tuple[str, ...]]:
     models: list[DerivedPermissionModel] = []
-    for key, name, level, default_allow_same in STANDARD_MODEL_DEFINITIONS:
-        action_codes = tuple(
-            action.code
-            for action in action_release.actions
-            if action.active and action.level is not None and action.level <= level
-        )
+    blockers: list[str] = []
+    action_by_code = {action.code: action for action in action_release.actions}
+    explicit_actions = standard_action_codes or {}
+    unknown_action_overrides = set(explicit_actions) - STANDARD_MODEL_KEYS
+    if unknown_action_overrides:
+        raise ValueError(f"unknown standard model action overrides: {sorted(unknown_action_overrides)}")
+
+    for key, name, default_level, default_allow_same in STANDARD_MODEL_DEFINITIONS:
         allow_same_level = standard_allow_same_level.get(key, default_allow_same)
         if not isinstance(allow_same_level, bool):
             raise ValueError(f"standard model {key} same-level policy must be boolean")
+
+        if key in explicit_actions:
+            selected = tuple(explicit_actions[key])
+            if len(set(selected)) != len(selected):
+                raise ValueError(f"standard model {key} has duplicate actions")
+            unknown = set(selected) - set(action_by_code)
+            if unknown:
+                raise ValueError(f"standard model {key} selects unknown actions: {sorted(unknown)}")
+            selected_set = set(selected)
+            effective_actions = tuple(
+                action
+                for action in action_release.actions
+                if action.code in selected_set and action.active and action.level is not None
+            )
+            action_codes = tuple(action.code for action in effective_actions)
+            # 按所选有效操作中最高风险等级动态推导；若因操作全部停用暂时无有效操作，
+            # 回退到默认档位用于保留纯可见兜底，避免停用操作直接锁死风险配置发布
+            derived_level = max(
+                (action.level for action in effective_actions if action.level is not None),
+                default=default_level,
+            )
+            selected_codes = tuple(action.code for action in action_release.actions if action.code in selected_set)
+            enforce_same_level = allow_same_level
+        else:
+            action_codes = tuple(
+                action.code
+                for action in action_release.actions
+                if action.active and action.level is not None and action.level <= default_level
+            )
+            selected_codes = action_codes
+            derived_level = default_level
+            enforce_same_level = key in standard_allow_same_level and allow_same_level
+
         # Standard models are an internal bootstrap contract, never an HTTP
         # request for an arbitrary empty custom model.
         standard_visibility_types = tuple(
@@ -228,7 +264,7 @@ def _standard_models(
         )
         visibility_types, visibility_level = _visibility_metadata(
             standard_visibility_types,
-            level if standard_visibility_types else None,
+            derived_level if standard_visibility_types else None,
             action_codes=action_codes,
             action_release=action_release,
         )
@@ -237,22 +273,22 @@ def _standard_models(
             name=name,
             kind="STANDARD",
             config_scope="PLATFORM",
-            derived_level=level,
+            derived_level=derived_level,
             active=True,
             allow_same_level=allow_same_level,
-            selected_action_codes=action_codes,
+            selected_action_codes=selected_codes,
             action_codes=action_codes,
             visibility_only_resource_types=visibility_types,
             visibility_level=visibility_level,
         )
-        if key in standard_allow_same_level and allow_same_level:
+        if enforce_same_level:
             model = with_allow_same_level(model, True)
         models.append(model)
 
     unknown_overrides = set(standard_allow_same_level) - STANDARD_MODEL_KEYS
     if unknown_overrides:
         raise ValueError(f"unknown standard model same-level overrides: {sorted(unknown_overrides)}")
-    return tuple(models)
+    return tuple(models), tuple(blockers)
 
 
 def _custom_model(
@@ -312,7 +348,7 @@ def _custom_model(
         derived_level=derived_level,
         active=selection.active,
         allow_same_level=selection.allow_same_level,
-        selected_action_codes=selected,
+        selected_action_codes=tuple(action.code for action in action_release.actions if action.code in selected_set),
         action_codes=effective_codes,
         visibility_only_resource_types=visibility_types,
         visibility_level=visibility_level,
@@ -335,11 +371,17 @@ def derive_permission_models(
     *,
     custom_models: Iterable[CustomModelSelection] = (),
     standard_allow_same_level: Mapping[str, bool] | None = None,
+    standard_action_codes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> PermissionModelRelease:
     """Rebuild all standards and derive every custom model in one release."""
 
-    models = list(_standard_models(action_release, standard_allow_same_level or {}))
-    blockers: list[str] = []
+    standard_models, standard_blockers = _standard_models(
+        action_release,
+        standard_allow_same_level or {},
+        standard_action_codes,
+    )
+    models = list(standard_models)
+    blockers: list[str] = list(standard_blockers)
     model_keys = set(STANDARD_MODEL_KEYS)
     normalized_names = {model.name.casefold() for model in models}
 
@@ -414,7 +456,7 @@ def validate_standard_model_update(
     current: DerivedPermissionModel,
     candidate: DerivedPermissionModel,
 ) -> None:
-    """Reject mutation of every standard field except same-level policy."""
+    """Reject mutation of immutable standard identity/lifecycle fields."""
 
     if current.kind != "STANDARD" or candidate.kind != "STANDARD":
         raise ValueError("standard model update requires standard models")
@@ -423,17 +465,14 @@ def validate_standard_model_update(
         "name",
         "kind",
         "config_scope",
-        "derived_level",
         "active",
-        "selected_action_codes",
-        "action_codes",
-        "visibility_only_resource_types",
-        "visibility_level",
         "retired_use_level_floor",
     )
     if any(getattr(current, field) != getattr(candidate, field) for field in immutable_fields):
         raise ValueError("standard model fields are immutable")
-    with_allow_same_level(current, candidate.allow_same_level)
+    if not candidate.action_codes:
+        raise ValueError("standard model requires at least one effective action")
+    with_allow_same_level(candidate, candidate.allow_same_level)
 
 
 def ensure_model_deletable(

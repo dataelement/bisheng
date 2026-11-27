@@ -99,6 +99,7 @@ class CatalogDraftBuildInput:
     actions: tuple[CatalogAction, ...]
     custom_models: tuple[CustomModelSelection, ...] = ()
     standard_allow_same_level: Mapping[str, bool] = field(default_factory=dict)
+    standard_action_codes: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     grant_references: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     model_reference_summaries: Mapping[str, ModelReferenceSummary] = field(default_factory=dict)
     draft_owner_id: int = 0
@@ -291,6 +292,7 @@ class CatalogService:
             action_release,
             custom_models=build.custom_models,
             standard_allow_same_level=build.standard_allow_same_level,
+            standard_action_codes=build.standard_action_codes or None,
         )
         before_by_key = {model.model_key: model for model in build.before_models.models}
         after_keys = {model.model_key for model in model_release.models}

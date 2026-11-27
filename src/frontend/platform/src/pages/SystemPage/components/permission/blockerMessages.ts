@@ -21,8 +21,8 @@ import { actionLabel } from "./actionLabels"
  * never swallowed silently.
  */
 
-const UNAVAILABLE_ACTIONS = /^custom model (.+) selects unavailable actions: (.+)$/
-const NO_EFFECTIVE_ACTIONS = /^active custom model (.+) has no effective actions$/
+const UNAVAILABLE_ACTIONS = /^(?:custom|standard) model (.+) selects unavailable actions: (.+)$/
+const NO_EFFECTIVE_ACTIONS = /^active (?:custom|standard) model (.+) has no effective actions$/
 
 interface BlockerContext {
   models?: PermissionCatalogModel[]
@@ -30,10 +30,18 @@ interface BlockerContext {
 }
 
 function modelName(
+  t: TFunction,
   models: PermissionCatalogModel[] | undefined,
   modelKey: string,
 ): string {
-  return models?.find((model) => model.key === modelKey)?.name || modelKey
+  const matched = models?.find((model) => model.key === modelKey)
+  if (
+    matched?.kind === "STANDARD" &&
+    ["viewer", "editor", "manager", "owner"].includes(modelKey)
+  ) {
+    return t(`level.${modelKey}`, { defaultValue: matched.name || modelKey })
+  }
+  return matched?.name || modelKey
 }
 
 function actionNames(
@@ -62,7 +70,7 @@ export function formatBlockerMessage(
       .map((code) => code.trim())
       .filter(Boolean)
     return t("impact.blockerUnavailableActions", {
-      model: modelName(models, modelKey),
+      model: modelName(t, models, modelKey),
       actions: actionNames(t, actions, codes),
     })
   }
@@ -71,7 +79,7 @@ export function formatBlockerMessage(
   if (empty) {
     const [, modelKey] = empty
     return t("impact.blockerNoEffectiveActions", {
-      model: modelName(models, modelKey),
+      model: modelName(t, models, modelKey),
     })
   }
 

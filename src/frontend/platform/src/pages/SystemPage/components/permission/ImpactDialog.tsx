@@ -6,13 +6,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog";
-import type {
-  PermissionCatalogAction,
-  PermissionCatalogActionChange,
-  PermissionCatalogDraft,
-  PermissionCatalogModel,
-  PermissionCatalogModelChange,
-  PublishPermissionCatalogDraftRequest,
+import {
+  getPermissionCatalogDraftAffectedUsersApi,
+  type PermissionCatalogAction,
+  type PermissionCatalogActionChange,
+  type PermissionCatalogAffectedUser,
+  type PermissionCatalogAffectedUsersPage,
+  type PermissionCatalogDraft,
+  type PermissionCatalogModel,
+  type PermissionCatalogModelChange,
+  type PublishPermissionCatalogDraftRequest,
 } from "@/controllers/API/permission";
 import { Alert, Button } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -30,12 +33,31 @@ interface ImpactDialogProps {
     draftId: number,
     payload: PublishPermissionCatalogDraftRequest,
   ) => Promise<unknown>
+  onLoadAffectedUsers?: (
+    draftId: number,
+    page: number,
+    pageSize: number,
+  ) => Promise<PermissionCatalogAffectedUsersPage>
   // Used only to resolve blocker model keys and action codes into the display
   // names an operator recognises; optional so the dialog still renders raw
   // blockers when the catalog is unavailable.
   models?: PermissionCatalogModel[]
   actions?: PermissionCatalogAction[]
   now?: Date
+}
+
+const AFFECTED_USERS_PAGE_SIZE = 20
+
+function isDraftExpiredOrChangedError(error: unknown): boolean {
+  const code = (error as { status_code?: number; code?: number } | null)?.status_code
+    ?? (error as { code?: number } | null)?.code
+  if (code === 25007 || code === 25008) return true
+  const message = typeof error === "string"
+    ? error
+    : ((error as { status_message?: string; message?: string } | null)?.status_message
+      ?? (error as { message?: string } | null)?.message
+      ?? "")
+  return /expired|version|changed|no longer active/i.test(message)
 }
 
 function createPublishIdempotencyKey(): string {
@@ -50,6 +72,7 @@ export function ImpactDialog({
   draft,
   onOpenChange,
   onPublish,
+  onLoadAffectedUsers,
   models,
   actions,
   now,
@@ -58,10 +81,37 @@ export function ImpactDialog({
   const [publishing, setPublishing] = useState(false)
   const [publishFailed, setPublishFailed] = useState(false)
   const [expiredDeadline, setExpiredDeadline] = useState<number | null>(null)
+  const [serverExpired, setServerExpired] = useState(false)
+  const [affectedUsers, setAffectedUsers] = useState<PermissionCatalogAffectedUser[]>(
+    () => draft?.impact.affected_users ?? [],
+  )
+  const [affectedUsersTotal, setAffectedUsersTotal] = useState<number | undefined>(
+    () => draft?.impact.affected_user_count,
+  )
+  const [affectedUsersHasMore, setAffectedUsersHasMore] = useState<boolean>(
+    () => Boolean(draft?.impact.affected_users_has_more),
+  )
+  const [affectedUsersCrossTenant, setAffectedUsersCrossTenant] = useState<boolean>(
+    () => Boolean(draft?.impact.affected_users_cross_tenant),
+  )
+  const [affectedUsersPage, setAffectedUsersPage] = useState(1)
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [usersLoadFailed, setUsersLoadFailed] = useState(false)
   const previousFocus = useRef<HTMLElement | null>(null)
   const expiresAt = Date.parse(draft?.impact.expires_at ?? "")
   const hasExpired = () => expiresAt <= (now?.getTime() ?? Date.now())
-  const expired = expiredDeadline === expiresAt || hasExpired()
+  const expired = serverExpired || expiredDeadline === expiresAt || hasExpired()
+
+  useEffect(() => {
+    setServerExpired(false)
+    setAffectedUsers(draft?.impact.affected_users ?? [])
+    setAffectedUsersTotal(draft?.impact.affected_user_count)
+    setAffectedUsersHasMore(Boolean(draft?.impact.affected_users_has_more))
+    setAffectedUsersCrossTenant(Boolean(draft?.impact.affected_users_cross_tenant))
+    setAffectedUsersPage(1)
+    setLoadingUsers(false)
+    setUsersLoadFailed(false)
+  }, [draft])
 
   useEffect(() => {
     if (!open || now || expired || !Number.isFinite(expiresAt)) return
@@ -77,6 +127,49 @@ export function ImpactDialog({
   const blocked = draft.impact.blockers.length > 0
   const modelChanges = draft.impact.model_changes ?? []
   const modelEdit = variant === "modelEdit"
+  const hasAffectedUsers = typeof affectedUsersTotal === "number"
+
+  const duplicateUsernames = new Set<string>()
+  const seenUsernames = new Set<string>()
+  for (const item of affectedUsers) {
+    if (seenUsernames.has(item.username)) duplicateUsernames.add(item.username)
+    else seenUsernames.add(item.username)
+  }
+
+  const handleLoadMoreUsers = async () => {
+    if (loadingUsers || !affectedUsersHasMore || expired) return
+    if (hasExpired()) {
+      setExpiredDeadline(expiresAt)
+      return
+    }
+    const nextPage = affectedUsersPage + 1
+    setLoadingUsers(true)
+    setUsersLoadFailed(false)
+    try {
+      const fetcher = onLoadAffectedUsers ?? (
+        (id: number, page: number, pageSize: number) =>
+          getPermissionCatalogDraftAffectedUsersApi(id, { page, page_size: pageSize }, { silent: true })
+      )
+      const result = await fetcher(draft.draft_id, nextPage, AFFECTED_USERS_PAGE_SIZE)
+      setAffectedUsers((current) => {
+        const seen = new Set(current.map((item) => item.user_id))
+        const appended = result.items.filter((item) => !seen.has(item.user_id))
+        return [...current, ...appended]
+      })
+      setAffectedUsersTotal(result.total)
+      setAffectedUsersHasMore(result.has_more)
+      setAffectedUsersCrossTenant(result.cross_tenant)
+      setAffectedUsersPage(result.page)
+    } catch (error) {
+      if (isDraftExpiredOrChangedError(error)) {
+        setServerExpired(true)
+      } else {
+        setUsersLoadFailed(true)
+      }
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
 
   const levelName = (level: number | null) =>
     level === null
@@ -189,20 +282,95 @@ export function ImpactDialog({
             </section>
           )}
 
-          <section className="space-y-1 rounded-lg bg-fill-1 px-3 py-2" aria-labelledby="impact-record-title">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 id="impact-record-title" className="text-body-sm font-medium text-text-1">
-                {t("impact.affectedRecords")}
-              </h3>
-              <p data-testid="impact-assignee-count" className="text-body font-semibold tabular-nums text-text-1">
-                {draft.impact.assignee_count}
-                <span className="ml-1 text-caption text-text-2">{t("impact.recordUnit")}</span>
+          {modelEdit && hasAffectedUsers ? (
+            <section className="space-y-2 rounded-lg bg-fill-1 px-3 py-2" aria-labelledby="impact-users-title">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 id="impact-users-title" className="text-body-sm font-medium text-text-1">
+                  {t("impact.affectedUsers")}
+                </h3>
+                <p data-testid="impact-affected-user-count" className="text-body font-semibold tabular-nums text-text-1">
+                  {affectedUsersTotal}
+                  <span className="ml-1 text-caption text-text-2">{t("impact.userUnit")}</span>
+                </p>
+              </div>
+              <p className="text-caption text-text-2">
+                {affectedUsersTotal > 0
+                  ? t("impact.affectedUsersDescription", { count: affectedUsersTotal })
+                  : t("impact.noAffectedUsers")}
               </p>
-            </div>
-            <p className="text-caption text-text-2">
-              {draft.impact.assignee_count > 0 ? t("impact.recordDescription") : t("impact.noRecordChanges")}
-            </p>
-          </section>
+              {affectedUsersTotal > 0 && (
+                <div
+                  data-testid="impact-affected-users-list"
+                  className="max-h-48 overflow-y-auto overscroll-contain rounded-lg border border-border-base bg-bg-page"
+                >
+                  <ul className="divide-y divide-border-base">
+                    {affectedUsers.map((user) => (
+                      <li
+                        key={user.user_id}
+                        className="flex items-center justify-between gap-2 px-3 py-2 text-body-sm text-text-1"
+                      >
+                        <span className="min-w-0 truncate">
+                          {user.username}
+                          {duplicateUsernames.has(user.username) && (
+                            <span className="ml-1 text-caption text-text-3">#{user.user_id}</span>
+                          )}
+                        </span>
+                        {affectedUsersCrossTenant && user.tenant_name && (
+                          <span className="shrink-0 text-caption text-text-3">
+                            {user.tenant_name}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {usersLoadFailed && (
+                    <div className="flex items-center justify-between gap-2 border-t border-border-base px-3 py-2 text-caption text-danger">
+                      <span>{t("impact.affectedUsersLoadFailed")}</span>
+                      <Button
+                        type="button"
+                        size="small"
+                        variant="link"
+                        disabled={loadingUsers || expired}
+                        onClick={() => void handleLoadMoreUsers()}
+                      >
+                        {t("catalog.retry")}
+                      </Button>
+                    </div>
+                  )}
+                  {affectedUsersHasMore && !usersLoadFailed && (
+                    <div className="border-t border-border-base px-3 py-1.5 text-center">
+                      <Button
+                        type="button"
+                        size="small"
+                        variant="text"
+                        color="default"
+                        loading={loadingUsers}
+                        disabled={loadingUsers || expired}
+                        onClick={() => void handleLoadMoreUsers()}
+                      >
+                        {loadingUsers ? t("impact.loadingMoreUsers") : t("impact.loadMoreUsers")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          ) : (
+            <section className="space-y-1 rounded-lg bg-fill-1 px-3 py-2" aria-labelledby="impact-record-title">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 id="impact-record-title" className="text-body-sm font-medium text-text-1">
+                  {t("impact.affectedRecords")}
+                </h3>
+                <p data-testid="impact-assignee-count" className="text-body font-semibold tabular-nums text-text-1">
+                  {draft.impact.assignee_count}
+                  <span className="ml-1 text-caption text-text-2">{t("impact.recordUnit")}</span>
+                </p>
+              </div>
+              <p className="text-caption text-text-2">
+                {draft.impact.assignee_count > 0 ? t("impact.recordDescription") : t("impact.noRecordChanges")}
+              </p>
+            </section>
+          )}
 
           {modelChanges.length > 0 && (
             <section className="space-y-2" aria-labelledby="impact-model-title">

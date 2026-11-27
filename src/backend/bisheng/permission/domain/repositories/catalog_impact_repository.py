@@ -91,3 +91,43 @@ class CatalogImpactRepository:
                 if len(rows) < BATCH_SIZE:
                     break
         return {ident: (count, digest.hexdigest()) for ident, (count, digest) in summaries.items()}
+
+    async def asource_subjects(self, grant_ids):
+        """按 200 行分页读取活跃授权来源主体，用于受影响用户展开与去重。"""
+        if len(grant_ids) > BATCH_SIZE:
+            raise ValueError("Catalog impact source batch exceeds 200 Grants")
+        items: list[tuple[int, int, str, str, str | None, bool]] = []
+        cursor = None
+        columns = (PermissionGrantAssignee.grant_id, PermissionGrantAssignee.id)
+        with bypass_tenant_filter():
+            while grant_ids:
+                query = select(
+                    PermissionGrantAssignee.grant_id,
+                    PermissionGrantAssignee.id,
+                    PermissionGrantAssignee.tenant_id,
+                    PermissionGrantAssignee.subject_type,
+                    PermissionGrantAssignee.subject_id,
+                    PermissionGrantAssignee.userset_relation,
+                    PermissionGrantAssignee.include_children,
+                ).where(col(PermissionGrantAssignee.grant_id).in_(grant_ids), PermissionGrantAssignee.state == "ACTIVE")
+                if cursor is not None:
+                    query = query.where(_after(columns, cursor))
+                async with self.sessions() as session:
+                    rows = tuple((await session.exec(query.order_by(*columns).limit(BATCH_SIZE))).all())
+                if not rows:
+                    break
+                for grant_id, _ident, tenant_id, subject_type, subject_id, userset_relation, include_children in rows:
+                    items.append(
+                        (
+                            int(grant_id),
+                            int(tenant_id or 1),
+                            str(subject_type),
+                            str(subject_id),
+                            str(userset_relation) if userset_relation is not None else None,
+                            bool(include_children),
+                        )
+                    )
+                cursor = rows[-1][:2]
+                if len(rows) < BATCH_SIZE:
+                    break
+        return items

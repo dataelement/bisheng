@@ -40,6 +40,15 @@ class CatalogApiPort(Protocol):
         operator_id: int,
     ) -> Any: ...
 
+    async def list_draft_affected_users(
+        self,
+        *,
+        draft_id: int,
+        operator_id: int,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Any: ...
+
     async def publish_draft(
         self,
         *,

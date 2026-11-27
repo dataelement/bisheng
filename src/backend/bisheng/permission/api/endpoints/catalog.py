@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
@@ -85,6 +85,34 @@ async def get_catalog_draft(
         data = await api.get_draft(
             draft_id=draft_id,
             operator_id=login_user.user_id,
+        )
+    except BaseErrorCode as error:
+        return permission_error_response(error)
+    return resp_200(data)
+
+
+@router.get(
+    "/catalog/drafts/{draft_id}/affected-users",
+    response_model=UnifiedResponseModel,
+)
+async def list_catalog_draft_affected_users(
+    draft_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    api: CatalogApiPort = Depends(get_catalog_api),
+) -> UnifiedResponseModel:
+    """Return deduplicated affected active users for one catalog draft."""
+
+    denied = _platform_super_admin_error(login_user)
+    if denied is not None:
+        return denied
+    try:
+        data = await api.list_draft_affected_users(
+            draft_id=draft_id,
+            operator_id=login_user.user_id,
+            page=page,
+            page_size=page_size,
         )
     except BaseErrorCode as error:
         return permission_error_response(error)
