@@ -27,9 +27,10 @@ it('previews the balance the member will have with the typed allowance', async (
 })
 
 it('tells how much an overdrawn member needs before they can continue', async () => {
-    vi.mocked(getUserCredits).mockResolvedValue(month({ used: '1284.754515', remaining: '0' }))
+    vi.mocked(getUserCredits).mockResolvedValue(month({ used: '1284.754515', remaining: '-284.754515' }))
     render(<CreditRulePreview userId={2} credits="1000" enabled />)
     const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('dsh.unified.previewBalance {"used":"1,284.75","remaining":"-284.75","limit":"1,000"}')
     expect(status).toHaveTextContent('dsh.unified.previewOverdrawn {"used":"1,284.75"}')
     expect(status.className).toContain('text-amber-600')
 })

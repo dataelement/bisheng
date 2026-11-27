@@ -67,6 +67,12 @@ it('F016: rereads the balance when the window regains focus, though the app turn
   focusManager.setFocused(undefined);
 });
 
+it('F016: formats negative remaining credits when overdrawn', async () => {
+  jest.mocked(getDshCredits).mockResolvedValue({ ...credits, used: '1284.754515', remaining: '-284.754515' });
+  show();
+  expect(await screen.findByRole('button', { name: /dsh.creditsRemaining/ })).toHaveTextContent('-284.75');
+});
+
 it('F016: says unlimited instead of a number', async () => {
   jest.mocked(getDshCredits).mockResolvedValue({ ...credits, unlimited: true, remaining: null });
   show();

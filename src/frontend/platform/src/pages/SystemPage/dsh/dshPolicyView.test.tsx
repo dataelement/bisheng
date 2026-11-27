@@ -248,10 +248,10 @@ describe('F016 selected user credits', () => {
         expect(await screen.findByText('15')).toBeTruthy()
     })
     it('says how far a member is over the allowance after a call overdrew it', async () => {
-        vi.mocked(getUserCredits).mockResolvedValue(credits({ used: '1284.754515', remaining: '0' }))
+        vi.mocked(getUserCredits).mockResolvedValue(credits({ used: '1284.754515', remaining: '-284.754515' }))
         render(<PolicyView />)
         const region = await card()
-        expect(figure(region, 'remaining')).toBe('0')
+        expect(figure(region, 'remaining')).toBe('-284.75')
         expect(within(region).getByText('dsh.unified.creditsOverdrawn')).toBeTruthy()
     })
     it('says nothing about overdraft within the allowance', async () => {

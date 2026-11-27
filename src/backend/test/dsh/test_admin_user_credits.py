@@ -61,6 +61,19 @@ async def test_admin_reads_the_selected_members_balance_in_the_authorized_tenant
     assert (principal.tenant_id, principal.user_id, month) == (2, 20, data["month"])
 
 
+async def test_admin_reads_negative_remaining_when_member_overdrew(credits_api):
+    credits_api.snapshot.update(used=1_284_754_515)
+    response = await credits_api.client.get("/api/v1/dsh/admin/users/20/credits?tenant_id=2")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert (data["limit"], data["used"], data["remaining"], data["unlimited"]) == (
+        "1000",
+        "1284.754515",
+        "-284.754515",
+        False,
+    )
+
+
 async def test_uncapped_member_and_unready_ledger_stay_explicit(credits_api):
     credits_api.state.limit = UNLIMITED_TOKEN_LIMIT
     credits_api.snapshot.update(quota_state="unavailable", used=None)

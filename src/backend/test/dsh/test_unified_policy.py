@@ -66,11 +66,14 @@ def test_unconfigured_user_is_uncapped_but_a_matching_zero_still_denies():
     assert effective_token_limit(user_id=3, departments=set(), roles=set(), rules=disabled) == UNLIMITED_TOKEN_LIMIT
 
 
-def test_conversion_preserves_small_usage_and_clamps_display_balance():
+def test_conversion_preserves_small_usage_and_allows_negative_remaining():
     assert CreditRuleInput(version=0, monthly_credits="500").monthly_token_limit == 500_000_000
     assert Decimal(credits_from_tokens(1)) == Decimal("0.000001")
+    with pytest.raises(ValueError):
+        credits_from_tokens(-1)
     assert credit_balance(limit=500_000_000, used=499_000_001)["remaining"] == "0.999999"
-    assert credit_balance(limit=0, used=1)["remaining"] == "0"
+    assert credit_balance(limit=0, used=1)["remaining"] == "-0.000001"
+    assert credit_balance(limit=1_000_000_000, used=1_284_754_515)["remaining"] == "-284.754515"
     assert credit_balance(limit=100, used=None)["remaining"] is None
     assert credit_balance(limit=100, used=1)["unlimited"] is False
     assert credit_balance(limit=UNLIMITED_TOKEN_LIMIT, used=1)["unlimited"] is True

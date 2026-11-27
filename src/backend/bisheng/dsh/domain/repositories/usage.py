@@ -376,7 +376,7 @@ class DshUsageRepository:
         return {
             "used": used,
             "limit": limit,
-            "remaining": max(limit - used, 0),
+            "remaining": limit - used,
             "model_limits": model_limits,
             "source": "sql_estimate",
             "unknown_pending": unknown_pending,

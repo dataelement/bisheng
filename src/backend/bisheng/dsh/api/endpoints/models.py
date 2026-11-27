@@ -216,7 +216,7 @@ async def usage(
                 "as_of": None,
                 "quota_state": "unavailable",
             }
-        snapshot = {**snapshot, "used": used, "limit": limit, "remaining": max(limit - used, 0)}
+        snapshot = {**snapshot, "used": used, "limit": limit, "remaining": limit - used}
     live = snapshot["source"] == "live"
     state = "unavailable"
     if live and snapshot["quota_state"] == "ready":

@@ -14,10 +14,10 @@ MAX_TOKEN_LIMIT = 9_223_372_036_854_775_807
 UNLIMITED_TOKEN_LIMIT = MAX_TOKEN_LIMIT
 
 
-def credits_from_tokens(tokens: int) -> str:
+def credits_from_tokens(tokens: int, *, allow_negative: bool = False) -> str:
     """Keep accounting exact, including consumption below one credit."""
-    if type(tokens) is not int or tokens < 0:
-        raise ValueError("Token amounts must be nonnegative integers")
+    if type(tokens) is not int or (not allow_negative and tokens < 0):
+        raise ValueError("Token amounts must be integers" if allow_negative else "Token amounts must be nonnegative integers")
     return format(Decimal(tokens) / TOKENS_PER_CREDIT, "f")
 
 
@@ -99,7 +99,8 @@ def credit_balance(*, limit: int, used: int | None) -> dict:
     return {
         "limit": credits_from_tokens(limit),
         "used": credits_from_tokens(used) if used is not None else None,
-        "remaining": credits_from_tokens(max(0, limit - used)) if used is not None else None,
+        # 剩余积分允许为负数，如实反映透支差额
+        "remaining": credits_from_tokens(limit - used, allow_negative=True) if used is not None else None,
         "tokens_per_credit": TOKENS_PER_CREDIT,
         # limit/remaining stay numeric strings for existing clients; a client that
         # knows this flag shows "unlimited" instead of the int64 ceiling.

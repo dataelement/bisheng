@@ -607,7 +607,7 @@ class QuotaRedis:
             "used": used,
             "limit": limit,
             "remaining": (
-                max(limit - used, 0)
+                limit - used
                 if result[9] == "shared"
                 else sum(max(allowed - models.get(model, 0), 0) for model, allowed in model_limits.items())
             ),

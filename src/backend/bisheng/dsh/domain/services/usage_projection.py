@@ -8,6 +8,6 @@ def apply_current_policy_limits(snapshot: dict, policy, *, model_id: int | None 
     return {
         **snapshot,
         "limit": limit,
-        "remaining": max(limit - used, 0) if used is not None else None,
+        "remaining": limit - used if used is not None else None,
         "model_limits": {str(item.model_id): limit for item in policy.model_configs},
     }
