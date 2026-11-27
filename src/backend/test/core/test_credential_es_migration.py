@@ -339,13 +339,17 @@ def inspection():
     ]
 
 
-def test_native_export_preserves_actual_data_ports_and_resources(unauthenticated, monkeypatch):
+@pytest.mark.parametrize("user", ["1001", "2345:3456", "0:0", ""])
+def test_native_export_preserves_actual_data_ports_and_resources(unauthenticated, monkeypatch, user):
     _, _, key, _ = unauthenticated
     session = make_session(unauthenticated)
     use_client(monkeypatch, client())
     es.freeze(session, key)
-    compiled = es.compile_es(session, key, io.StringIO(json.dumps(inspection())), "0")
+    captured = inspection()
+    captured[0]["Config"]["User"] = user
+    compiled = es.compile_es(session, key, io.StringIO(json.dumps(captured)), "0")
     service = compiled["services"]["elasticsearch"]
+    assert service.get("user") == (user or None)
     assert service["image"] == inspection()[0]["Image"]
     assert service["mem_limit"] == 1073741824
     assert service["ports"][0]["published"] == "19200"

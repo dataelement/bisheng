@@ -279,18 +279,23 @@ export const MemoryToolStep: FC<{ toolCalls: ToolCallDisplayProps["toolCall"][];
         <div className="flex w-full min-w-0 gap-1.5" data-memory-step={step.state}>
             <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
                 {icon}
-                {showConnector && <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />}
+                {(showConnector || (expandable && open)) && (
+                    <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />
+                )}
             </div>
-            <div className="flex min-w-0 flex-1 flex-col gap-1 pb-3">
+            <div className="flex min-w-0 flex-1 flex-col pb-3">
                 {expandable ? (
                     <button
                         type="button"
-                        className="group flex w-fit items-center gap-1 text-sm leading-[22px] text-text-3 hover:text-text-1"
+                        className="group flex w-fit max-w-full items-center gap-1 text-sm leading-[22px] text-text-3 transition-colors hover:text-text-1"
                         aria-expanded={open}
                         onClick={() => setOpen((v) => !v)}
                     >
                         <span>{label}</span>
-                        <Outlined.Down size={14} className={cn("shrink-0 transition-transform", !open && "-rotate-90")} />
+                        <Outlined.Down
+                            size={16}
+                            className={cn("shrink-0 transform-gpu transition-transform duration-200", !open && "-rotate-90")}
+                        />
                     </button>
                 ) : (
                     <span className={cn("text-sm leading-[22px] text-text-3", step.state === "running" && "animate-pulse")}>
@@ -298,7 +303,7 @@ export const MemoryToolStep: FC<{ toolCalls: ToolCallDisplayProps["toolCall"][];
                     </span>
                 )}
                 {expandable && open && (
-                    <div className="w-fit max-w-[560px] border-l-2 border-border-base py-0.5 pl-3">
+                    <div className="mt-2">
                         <MemorySearchHits itemIds={step.itemIds} />
                     </div>
                 )}

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 from langchain_core.documents import Document
@@ -56,7 +55,14 @@ def _fake_assign(mapping_by_index):
 def _hit(idx: int) -> Document:
     return Document(
         page_content=f"chunk {idx}",
-        metadata={"document_id": 11, "file_name": "总结.pdf", "page": idx, "bbox": "{}", "chunk_index": idx, "pk": f"pk-{idx}"},
+        metadata={
+            "document_id": 11,
+            "file_name": "总结.pdf",
+            "page": idx,
+            "bbox": "{}",
+            "chunk_index": idx,
+            "pk": f"pk-{idx}",
+        },
     )
 
 
@@ -70,13 +76,16 @@ def kb_deps(monkeypatch: pytest.MonkeyPatch):
         return f"<chunk_id>{meta.get('citation_key') or ''}</chunk_id>\n<paragraph_content>{doc.page_content}</paragraph_content>"
 
     monkeypatch.setattr(knowledge_tool, "cache_citation_registry_items", fake_cache)
-    monkeypatch.setattr(knowledge_tool.KnowledgeUtils, "format_retrieved_chunk", staticmethod(fake_format), raising=False)
-    monkeypatch.setattr(KnowledgeDao, "get_list_by_ids", classmethod(lambda cls, ids: [SimpleNamespace(id=99, name="政策")]))
+    monkeypatch.setattr(
+        knowledge_tool.KnowledgeUtils, "format_retrieved_chunk", staticmethod(fake_format), raising=False
+    )
+    monkeypatch.setattr(
+        KnowledgeDao, "get_list_by_ids", classmethod(lambda cls, ids: [SimpleNamespace(id=99, name="政策")])
+    )
 
 
 async def _search(tool):
-    vector = SimpleNamespace(asimilarity_search=AsyncMock(return_value=[_hit(1), _hit(2)]))
-    return json.loads(await tool.base_search(vector, "q", 2, knowledge_id=99, knowledge_name="政策"))
+    return json.loads(await tool.format_documents([_hit(1), _hit(2)], knowledge_id=99, knowledge_name="政策"))
 
 
 async def test_kb_chunks_carry_ref_handles(kb_deps, monkeypatch):
@@ -112,7 +121,10 @@ async def test_kb_allocation_failure_or_disabled_scope_keeps_f047_shape(kb_deps,
         return {}
 
     monkeypatch.setattr(handle_svc, "assign_handles", _never)
-    assert "<chunk_id>knowledgesearch_" in (await _search(SearchKnowledgeBase(citation_scope=_Scope(enabled=False))))["结果"][0]
+    assert (
+        "<chunk_id>knowledgesearch_"
+        in (await _search(SearchKnowledgeBase(citation_scope=_Scope(enabled=False))))["结果"][0]
+    )
     assert called["n"] == 0
 
 
@@ -124,10 +136,12 @@ class _FakeWeb(BaseTool):
     name: str = "web_search"
     description: str = "search the web"
     args_schema: type[BaseModel] = _WebIn
-    payload: str = json.dumps([
-        {"title": "A", "url": "https://a.com/1", "snippet": "x"},
-        {"title": "B", "url": "https://b.com/2", "snippet": "y"},
-    ])
+    payload: str = json.dumps(
+        [
+            {"title": "A", "url": "https://a.com/1", "snippet": "x"},
+            {"title": "B", "url": "https://b.com/2", "snippet": "y"},
+        ]
+    )
 
     def _run(self, query: str = "") -> str:
         return self.payload
@@ -141,7 +155,9 @@ def cache_web(monkeypatch: pytest.MonkeyPatch):
     async def fake_cache(items):
         return items
 
-    monkeypatch.setattr("bisheng.citation.domain.services.citation_prompt_helper.cache_citation_registry_items", fake_cache)
+    monkeypatch.setattr(
+        "bisheng.citation.domain.services.citation_prompt_helper.cache_citation_registry_items", fake_cache
+    )
 
 
 async def test_web_results_carry_ref_and_drop_key(cache_web, monkeypatch):

@@ -14,6 +14,11 @@ let mockStreaming = false;
 let mockKnowledgeAccessVerifying = false;
 const mockDeactivationCallbacks = new Set<() => void>();
 const mockLinsightMap = new Map();
+let mockHostHeader = false;
+
+jest.mock('~/hooks/useClientEnvironment', () => ({
+  useClientEnvironment: () => ({ channel: 'web', capabilities: { hasHostChatHeader: mockHostHeader } }),
+}));
 
 jest.mock('~/components/ApiRequestFailure', () => ({ ApiRequestFailure: () => null }));
 jest.mock('./attachments/collectChatAttachments', () => ({ collectChatAttachments: () => [] }));
@@ -31,9 +36,10 @@ jest.mock('recoil', () => ({
     key === 'task' ? false : key === 'model' ? { id: 1, name: 'Alpha' } : '',
   ),
 }));
-jest.mock('~/store', () => ({ __esModule: true, default: { chatModel: 'model', searchType: 'search' } }));
+jest.mock('~/store', () => ({ __esModule: true, default: { chatModel: 'model', searchType: 'search', selectedAgentTools: 'tools' } }));
 jest.mock('~/store/linsight', () => ({
   taskModeState: 'task',
+  taskModeSkillsState: () => 'skills',
   SopStatus: { NotStarted: 'not_started', SopGenerating: 'generating', SopGenerated: 'generated', Running: 'running' },
 }));
 jest.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: null }) }));
@@ -132,6 +138,35 @@ beforeEach(() => {
   mockConfigReady = false;
   mockStreaming = false;
   mockKnowledgeAccessVerifying = false;
+  mockHostHeader = false;
+});
+
+test('the mobile host waits for model config before accepting the first draft', async () => {
+  mockHostHeader = true;
+  mockSend.mockResolvedValue(true);
+  const notices: Record<string, unknown>[] = [];
+  const host = window as Window & {
+    BishengMobile?: { postMessage: (message: string) => void };
+    __bsMobileHost?: { send: (draft: unknown) => Promise<void> };
+  };
+  host.BishengMobile = { postMessage: message => notices.push(JSON.parse(message)) };
+  const view = open();
+  try {
+    expect(notices).toEqual([]);
+    const api = host.__bsMobileHost!;
+    await act(async () => { await api.send({ text: 'Describe this image', modelId: 1 }); });
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(notices).toEqual([{ type: 'send-failed', handedOff: false }]);
+
+    mockConfigReady = true;
+    view.rerender(<View revision={1} />);
+    expect(notices.slice(1)).toEqual([{ type: 'shell-ready' }, { type: 'blank-ready' }]);
+    await act(async () => { await api.send({ text: 'Describe this image', modelId: 1 }); });
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Describe this image')).toBeInTheDocument();
+  } finally {
+    delete host.BishengMobile;
+  }
 });
 
 test('the permission loading toast closes after verification and when leaving the cached chat', async () => {

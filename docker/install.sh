@@ -21,6 +21,7 @@ deploy_succeed() {
 }
 trap 'printf "此次部署脚本执行失败：命令未成功完成（退出码 %s）。\n" "$?" >&2' ERR
 
+credential_generated_labels=(); credential_generated_values=()
 BUNDLE=""; KEY_FILE=""; REVISION=""
 credential_key_explicit=false
 GATEWAY_CHOICE=""; FT_CHOICE=""; LICENSE_FILE=""; PUBLIC_URL=""; PREPARE_ONLY=false
@@ -41,7 +42,7 @@ while [[ $# -gt 0 ]]; do
       shift 2 ;;
     -h|--help)
       printf '%s\n' '用法：bash docker/install.sh [--gateway | --no-gateway] [--ft | --no-ft] [--prepare-only]' \
-        '首次运行引导填写密码；重新部署逐项选择是否改密，回车保留。首次无参数部署不启用 Gateway 和 FT。' \
+        '首次正式安装按提示手填密码，标有“直接回车随机生成”的组件可留空；重新部署逐项选择是否改密，回车保留。首次无参数部署不启用 Gateway 和 FT。' \
         'FT 需要 NVIDIA GPU 和 NVIDIA Container Toolkit；--no-ft 不停止已运行容器。' \
         'Gateway 必须提供 license 文件路径：--license-file <文件> --public-url <平台地址>'
       exit 0 ;;
@@ -277,5 +278,6 @@ credential_start_native
 compose up -d --no-deps --force-recreate backend backend_worker
 compose up -d
 credential_wait_apps
+credential_show_generated
 credential_lock_release
 deploy_succeed '已执行启动；部署凭据已保存，后续继续使用原命令即可。请使用 Compose ps / logs 确认业务就绪。'

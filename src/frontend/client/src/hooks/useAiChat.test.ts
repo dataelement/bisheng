@@ -520,6 +520,40 @@ describe("knowledge-space asks across cached conversations", () => {
   });
 });
 
+test("a mobile host draft is what the turn sends, not the closed-over selection", async () => {
+  const { result } = renderChat("new");
+  await act(async () => {
+    expect(await result.current.sendMessage("hello from the phone", [{ filepath: "a", name: "a.txt" }], {
+      taskMode: true,
+      hostDraft: {
+        text: "hello from the phone",
+        files: [{ filepath: "a", name: "a.txt" }],
+        taskMode: true,
+        searchEnabled: false,
+        model: { id: 9, name: "Host" },
+        tools: [{ id: 1, name: "group", children: [{ id: 4, tool_key: "search" }] }],
+        knowledge: [
+          { id: "3", name: "", type: "org" },
+          { id: "8", name: "", type: "space" },
+        ],
+        skills: [{ name: "brief", display_name: "brief", id: 6 }],
+      },
+    })).toBe(true);
+  });
+  expect(result.current.messages[0].text).toBe("hello from the phone");
+  expect(lastPayload()).toEqual(expect.objectContaining({
+    model: "9",
+    task_mode: true,
+    skills: ["brief"],
+    skill_ids: [6],
+    tools: [{ id: 4, tool_key: "search", type: "tool" }],
+    use_knowledge_base: expect.objectContaining({
+      organization_knowledge_ids: [3],
+      knowledge_space_ids: [8],
+    }),
+  }));
+});
+
 test("knowledge handoff submits the chosen model ID and space in the real chat payload", async () => {
   const modelAtom = store.chatModel as unknown as { __testValue: { id: number; name: string } };
   const initialModel = modelAtom.__testValue;
