@@ -31,10 +31,14 @@
 ## Wave 4：验证、审查与交付
 
 - [x] **T008（测试）**：组合执行默认模型、空间创建、配置保存、QA、callback、新引用和历史读取测试；运行受影响 Platform lint / typecheck、i18n 与变更 Python ruff / arch-guard。生成 `/e2e-test` 所要求的 API 覆盖与 UI 清单；真实环境未提供时明确标记未执行，局部 HTTP/SQL 链路仍须执行。依赖 T005、T007。覆盖 AC: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16。
-- [ ] **T009（审查 / 文档）**：各任务按 `/task-review` 记录，更新 design 当前实现、偏差和验证限制；执行 `/sdd-code-review --base origin/feat/3.1.0`。提交本分支的已完成代码与文档供审查，不自动部署或合并。依赖 T008。
+- [x] **T009（审查 / 文档）**：各任务按 `/task-review` 记录，更新 design 当前实现、偏差和验证限制；执行 `/sdd-code-review --base origin/feat/3.1.0`。提交本分支的已完成代码与文档供审查，不自动部署或合并。依赖 T008。
 
 ## 实际偏差记录
 
 T003 初值读取只投影 embedding 的原始标量，避免无关坏配置阻断修复或布尔值被转成模型 1；见 design.md §4.1，未改变已确认需求。
 
 T008 完成可执行的本地 HTTP/SQL 和组件验证；真实环境/浏览器验收未提供，E2E 报告标 PARTIAL，见 verification.md。
+
+## 交付
+
+实现提交 `b90ce2926a`；L1 审查见 [task-reviews.md](./task-reviews.md)，L2 结论为 [PASS_WITH_WARNINGS](./code-review.md)（仅验证范围限制），真实环境 E2E 为 PARTIAL。工作区实现任务已完成，未推送、合并或部署。
