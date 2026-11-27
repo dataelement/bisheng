@@ -40,6 +40,10 @@ _RLIMIT_AS = 2 * 1024 * 1024 * 1024
 _RLIMIT_NPROC = 256
 _RLIMIT_CPU = 600
 
+# Wall-clock ceiling for one exec request. Deep research asks for 3600s per run;
+# RLIMIT_CPU still caps CPU seconds separately.
+MAX_TIMEOUT_S = 3600
+
 # After SIGKILL on timeout, how long to wait for the pipes to close.
 _KILL_GRACE_S = 5.0
 
@@ -216,7 +220,7 @@ def validate_exec_payload(payload: object) -> tuple[str, str, float]:
         timeout_s = float(timeout)
     except (OverflowError, ValueError):
         raise InvalidExecRequest() from None
-    if not math.isfinite(timeout_s) or not 0 < timeout_s <= 600:
+    if not math.isfinite(timeout_s) or not 0 < timeout_s <= MAX_TIMEOUT_S:
         raise InvalidExecRequest()
     return code, lang, timeout_s
 

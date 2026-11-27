@@ -26,7 +26,10 @@ INVALID = [
     {"code": "x", "lang": "python-not-a-language"},
     {"code": "x", "lang": "Python"},
     {"code": "x", "lang": " python"},
-    *[{"code": "x", "timeout_s": value} for value in (None, True, "5", 0, -1, 601, float("nan"), float("inf"), [], {})],
+    *[
+        {"code": "x", "timeout_s": value}
+        for value in (None, True, "5", 0, -1, 3601, float("nan"), float("inf"), [], {})
+    ],
     {"code": "\ud800"},
     {"code": "print(1)", "unexpected": True},
 ]
@@ -96,3 +99,8 @@ def test_missing_optional_fields_keep_python_default(runner):
     )
     assert response.status_code == 200
     assert "default-ok" in response.json()["stdout"]
+
+
+def test_exec_accepts_deep_research_timeout():
+    """Deep research sends timeout_s=3600; the runner must accept it."""
+    assert execute.validate_exec_payload({"code": "x", "timeout_s": execute.MAX_TIMEOUT_S})[2] == 3600.0
