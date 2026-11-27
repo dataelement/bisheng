@@ -277,12 +277,12 @@ class TestE2EF053OpenApiAuthIdentity:
         assert isinstance(data["models"], list)
         assert isinstance(data["tools"], list)
 
-    async def test_ac_f053_05_pat_is_natural_person_and_read_only(
+    async def test_ac_f053_05_pat_is_natural_person_with_read_and_write(
         self,
         client: httpx.AsyncClient,
         personal_token: dict,
     ) -> None:
-        """AC-F053-05: PAT resolves a natural person with only knowledge:read."""
+        """AC-F053-05: PAT resolves a natural person carrying read and write scopes."""
 
         data = assert_resp_200(
             await client.get(
@@ -292,7 +292,7 @@ class TestE2EF053OpenApiAuthIdentity:
         )
         assert data["actor_kind"] == "natural_person"
         assert data["authorization_subject_type"] == "user"
-        assert data["scopes"] == ["knowledge:read"]
+        assert sorted(data["scopes"]) == ["knowledge:read", "knowledge:write"]
 
     async def test_ac_f053_06_public_v3_is_anonymous_and_allowlisted(
         self,

@@ -45,6 +45,7 @@ EXPECTED_TOOL_NAMES = frozenset(
         "bisheng_knowledge_files_delete",
     }
 )
+# 只读工具，供 --call-tool 用
 READ_ONLY_TOOL_NAMES = frozenset(
     {
         "bisheng_knowledge_list",
@@ -52,9 +53,20 @@ READ_ONLY_TOOL_NAMES = frozenset(
         "bisheng_knowledge_file_list",
     }
 )
+# 个人令牌可见的工具：3 个读 + 3 个写（创建、更新、上传），删除类不开放
+PERSONAL_TOKEN_TOOL_NAMES = frozenset(
+    {
+        "bisheng_knowledge_list",
+        "bisheng_knowledge_retrieve",
+        "bisheng_knowledge_file_list",
+        "bisheng_knowledge_create",
+        "bisheng_knowledge_update",
+        "bisheng_knowledge_file_upload",
+    }
+)
 EXPECTED_PROFILES = {
     "full": EXPECTED_TOOL_NAMES,
-    "pat": READ_ONLY_TOOL_NAMES,
+    "pat": PERSONAL_TOKEN_TOOL_NAMES,
     "scope-filtered": None,
 }
 

@@ -149,7 +149,7 @@ def _build_space_service(
 
 
 @router.post("/", status_code=200)
-@open_api_scope("knowledge:write")
+@open_api_scope("knowledge:write", pat=True)
 async def create(
     request: Request,
     knowledge: KnowledgeCreate,
@@ -198,7 +198,7 @@ async def create(
 
 
 @router.put("/", status_code=200)
-@open_api_scope("knowledge:write")
+@open_api_scope("knowledge:write", pat=True)
 async def update_knowledge(
     *,
     request: Request,
@@ -232,7 +232,7 @@ async def update_knowledge(
 
 
 @router.get("/", status_code=200)
-@open_api_scope("knowledge:read")
+@open_api_scope("knowledge:read", pat=True)
 async def get_knowledge(
     *,
     request: Request,
@@ -332,7 +332,7 @@ async def clear_knowledge_files(
 
 
 @router.post("/file/{knowledge_id}")
-@open_api_scope("knowledge:write")
+@open_api_scope("knowledge:write", pat=True)
 async def upload_file(
     request: Request,
     knowledge_id: int,
@@ -446,7 +446,7 @@ def delete_file_batch_api(request: Request, file_ids: list[int]):
 
 
 @router.get("/file/list", status_code=200)
-@open_api_scope("knowledge:read")
+@open_api_scope("knowledge:read", pat=True)
 async def get_filelist(
     request: Request,
     knowledge_id: int,
@@ -718,7 +718,7 @@ def detail_qa(*, id: int):
 
 
 @router.post("/retrieve")
-@open_api_scope("knowledge:read")
+@open_api_scope("knowledge:read", pat=True)
 async def retrieve_chunks(
     request: Request,
     req: RetrieveReq,

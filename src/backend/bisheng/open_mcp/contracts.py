@@ -21,10 +21,13 @@ class McpContract(BaseModel):
 
 
 class KnowledgeListInput(McpContract):
-    resource_type: Literal[0, 1, 3] = Field(
-        default=0,
+    resource_type: Literal[0, 1, 3] | None = Field(
+        default=None,
         alias="type",
-        description="资源类型: 0=文档知识库, 1=问答知识库, 3=知识空间。",
+        description=(
+            "资源类型: 0=文档知识库, 1=问答知识库, 3=知识空间；省略时同时返回文档库和知识空间两类，"
+            "每类各取 page_size 条，翻页游标同时带两类的子游标。"
+        ),
     )
     name: str | None = None
     sort_by: Literal["update_time", "create_time", "name"] = "update_time"

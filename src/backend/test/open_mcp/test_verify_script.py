@@ -26,6 +26,14 @@ def test_verifier_allowlist_and_calls_are_read_only():
         "bisheng_knowledge_retrieve",
         "bisheng_knowledge_file_list",
     }
+    assert script.PERSONAL_TOKEN_TOOL_NAMES == {
+        "bisheng_knowledge_list",
+        "bisheng_knowledge_retrieve",
+        "bisheng_knowledge_file_list",
+        "bisheng_knowledge_create",
+        "bisheng_knowledge_update",
+        "bisheng_knowledge_file_upload",
+    }
     args = script._parser().parse_args(
         [
             "--url",
@@ -51,7 +59,7 @@ def test_verifier_detects_missing_and_unexpected_tools_for_exact_profiles():
     assert unexpected == []
 
     missing, unexpected = script._tool_differences(
-        script.READ_ONLY_TOOL_NAMES | {"bisheng_knowledge_delete"},
+        script.PERSONAL_TOKEN_TOOL_NAMES | {"bisheng_knowledge_delete"},
         "pat",
     )
     assert missing == []

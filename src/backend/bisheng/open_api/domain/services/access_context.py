@@ -13,6 +13,7 @@ from bisheng.common.errcode.open_api import (
     OpenApiEndpointUnregisteredError,
     OpenApiScopeMissingError,
     PersonalTokenDisabledError,
+    PersonalTokenEndpointNotAllowedError,
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, current_tenant_id, visible_tenant_ids
@@ -77,6 +78,8 @@ async def open_api_access_context(
             if not tenant_policy.enabled:
                 raise PersonalTokenDisabledError()
             pat_data_scope = tenant_policy.data_scope
+            if marker is not None and not marker.pat_allowed:
+                raise PersonalTokenEndpointNotAllowedError()
 
         if marker is None:
             raise OpenApiEndpointUnregisteredError()
