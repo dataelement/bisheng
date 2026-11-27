@@ -21,7 +21,7 @@ scope=openid profile email
 
 ## xpie 配置与用户授权
 
-目标 `xpie` 必须启用，且 `grant_types` 包含 `urn:ietf:params:oauth:grant-type:token-exchange`。Scope 必须属于目标允许范围与 `openid/profile/email` 的交集。第一方来源不需要跨 OAuth 客户端的两两 exchange policy；`require_consent=true` 时仍须先通过正常授权页面取得该用户、租户及目标注册对应的同意，缺少同意会返回 `consent_required`，客户端应引导正常授权，不能自动批准。
+目标 `xpie` 必须是已启用的非内置应用；第一方平台会话换证不要求目标额外开启 Token Exchange Grant Type。第三方 OAuth 来源的换证授权规则保持不变。Scope 必须属于目标允许范围与 `openid/profile/email` 的交集。第一方来源不需要跨 OAuth 客户端的两两 exchange policy；`require_consent=true` 时仍须先通过正常授权页面取得该用户、租户及目标注册对应的同意，缺少同意会返回 `consent_required`，客户端应引导正常授权，不能自动批准。
 
 ## 兼容边界
 

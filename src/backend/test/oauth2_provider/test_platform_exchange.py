@@ -61,7 +61,7 @@ async def platform_env(request, tmp_path):
             client_id="platform-target",
             client_name="B",
             redirect_uris=["https://b.example/cb"],
-            grant_types=["authorization_code", EXCHANGE_GRANT_TYPE],
+            grant_types=["authorization_code", "refresh_token"],
             require_consent=False,
         )
     )
@@ -155,7 +155,6 @@ async def test_parent_revocation_is_online_enforced(platform_env, change):
     "update",
     [
         {"enabled": False},
-        {"grant_types": ["authorization_code"]},
         {"allowed_scopes": ["openid"]},
         {"require_consent": True},
     ],
