@@ -41,4 +41,4 @@ T008 完成可执行的本地 HTTP/SQL 和组件验证；真实环境/浏览器�
 
 ## 交付
 
-实现提交 `b90ce2926a`；L1 审查见 [task-reviews.md](./task-reviews.md)，L2 结论为 [PASS_WITH_WARNINGS](./code-review.md)（仅验证范围限制），真实环境 E2E 为 PARTIAL。工作区实现任务已完成，未推送、合并或部署。
+实现提交 `b90ce2926a`；L1 审查见 [task-reviews.md](./task-reviews.md)，L2 结论为 [PASS_WITH_WARNINGS](./code-review.md)（仅验证范围限制），真实环境 E2E 为 PARTIAL。工作区实现任务已完成；合入最新发版线复核见 verification.md 的合入记录，部署验收仍待执行。

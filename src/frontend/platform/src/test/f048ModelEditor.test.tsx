@@ -584,7 +584,7 @@ describe("ImpactDialog", () => {
         page_size: 20,
         has_more: false,
         cross_tenant: true,
-        items: [{ user_id: 201, username: "alice", tenant_id: 2, tenant_name: "华东子公司" }],
+        items: [{ user_id: 201, username: "alice", tenant_id: 2, tenant_name: "East subsidiary" }],
       })
 
     render(
@@ -599,8 +599,8 @@ describe("ImpactDialog", () => {
             affected_users_has_more: true,
             affected_users_cross_tenant: true,
             affected_users: [
-              { user_id: 101, username: "alice", tenant_id: 1, tenant_name: "总部租户" },
-              { user_id: 102, username: "bob", tenant_id: 1, tenant_name: "总部租户" },
+              { user_id: 101, username: "alice", tenant_id: 1, tenant_name: "Root tenant" },
+              { user_id: 102, username: "bob", tenant_id: 1, tenant_name: "Root tenant" },
             ],
           },
         }}
@@ -615,15 +615,15 @@ describe("ImpactDialog", () => {
     const list = screen.getByTestId("impact-affected-users-list")
     expect(within(list).getByText("alice")).toBeInTheDocument()
     expect(within(list).getByText("bob")).toBeInTheDocument()
-    expect(within(list).getAllByText("总部租户")).toHaveLength(2)
+    expect(within(list).getAllByText("Root tenant")).toHaveLength(2)
 
-    // 首次分页失败 -> 展示错误并支持重试
+    // A failed first page shows an error and supports retry.
     fireEvent.click(within(list).getByRole("button", { name: "impact.loadMoreUsers" }))
     expect(await within(list).findByText("impact.affectedUsersLoadFailed")).toBeInTheDocument()
 
-    // 重试成功 -> 追加同名跨租户用户并附 #user_id 区分
+    // Retry appends the same-name user from another tenant, distinguished by #user_id.
     fireEvent.click(within(list).getByRole("button", { name: "catalog.retry" }))
-    expect(await within(list).findByText("华东子公司")).toBeInTheDocument()
+    expect(await within(list).findByText("East subsidiary")).toBeInTheDocument()
     expect(within(list).getByText("#101")).toBeInTheDocument()
     expect(within(list).getByText("#201")).toBeInTheDocument()
     expect(within(list).queryByRole("button", { name: "impact.loadMoreUsers" })).not.toBeInTheDocument()
@@ -666,7 +666,7 @@ describe("ImpactDialog", () => {
             affected_user_count: 25,
             affected_users_has_more: true,
             affected_users_cross_tenant: false,
-            affected_users: [{ user_id: 101, username: "alice", tenant_id: 1, tenant_name: "总部租户" }],
+            affected_users: [{ user_id: 101, username: "alice", tenant_id: 1, tenant_name: "Root tenant" }],
           },
         }}
         onOpenChange={vi.fn()}

@@ -110,3 +110,11 @@ test/dsh/test_billing_scope.py::test_admin_chosen_helper_model_is_billed_without
 前端原有失败：空间创建页面文字计数断言 1 项（找不到 `0/10`）；引用预览 2 项（当前 Node 测试环境的 `localStorage.getItem` 不可用）。不是新设置逻辑失败，未修改无关实现或测试环境。
 
 真实 MySQL/DM8、Milvus/ES、OpenFGA、MinIO 和在线模型的联调，以及真实登录后的浏览器操作尚未执行。API 测试的认证/授权边界有替身，不宣称真实 JWT 或 OpenFGA 验收通过。见 [E2E 清单](./e2e-checklist.md)，QA 参考表仍为待执行。
+
+## 合入最新发版线复核（2026-11-27）
+
+- 目标分支 `feat/3.1.0` 最新远端父提交为 `5a3bb1ae1c`，包含角色权限功能；本次合并提交为 `3093aaf227`。两个提交和本功能提交均为合并结果的祖先，无冲突。
+- 合并后核对本功能原 66 个改动路径，内容与功能分支一致；远端新增角色权限生产代码保持。
+- 合并后本功能关键后端回归 **192 passed**；Platform 核心表单、历史按钮及弹窗回归 **28 passed**；类型检查与三语检查通过。
+- 整包 lint 发现远端 `f048ModelEditor.test.tsx` 新增的 6 个中文测试租户名称违规；单独将测试值改为英文并同步断言，不修改权限业务逻辑或翻译。该文件 **19 passed**；整包 lint 随后通过，仅保留原有 1 条无用 eslint-disable 警告。
+- `git diff --check` 通过。完整环境验收和部署状态仍按上文记录，不因合入而视为已执行。
