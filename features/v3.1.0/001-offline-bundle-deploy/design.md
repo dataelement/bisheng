@@ -43,6 +43,7 @@ Nexus 下载凭据仅在电脑内存/进程环境中使用；curl 凭据由 stdi
 | Python 源码通过 stdin heredoc 运行 | Python 的 stdin 不是交互终端；用户名/密码提示由外层 Bash 在进入 heredoc 前完成 |
 | macOS tar 自动产生 AppleDouble 元数据 | 顶层额外文件不符合发行布局；构建时 COPYFILE_DISABLE=1，解包继续拒绝越界/链接 |
 | macOS sha256sum 对格式错误的校验行可能返回0 | 回归用合法长度但摘要错误的数据验证失败路径；新统一脚本使用 Python 流式 SHA256 精确匹配 |
+| 版本号进入构建输出和上传路径 | 在所有入口使用路径前拒绝路径字符；分卷大小必须为正整数，awk 输出固定十进制避免跨平台科学计数法 |
 | Nexus REST 上传嵌套 Gateway 文件 | raw.directory 使用子目录，raw.asset filename 只传 basename，GET/PUT 使用完整相对路径 |
 
 ## 6. 依赖与边界

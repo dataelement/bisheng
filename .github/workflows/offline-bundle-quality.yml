@@ -9,6 +9,7 @@ on:
       - scripts/nexus-upload.sh
       - scripts/collect-images.sh
       - scripts/tests/test_offline_deploy.py
+      - scripts/tests/offline-bundle.sh
       - scripts/tests/compose/test-install.sh
       - .github/workflows/offline-bundle*.yml
       - .drone.yml

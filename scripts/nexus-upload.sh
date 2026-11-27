@@ -58,6 +58,7 @@ done
 
 [[ -n "$DIR" && -d "$DIR" ]] || die "--dir 必须是已存在的目录"
 [[ -n "$VERSION" ]] || die "必须指定 --version"
+[[ "$VERSION" =~ ^[0-9][A-Za-z0-9._-]*$ ]] || die "--version 格式非法，不允许路径字符"
 [[ "$ARCH" =~ ^(amd64|arm64)$ ]] || die "--arch 只能是 amd64 或 arm64"
 [[ "$METHOD" =~ ^(rest|put)$ ]] || die "--method 只能是 rest 或 put"
 [[ "$VERIFY" =~ ^(size|sha256|none)$ ]] || die "--verify 只能是 size / sha256 / none"

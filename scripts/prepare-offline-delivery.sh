@@ -15,6 +15,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$ARCH" =~ ^(amd64|arm64)$ && -n "$VERSION" && -d "$DIR" && -d "$DOCKER_DIR" ]]
+[[ "$VERSION" =~ ^[0-9][A-Za-z0-9._-]*$ ]] || { echo '版本号格式无效' >&2; exit 1; }
 NAME="bisheng-offline-${VERSION}-${ARCH}"
 cp "$ROOT/deploy.sh" "$DIR/deploy.sh"
 

@@ -50,7 +50,7 @@ to_bytes() {
     /^[0-9]+[KkMmGgTt]$/{
       n=substr($0,1,length($0)-1); u=toupper(substr($0,length($0),1));
       m=(u=="K")?1024:(u=="M")?1024^2:(u=="G")?1024^3:1024^4;
-      print n*m; next}
+      printf "%.0f\n", n*m; next}
     {exit 1}'
 }
 
@@ -74,6 +74,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$VERSION" ]]     || die "必须指定 --version（如 3.1.0）"
+[[ "$VERSION" =~ ^[0-9][A-Za-z0-9._-]*$ ]] || die "--version 格式非法，不允许路径字符"
 [[ "$ARCH" =~ ^(amd64|arm64)$ ]] || die "--arch 只能是 amd64 或 arm64"
 [[ -n "$IMAGES_FILE" ]]  || die "必须指定 --images-file"
 [[ -f "$IMAGES_FILE" ]]  || die "镜像清单不存在：$IMAGES_FILE"
@@ -90,6 +91,7 @@ need_cmd python3
 [[ "$DRY_RUN" -eq 1 ]] || need_cmd docker
 
 BYTES=$(to_bytes "$SPLIT_SIZE") || die "--split-size 格式非法：$SPLIT_SIZE"
+[[ "$BYTES" =~ ^[0-9]+$ && "$BYTES" -gt 0 ]] || die "--split-size 必须大于零"
 NAME="bisheng-offline-${VERSION}-${ARCH}"
 STAGE="${OUT_DIR}/${NAME}"
 

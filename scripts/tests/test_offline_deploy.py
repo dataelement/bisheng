@@ -333,6 +333,14 @@ class OfflineDeployE2E(unittest.TestCase):
         self.assertTrue(lock.is_dir())
         self.assertEqual(self.calls(), [])
 
+    def test_build_rejects_version_path_before_writing_or_docker(self):
+        """AC-07: packager rejects path-like versions before using them in output paths."""
+        self.execute(['bash', ROOT / 'scripts/make-bundle.sh', '--version', '../escape',
+                      '--arch', 'amd64', '--images-file', self.images,
+                      '--docker-dir', self.docker, '--out', self.dist], success=False)
+        self.assertFalse(self.dist.exists())
+        self.assertEqual(self.calls(), [])
+
     def test_missing_volume_and_resumable_download(self):
         """AC-02/03/07: a 404 isn't treated as end-of-volumes; retries skip verified files."""
         self.build(split=True)

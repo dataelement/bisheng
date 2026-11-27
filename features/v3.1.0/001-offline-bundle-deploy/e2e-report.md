@@ -15,7 +15,7 @@
 
 验证命令与结果：
 
-- `python3 -m unittest discover -s scripts/tests -p test_offline_deploy.py -v`：14/14 通过。
+- `python3 -m unittest discover -s scripts/tests -p test_offline_deploy.py -v`：15/15 通过。
 - `bash scripts/tests/offline-bundle.sh`：原有打包、架构、上传幂等与覆盖拒绝、通知回归通过。
 - `bash scripts/tests/compose/test-install.sh`：23/23 通过。
 - `docker compose --env-file docker/.env.example -f docker/docker-compose.yml --profile gateway config --format json`：实际 CLI 解析通过。
