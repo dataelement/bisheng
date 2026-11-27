@@ -5,8 +5,7 @@
 请自行读取以下文件：
 - {feature_dir}/spec.md（已写的规格文档）
 - {prd_path}（从 spec.md「关联 PRD」字段获取；未标注则读 docs/PRD/ 下与特性名最相关的文件）
-- features/v{X.Y.Z}/release-contract.md（不变量约束 + 领域归属，确认 spec 未越界）
-- docs/constitution.md（架构铁律 C1–C7）
+- {feature_dir}/../release-contract.md（当前版本的领域归属和业务不变量）
 
 **需求覆盖**：
 1. PRD 的功能点 / 用户场景，spec 是否都有对应 AC？
@@ -21,7 +20,7 @@
 
 **边界与合规**：
 8. 是否越界进入 release-contract 表 1 中归属其他 Feature 的领域？
-9. 是否与 release-contract 的 INV 不变量、或 constitution C1–C7 冲突？
+9. 需求描述的行为是否与当前版本契约的业务不变量（INV）冲突？
 10. **spec 是否误写了 How**（架构决策 / API 契约 / 数据模型 / 分层 / 响应格式 / 文件清单 / 性能指标）？这些应在 design.md —— spec 里出现即为 gap（违反纯 What 模型）。
 
 返回格式（必须严格遵守）：
@@ -29,7 +28,7 @@
 有 gap / 问题时，每个问题单独一行：
 - MISSING: <PRD 中的功能/场景，spec 未覆盖> | SEVERITY: high/medium/low | PRD_REF: <PRD 原文片段或章节>
 - ISSUE: <AC 不可测 / 误写 How / 越界 / 缺 EARS> | SEVERITY: high/medium/low | AC: <AC-NN 若适用>
-- CONFLICT: <与 INV / constitution 冲突> | SEVERITY: high | REF: <INV-N 或 C-N>
+- CONFLICT: <与当前版本的业务不变量冲突> | SEVERITY: high | REF: <INV-N>
 
 无 gap 且无问题时，只返回一行：LGTM
 

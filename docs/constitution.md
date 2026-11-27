@@ -15,7 +15,7 @@
 | **C1** | DDD layered call chain | RULE-1 / 2 / 3 / 4 / 5 | VIOLATION (RULE-3 is WARNING during migration) |
 | **C1** | Backend holds no orchestration privilege (F054 K1): no docker / kubernetes SDK import, no `/var/run/docker.sock`, no `DOCKER_HOST` anywhere under `src/backend/bisheng/**`. Container lifecycle is driven by desired-state intents sent to the standalone `src/runtime-manager/` process, which is the sole holder of that access surface. | RULE-10 | VIOLATION |
 | **C2** | Dual-DB compatibility (MySQL + DM8) | — (review + CI) | — |
-| **C3** | Multi-tenancy auto-injection | — (review) | — |
+| **C3** | Multi-tenant read and write scope | — (review) | — |
 | **C4** | Permission unified entry point | RULE-8 / 9 | VIOLATION |
 | **C5** | Error-code convention | — (review) | — |
 | **C6** | No hardcoded secrets | RULE-7 | WARNING |
@@ -51,9 +51,12 @@ Every new feature must work on both dialects. **DM8 is not optional.**
 macOS: the DM8 driver (`dmPython`/`dmAsync`) is not installed (`sys_platform != 'darwin'`).
 **DM8 is a development hard-requirement** — always use `dialect_helpers`, never MySQL-only syntax. But **DM8 compatibility is *verified* by a central regression run** (pre-release / periodic, on Linux), **not by per-feature CI gates** — day-to-day it's held by this law + review, not by a per-PR DM8 test.
 
-## C3. Multi-Tenancy — Auto-Injected, Never Manual
+## C3. Multi-Tenant Data Isolation
 
-**Never write `WHERE tenant_id = X` manually.** SQLAlchemy events handle it automatically for 23+ tables.
+- **Ordinary ORM reads:** rely on the automatic filter for registered tenant-owned tables. If a query hides a tenant-owned table from the filter (for example, inside a subquery or `UNION`), attach the condition from `build_tenant_filter_clause()` to the relevant inner query.
+- **Bulk UPDATE and DELETE:** apply `apply_strict_tenant_filter()` in the DAO or repository under the verified target tenant's execution context. The operation must stay within that tenant even when the read scope includes other tenants. An explicitly authorized maintenance bypass must still constrain the write to its authorized scope.
+- **Raw SQL:** prefer an existing tenant-scoped ORM or repository path. If raw SQL is necessary, explicitly constrain it to the verified tenant or authorized tenant set using bound parameters.
+
 `multi_tenant.enabled=false` behaves identically to single-tenant (default `tenant_id=1`).
 
 ## C4. Permissions — Verified Business Target + Unified Action Runtime

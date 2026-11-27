@@ -1,5 +1,7 @@
 # AGENTS.md
 
+**Before editing code:** Read and apply the [core Ponytail skill](.claude/skills/ponytail/SKILL.md) for every code change, including small fixes and hotfixes outside SDD. Follow the project's constitution and the selected track's required checks. Use the other [Ponytail skills](docs/SDD-Guide.md#11-ponytail-in-the-development-workflow) as needed.
+
 ---
 
 ## 1. Project Identity
@@ -22,15 +24,13 @@
 
 ## 2. Commands
 
-Dev / test / build commands live in each sub-project's `AGENTS.md`: `src/backend/AGENTS.md` · `src/frontend/platform/AGENTS.md` · `src/frontend/client/AGENTS.md`.
-
-Middleware (MySQL / Redis / Milvus / ES / MinIO / OpenFGA): integration tests run in **CI**; per-developer middleware machines are pending.
+Development commands and test conventions live in the sub-project guides: [backend](src/backend/AGENTS.md) · [platform](src/frontend/platform/AGENTS.md) · [client](src/frontend/client/AGENTS.md). For verification scope and environment, see the [SDD guide](docs/SDD-Guide.md).
 
 ---
 
 ## 3. Backend Rules (P0)
 
-- **Architectural laws** (DDD layering / dual-DB / multi-tenancy / permissions / error codes / security) → [`docs/constitution.md`](docs/constitution.md) (C1–C7); enforced by `scripts/arch-guard.sh` + Constitution Check in `/sdd-review design`.
+- **Architectural laws** → [`docs/constitution.md`](docs/constitution.md). The constitution maps each law to its review or automated check.
 - **Backend coding conventions** (module layout, API/response helpers, pagination, error handling) + subsystem quick map → `src/backend/AGENTS.md` (auto-loads when editing backend files).
 
 ---
@@ -50,35 +50,13 @@ The 10 RULEs (RULE-1 … RULE-10) are the machine-enforcement arm of constitutio
 
 ## 6. SDD Workflow (non-trivial features)
 
-**Full guide — track selection, ★ pause points, deviation re-confirm rule, document roles, constitution gate, harness → [`docs/SDD-Guide.md`](docs/SDD-Guide.md).**
-
-```
-0. release-contract.md (features/v{X.Y.Z}/release-contract.md;
-   version's first feature creates it) + read constitution.md
-1. Spec Discovery                          → ★ user confirms
-2. spec.md   → /sdd-review <dir> spec       → ★ user confirms
-3. design.md → /sdd-review <dir> design     → ★ user confirms (Constitution Check)
-             → read QA template, generate and check eight-column test-cases.md (SDD Guide §2.1)
-4. tasks.md  → /sdd-review <dir> tasks
-5. branch feat/<version>/{NNN}-{name}  (create early; docs + code on the branch)
-6. implement wave-by-wave → /task-review <dir> <id> → check off
-7. /e2e-test <dir>  (mandatory)
-8. /sdd-code-review --base <main>  (+ CI auto-review)
-9. merge
-```
-
-Artifacts: `features/v{X.Y.Z}/{NNN}-{name}/{spec,design,test-cases,tasks}.md`. Templates: `features/_templates/` (incl. `release-contract.md`).
-**★ cannot be skipped.** Trivial/hotfix changes use a lighter track — see SDD-Guide §1.
-
-Tests: new backend tests under `test/<module>/` (e.g., `test/approval/`), not `test/` root. `asyncio_mode=auto`.
-
-- **Release line first**: changes not specific to a derived branch land on the release line, then merge down; across version lines, cherry-pick only from a commit already on a release line. Details (back-port duplicate checks, AC id format, renumbering sweep, verifying delivery) → `docs/SDD-Guide.md` §9.
+Before starting, pick the track in the [SDD guide](docs/SDD-Guide.md) and follow its steps, mandatory ★ confirmations, and release-line rules. The guide owns the process and artifact requirements.
 
 ---
 
 ## 7. Common Pitfalls
 
-Subsystem pitfalls live in the nearest AGENTS.md (backend / client / platform §Known Pitfalls, linsight). Factual pitfalls table + method pitfalls in full → `docs/agent-pitfalls.md`. One-line index: liveness = trace callers + frontend entry · root cause = check magnitude, measure where it reproduces · scope follows root cause; dead code is deleted · surface model misbehaviour, don't fall back.
+Read [BiSheng's known pitfalls](docs/agent-pitfalls.md) for verified lessons and links to the relevant subsystem rules.
 
 - **Shared working tree: no repo-wide git writes** — `git stash` (incl. pop/apply), `git checkout .`, `git reset --hard`, `git clean`, path-less `git restore`. Use `git show HEAD:<path>`, `git diff HEAD -- <path>`, `git worktree add`; a path-scoped `git checkout <ref> -- <path>` is safe. Put this in every concurrent sub-agent brief.
 - **`git checkout --theirs <file>` takes the whole file**, silently dropping your side's unique entries (locale JSON, error-code copy). Use `git checkout --merge -- <file>`, resolve hunk by hunk, then parse the file to validate.

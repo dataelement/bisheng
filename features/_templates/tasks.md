@@ -24,7 +24,8 @@
 - 理想流程：先写测试（红），再写实现（绿）
 - 测试基础薄弱时，首个测试任务一并搭 pytest 基础设施（conftest.py、db fixture、mock helpers）
 - 测试编写成本极高（如需完整 Milvus/ES mock）可标注 `**测试降级**: 手动验证 + TODO`，并在「实际偏差记录」说明
-- 中间件 / DM8 / e2e 测试在 **CI** 跑，不依赖本地（见 `docs/SDD-Guide.md` §6）
+- 后端测试目录和运行命令见 `src/backend/AGENTS.md`。
+- 按所选 SDD 流程和可用环境执行验证，现有 CI 覆盖见 `docs/SDD-Guide.md` §6。中间件、DM8 或 E2E 检查未执行时，注明未验证项和原因。
 
 **前端**：当前用「手动验证」（每个任务附验证步骤）。目标是 Playwright 交互测试（`docs/SDD-Guide.md` §6，🚧 规划中）—— 落地后前端任务改写自动化断言。
 
@@ -50,7 +51,7 @@
 ### 后端 Domain Service（Test-First 配对）
 
 - [ ] **T003**: {Module}Service 单元测试
-  **文件**: `src/backend/test/test_{module}_service.py`
+  **文件**: `src/backend/test/{module}/test_{module}_service.py`
   **逻辑**: 测试核心方法，mock DAO 层
   **测试**: `test_create_success` → AC-01, `test_permission_denied` → AC-02
   **覆盖 AC**: AC-01, AC-02
@@ -67,7 +68,7 @@
 ### 后端 API 层（Test-First 配对）
 
 - [ ] **T005**: API 端点集成测试
-  **文件**: `src/backend/test/test_{module}_api.py`
+  **文件**: `src/backend/test/{module}/test_{module}_api.py`
   **逻辑**: TestClient 测试 HTTP 端点，覆盖 happy path + 主要 error path
   **覆盖 AC**: AC-01, AC-02
   **依赖**: T004

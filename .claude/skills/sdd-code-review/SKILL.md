@@ -29,7 +29,7 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行（SDD �
 
 1. 执行 `git diff <base>...HEAD --stat` 获取变更文件列表
 2. 执行 `git diff <base>...HEAD` 获取完整 diff
-3. 对照 Feature 的 `spec.md`、`design.md` 和 `tasks.md`
+3. 对照所选 SDD 流程要求的 Feature 文档。无需新建文档的热修，按改动涉及的现有契约或设计约束审查
 4. 按 7 维度逐一审查
 5. 输出审查报告
 
@@ -50,15 +50,15 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行（SDD �
 
 ### 维度 2：权限与认证
 
-> 以 `docs/constitution.md` C4 为准；本表只列审查时要看的点。
+> 权限规则以[架构宪章](../../../docs/constitution.md) C4 为准。审查时沿调用链核对以下事项。
 
 | 检查项 | 说明 |
 |--------|------|
 | 认证注入 | 需要认证的端点是否使用 `UserPayload = Depends(UserPayload.get_login_user)` |
-| 资源动作鉴权 | 资源操作是否走 `permission.application` 的 `require_business_action` / `check_business_action`（F048 统一运行时），而不是直接查 `role_access`、OpenFGA 或旧的 relation/`permission_id` 模板（RULE-8） |
-| 判定顺序 | 不自行重写 super_admin → 租户不匹配拒绝 → 租户管理员 → Catalog/动作闸 → OpenFGA 的短路顺序；RBAC 菜单权限不能当资源动作的兜底放行 |
-| 资源生命周期 | 资源创建、移动、复制、删除与授权变更是否走权限模块的投影台账，而不是业务代码自己写 tuple（RULE-9） |
-| tenant_id 隔离 | 跨租户访问被阻止；批量 `update()` / `delete()` 和原生 SQL 是否手写了 tenant 条件（自动过滤只拦 SELECT） |
+| 资源动作鉴权 | 核对各业务入口怎样调用 C4 规定的权限入口，是否存在绕过路径（RULE-8） |
+| 判定顺序 | 按 C4 核对拒绝条件和短路顺序，抽查拒绝后能否被其他权限分支放行 |
+| 资源生命周期 | 核对资源创建、移动、复制、删除和授权变更是否走 C4 规定的投影台账（RULE-9） |
+| 租户隔离 | 按 [C3](../../../docs/constitution.md#c3-multi-tenant-data-isolation) 核查 ORM 查询、批量写入和原生 SQL；确认整条链路使用已验证的目标租户，较宽的查询范围不会扩大写入范围 |
 | 普通用户验证 | 权限相关的测试或手动验证是否用了非管理员账号（super_admin 会短路） |
 | WebSocket 认证 | WS 端点是否使用 `UserPayload.get_login_user_from_ws` |
 
@@ -101,9 +101,8 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行（SDD �
 |--------|------|
 | DDD 分层 | 新代码在正确的层级（domain/services vs api/endpoints） |
 | 命名一致 | DAO/Service/错误码命名遵循项目约定 |
-| 代码重复 | 无复制粘贴式重复逻辑（应提取到 Service 或工具函数） |
-| 未使用代码 | 无 dead code、注释掉的代码块、空函数 |
-| 格式化 | Python 代码通过 ruff check（hook 自动处理） |
+| 实现范围 | 按 [Ponytail](../ponytail/SKILL.md) 核对本次变更是否复用了合适的现有实现，是否新增可省的封装或无用代码 |
+| 格式化 | 核对本次 Python 改动的 Ruff 检查结果，命令见[后端规范](../../../src/backend/AGENTS.md) |
 
 ### 维度 7：文档同步（design.md 现状快照）
 
@@ -111,7 +110,7 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行（SDD �
 
 | 检查项 | 说明 | 严重度 |
 |--------|------|--------|
-| design.md 存在 | feature 目录下有 `design.md`（按 `features/_templates/design.md` 起的稿） | HIGH（缺失直接 NEEDS_FIX） |
+| design.md 存在 | 所选流程要求设计文档时，feature 目录有按 `features/_templates/design.md` 编写的 `design.md` | HIGH（应有而缺失时 NEEDS_FIX） |
 | 决策同步 | diff 中新增/替换的关键技术决策（数据格式、配对/匹配策略、同步 vs 异步、二进制依赖等）在 §3 方案对比有记录，且给出"何时该重新考虑" | HIGH |
 | 数据流/契约同步 | diff 触及 API 路径 / 请求响应字段 / 内部 Service 入参出参 / 数据库新表新字段 / 关键文件职责变化 → §4.1 数据流、§4.2 字段约定、§4.3 模块职责对应章节已更新 | HIGH |
 | 已知坑同步 | 修了一个"代码里看不出的"反直觉 bug（典型：上游字段格式不符合直觉、运行时值与文档不符、必须的兜底逻辑）→ §5 已知坑 表新增一行（带"如果不知道会怎样"+"在哪处理"） | HIGH |

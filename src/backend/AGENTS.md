@@ -1,7 +1,7 @@
 # Backend Reference
 
 Auto-loaded when editing files in `src/backend/`. Complements root `AGENTS.md`.
-- Architectural **laws** (inviolable) → `docs/constitution.md` (C1–C7).
+- Architectural **laws** (inviolable) → [`docs/constitution.md`](../../docs/constitution.md).
 - Deep **subsystem architecture** (workflow / RAG / linsight / permission / gateway / multi-tenant / data models) → `docs/architecture/`.
 - **This file = coding conventions + a quick map. Do not duplicate architecture prose here** — link to `architecture/` instead.
 
@@ -166,7 +166,7 @@ uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only;
 
 ## Known Pitfalls
 
-- **Tenant auto-filter only intercepts SELECT.** The `do_orm_execute` listener (`core/database/tenant_filter.py`) returns early for non-SELECT; `before_flush` auto-fills `tenant_id` on INSERT. Bulk `update()` / `delete()` statements and raw `text()` SQL get **no** tenant injection — hand-write the `tenant_id` condition (has leaked cross-tenant twice: LLM module, F035).
+- **Tenant auto-filter only intercepts SELECT.** The `do_orm_execute` listener (`core/database/tenant_filter.py`) returns early for non-SELECT. The separate `before_flush` hook fills an unset `tenant_id` on new ORM objects. Follow [C3](../../docs/constitution.md#c3-multi-tenant-data-isolation) for reads, bulk writes, and raw SQL. See `test/admin/test_migrated_resource_boundaries.py` for regression cases covering bulk writes with wider read visibility.
 - **The ruff PostToolUse hook deletes not-yet-used imports.** Every written `.py` gets `ruff check --fix`; an import added in one edit whose usage lands only in a later edit is removed as unused (F401) in between. Land import + usage in the same edit, or write the usage first. A green test run does **not** prove you escaped this — the deleted import only explodes on the code path that uses it. After adding imports, run `uv run ruff check --select F821` to catch "import removed, usage still there", and check `git diff --stat` for files outside the ones you meant to touch.
 - **Celery Beat × multi-tenant.** A Beat schedule fires once; the task body iterates all active tenants — call `set_current_tenant_id()` per iteration, and wrap the cross-tenant enumeration query itself in `bypass_tenant_filter()` (`core/context/tenant.py`), otherwise queries fail on missing tenant context.
 - **DB config changes take up to 100s.** DB-layer config is cached in Redis with a 100s TTL — don't chase "config not applied" inside that window. The cache lives on the db index named in `redis_url` (`/1` in the shipped `config.yaml`), **not** db0: after editing the `config` table directly, deleting the key from db0 is a no-op that returns 0 and looks like it worked, and the TTL then makes it read as "the change did not take". Delete it on the right index and the new config applies immediately — no backend restart needed.
