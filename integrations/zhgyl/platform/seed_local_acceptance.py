@@ -7,7 +7,7 @@ source tree, including runnable Skill copies with synthetic asset files.
 from __future__ import annotations
 
 import argparse
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 import hashlib
 import importlib.util
 import json
@@ -16,6 +16,7 @@ import runpy
 import secrets
 import shutil
 import zipfile
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -336,9 +337,15 @@ def customs(root):
     write(root, "customs/snapshot.json", result)
 
 
-def orders(root):
-    result = {"asOf": "2026-11-26", "orders": [], "initialReminders": {}}
-    for i, due_date in enumerate(("2026-11-29", "2026-11-20", None), 1):
+def orders(root, as_of=None):
+    base = as_of or datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    result = {"asOf": base.isoformat(), "orders": [], "initialReminders": {}}
+
+    def day(offset):
+        return None if offset is None else (base + timedelta(days=offset)).isoformat()
+
+    for i, offset in enumerate((3, -6, None), 1):
+        due_date = day(offset)
         result["orders"].append(
             {
                 "id": "SIM-ORDER-" + str(i),
@@ -380,13 +387,8 @@ def orders(root):
                 ],
             }
         )
-    # Keep the original three fixtures byte-for-value; add independent synthetic
-    # orders to exercise two default pages and every calendar window.
-    base = date.fromisoformat(result["asOf"])
-    offsets = (-45, -7, -1, 0, 1, 3, 7, 8, 15, 30, 31, 60, None)
-
-    def day(offset):
-        return None if offset is None else (base + timedelta(days=offset)).isoformat()
+    # Keep most examples upcoming while exercising past, due today, and missing dates.
+    offsets = (12, 17, 9, 0, 2, 3, 7, 8, 15, 30, 31, 60, None)
 
     for i in range(4, 25):
         offset = offsets[(i - 4) % len(offsets)]
