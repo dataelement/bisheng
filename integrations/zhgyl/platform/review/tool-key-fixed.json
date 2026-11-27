@@ -1,0 +1,53 @@
+{
+  "use_ordinary": {
+    "api_key_exposed": false,
+    "requested_permission_actions": [
+      [
+        "use"
+      ],
+      [
+        "edit"
+      ]
+    ],
+    "database_credential_unchanged": true
+  },
+  "visible_ordinary": {
+    "api_key_exposed": false,
+    "requested_permission_actions": [
+      [
+        "visible"
+      ],
+      [
+        "edit"
+      ]
+    ],
+    "database_credential_unchanged": true
+  },
+  "use_editor": {
+    "api_key_exposed": true,
+    "requested_permission_actions": [
+      [
+        "use"
+      ],
+      [
+        "edit"
+      ]
+    ],
+    "database_credential_unchanged": true
+  },
+  "visible_editor": {
+    "api_key_exposed": true,
+    "requested_permission_actions": [
+      [
+        "visible"
+      ],
+      [
+        "edit"
+      ]
+    ],
+    "database_credential_unchanged": true
+  },
+  "editor_round_trip_preserves_key": true,
+  "fixed": true,
+  "scope": "actual_source_methods_with_synthetic_dao_and_permission_stubs_only"
+}

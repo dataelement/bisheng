@@ -1591,6 +1591,23 @@ async def create_linsight_agent(
         getattr(session_model, "user_id", None), getattr(session_model, "tenant_id", None)
     )
     export_tools = init_linsight_export_tools(backend, export_user=export_user)
+    from bisheng.linsight.domain.services.customs_tools import CustomsMiddleware, CustomsTool
+    from bisheng.linsight.domain.services.procurement_api_files import (
+        OrderExecutionTool,
+        OrderMiddleware,
+        ProcurementExecutionTool,
+        ProcurementSerialMiddleware,
+    )
+    from bisheng.linsight.domain.services.transport_tools import TransportMiddleware, TransportTool
+
+    for tool_type, middleware_type in (
+        (ProcurementExecutionTool, ProcurementSerialMiddleware),
+        (OrderExecutionTool, OrderMiddleware),
+        (TransportTool, TransportMiddleware),
+        (CustomsTool, CustomsMiddleware),
+    ):
+        if any(isinstance(tool, tool_type) for tool in tools):
+            middlewares.append(middleware_type())
     # Invalid tool-call repair (after_model). Appended LAST on purpose: after_model
     # hooks run in REVERSE middleware order, so this one sees the model output
     # first and the tool-loop breaker / TodoList hooks then see the repaired call.

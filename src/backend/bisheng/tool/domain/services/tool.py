@@ -202,11 +202,28 @@ class ToolServices(BaseModel):
             tool_type_children[one.type].append(one)
 
         enrich_start = perf_counter()
+        # List/use permission does not grant access to a saved service credential.
+        # Keep the existing editor contract only for callers with the exact edit
+        # action. These are response copies; runtime execution still reads DB keys.
+        credential_type_ids = [one.id for one in res if one.api_key]
+        credential_actions = (
+            await batch_check_business_actions(
+                self.login_user,
+                resource_type="tool",
+                resource_ids=credential_type_ids,
+                actions=("edit",),
+            )
+            if credential_type_ids
+            else {}
+        )
+        credential_masker = JsonFieldMasker()
         for one in res:
             one.children = tool_type_children.get(one.id, [])
 
             # Data desensitization
             one.mask_sensitive_data()
+            if one.api_key and "edit" not in credential_actions.get(str(one.id), ()):
+                one.api_key = credential_masker.mask_api_key(one.api_key)
         enrich_elapsed_ms = (perf_counter() - enrich_start) * 1000
 
         logger.info(

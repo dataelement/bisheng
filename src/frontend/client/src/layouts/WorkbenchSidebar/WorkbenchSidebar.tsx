@@ -1,9 +1,10 @@
+import { FlightReplay } from '~/components/zhgyl/FlightReplay';
+import { workspaceAsset } from '~/components/zhgyl/scenes';
 import { Dropdown, DropdownItem } from "@bisheng/ui";
 import { Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
-import type { MouseEvent, ReactElement, ReactNode } from 'react';
-import { cloneElement } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import type { MouseEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useStartNewChat } from '~/components/Nav/NewChat';
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
@@ -14,30 +15,13 @@ import { useWorkbenchNavLinks } from '../useWorkbenchNavLinks';
 import { SidebarConversationList } from './SidebarConversationList';
 import { SidebarProjects } from './SidebarProjects';
 import { splitSidebarEntries, useSidebarEntries } from './useSidebarEntries';
+import { SidebarNavRow, SIDEBAR_NAV_ROW_CLASS_NAME as NAV_ROW } from './SidebarNavRow';
+import { sidebarChatEntry } from './sidebarChatEntry';
 
 /** Shown next to the logo when the admin has not configured a 首页 display name. */
 const DEFAULT_BRAND_NAME = 'BISHENG';
 
 const BRAND_LINK = 'flex h-8 min-w-0 items-center gap-2.5';
-
-const NAV_ROW = 'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-body text-text-1 transition-colors hover:bg-fill-1';
-
-interface SidebarNavRowProps {
-  to: string;
-  icon: ReactNode;
-  label: string;
-  active?: boolean;
-  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
-}
-
-function SidebarNavRow({ to, icon, label, active = false, onClick }: SidebarNavRowProps) {
-  return (
-    <NavLink to={to} onClick={onClick} className={cn(NAV_ROW, active && 'bg-fill-2 hover:bg-fill-2')}>
-      {cloneElement(icon as ReactElement, { className: 'size-4 shrink-0' })}
-      <span className="min-w-0 flex-1 truncate py-px">{label}</span>
-    </NavLink>
-  );
-}
 
 /**
  * Desktop workbench sidebar (Figma 13139:111432): brand row, module entries, 项目,
@@ -56,7 +40,8 @@ interface WorkbenchSidebarProps {
 
 export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
   const localize = useLocalize();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const selectedChatEntry = sidebarChatEntry(pathname, search);
   const { data: bsConfig } = useGetBsConfig();
   const navigate = useNavigate();
   const { links, showAdminEntry } = useWorkbenchNavLinks();
@@ -72,6 +57,7 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
   // A granted 首页 starts a fresh chat; without the grant the link target is the
   // menu-unavailable placeholder and must navigate normally.
   const homeGranted = homeLink?.to.startsWith('/menu-unavailable') === false;
+  const brandTarget = homeGranted ? '/c/new' : homeLink?.to ?? '/c/new';
   const handleNewChat = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!homeGranted || event.button !== 0 || event.ctrlKey || event.metaKey) return;
     event.preventDefault();
@@ -81,11 +67,12 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
   // Re-navigating to the path we are already on still mints a fresh location.key
   // and re-runs every effect keyed on it, for nothing the user can see.
   const handleSamePathClick = (to: string) => (event: MouseEvent<HTMLAnchorElement>) => {
-    if (to === pathname) event.preventDefault();
+    if (to === pathname + search) event.preventDefault();
   };
 
   const brand = (
     <>
+      <img src={workspaceAsset('company-logo.png')} className="zh-sidebar-logo" alt={localize('zhgyl.brand')} />
       {logoSrc ? <img src={logoSrc} className="size-6 shrink-0 object-contain" alt="" /> : null}
       <span className="truncate text-h4 font-semibold text-text-1">{brandName}</span>
     </>
@@ -100,16 +87,16 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
     >
       <div className="flex h-8 w-full shrink-0 items-center px-2">
         {homeLink ? (
-          <NavLink
-            to={homeLink.to}
-            onClick={handleSamePathClick(homeLink.to)}
+          <Link
+            to={brandTarget}
+            onClick={handleSamePathClick(brandTarget)}
             aria-label={localize('com_workbench_sidebar.home')}
-            className={BRAND_LINK}
+            className={cn(BRAND_LINK, 'zh-sidebar-brand')}
           >
             {brand}
-          </NavLink>
+          </Link>
         ) : (
-          <div className={BRAND_LINK}>{brand}</div>
+          <div className={cn(BRAND_LINK, 'zh-sidebar-brand')}>{brand}</div>
         )}
       </div>
 
@@ -118,13 +105,16 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
           <SidebarNavRow
             to={homeGranted ? '/c/new' : homeLink.to}
             icon={<Outlined.MessagePlus />}
-            label={localize('com_nav_start_new_chat')}
+            label={localize('zhgyl.navigation')}
+            entryId="home"
+            active={selectedChatEntry === 'home'}
             onClick={handleNewChat}
           />
         )}
         {entries.map((entry) => (
           <SidebarNavRow
             key={entry.id}
+            entryId={entry.id}
             to={entry.to}
             icon={entry.icon}
             label={entry.label}
@@ -140,7 +130,7 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
                   icon={entry.icon}
 
                   onSelect={() => {
-                    if (entry.to !== pathname) navigate(entry.to);
+                    if (entry.to !== pathname + search) navigate(entry.to);
                   }}
                 >{entry.label}</DropdownItem>
               ))}
@@ -162,6 +152,7 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
         <div className="min-h-0 flex-1" />
       )}
 
+      <FlightReplay />
       <div className="h-px w-full shrink-0 bg-border-base" />
       {/* Two controls, one row chrome: both 32px tall with the nav rows' 8px radius and
           fill-1 hover — the account button stretches, the admin link is the 32px square. */}

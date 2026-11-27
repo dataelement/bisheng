@@ -10,6 +10,7 @@ import { useRecoilState } from "recoil";
 import { useToastContext } from "~/Providers";
 import { Button } from "~/components";
 import { uploadFile, uploadFileWithProgress } from "~/api/apps";
+import { showApiError } from "~/api/request";
 import useLocalize from "~/hooks/useLocalize";
 import { normalizeSuffixList } from "../fileAcceptUtils";
 
@@ -107,7 +108,7 @@ export default function InputFileComponent({
                 setMyValue(result.files.map(f => f.display_name).join(', '));
                 onChange(result.files.map(f => f.display_name).join(', '));
                 onFileChange(result.files.map(f => f.file_path));
-            }).catch(error => { onFileChange([]); showToast({message: String(error.message || error), status:'error'}); })
+            }).catch(error => { showToast({message: String(error.message || error), status:'error'}); })
                 .finally(() => setBusy(false));
             return;
         }
@@ -143,8 +144,8 @@ export default function InputFileComponent({
                     onFileChange(file_path);
                     setBusy(false);
                 }))
-                .catch(() => {
-                    console.error("Error occurred while uploading file");
+                .catch((error) => {
+                    showApiError(error);
                 })
                 .finally(() => {
                     setBusy(false);
@@ -213,7 +214,7 @@ export default function InputFileComponent({
                         setBusy(false); // Hide loading state
                     })
                     .catch((error) => {
-                        console.error("Error occurred while uploading files", error);
+                        showApiError(error);
                         setBusy(false); // Hide loading state if an error occurs
                     });
             } else {

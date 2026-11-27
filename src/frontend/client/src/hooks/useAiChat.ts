@@ -2,6 +2,7 @@
  * Core chat state hook — manages messages, submission, and SSE lifecycle.
  * Uses useState/useRef for local state, Recoil only for shared atoms (chatModel, searchType).
  */
+import { stripTransportDetail } from "~/components/zhgyl/transportDetail";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRecoilState } from "recoil";
@@ -414,7 +415,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         getAgentMessages(conversationId, shareToken || undefined)
             .then((msgs) => {
                 if (!active) return;
-                setMessages(msgs);
+                setMessages(msgs.map(message => message.isCreatedByUser ? { ...message, text: stripTransportDetail(message.text) } : message));
                 setIsLoading(false);
             })
             .catch((err) => {
@@ -508,7 +509,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     }, [setIsParsingMedia, setMessages]);
 
     const sendMessage = useCallback(
-        (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
+        (text: string, files?: any[] | null, opts?: { taskMode?: boolean; transportDetailText?: string }) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return false;
             if (knowledgeAccessBlocked) {
                 showToast({ message: knowledgeAccessMessage, status: "warning" });
@@ -622,7 +623,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 .filter((kb) => kb.type === 'space')
                 .map((kb) => Number(kb.id));
             const payload = {
-                text: text.trim(),
+                text: opts?.transportDetailText ?? text.trim(),
                 clientTimestamp: new Date().toLocaleString("sv").replace(" ", "T"),
                 parentMessageId,
                 conversationId: currentConvoId,
@@ -1028,7 +1029,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                     m.messageId === userMessageId
                             );
                             if (userIdx >= 0 && data.requestMessage) {
-                                msgs[userIdx] = { ...msgs[userIdx], ...data.requestMessage };
+                                msgs[userIdx] = { ...msgs[userIdx], ...data.requestMessage, text: stripTransportDetail(data.requestMessage.text ?? msgs[userIdx].text) };
                             }
                         }
                         return msgs;

@@ -1,3 +1,4 @@
+import { stripTransportDetail } from '~/components/zhgyl/transportDetail';
 // @ts-strict-ignore
 /**
  * SSE hook for v2.5 Agent-mode chat streaming.
@@ -195,7 +196,7 @@ export function openChatStream(
 
             // --- created: conversation init ---
             if (data.created != null) {
-                const mergedUser = { ...userMessage, ...data.message };
+                const mergedUser = { ...userMessage, ...data.message, text: stripTransportDetail(data.message?.text ?? userMessage.text) };
                 assignProject(data.message?.conversationId || userMessage.conversationId);
                 onCreated(
                     data.message?.conversationId || userMessage.conversationId,

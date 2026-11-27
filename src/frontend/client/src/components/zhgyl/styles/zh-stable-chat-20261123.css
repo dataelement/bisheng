@@ -1,0 +1,37 @@
+
+/* The scene heading and the opening keep the same axis when Chat mounts its history. */
+.zh-workbench :is([data-assistant-scene="procurement"], [data-assistant-scene="transport"], [data-assistant-scene="customs"]) .assistant-chat-heading-stable {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.zh-workbench .assistant-chat-heading-stable > span { margin-right: auto; }
+
+.zh-workbench .assistant-chat-heading-stable > .flex-1 {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+}
+
+body.zh-workbench .dsh-chat-surface[data-scene-theme] .assistant-chat-heading-stable::after {
+  right: 190px;
+}
+
+.zh-workbench .dsh-chat-surface[data-scene-theme] .assistant-chat-heading-stable:not(.assistant-chat-intro > .assistant-chat-heading-stable) {
+  width: calc(100% - 32px);
+  max-width: 1088px;
+  margin-inline: auto;
+}
+
+.zh-workbench .dsh-chat-surface[data-scene-theme] .dsh-chat-composer-seat {
+  max-width: 1120px !important;
+}
+
+.zh-workbench .dsh-chat-surface[data-scene-theme] .assistant-chat-heading-stable:not(.assistant-chat-intro > .assistant-chat-heading-stable)::before,
+.zh-workbench .dsh-chat-surface[data-scene-theme] .assistant-chat-heading-stable:not(.assistant-chat-intro > .assistant-chat-heading-stable)::after {
+  animation: none !important;
+}
+
+@media (max-width: 720px) {
+  body.zh-workbench .dsh-chat-surface[data-scene-theme] .assistant-chat-heading-stable::after { right: 155px; }
+}

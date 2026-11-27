@@ -19,6 +19,7 @@ const App = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
+        ...(navigator.onLine === false ? { networkMode: 'always' } : {}),
         refetchOnWindowFocus: false,
         retry: (failureCount, error) => shouldRetryApiError(error) && failureCount < 3,
       },

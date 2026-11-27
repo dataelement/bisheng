@@ -1,0 +1,42 @@
+@import "./styles/procurement-chat-tables-20261112.css";
+@import "./styles/procurement-entry-20261112.css";
+@import "./styles/customs-entry-20261113.css";
+@import "./styles/customs-compact-v110.css";
+@import "./styles/assistant-task-list-20261113.css";
+@import "./styles/customs-shared-visible-v110.css";
+@import "./styles/assistant-friendly-20261113.css";
+@import "./styles/zh-workbench-v1.css";
+@import "./styles/zh-home-flight-20261123.css";
+@import "./styles/zh-stable-chat-20261123.css";
+@import "./styles/zh-scene-chat-aviation-20261123.css";
+@import "./styles/zh-order-tracking.css";
+@import "./styles/zh-workspace-palette.css";
+/* Host adapters retain the D structures while preserving the 3.0.2 composer owner. */
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .dsh-chat-hero{margin:0 auto!important}
+body.zh-workbench .dsh-chat-surface[data-procurement-mode="true"] .dsh-chat-hero{margin:0 auto!important}
+body.zh-workbench .assistant-home-general{display:block}
+.zh-native-orders-nav[hidden]{display:none!important}
+.zhgyl-module{display:flex;min-height:0;flex:1;flex-direction:column;width:100%}
+.zhgyl-module .zh-orders-frame{min-height:0!important;display:block!important;height:100%;flex:1}
+body.zh-workbench .dsh-chat-surface[data-scene-theme] .dsh-chat-landing{padding-top:0}
+body.zh-workbench .dsh-chat-surface[data-scene-theme] .dsh-chat-hero>.w-full{margin-top:auto}
+.zh-process{white-space:normal}.zh-process .zh-node-detail{white-space:pre-wrap}
+.zh-process-status{display:block;white-space:normal;font:12px/1.7 inherit;color:#6e7e90}
+body.zh-workbench .zh-chat-native-progress{display:none}
+.zh-sidebar-brand .zh-sidebar-logo{width:172px;height:50px}
+.zh-sidebar-brand:has(.zh-sidebar-logo)>:not(.zh-sidebar-logo){display:none!important}
+.zh-sidebar-brand{min-height:55px!important;height:55px!important}
+.zh-sidebar-brand>img{max-width:100%}
+body.zh-workbench .zh-chat-shell .dsh-chat-column{margin-inline-end:0}
+
+body.zh-sidebar-clean [data-zh-home-entry]{background:transparent!important;color:inherit}
+#procurement-forecast-navigation.zh-forecast-entry{display:flex!important}
+#procurement-forecast-navigation[aria-current="page"]{background:#dfeaf5!important;color:#1f5d95!important;font-weight:600}
+.zh-forecast-entry:focus-visible{outline:2px solid #447db0;outline-offset:2px}
+
+[data-business-progress="live"] .zh-historical-process{display:none!important}
+body.zh-orders-ai .dsh-chat-surface{flex-direction:column}
+
+body.zh-forecast-open #root aside{background:var(--aviation-sidebar,#eaf0f2)!important;border-right-color:var(--aviation-border,#dbe4e8)!important}
+
+.zhgyl-module[hidden]{display:none!important}

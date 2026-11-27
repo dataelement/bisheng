@@ -1,0 +1,112 @@
+/* A deterministic projection of native SOP/task events. Never consumes reasoning text. */
+(function(root){
+'use strict';
+const names={procurement:'采购',transport:'运输',customs:'报关',orders:'订单'};
+function make(scene,id){const phases=[['scope','确认本轮任务','正在进入'+names[scene]+'场景'],['rules','读取场景规则','等待执行规则读取']];if(scene==='procurement')phases.push(['query','查询历史采购','等待本轮取数或批次确认']);phases.push(['execute',scene==='procurement'?'筛选、比价与名录核验':scene==='orders'?'核对订单、日期与提醒方式':'匹配历史与核对费用','等待业务步骤执行'],['result','返回本轮结果','等待实际结果']);return {version:2,scene,id,phase:'accepted',finished:false,sequence:0,events:[],seen:{},nodes:phases.map(([id,title,summary],i)=>({id,title,summary,status:i===0?'running':'pending',details:[]}))};}
+function set(r,id,status,summary,details){const n=r.nodes.find(n=>n.id===id);if(!n)return;if(status)n.status=status;if(summary)n.summary=summary;if(details)n.details=details;}
+function json(text){try{return typeof text==='string'?JSON.parse(text):text;}catch(_){return null;}}
+function isTransportRecap(text){
+ if(typeof text!=='string'||text.length>30000)return false;
+ const head=text.slice(0,1024).split(/"nodes"\s*:/,1)[0];
+ return /^\s*\{/.test(head)&&/"version"\s*:\s*1\s*[,}]/.test(head)&&/"scene"\s*:\s*"transport"/.test(head)&&/"mode"\s*:\s*"execution_recap"/.test(head);
+}
+function parseRecap(text,repairTransport=false){
+ if(typeof text!=='string'||text.length>30000)return null;
+ const body=text.trim(),parsed=json(body);
+ if(parsed)return parsed;
+ // The model can drop the closing object brace after copying a complete nodes array.
+ if(!repairTransport||!body.endsWith(']')||!isTransportRecap(body))return null;
+ const repaired=json(body+'}');
+ return Array.isArray(repaired?.nodes)?repaired:null;
+}
+function recap(text,scene){
+ if(typeof text!=='string')return null;
+ const fence=text.trimStart().match(/^```(business-process|business)[ \t]*\r?\n([\s\S]{1,30000}?)\r?\n```(?=[ \t]*(?:\r?\n|$))/);
+ if(!fence)return null;
+ const legacy=fence[1]==='business';
+ if(legacy&&(scene!=='transport'||!isTransportRecap(fence[2])))return null;
+ return parseRecap(fence[2],scene==='transport');
+}
+function observe(r,e){
+ if(!e||typeof e!=='object'||e.task_id!==r.id||r.finished)return false;
+ const name=e.name||'';const thinking=e.step_type==='thinking'||name==='thinking';
+ if(thinking){if(r.phase==='accepted'){r.phase='understanding';set(r,'scope','running','正在理解本轮需求，后续步骤尚未执行');r.sequence++;return true;}return false;}
+ const nativeTransport=r.scene==='transport'&&name==='tool_type_22_631a99bc6670f725c28235e5bf5e4edc';
+ if(!nativeTransport&&!['read_file','tool_type_21_df150bfcffc4d3a398f68301818e9165','bisheng_code_interpreter','transport_history','customs_history','write_todos'].includes(name))return false;
+ const key=(e.call_id||name)+':'+e.status;if(r.seen[key])return false;r.seen[key]=true;r.sequence++;r.events.push({sequence:r.sequence,name,status:e.status,call_id:e.call_id||'',at:e.timestamp||null});if(r.events.length>80)r.events.shift();
+ set(r,'scope','done','已进入'+names[r.scene]+'业务流程');
+ if(name==='read_file'){
+  set(r,'rules',e.status==='start'?'running':'done',e.status==='start'?'正在读取本场景的规则与资料':'本轮场景规则与资料已读取');r.phase=e.status==='start'?'loading_rules':'planning';
+ }else if(name==='write_todos'){r.phase='planning';set(r,'scope','done','已生成本轮实际执行计划');}
+ else if(name.startsWith('tool_type_21')){
+  r.phase=e.status==='start'?'querying':'query_returned';
+  if(e.status==='start')set(r,'query','running','正在按本轮型号查询历史，尚未形成结论');
+  else{const d=json(e.output);if(d&&d.status==='api_json_saved')set(r,'query','done','接口已返回'+(Number.isInteger(d.totalElements)?d.totalElements+'条历史':'本轮数据')+(d.hasNext?'，正在继续分页':''));else if(d&&d.terminal===true){set(r,'query','error','本次取数未完成，不能解释为没有历史');r.failed=true;}else set(r,'query','done','本轮接口调用已结束，等待业务入口校验');}
+ }else{
+  if(r.nodes.find(n=>n.id==='rules').status==='pending')set(r,'rules','skipped','本轮未单独读取规则资料');
+  r.phase=e.status==='start'?'executing':'validating_result';
+  set(r,'execute',e.status==='start'||nativeTransport?'running':'done',e.status==='start'?(r.scene==='procurement'?'正在执行筛选、比较或名录核验':r.scene==='orders'?'正在读取订单与关联单据，核对日期和提醒方案':'正在匹配本轮条件并核对历史费用'):'业务步骤已返回，正在核对本轮结果');
+  if(e.status!=='start'){
+   const out=json(e.output);const p=recap(out&&typeof out.answer==='string'?out.answer:e.output,r.scene);
+   if(nativeTransport){
+    if(p&&p.scene==='transport'&&Array.isArray(p.nodes))r.transportRecap=p;
+    set(r,'execute','running','已收到运输工具响应，正在核对费用与匹配结果');
+    set(r,'result','running','正在整理本轮运输结果');
+   }else if(p)finish(r,p);
+   else set(r,'result','running','正在接收本轮结果；尚未获得的条件不作结论');
+  }
+ }
+ return true;
+}
+function finish(r,p){
+ if(!p||p.scene!==r.scene||!Array.isArray(p.nodes))return false;
+ const waiting=p.nodes.some(n=>n.status==='waiting');const error=p.nodes.some(n=>n.status==='error');const empty=p.nodes.some(n=>n.status==='empty');
+ r.finalPayload=p;r.finished=true;r.phase=error?'failed':waiting?'waiting':'completed';r.sequence++;
+ set(r,'scope','done','本轮需求已按'+names[r.scene]+'流程处理');
+ const rules=r.nodes.find(n=>n.id==='rules');if(['pending','running'].includes(rules.status))set(r,'rules','skipped','按当前场景执行；本轮未单独读取规则资料');
+ const query=r.nodes.find(n=>n.id==='query');if(query){
+  const h=p.nodes.find(n=>/核对历史与筛选|核对型号/.test(n.title));
+  if(h)set(r,'query',h.status==='waiting'?'empty':h.status,h.summary,h.details||[]);
+  else if(query.status==='pending')set(r,'query','skipped','本轮未执行新的接口查询');
+ }
+ const evidence=p.nodes.filter(n=>!['理解本轮需求','查看与继续','形成本轮结果'].includes(n.title)).map(n=>n.title+'：'+n.summary);
+ const q=p.nodes.find(n=>/按甲方核验|近似召回|核对查询与匹配/.test(n.title));
+ set(r,'execute',error?'error':waiting?'waiting':empty&&!p.nodes.some(n=>/^整理/.test(n.title))?'empty':'done',error?'本轮处理失败，后续结论不成立':waiting?'需要你补充或确认后继续':q?q.summary:'本轮业务处理已完成',evidence);
+ set(r,'result',error?'error':waiting?'waiting':'done',error?'请按错误提示恢复；失败不代表没有历史':waiting?'等待你的补充，本轮后续步骤暂停':'本轮结果已返回，可继续查看依据或追问');
+ return true;
+}
+function reply(r,failed){if(!r||r.finished)return;if(failed||r.failed){stop(r,true);return;}r.finished=true;r.phase='completed';r.sequence++;r.nodes.forEach(n=>{if(n.id!=='scope'&&n.id!=='result'&&['pending','running'].includes(n.status)){n.status='skipped';n.summary='本轮未取得该步骤的执行结果，不作完成判断';}});set(r,'scope','done','已返回本轮回复');set(r,'result','done','本轮回复已返回；实际执行范围见上方步骤和正文');}
+function stop(r,failed){if(!r||r.finished)return;r.finished=true;r.phase=failed?'failed':'stopped';r.sequence++;r.nodes.forEach(n=>{if(n.status==='running')n.status=failed?'error':'skipped'});set(r,'result',failed?'error':'skipped',failed?'任务未完成，请检查错误后重试':'本轮任务已停止，尚未执行的步骤保留未开始');}
+root.ZhSopState={make,observe,finish,stop,reply,recap,parseRecap,isTransportRecap};if(typeof module!=='undefined')module.exports=root.ZhSopState;
+})(typeof window==='undefined'?globalThis:window);
+
+/* Transportation/customs business content, rendered by the unchanged procurement timeline. */
+(function(root){
+'use strict';
+const enabled=s=>s==='transport'||s==='customs';
+function present(s){
+ if(!enabled(s.scene))return s;
+ const p=s.finalPayload||(s.mode==='execution_recap'?s:null);const source=p?.nodes||[];
+ const waiting=source.some(n=>n.status==='waiting')||s.phase==='waiting';const error=source.some(n=>n.status==='error')||s.phase==='failed';const matching=source.find(n=>n.title==='核对查询与匹配');const empty=matching?.status==='empty';
+ let summary=error?'本轮未完成':s.phase==='stopped'?'本轮已停止':waiting?'等待补充':empty?'历史无匹配':s.finished?'本轮已完成':undefined;
+ const cp=n=>({...n,details:[...(n.details||[])]});
+ if(s.mode==='execution_recap'){
+  const order=t=>t==='理解本轮需求'?0:/核对必要条件|未完成/.test(t)?1:t==='核对查询与匹配'?2:t==='核对参考强度'?3:t==='核对费用与完整覆盖'?4:/^整理/.test(t)?5:6;
+  const nodes=source.map((n,i)=>({...cp(n),id:'receipt-'+i})).sort((a,b)=>order(a.title)-order(b.title));
+  return {...s,nodes,displaySummary:summary};
+ }
+ const nodes=s.nodes.map(cp);const scope=nodes.find(n=>n.id==='scope');const rules=nodes.find(n=>n.id==='rules');let execute=nodes.find(n=>n.id==='execute');const result=nodes.find(n=>n.id==='result');
+ if(scope)scope.title='理解本轮需求';if(rules)rules.title='读取'+(s.scene==='transport'?'运输':'报关')+'规则与资料';
+ if(!p)return {...s,nodes,displaySummary:summary};
+ const request=source.find(n=>n.title==='理解本轮需求');if(scope&&request){scope.summary=request.summary;scope.details=[...(p.conditions||request.details||[])];}
+ const required=source.find(n=>n.title==='核对必要条件');const failure=source.find(n=>n.status==='error');const limits=source.find(n=>n.title==='核对数据边界');
+ if(execute){const actual=required||failure||matching||limits;if(actual)Object.assign(execute,cp(actual),{id:'execute'});}
+ const extras=source.filter(n=>n.title==='核对参考强度'||n.title==='核对费用与完整覆盖'||/^整理/.test(n.title)).map((n,i)=>({...cp(n),id:'evidence-'+i})).sort((a,b)=>(a.title==='核对参考强度'?0:a.title==='核对费用与完整覆盖'?1:2)-(b.title==='核对参考强度'?0:b.title==='核对费用与完整覆盖'?1:2));
+ extras.forEach(n=>{if(n.title==='核对费用与完整覆盖'&&(n.details||[]).some(t=>t.includes('不自动分摊')||t.includes('不分摊')))n.summary+='；共享费用不分摊';});
+ const at=nodes.indexOf(result);nodes.splice(at<0?nodes.length:at,0,...extras);
+ if(result&&empty){result.summary='当前条件没有匹配历史；经验候选另行说明，不作为本次匹配费用';}
+ return {...s,nodes,displaySummary:summary};
+}
+root.ZhUnifiedTimeline={present,enabled};if(typeof module!=='undefined')module.exports=root.ZhUnifiedTimeline;
+})(typeof window==='undefined'?globalThis:window);
+

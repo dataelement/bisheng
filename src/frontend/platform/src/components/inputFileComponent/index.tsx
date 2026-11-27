@@ -95,7 +95,7 @@ export default function InputFileComponent({
           setMyValue(children.map(child => child.display_name).join(', '));
           onChange(children.map(child => child.display_name));
           onFileChange(children.map(child => child.file_path));
-        }).catch(error => { onFileChange([]); showApiError(error); })
+        }).catch(showApiError)
           .finally(() => setBusy(false));
         return;
       }

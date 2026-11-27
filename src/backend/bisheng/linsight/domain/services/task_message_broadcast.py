@@ -19,7 +19,8 @@ return viewers
 async def task_message_subscription(redis, queue_key: str):
     """Subscribe before draining so simultaneous viewers share every new frame."""
     channel = f"{queue_key}:broadcast"
-    async with redis.pubsub() as subscription:
+    subscription = redis.pubsub()
+    try:
         await subscription.subscribe(channel)
         # subscribe() writes the command; its acknowledgement establishes the
         # ordering barrier before this connection can publish queued frames.
@@ -37,3 +38,17 @@ async def task_message_subscription(redis, queue_key: str):
                 yield pickle.loads(frame["data"]) if frame and frame["type"] == "message" else None
 
         yield messages()
+
+    finally:
+        # Terminal close may repeatedly cancel this generator while its peer
+        # watches disconnect. Join cleanup before returning the Redis connection.
+        cleanup = asyncio.create_task(subscription.aclose())
+        cancelled = None
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError as error:
+                cancelled = error
+        await cleanup
+        if cancelled is not None:
+            raise cancelled

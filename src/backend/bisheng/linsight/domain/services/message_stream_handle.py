@@ -64,6 +64,13 @@ class MessageStreamHandle:
         return None
 
     async def _send_stream(self) -> None:
+        # Finished viewers need only the authoritative persisted terminal result.
+        # Checking first also works when Redis has no spare subscription slot.
+        terminal = await self._terminal_message()
+        if terminal:
+            await self.send_json(terminal.model_dump())
+            await self._websocket.close(code=1000, reason="Session finished")
+            return
         async with self._state_message_manager.message_stream() as messages:
             next_check = 0.0
             async for payload in messages:

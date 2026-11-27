@@ -1,0 +1,8 @@
+html[data-result-only="true"] .batch-panel,
+html[data-result-only="true"] .query-panel,
+html[data-result-only="true"] .welcome{display:none!important}
+html[data-result-only="true"] .result{margin-top:0}
+.embed-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 13px;font-size:11px;line-height:1.7;color:#638198}
+.embed-toolbar button{font-size:11px;min-height:32px;border:1px solid #ccdde8;border-radius:6px;background:#fff;color:#386b8b;padding:4px 10px}
+.embed-toolbar button:hover{background:#eaf6fc;border-color:#8dbcd4}
+@media(max-width:600px){.embed-toolbar{font-size:10px}.embed-toolbar button{font-size:10px}}

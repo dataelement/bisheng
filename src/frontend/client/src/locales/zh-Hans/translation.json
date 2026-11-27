@@ -2836,5 +2836,331 @@
   },
   "com_archive_batch_limit": "含ZIP的附件批次最多20个文件、合计100 MiB。",
   "com_archive_wait_upload": "请等待文件上传完成后再执行。",
-  "com_archive_remove_group": "移除此压缩包的全部文件"
+  "com_archive_remove_group": "移除此压缩包的全部文件",
+  "zhgyl": {
+    "title": "AI+采购智能推荐Agent",
+    "workspace": "供应链工作台",
+    "subtitle": "选择下方子功能：采购、运输或报关参谋，开始一段工作对话。查历史、看依据，逐步形成采购、运输和报关参考。",
+    "switch": "切换参谋",
+    "general": "通用对话",
+    "forecast": "采购需求预测",
+    "orders": "采购订单跟踪",
+    "ready": "正在准备场景…",
+    "unavailable": "当前场景技能、查询工具或任务权限不可用，本轮未开始。请联系管理员检查配置。",
+    "retry": "重新加载",
+    "guide": "使用引导",
+    "disclaimer": "历史记录仅供参考，不构成本次报价。",
+    "example": "输入示例",
+    "start": "开始对话",
+    "emptyOrders": "当前未载入订单数据。",
+    "orderHint": "尚未接入订单数据，当前列表为空。接入后可查看订单、核对日期和管理提醒。",
+    "backOrders": "返回订单跟踪",
+    "transportMissing": "请先在当前对话查询运输费用，再查看账单详情。",
+    "transportFailed": "暂时无法读取本对话的运输查询记录，本轮未开始。请重试。",
+    "transportUnavailable": "当前对话没有可用的运输账单引用，请重新查询运输费用。",
+    "scenes": {
+      "procurement": {
+        "label": "采购参谋",
+        "summary": "推荐供应商 · 查历史价格 · 名录核验",
+        "paragraphs": [
+          "你好，我是你的采购参谋。",
+          "把型号发给我，就可以查历史采购价格。需要选供应商时，也可以直接问我；我会分开列出该型号的历史供货商和名录候选，并说明依据。",
+          "把完整规格型号发给我，就可以开始。 如果有年份、币种或甲方要求，也可以一起告诉我。不用一次把条件都准备齐，我们可以先查起来，再逐步筛选。",
+          "你可以直接输入问题，也可以选一个输入示例开始。"
+        ],
+        "note": "历史价格仅供参考；空客核验QPL，商飞核验QSL，其他甲方展示历史供应商。",
+        "examples": [
+          {
+            "label": "甲方空客 · 选供应商",
+            "description": "DEMO-QPL-001 · QPL名单内历史样例",
+            "icon": "search",
+            "text": "DEMO-QPL-001有哪些历史供应商？本次甲方空客，按历史最低单价升序展示。"
+          },
+          {
+            "label": "甲方商飞 · 名单内供应商",
+            "description": "DEMO-QSL-001 · QSL名单内历史样例",
+            "icon": "users",
+            "text": "DEMO-QSL-001有哪些历史供应商？本次甲方商飞，按历史最低单价升序展示。"
+          }
+        ],
+        "home": {
+          "desc": "从规格型号出发，查历史价格、比较采购条件，再按本次甲方要求筛选询价对象。",
+          "features": [
+            "历史采购：价格、数量、币种与贸易条款",
+            "名单核验：空客 QPL · 商飞 QSL",
+            "选取供应商：说明依据，支持确认与撤销"
+          ],
+          "example": "DEMO-QPL-001 · 空客名单内供应商",
+          "action": "进入采购参谋"
+        },
+        "emphasis": "把完整规格型号发给我，就可以开始。"
+      },
+      "transport": {
+        "label": "运输参谋",
+        "summary": "推荐运输方案 · 查历史运费 · 追溯账单",
+        "paragraphs": [
+          "你好，我是你的运输参谋。",
+          "查历史运费时，发主单号、分单号或费用单号即可。需要新货运输方案时，告诉我货物和线路条件，我会推荐可参考的运输方案，并附历史账单。",
+          "新货可以先告诉我型号和线路，毛重、包装尺寸或危化属性稍后补齐。",
+          "不用一次把信息准备齐。你可以直接输入问题，也可以选一个输入示例开始。"
+        ],
+        "note": "当前使用联调数据。历史运费按原币展示，共享账单按整单金额显示。",
+        "examples": [
+          {
+            "label": "从历史单据开始",
+            "description": "DEMO-TRN-001 · 查历史运费",
+            "icon": "receipt-text",
+            "text": "查分单 DEMO-TRN-001 的历史运输费用。"
+          },
+          {
+            "label": "从新货条件开始",
+            "description": "JFK → TFU · 推荐方案 + 历史参考",
+            "icon": "truck",
+            "text": "推荐运输方案。JFK 到 TFU，型号 683-3-2/X-310A，毛重 100 KG，包装尺寸 107 × 61 × 61 CM，危化品空运。"
+          }
+        ],
+        "home": {
+          "desc": "从分单号或新货运输条件开始，查历史运费、核对完整覆盖，并查看运输方案依据。",
+          "features": [
+            "运输条件：线路、毛重、尺寸与危化属性",
+            "费用参考：相同条件优先，近似差异说明",
+            "单据追溯：共享账单去重，整单范围展开"
+          ],
+          "example": "JFK → TFU · 100KG 危化品空运",
+          "action": "进入运输参谋"
+        },
+        "emphasis": "把主单号、分单号或费用单号发给我，就可以开始。"
+      },
+      "customs": {
+        "label": "报关参谋",
+        "summary": "推荐报关代理 · 查历史报关费用 · 单据追溯",
+        "paragraphs": [
+          "你好，我是你的报关参谋。",
+          "查历史报关时，我可以帮你找当时的报关费和承办代理。需要给新货选代理时，告诉我目的港和货物条件，我会推荐代理，并附历史报关费作为参考。",
+          "有单据的话，把分单号、主单号、合同号或费用单号发给我，就可以开始。新货可以先告诉我目的港和型号，毛重、包装尺寸和危化属性再逐步补充。",
+          "不用一次把信息准备齐。你可以直接输入问题，也可以选一个输入示例开始。"
+        ],
+        "note": "代理推荐基于历史业务排序，费用仅供参考，不构成本次报价。报关匹配用毛重；共享费用显示完整覆盖，不自动分摊。",
+        "examples": [
+          {
+            "label": "从历史单据开始",
+            "description": "DEMO-CUS-001 · 查报关费和承办代理",
+            "icon": "files",
+            "text": "查分单 DEMO-CUS-001 当时的报关代理和报关费。"
+          },
+          {
+            "label": "从新货条件开始",
+            "description": "PVG · 推荐代理 + 历史参考",
+            "icon": "package",
+            "text": "推荐报关代理。目的港 PVG，型号 BMS10-146 TYPE I，毛重 100 KG，包装尺寸 100 × 80 × 60 CM，危化品。"
+          }
+        ],
+        "home": {
+          "desc": "从历史分单或报关需求开始，查看费用与代理经验，按目的港、毛重和危化属性找参考。",
+          "features": [
+            "历史费用：报关费、币种与承办代理",
+            "条件匹配：目的港、毛重、包装与危化属性",
+            "代理参考：同类经验、匹配差异与业务依据"
+          ],
+          "example": "DEMO-CUS-001 · 历史报关费用与代理",
+          "action": "进入报关参谋"
+        },
+        "emphasis": "把分单号、主单号、合同号或费用单号发给我，就可以开始。"
+      },
+      "orders": {
+        "label": "AI订单助手",
+        "summary": "看订单全景 · 核对日期 · 调整页面提醒",
+        "paragraphs": [
+          "你好，我是你的AI订单助手。",
+          "把订单号、供应商或件号发给我，我可以帮你查看物料与金额、筛出需要关注的日期，并逐项核对付款、交付和结算安排。",
+          "需要调整提醒时，我会先生成待确认方案，你核对后再保存。"
+        ],
+        "note": "日期已过不代表业务未完成；提醒方案需页面确认保存。",
+        "examples": [
+          {
+            "label": "查看订单全景",
+            "description": "物料、金额与三类日期放在一起核对",
+            "icon": "search",
+            "text": "查看订单DEMO-ORDER-001的订单全景，列出物料、数量、金额、付款、交付和结算日期。"
+          },
+          {
+            "label": "本周交付日期",
+            "description": "按日期筛选，查看订单与剩余天数",
+            "icon": "search",
+            "text": "未来7天有哪些交付日期需要关注？列出订单、供应商和剩余天数。"
+          },
+          {
+            "label": "生成提醒方案",
+            "description": "交付节点7天后再提醒，核对后保存",
+            "icon": "users",
+            "text": "把订单DEMO-ORDER-001的交付提醒改为7天后，给我待确认方案。"
+          }
+        ],
+        "emphasis": "把订单号、供应商或件号发给我"
+      }
+    },
+    "navigation": "采购方案推荐",
+    "transportDraft": "查看 {{reference}} 详情。",
+    "recapTitle": "业务流程记录",
+    "recapPending": "正在接收流程记录…",
+    "recapInvalid": "流程记录暂不可用，请查看正文结果。",
+    "recapDemo": "模拟演示数据",
+    "recapStates": {
+      "done": "已完成",
+      "running": "进行中",
+      "waiting": "待补充",
+      "pending": "未开始",
+      "error": "未完成",
+      "empty": "无匹配",
+      "skipped": "已跳过"
+    },
+    "generalEntry": "或者，直接开始通用对话",
+    "replay": "↻ 重播动效",
+    "reducedMotion": "系统已设为减少动态效果",
+    "fillQuestion": "填入问法：{{label}}",
+    "openingLabel": "{{label}}开场白",
+    "quickTasks": "{{label}}快捷任务",
+    "brand": "中航供应链",
+    "currentOrder": "当前订单 · 已关联",
+    "currentThreadOrder": "当前订单 · {{order}}",
+    "orderDetails": "查看订单详情 ↗",
+    "supplier": "供应商",
+    "material": "物料 / 件号",
+    "amount": "订单金额",
+    "paymentDate": "付款截止日",
+    "deliveryDate": "计划交付日期",
+    "settlementDate": "结算日期",
+    "missingDate": "日期未提供",
+    "pastDays": "逾期 {{count}} 天",
+    "todayDue": "今天到期",
+    "futureDays": "还有 {{count}} 天",
+    "dateCount": "共 {{count}} 个日期",
+    "orderContextHint": "可以直接问“这笔订单还有几天交付”，无需重复输入订单号。",
+    "orderBreadcrumb": "业务工作区 / 订单跟踪",
+    "orderNav": "订单跟踪模块导航",
+    "orderOverview": "订单全景",
+    "orderWorkbench": "预警工作台",
+    "orderReminders": "提醒管理",
+    "orderAi": "AI订单助手",
+    "orderPrefix": "当前订单：{{order}}\n\n用户问题：{{question}}",
+    "moreFunctions": "其他工作区功能",
+    "orderLoading": "正在读取订单数据…",
+    "orderLoadFailed": "订单数据暂时无法读取，请重试。",
+    "orderLinkedIntro": "已关联当前订单 {{order}}。",
+    "orderLinkedAsk": "你可以直接问“这笔订单还有几天交付”，也可以查看物料金额或调整提醒。",
+    "orderLinkedConfirm": "提醒方案仍需你确认后保存。",
+    "orderLinkedEmphasis": "这笔订单还有几天交付",
+    "orderLinkedOverview": "查看本单全景",
+    "orderLinkedDelivery": "查看本单交付",
+    "orderLinkedReminder": "调整本单提醒",
+    "orderLinkedDeliveryDescription": "查看本单约定交期与剩余天数",
+    "orderLinkedOverviewQuestion": "查看订单{{order}}的订单全景，列出物料、数量、金额及三类日期。",
+    "orderLinkedDeliveryQuestion": "订单{{order}}的交付日期是什么？还有几天？请逐项列出。",
+    "orderLinkedReminderQuestion": "把订单{{order}}的交付提醒改为7天后，给我待确认方案。",
+    "flowCopy": {
+      "procurement": "采购",
+      "transport": "运输",
+      "customs": "报关",
+      "orders": "订单",
+      "scope": "确认本轮任务",
+      "entering": "正在进入{{scene}}场景",
+      "rules": "读取场景规则",
+      "rulesWaiting": "等待执行规则读取",
+      "query": "查询历史采购",
+      "queryWaiting": "等待本轮取数或批次确认",
+      "executeProcurement": "筛选、比价与名录核验",
+      "executeOrders": "核对订单、日期与提醒方式",
+      "executeCosts": "匹配历史与核对费用",
+      "executeWaiting": "等待业务步骤执行",
+      "result": "返回本轮结果",
+      "resultWaiting": "等待实际结果",
+      "scopeProcessed": "本轮需求已按{{scene}}流程处理",
+      "rulesNotRead": "按当前场景执行；本轮未单独读取规则资料",
+      "queryNotRun": "本轮未执行新的接口查询",
+      "executeFailed": "本轮处理失败，后续结论不成立",
+      "needsInput": "需要你补充或确认后继续",
+      "executeComplete": "本轮业务处理已完成",
+      "resultFailed": "请按错误提示恢复；失败不代表没有历史",
+      "resultWaitingInput": "等待你的补充，本轮后续步骤暂停",
+      "resultReturned": "本轮结果已返回，可继续查看依据或追问",
+      "understanding": "正在理解本轮需求，后续步骤尚未执行",
+      "entered": "已进入{{scene}}业务流程",
+      "rulesReading": "正在读取本场景的规则与资料",
+      "rulesRead": "本轮场景规则与资料已读取",
+      "planned": "已生成本轮实际执行计划",
+      "queryRunning": "正在按本轮型号查询历史，尚未形成结论",
+      "queryReturned": "接口已返回{{count}}{{rows}}{{more}}",
+      "historyRows": "条历史",
+      "currentData": "本轮数据",
+      "paging": "，正在继续分页",
+      "queryFailed": "本次取数未完成，不能解释为没有历史",
+      "queryNeedsValidation": "本轮接口调用已结束，等待业务入口校验",
+      "rulesSkipped": "本轮未单独读取规则资料",
+      "procurementRunning": "正在执行筛选、比较或名录核验",
+      "ordersRunning": "正在读取订单与关联单据，核对日期和提醒方案",
+      "costsRunning": "正在匹配本轮条件并核对历史费用",
+      "validating": "业务步骤已返回，正在核对本轮结果",
+      "transportValidating": "已收到运输工具响应，正在核对费用与匹配结果",
+      "transportResult": "正在整理本轮运输结果",
+      "receiving": "正在接收本轮结果；尚未获得的条件不作结论",
+      "taskFailed": "任务未完成，请检查错误后重试",
+      "stopped": "本轮任务已停止，尚未执行的步骤保留未开始",
+      "unconfirmed": "本轮未取得该步骤的执行结果，不作完成判断",
+      "replyReturned": "已返回本轮回复",
+      "replyScope": "本轮回复已返回；实际执行范围见上方步骤和正文",
+      "understandTitle": "理解本轮需求",
+      "sceneRules": "读取{{scene}}规则与资料",
+      "unallocated": "；共享费用不分摊",
+      "noMatch": "当前条件没有匹配历史；经验候选另行说明，不作为本次匹配费用",
+      "failedSummary": "本轮未完成",
+      "stoppedSummary": "本轮已停止",
+      "waitingSummary": "等待补充",
+      "emptySummary": "历史无匹配",
+      "completedSummary": "本轮已完成",
+      "liveSummary": "随实际执行更新",
+      "executionFlow": "执行流程",
+      "executionRecord": "执行记录",
+      "historySummary": "本轮历史执行记录",
+      "liveIntro": "步骤随本轮任务执行更新；未执行的步骤保持待开始。",
+      "historyIntro": "本轮实际业务结果与依据",
+      "requiredTitle": "核对必要条件",
+      "inputRequested": "请在对话中补充所需信息",
+      "effectiveFilters": "生效筛选：",
+      "dateFrom": "确认日期起",
+      "dateTo": "确认日期止",
+      "currency": "币种",
+      "unit": "单位",
+      "tradeTerm": "贸易条件",
+      "tradePlace": "贸易地点",
+      "supplier": "供应商",
+      "supplierContains": "供应商含",
+      "customer": "客户",
+      "customerContains": "客户含",
+      "extraCondition": "附加条件",
+      "noFilters": "无额外筛选",
+      "noRelaxation": "按本轮单据或保护条件查询，无需逐级放宽。",
+      "matchSteps": "逐级匹配：",
+      "material": "物料",
+      "grossWeight": "毛重",
+      "netWeight": "净重",
+      "packageSize": "包装尺寸",
+      "packageCount": "包装数量",
+      "currentCondition": "当前条件",
+      "rows": "条",
+      "keepPrevious": "没有相同记录，保留上一层结果",
+      "sameCondition": "按相同条件筛选",
+      "matchDetails": "逐级匹配明细见业务结果。",
+      "submitting": "需求正在提交，等待任务接收"
+    },
+    "sharedFeeHint": "共享费用提示：",
+    "forecastLoadFailed": "预测页面暂时无法加载。",
+    "reopen": "重新打开",
+    "tableLabels": {
+      "procurement": "采购历史价格",
+      "transport": "运输费用总览",
+      "customs": "报关费用总览",
+      "orders": "订单总览",
+      "details": "关联明细"
+    }
+  }
 }

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f8fc">
+  <title>采购需求预测 · 中航供应链</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="embed.js" defer></script>
+  <script src="native-runner.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#query">跳转至预测条件</a>
+  <header class="brandbar"><div class="brand"><span class="brand-name">中航供应链<small>AVIATION SUPPLY CHAIN</small></span><span class="brand-divider"></span><span class="product-name">采购决策工作台</span></div><span class="demo-badge">测试数据 · 非正式采购依据</span></header>
+  <main class="page-shell">
+    <header class="scenario-header">
+      <div class="scenario-title"><span class="scenario-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M7 14l4-4 4 2 5-7m-5 0h5v5"/></svg></span><div><h1 id="page-title"><span id="query-heading">采购需求预测</span></h1><span class="scenario-subtitle">PROCUREMENT FORECAST</span></div></div>
+      <div class="scenario-header-actions"><span class="header-mode">月度数量 · 价格 · 备货计划</span><button id="new-query-button" type="button" class="new-query-button"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>新查询</button></div>
+    </header>
+    <section id="welcome" class="welcome forecast-welcome" aria-labelledby="welcome-title">
+      <div class="forecast-intro">
+        <div class="welcome-copy"><div class="eyebrow"><span></span> 历史有依据，采购有计划</div><h2 id="welcome-title">从历史数据，<br>到<span>月度采购计划。</span></h2><p>查看未来每个月的采购数量与价格，<br class="wide-break">结合订单、交付和客户需求，形成可追溯的备货报告。</p><div class="welcome-capabilities"><span>月度量价</span><span>历史回溯</span><span>多维报告</span></div></div>
+        <div class="planning-visual"><div class="planning-glow" aria-hidden="true"></div><img class="planning-art" src="media/forecast-planning.png" alt="航空精密零件与月度计划的场景插画" width="640" height="480" fetchpriority="high"><span class="visual-caption">场景示意 · 非预测数据</span></div>
+      </div>
+      <ol class="forecast-path" aria-label="需求预测流程"><li><span class="path-number">01</span><div><strong>历史依据</strong><span>核对订单与交付记录</span></div></li><li><span class="path-number">02</span><div><strong>月度量价</strong><span>查看数量、单价与金额</span></div></li><li><span class="path-number">03</span><div><strong>备货报告</strong><span>追溯依据，下载完整报告</span></div></li></ol>
+      <div class="welcome-examples"><div class="examples-heading"><h3>选择一个示例开始</h3><p>示例只填入草稿，确认条件后再分析</p></div><div id="primary-examples" class="primary-examples"></div><details class="examples-wrap"><summary>更多查询示例</summary><div id="examples" class="examples" aria-label="更多查询示例"></div></details></div>
+    </section>
+    <section class="query-panel forecast-query-panel" aria-label="需求预测查询条件">
+      <form id="query-form"><div class="natural-query"><span id="natural-query-summary" class="query-label">设置预测范围</span><label class="sr-only" for="query">描述型号、客户或预测周期</label><div class="query-input-row"><input id="query" name="query" type="text" autocomplete="off" maxlength="500" placeholder="输入型号、客户和时间，例如：189A1002-1 未来三个月的采购量和价格"><button class="primary-button" id="analyze-button" type="submit"><span>开始分析</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></button><button id="cancel-button" class="text-button" type="button" hidden>取消分析</button></div></div><div class="query-bottom"><details class="optional-filters"><summary>可选查询条件 <span>型号 / 客户 / 起始月 / 周期</span></summary><div class="filter-row"><div class="field material-field"><label for="spec">物料型号</label><select id="spec" name="spec"><option value="">请选择型号（可选）</option><option value="189A1002-1">189A1002-1</option><option value="all">全部物料</option></select></div><div class="field"><label for="customer">客户</label><select id="customer" name="customer"><option value="all">全部客户</option></select></div><div class="field"><label for="start-month">预测起始月</label><input id="start-month" name="start_month" type="month" value="2026-12" required></div><div class="field"><label for="months">预测时长</label><select id="months" name="months"><option value="1">1 个月</option><option value="3">3 个月</option><option value="6">6 个月</option><option value="12" selected>12 个月</option></select></div></div><p class="query-note">自然语言中明确的型号、客户与周期优先；结果回显实际解析范围。清空文字后，可用明确选择的型号查询。</p></details><button id="clear-query-button" type="button" class="text-button" hidden>清空草稿</button><span class="query-disclaimer">模拟演示 · 采购需人工复核</span></div></form>
+    </section>
+    <div id="status" class="live-status" role="status" aria-live="polite" aria-atomic="true"></div>
+    <section id="result" class="result" aria-label="采购需求分析结果" hidden></section>
+    <details class="batch-panel"><summary><span id="batch-title">月度数据与预测更新</span><span class="summary-hint">查看批次 · 刷新数据</span></summary><div class="batch-content"><div class="batch-title"><p>服务运行期间自动检查跨月；手动刷新会纳入新增模拟订单并重算月度快照。</p></div><div id="batch-summary" class="batch-summary">正在读取当前批次…</div><button id="refresh-button" type="button" class="secondary-button">刷新月度数据</button><div id="batch-status" role="status" aria-live="polite"></div><details class="batch-details"><summary>查看新增订单与最近更新</summary><div id="batch-details">正在读取…</div></details></div></details>
+    <footer class="page-footer"><span>中航供应链 · 月度采购决策支持</span><span>模拟数据与预测 API · 平台 Agent / Skill 执行 · 历史 NL2SQL 待接入，采购决策需人工复核。</span></footer>
+  </main>
+</body>
+</html>

@@ -1,3 +1,5 @@
+import { advisorScene } from '~/components/zhgyl/scenes';
+import { AdvisorPendingProgress } from '~/components/zhgyl/AdvisorPendingProgress';
 /**
  * Single message bubble for user / assistant messages.
  */
@@ -567,6 +569,7 @@ function AssistantBubble({
         !regularContent &&
         !(Array.isArray(message.events) && message.events.length > 0);
 
+    const pendingScene = showWaiting ? advisorScene(window.location.search) : '';
     // F028: per-message selection checkbox.
     const { isActiveForChat } = useMessageSelection();
     const showCheckbox =
@@ -646,7 +649,7 @@ function AssistantBubble({
                 {/* Pre-stream "正在思考" indicator — pulsing black dot. Rendered AFTER the
                     thinking block so that once "思考内容" appears it sits below that node
                     (answer-pending), not above it. */}
-                {showWaiting && (
+                {showWaiting && (pendingScene && pendingScene !== 'select' ? <AdvisorPendingProgress scene={pendingScene} messageId={message.messageId} /> :
                     <div className="flex items-center py-0.5" aria-label={localize('com_ui_ai_thinking')}>
                         <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                     </div>

@@ -1185,6 +1185,20 @@ class LinsightWorkflowTask:
         # The backend was built before this provision. Reads look up the row by
         # the snapshot id, so the copy has to be the one just written.
         backend.skill_snapshot = list(getattr(session_model, "skill_snapshot", None) or [])
+        # Bind only the tools already allowed for this task. Workspace ownership
+        # stays in the backend; model arguments cannot select another session.
+        from bisheng.linsight.domain.services.customs_tools import bind_customs_tools
+        from bisheng.linsight.domain.services.procurement_api_files import bind_procurement_tools
+        from bisheng.linsight.domain.services.transport_tools import bind_transport_tools
+
+        selected_skills = getattr(session_model, "skills", None)
+        selected = set(selected_skills or [])
+        self._procurement_fixed_entry_enabled = bool({"procurement-history", "order-tracking"} & selected)
+        self._transport_fixed_entry_enabled = "transport-history" in selected
+        self._customs_fixed_entry_enabled = "customs-history" in selected
+        tools = bind_procurement_tools(tools, backend, selected_skills=selected_skills)
+        tools = bind_transport_tools(tools, backend, selected_skills=selected_skills)
+        tools = bind_customs_tools(tools, backend, selected_skills=selected_skills)
         if skills.failed:
             await self._push_skill_load_failure(session_model.id, skills.failed)
         return await create_linsight_agent(
@@ -1255,6 +1269,15 @@ class LinsightWorkflowTask:
                 return
             minio = await get_minio_storage()
             copied = await seed_workspace_from_previous(minio, src_svid=prev.id, dst_svid=session_model.id)
+            if (
+                "order-tracking" in (getattr(session_model, "skills", None) or [])
+                and prev.session_id == session_model.session_id
+                and prev.user_id == session_model.user_id
+                and prev.tenant_id == session_model.tenant_id
+            ):
+                from bisheng.linsight.domain.services.procurement_api_files import inherit_order_context
+
+                await inherit_order_context(minio, prev.id, session_model.id)
             if copied:
                 logger.info(
                     f"Seeded {copied} file(s) from previous turn {prev.id[:8]} into "
@@ -1308,6 +1331,13 @@ class LinsightWorkflowTask:
                         continue
                     if await asyncio.to_thread(backend.ensure_local, rel):
                         synced.append(local_path)
+
+            if "order-tracking" in (getattr(session_model, "skills", None) or []):
+                from bisheng.linsight.domain.services.procurement_api_files import restore_order_context
+
+                order_context = await restore_order_context(backend, self.file_dir)
+                if order_context:
+                    synced.append(order_context)
 
             if synced:
                 # These arrived AFTER _init_file_directory took the baseline, so
@@ -1801,6 +1831,21 @@ class LinsightWorkflowTask:
         that turn left tool calls pending (see ``_last_ai_pending_tool_calls``).
         """
         messages = raw.get("messages")
+        from bisheng.linsight.domain.services.customs_tools import extract_customs_completion
+        from bisheng.linsight.domain.services.procurement_api_files import extract_procurement_completion
+        from bisheng.linsight.domain.services.transport_tools import extract_transport_completion
+
+        for enabled, extract in (
+            (getattr(self, "_procurement_fixed_entry_enabled", False), extract_procurement_completion),
+            (getattr(self, "_transport_fixed_entry_enabled", False), extract_transport_completion),
+            (getattr(self, "_customs_fixed_entry_enabled", False), extract_customs_completion),
+        ):
+            if enabled:
+                completed_answer = extract(messages)
+                if completed_answer is not None:
+                    self._last_assistant_text = completed_answer
+                    self._last_ai_has_pending_tool_calls = False
+                    return
         text = self._extract_last_message_text(messages)
         if text:
             self._last_assistant_text = text

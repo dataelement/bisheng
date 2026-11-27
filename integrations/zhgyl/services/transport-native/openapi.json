@@ -1,0 +1,68 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "运输方案与费用查询 API",
+    "version": "1.0.0",
+    "description": "独立业务服务，原生API接入，不依赖平台运输后端补丁。"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8080"
+    }
+  ],
+  "paths": {
+    "/transport/execute": {
+      "post": {
+        "operationId": "transport_execute",
+        "summary": "运输方案推荐与历史费用查询",
+        "description": "运输唯一业务入口。request_json为JSON字符串，动作history/inquiry/detail/show/filter/reset/explain_limits。首次context_id传空字符串；续问必须传上次返回的context_id。返回answer直接展示并结束；失败也结束，不重试、不等待。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "request_json",
+                  "context_id"
+                ],
+                "properties": {
+                  "request_json": {
+                    "type": "string",
+                    "description": "严格JSON对象字符串，例：{\"action\":\"history\",\"query\":{\"house_numbers\":[\"ELC24018561\"]}}。detail例：{\"action\":\"detail\",\"reference\":\"F01\"}。不传凭据、URL或路径。"
+                  },
+                  "context_id": {
+                    "type": "string",
+                    "description": "首次查询传空字符串；续问仅使用上次工具返回的context_id，禁止猜测或沿用其他会话。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已完成或明确失败，terminal=true，直接展示answer并结束"
+          },
+          "401": {
+            "description": "鉴权失败，结束本轮"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "采购需求预测快速执行 API",
+    "description": "需求预测Skill专用运行接口。当前预测和历史数据模拟；真实Agent生成解释。",
+    "version": "0.8.0"
+  },
+  "servers": [
+    {
+      "url": "http://procurement-forecast:8786"
+    }
+  ],
+  "paths": {
+    "/api/skill-execute": {
+      "post": {
+        "operationId": "forecast_execute",
+        "summary": "执行需求预测Skill步骤",
+        "description": "需求预测Skill专用入口。request_json为JSON字符串，含run_id/token/action(prepare或finalize)，prepare内部按序forecast/history并返回真实回执；finalize增加explanation。固定范围不可修改。只调用prepare，按本次事实撰写简洁解释，调用finalize，然后立即结束。错误停止，禁止假报告。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "request_json": {
+                    "type": "string",
+                    "description": "本次绑定运行的JSON对象字符串，临时token不得回显"
+                  }
+                },
+                "required": [
+                  "request_json"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "动作回执与事实"
+          }
+        }
+      }
+    }
+  }
+}

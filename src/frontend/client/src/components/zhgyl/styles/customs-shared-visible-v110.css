@@ -1,0 +1,1 @@
+[data-assistant-result="customs"] table[data-assistant-table="primary"] :is(th,td):nth-child(2){white-space:normal;max-width:150px}[data-assistant-result="customs"] table[data-assistant-table="primary"] :is(th,td):nth-child(5){min-width:160px;max-width:230px}[data-assistant-result="customs"] [data-assistant-shared-summary]{white-space:normal;overflow-wrap:anywhere}

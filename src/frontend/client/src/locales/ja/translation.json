@@ -2831,5 +2831,324 @@
   },
   "com_archive_batch_limit": "ZIPを含む添付は合計20ファイル、100 MiBまでです。",
   "com_archive_wait_upload": "アップロードの完了後に実行してください。",
-  "com_archive_remove_group": "このZIPの全ファイルを削除"
+  "com_archive_remove_group": "このZIPの全ファイルを削除",
+  "zhgyl": {
+    "title": "AI調達アドバイザー",
+    "workspace": "サプライチェーンワークスペース",
+    "subtitle": "調達・輸送・通関の担当を選び、履歴と根拠を確認して業務判断に役立てます。",
+    "switch": "担当を切り替え",
+    "general": "一般チャット",
+    "forecast": "調達需要予測",
+    "orders": "発注追跡",
+    "ready": "準備しています…",
+    "unavailable": "必要なスキル、照会ツール、またはタスク権限が利用できません。この処理は開始していません。管理者に確認してください。",
+    "retry": "再読み込み",
+    "guide": "利用ガイド",
+    "disclaimer": "過去の記録は参考情報であり、今回の見積ではありません。",
+    "example": "質問例",
+    "start": "会話を開始",
+    "emptyOrders": "注文データは読み込まれていません。",
+    "orderHint": "注文データは未接続です。接続後に注文や日付の確認、通知の管理ができます。",
+    "backOrders": "発注追跡に戻る",
+    "transportMissing": "この会話で輸送費を照会してから請求の詳細を確認してください。",
+    "transportFailed": "この会話の輸送履歴を取得できません。この処理は開始していません。再試行してください。",
+    "transportUnavailable": "この会話に有効な請求参照がありません。輸送費を再照会してください。",
+    "scenes": {
+      "procurement": {
+        "label": "調達アドバイザー",
+        "summary": "仕入先推薦・過去価格・資格確認",
+        "paragraphs": [
+          "仕入先推薦・過去価格・資格確認",
+          "質問を入力するか例を選んでください。例は下書きに入力され、送信されません。"
+        ],
+        "note": "過去の記録は参考情報であり、今回の見積ではありません。",
+        "examples": [
+          {
+            "label": "質問例 1",
+            "description": "調達アドバイザー",
+            "text": "Find historical suppliers for DEMO-QPL-001 for Airbus. Sort by historical minimum unit price.",
+            "icon": "search"
+          },
+          {
+            "label": "質問例 2",
+            "description": "調達アドバイザー",
+            "text": "Find historical suppliers for DEMO-QSL-001 for COMAC. Sort by historical minimum unit price.",
+            "icon": "users"
+          }
+        ],
+        "home": {
+          "desc": "仕様型番から過去価格と取引条件を比較し、今回の顧客条件に合わせて照会先を選びます。",
+          "features": [
+            "調達履歴：価格・数量・通貨・貿易条件",
+            "資格確認：エアバス QPL・COMAC QSL",
+            "仕入先選択：根拠・確認・取り消し"
+          ],
+          "example": "DEMO-QPL-001 · Airbus qualified suppliers",
+          "action": "調達担当を開く"
+        },
+        "emphasis": ""
+      },
+      "transport": {
+        "label": "輸送アドバイザー",
+        "summary": "輸送提案・過去運賃・請求照会",
+        "paragraphs": [
+          "輸送提案・過去運賃・請求照会",
+          "質問を入力するか例を選んでください。例は下書きに入力され、送信されません。"
+        ],
+        "note": "過去の記録は参考情報であり、今回の見積ではありません。",
+        "examples": [
+          {
+            "label": "質問例 1",
+            "description": "輸送アドバイザー",
+            "text": "分荷証券 DEMO-TRN-001 の過去運賃を確認してください。",
+            "icon": "receipt-text"
+          },
+          {
+            "label": "質問例 2",
+            "description": "輸送アドバイザー",
+            "text": "JFK から TFU への輸送案を提案してください。仕様型番は 683-3-2/X-310A、総重量は 100 kg、包装寸法は 107 × 61 × 61 cm、航空輸送の危険物です。",
+            "icon": "truck"
+          }
+        ],
+        "home": {
+          "desc": "分荷証券または新しい貨物条件から過去運賃と請求の対象範囲、輸送案の根拠を確認します。",
+          "features": [
+            "輸送条件：経路・総重量・寸法・危険物",
+            "費用参考：同一条件を優先し相違を明記",
+            "書類追跡：共通請求を重複除外し対象を展開"
+          ],
+          "example": "JFK → TFU · 100KG hazardous air freight",
+          "action": "輸送担当を開く"
+        },
+        "emphasis": ""
+      },
+      "customs": {
+        "label": "通関アドバイザー",
+        "summary": "通関業者推薦・過去費用・書類照会",
+        "paragraphs": [
+          "通関業者推薦・過去費用・書類照会",
+          "質問を入力するか例を選んでください。例は下書きに入力され、送信されません。"
+        ],
+        "note": "過去の記録は参考情報であり、今回の見積ではありません。",
+        "examples": [
+          {
+            "label": "質問例 1",
+            "description": "通関アドバイザー",
+            "text": "分荷証券 DEMO-CUS-001 の通関費用と担当業者を確認してください。",
+            "icon": "files"
+          },
+          {
+            "label": "質問例 2",
+            "description": "通関アドバイザー",
+            "text": "仕向港 PVG、仕様型番 BMS10-146 TYPE I の通関業者を提案してください。総重量は 100 kg、包装寸法は 100 × 80 × 60 cm、危険物です。",
+            "icon": "package"
+          }
+        ],
+        "home": {
+          "desc": "過去の書類または通関条件から費用と業者経験を確認し、仕向港・総重量・危険物属性で照合します。",
+          "features": [
+            "過去実績：通関費用・通貨・担当業者",
+            "条件照合：仕向港・総重量・包装・危険物",
+            "業者参考：類似経験・相違・業務根拠"
+          ],
+          "example": "DEMO-CUS-001 · Historical costs and brokers",
+          "action": "通関担当を開く"
+        },
+        "emphasis": ""
+      },
+      "orders": {
+        "label": "AI発注アシスタント",
+        "summary": "注文全景・日付・通知提案",
+        "paragraphs": [
+          "注文全景・日付・通知提案",
+          "質問を入力するか例を選んでください。例は下書きに入力され、送信されません。"
+        ],
+        "note": "過去の記録は参考情報であり、今回の見積ではありません。",
+        "examples": [
+          {
+            "label": "質問例 1",
+            "description": "AI発注アシスタント",
+            "text": "Show the order overview for DEMO-ORDER-001 with materials, amounts, payment, delivery and settlement dates.",
+            "icon": "search"
+          },
+          {
+            "label": "質問例 2",
+            "description": "AI発注アシスタント",
+            "text": "Which delivery dates fall in the next seven days?",
+            "icon": "search"
+          },
+          {
+            "label": "質問例 3",
+            "description": "AI発注アシスタント",
+            "text": "Prepare a reminder proposal for DEMO-ORDER-001 seven days after delivery, for review before saving.",
+            "icon": "users"
+          }
+        ],
+        "emphasis": ""
+      }
+    },
+    "navigation": "調達プラン推薦",
+    "transportDraft": "{{reference}} の詳細を表示。",
+    "recapTitle": "業務プロセス記録",
+    "recapPending": "プロセス記録を受信しています…",
+    "recapInvalid": "プロセス記録を表示できません。本文の結果をご確認ください。",
+    "recapDemo": "合成デモデータ",
+    "recapStates": {
+      "done": "完了",
+      "running": "進行中",
+      "waiting": "追加入力待ち",
+      "pending": "未開始",
+      "error": "未完了",
+      "empty": "一致なし",
+      "skipped": "スキップ"
+    },
+    "generalEntry": "または一般チャットを開始",
+    "replay": "↻ アニメーションを再生",
+    "reducedMotion": "システムで動きの軽減が有効です",
+    "fillQuestion": "質問を入力：{{label}}",
+    "openingLabel": "{{label}}の案内",
+    "quickTasks": "{{label}}のクイックタスク",
+    "brand": "中航サプライチェーン",
+    "currentOrder": "現在の注文 · 関連付け済み",
+    "currentThreadOrder": "現在の注文 · {{order}}",
+    "orderDetails": "注文詳細を表示 ↗",
+    "supplier": "仕入先",
+    "material": "品目 / 部品番号",
+    "amount": "注文金額",
+    "paymentDate": "支払期限",
+    "deliveryDate": "納品予定日",
+    "settlementDate": "決済日",
+    "missingDate": "日付未提供",
+    "pastDays": "{{count}} 日経過",
+    "todayDue": "本日期日",
+    "futureDays": "あと {{count}} 日",
+    "dateCount": "{{count}} 件の日付",
+    "orderContextHint": "注文番号を繰り返さず、この注文について直接質問できます。",
+    "orderBreadcrumb": "業務ワークスペース / 発注追跡",
+    "orderNav": "発注追跡ナビゲーション",
+    "orderOverview": "注文全景",
+    "orderWorkbench": "アラート",
+    "orderReminders": "通知管理",
+    "orderAi": "AI注文アシスタント",
+    "orderPrefix": "現在の注文：{{order}}\n\nユーザーの質問：{{question}}",
+    "moreFunctions": "その他の機能",
+    "orderLoading": "注文データを読み込んでいます…",
+    "orderLoadFailed": "注文データを取得できません。再試行してください。",
+    "orderLinkedIntro": "注文 {{order}} を関連付けました。",
+    "orderLinkedAsk": "この注文の納品までの日数、品目金額、通知変更について直接質問できます。",
+    "orderLinkedConfirm": "通知案を確認してから保存してください。",
+    "orderLinkedEmphasis": "納品までの日数",
+    "orderLinkedOverview": "この注文の全景",
+    "orderLinkedDelivery": "この注文の納品",
+    "orderLinkedReminder": "この注文の通知",
+    "orderLinkedDeliveryDescription": "約定納期と残日数を確認します",
+    "orderLinkedOverviewQuestion": "注文 {{order}} の品目・数量・金額と三種類の日付を一覧表示してください。",
+    "orderLinkedDeliveryQuestion": "注文 {{order}} の納品日と残日数を各項目で確認してください。",
+    "orderLinkedReminderQuestion": "注文 {{order}} の納品通知を7日後にする確認用の案を作ってください。",
+    "flowCopy": {
+      "procurement": "調達",
+      "transport": "輸送",
+      "customs": "通関",
+      "orders": "注文",
+      "scope": "今回のタスクを確認",
+      "entering": "{{scene}}の処理に入っています",
+      "rules": "業務ルールを読む",
+      "rulesWaiting": "ルールの読み込み待ち",
+      "query": "調達履歴を照会",
+      "queryWaiting": "データ取得またはバッチ確認待ち",
+      "executeProcurement": "絞り込み・比較・資格確認",
+      "executeOrders": "注文・日付・通知を確認",
+      "executeCosts": "履歴照合と費用確認",
+      "executeWaiting": "業務処理の開始待ち",
+      "result": "今回の結果を返す",
+      "resultWaiting": "実際の結果を待っています",
+      "scopeProcessed": "This request was handled through the {{scene}} process",
+      "rulesNotRead": "Followed this scene; no separate rule-file read was observed",
+      "queryNotRun": "No new API query was executed this turn",
+      "executeFailed": "This operation failed; subsequent conclusions are not established",
+      "needsInput": "Provide or confirm information to continue",
+      "executeComplete": "Business processing completed",
+      "resultFailed": "Follow the error guidance; failure does not mean no history exists",
+      "resultWaitingInput": "Waiting for your input; subsequent steps are paused",
+      "resultReturned": "The result is available; review evidence or ask a follow-up",
+      "understanding": "Understanding this request; later steps have not executed",
+      "entered": "Entered the {{scene}} business process",
+      "rulesReading": "Reading the scene rules and materials",
+      "rulesRead": "Scene rules and materials have been read",
+      "planned": "Generated the actual execution plan for this turn",
+      "queryRunning": "Querying history for this model; no conclusion yet",
+      "queryReturned": "The API returned {{count}}{{rows}}{{more}}",
+      "historyRows": " history records",
+      "currentData": "data for this turn",
+      "paging": "; continuing pagination",
+      "queryFailed": "Data retrieval did not complete; this does not establish an empty history",
+      "queryNeedsValidation": "The API call ended; waiting for business-entry validation",
+      "rulesSkipped": "No separate rules read was observed this turn",
+      "procurementRunning": "Filtering, comparing or checking qualifications",
+      "ordersRunning": "Reading the order and linked documents, validating dates and reminders",
+      "costsRunning": "Matching this request and validating historical costs",
+      "validating": "Business steps returned; validating the result",
+      "transportValidating": "Transport response received; validating costs and matching",
+      "transportResult": "Preparing this transport result",
+      "receiving": "Receiving the result; missing conditions are not conclusions",
+      "taskFailed": "Task incomplete; review the error and retry",
+      "stopped": "This task stopped; unexecuted steps remain not started",
+      "unconfirmed": "No execution result was observed for this step; completion is not assumed",
+      "replyReturned": "This response has been returned",
+      "replyScope": "The response is available; see the steps and answer for the actual scope",
+      "understandTitle": "Understand this request",
+      "sceneRules": "Read {{scene}} rules and materials",
+      "unallocated": "; shared costs are not allocated",
+      "noMatch": "No history matched these conditions; experience candidates are separate and are not matched costs",
+      "failedSummary": "今回の処理は未完了",
+      "stoppedSummary": "今回の処理は停止済み",
+      "waitingSummary": "追加入力待ち",
+      "emptySummary": "該当する履歴なし",
+      "completedSummary": "今回の処理は完了",
+      "liveSummary": "実行状況に合わせて更新",
+      "executionFlow": "実行フロー",
+      "executionRecord": "実行記録",
+      "historySummary": "今回の過去の実行記録",
+      "liveIntro": "実際の処理に合わせて更新します。未実行の手順は未開始のままです。",
+      "historyIntro": "今回の実際の業務結果と根拠",
+      "requiredTitle": "必要条件を確認",
+      "inputRequested": "会話で必要な情報を入力してください",
+      "effectiveFilters": "適用した条件：",
+      "dateFrom": "確認開始日",
+      "dateTo": "確認終了日",
+      "currency": "通貨",
+      "unit": "単位",
+      "tradeTerm": "貿易条件",
+      "tradePlace": "貿易場所",
+      "supplier": "仕入先",
+      "supplierContains": "仕入先に含む",
+      "customer": "顧客",
+      "customerContains": "顧客に含む",
+      "extraCondition": "追加条件",
+      "noFilters": "追加の絞り込みなし",
+      "noRelaxation": "Queried by this document or protected conditions; no progressive relaxation needed.",
+      "matchSteps": "段階的な照合：",
+      "material": "品目",
+      "grossWeight": "総重量",
+      "netWeight": "正味重量",
+      "packageSize": "包装寸法",
+      "packageCount": "包装数",
+      "currentCondition": "現在の条件",
+      "rows": "件",
+      "keepPrevious": "同一記録がないため前段階を維持",
+      "sameCondition": "同じ条件で絞り込み",
+      "matchDetails": "照合の詳細は業務結果を参照してください。",
+      "submitting": "要求を送信しています。タスクの受け付け待ちです"
+    },
+    "sharedFeeHint": "共通費用の注意：",
+    "forecastLoadFailed": "予測ページを読み込めません。",
+    "reopen": "再度開く",
+    "tableLabels": {
+      "procurement": "過去の調達価格",
+      "transport": "輸送費用一覧",
+      "customs": "通関費用一覧",
+      "orders": "注文一覧",
+      "details": "関連明細"
+    }
+  }
 }

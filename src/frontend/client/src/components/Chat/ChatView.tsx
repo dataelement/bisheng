@@ -1,3 +1,12 @@
+import { useOrderDataset } from '~/components/zhgyl/orderDataset';
+import { OrderContext } from '~/components/zhgyl/OrderContext';
+import { OrderNavigation } from '~/components/zhgyl/OrderNavigation';
+import { useAdvisorPresentation } from '~/components/zhgyl/useAdvisorPresentation';
+import { useTransportDetail } from '~/components/zhgyl/useTransportDetail';
+import { AdvisorLanding, AdvisorOpening } from '~/components/zhgyl/AdvisorLanding';
+import { WorkspaceModule } from '~/components/zhgyl/WorkspaceModule';
+import { advisorScene, advisorSearch } from '~/components/zhgyl/scenes';
+import { useAdvisorEntry } from '~/components/zhgyl/useAdvisorEntry';
 import { isApiError } from "@bisheng/api-client";
 import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { useQuery } from "@tanstack/react-query";
@@ -20,7 +29,7 @@ import {
 import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { getLinsightSessionVersionList, userStopLinsightEvent } from "~/api/linsight";
-import { SopStatus, taskModeState } from "~/store/linsight";
+import { SopStatus, taskModeState, taskModeSkillsState } from "~/store/linsight";
 import { findPendingUserInput, splitSessionPseudoTask } from "~/components/Linsight/Execution/stepUtils";
 import type { ExecStepEventData } from "~/components/Linsight/Execution/stepUtils";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
@@ -60,6 +69,8 @@ import {
   type AddToKnowledgeSelection,
 } from "~/pages/Subscription/Article/AddToKnowledgeModal";
 
+import { deriveOrderFocus, orderIdentityIntent } from "~/components/zhgyl/orderFocus";
+
 const ChatView = ({
   id = "",
   index = 0,
@@ -75,6 +86,15 @@ const ChatView = ({
   const conversationId = (cid ?? id) || "new";
 
   const [inputText, setInputText] = useState("");
+  const scene = !shareToken && /^\/c\/[^/]+\/?$/.test(location.pathname) ? advisorScene(location.search) : '';
+  const orderDataset = useOrderDataset(scene === 'orders');
+  const currentOrderNumber = new URLSearchParams(location.search).get('order');
+  const workspaceModule = !shareToken && conversationId === 'new' ? new URLSearchParams(location.search).get('module') : null;
+  const [orderModuleVisited, setOrderModuleVisited] = useState(workspaceModule === 'order-tracking');
+  useEffect(() => { if (workspaceModule === 'order-tracking') setOrderModuleVisited(true); }, [workspaceModule]);
+  const [advisorSkills, setAdvisorSkills] = useRecoilState(taskModeSkillsState('new'));
+  const [advisorTools, setAdvisorTools] = useRecoilState(store.selectedAgentTools);
+  useEffect(() => { setInputText(''); }, [scene]);
 
   // F035: task mode is a toggle on the daily welcome page — no route jump.
   // The route stays `/c`; only submitting in task mode navigates to /linsight.
@@ -110,6 +130,9 @@ const ChatView = ({
     stopGenerating,
     regenerate,
   } = useAiChat(conversationId, false, shareToken);
+
+  const currentOrderIdentity = deriveOrderFocus(orderDataset.data?.orders ?? [], currentOrderNumber, messages);
+  const currentOrder = orderDataset.data?.orders.find(order => order.id === currentOrderIdentity?.id);
 
   const selectedOrgKbIds = useMemo(
     () => selectedOrgKbs.filter((item) => item.type === "org").map((item) => String(item.id)),
@@ -253,11 +276,12 @@ const ChatView = ({
       if (user?.id) {
         moveConversationModel(String(user.id), "new", activeConvoId);
       }
-      navigate(`/c/${activeConvoId}`, { replace: true });
+      navigate(`/c/${activeConvoId}${advisorSearch(location.search)}`, { replace: true });
     }
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  useAdvisorPresentation(scene, chatContainerRef, conversationId);
 
   // F035: task mode is a ROLE permission. The backend folds each role's
   // menu_ids into web_menu → client `user.plugins`; `linsight_task_mode` is the
@@ -271,14 +295,28 @@ const ChatView = ({
     return Array.isArray(plugins) ? plugins.includes("linsight_task_mode") : true;
   }, [user]);
 
+  const advisor = useAdvisorEntry({ scene, config: bsConfig, skills: advisorSkills, tools: advisorTools,
+    taskMode, searchType, canUseTaskMode, setSkills: setAdvisorSkills, setTools: setAdvisorTools,
+    setTaskMode, setSearchType });
+
+  const transportDetail = useTransportDetail({ scene, ready: advisor.ready, chatId: conversationId,
+    locationKey: location.key, toolKey: advisor.transportToolKey, setDraft: setInputText,
+    toast: key => showToast?.({ message: t(key), severity: NotificationSeverity.WARNING }) });
   const handleSend = useCallback(
-    (text: string, files?: any[] | null) => {
+    async (text: string, files?: any[] | null) => {
+      if (!advisor.ready) return false;
       // Capture the turn's resources before resetting its composer draft.
-      const accepted = sendMessage(text, files, { taskMode: taskMode && canUseTaskMode });
+      const prepared = await transportDetail.prepare(text);
+      if (prepared === false) return false;
+      const explicitOrder = orderIdentityIntent(text, orderDataset.data?.orders ?? []).mentioned;
+      const firstOrderTurn = !messages.some(message => message.isCreatedByUser);
+      const contextual = scene === 'orders' && currentOrder && firstOrderTurn && !explicitOrder
+        ? t('zhgyl.orderPrefix', { order: currentOrder.number, question: prepared }) : prepared;
+      const accepted = sendMessage(text, files, { taskMode: taskMode && canUseTaskMode, transportDetailText: contextual });
       if (accepted) setInputText("");
       return accepted;
     },
-    [taskMode, canUseTaskMode, sendMessage],
+    [taskMode, canUseTaskMode, sendMessage, advisor.ready, transportDetail, scene, currentOrder, orderDataset.data, messages, t],
   );
 
   const isNew = conversationId === "new";
@@ -698,8 +736,12 @@ const ChatView = ({
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
     <Presentation isLingsi={false}>
-      <div className="dsh-chat-surface" data-testid="dsh-chat-surface">
+      <div className="dsh-chat-surface" data-testid="dsh-chat-surface" data-assistant-scene={scene && scene !== 'select' ? scene : undefined} data-assistant-home={!shareToken && !workspaceModule && conversationId === 'new' && (!scene || scene === 'select') ? 'true' : undefined} data-procurement-mode={scene ? 'true' : undefined} data-scene-theme={scene && scene !== 'select' && scene !== 'orders' ? 'light' : undefined}>
+        {(orderModuleVisited || workspaceModule === 'order-tracking') && <WorkspaceModule module="order-tracking" active={workspaceModule === 'order-tracking'} />}
+        {workspaceModule === 'procurement-forecast' ? <WorkspaceModule module="procurement-forecast" /> : workspaceModule === 'order-tracking' ? null : <>
         <div ref={chatContainerRef} className="relative z-10 flex h-full min-w-0 flex-1 flex-col">
+          {scene === 'orders' && <OrderNavigation view="ai" />}
+          {scene === 'orders' && currentOrder && messages.length > 0 && <OrderContext order={currentOrder} compact />}
           {/* Layout: treat "loading an existing conversation" the same as
               "has messages" so the input stays pinned to the bottom during
               sidebar navigation (otherwise the centered welcome-page layout
@@ -752,6 +794,7 @@ const ChatView = ({
                         {Boolean(historyError) && <ApiRequestFailure error={historyError} onRetry={retryHistory} />}
                       <AiChatMessages
                           messages={messages}
+                          assistantOpening={!shareToken && scene === 'orders' ? <AdvisorOpening key={activeConvoId} scene="orders" compact ready={advisor.ready} error={advisor.error} onRetry={advisor.retry} /> : undefined}
                           conversationId={activeConvoId}
                           title={chatTitle}
                           isLoading={false}
@@ -804,11 +847,11 @@ const ChatView = ({
                           </div>
                         ) : (
                           <div className="dsh-chat-composer-seat">
-                            {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
+                            {latestTaskVersionId && !scene && <PinnedTaskPanel versionId={latestTaskVersionId} />}
                             <AiChatInput
                               allowConfiguration={false}
                               disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
-                              sendDisabled={taskRunning}
+                              sendDisabled={taskRunning || !advisor.ready || transportDetail.resolving}
                               isStreaming={isStreaming}
                               isParsingMedia={isParsingMedia}
                               // Parked awaiting the user → not "running": drop the Stop
@@ -1003,11 +1046,7 @@ const ChatView = ({
                       {/* F035 Track H (P5): daily/task mode switch removed —
                           task mode is reached via the sidebar "new task" entry
                           and the input-bar task-mode button. */}
-                      <Landing
-                        isNew={isNew}
-                        hideSubtitle={landingHasSelection}
-                        onStarterClick={setInputText}
-                      />
+                      {!shareToken ? <AdvisorLanding scene={scene} ready={advisor.ready} error={advisor.error} onRetry={advisor.retry} onStarterClick={setInputText} orderContext={currentOrder ? <OrderContext order={currentOrder} /> : undefined} orderNumber={currentOrder?.number} /> : <Landing isNew={isNew} hideSubtitle={landingHasSelection} onStarterClick={setInputText} />}
 
                       {/* Input area for landing page */}
                       {!shareToken && (
@@ -1015,7 +1054,7 @@ const ChatView = ({
                           <AiChatInput
                             elevated
                             disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
-                            sendDisabled={taskRunning}
+                            sendDisabled={taskRunning || !advisor.ready || transportDetail.resolving}
                             isStreaming={isStreaming}
                             isParsingMedia={isParsingMedia}
                             features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
@@ -1054,7 +1093,7 @@ const ChatView = ({
                         offset = (block center) + (half block height) + 40px.
                         ≥768 block center = 45vh; ≤767 = 40% of the measured region
                         height (px, since `vh`/`%`-padding don't work here). */}
-                    <DailyFeaturedApps t={t} />
+                    {shareToken && <DailyFeaturedApps t={t} />}
                   </div>
                 )}
               </div>
@@ -1138,7 +1177,8 @@ const ChatView = ({
               />
             </>
           )}
-        </div>
+        </>}
+      </div>
       </Presentation>
     </TaskTurnLoadContext.Provider>
   );

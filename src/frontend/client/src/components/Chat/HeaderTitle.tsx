@@ -1,3 +1,5 @@
+import { AdvisorHeading } from '~/components/zhgyl/AdvisorLanding';
+import { advisorScene } from '~/components/zhgyl/scenes';
 import { Outlined } from 'bisheng-icons';
 import { useLocation } from 'react-router-dom';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -22,7 +24,7 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
   workspaceOpen?: boolean;
 }) {
   const localize = useLocalize();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const isNarrowViewport = usePrefersMobileLayout();
   const isAppChatRoute = pathname.includes('/app/');
   const isAppChatCompact = useMediaQuery('(max-width: 1023px)');
@@ -30,29 +32,7 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
     conversation?.title != null && String(conversation.title).trim() !== ''
       ? String(conversation.title).trim()
       : localize('com_ui_new_chat');
-  // Merge title and share into MobileNav on mobile and compact app-chat layouts.
-  if (isNarrowViewport || (isAppChatRoute && isAppChatCompact)) {
-    return null;
-  }
-
-  return (
-    <div
-      className={cn(
-        'dsh-chat-header sticky top-0 z-10 flex h-[56px] w-full items-center justify-between bg-page pl-4 pr-4 text-text-1',
-      )}
-    >
-      <div className="dsh-chat-header-row flex w-full min-w-0 items-center justify-between">
-        {/* Left placeholder to balance the center layout */}
-        <div className="dsh-chat-header-spacer flex-1"></div>
-
-        {/* Center Title */}
-        <div className="dsh-chat-title flex-[2] flex justify-center text-[14px] font-medium leading-[22px]">
-          <div id="app-title" className="truncate max-w-full text-center">
-            {normalizedTitle}
-          </div>
-        </div>
-
-        {/* Right actions */}
+  const actions = (
         <div className="flex-1 flex justify-end items-center gap-1">
           {!readOnly && !hideShare && (
             <ShareChat
@@ -85,6 +65,33 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
             </button>
           )}
         </div>
+  );
+  const scene = !readOnly && /^\/c\/[^/]+\/?$/.test(pathname) ? advisorScene(search) : '';
+  if (scene && scene !== 'select' && scene !== 'orders') return <AdvisorHeading scene={scene} actions={actions} title={normalizedTitle} />;
+  // Merge title and share into MobileNav on mobile and compact app-chat layouts.
+  if (isNarrowViewport || (isAppChatRoute && isAppChatCompact)) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        'dsh-chat-header sticky top-0 z-10 flex h-[56px] w-full items-center justify-between bg-page pl-4 pr-4 text-text-1',
+      )}
+    >
+      <div className="dsh-chat-header-row flex w-full min-w-0 items-center justify-between">
+        {/* Left placeholder to balance the center layout */}
+        <div className="dsh-chat-header-spacer flex-1"></div>
+
+        {/* Center Title */}
+        <div className="dsh-chat-title flex-[2] flex justify-center text-[14px] font-medium leading-[22px]">
+          <div id="app-title" className="truncate max-w-full text-center">
+            {normalizedTitle}
+          </div>
+        </div>
+
+        {/* Right actions */}
+        {actions}
       </div>
     </div>
   );

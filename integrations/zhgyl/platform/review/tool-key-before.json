@@ -1,0 +1,24 @@
+{
+  "scope": "actual_source_methods_with_synthetic_dao_and_permission_stubs_only",
+  "recorded_before_fix": true,
+  "use": {
+    "api_key_exposed": true,
+    "requested_permission_actions": [
+      [
+        "use"
+      ]
+    ],
+    "edit_permission_requested": false
+  },
+  "visible": {
+    "api_key_exposed": true,
+    "requested_permission_actions": [
+      [
+        "visible"
+      ]
+    ],
+    "edit_permission_requested": false
+  },
+  "read_mask_only_breaks_update": true,
+  "baseline_source_sha256": "dd14de28ea0a1f53d8e0538486e9a2f305977fc86902bda6c583c06d2855bb00"
+}

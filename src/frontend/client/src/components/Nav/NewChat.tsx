@@ -1,3 +1,4 @@
+import { advisorScene, advisorSearch } from '~/components/zhgyl/scenes';
 import { useQueryClient } from '@tanstack/react-query';
 import { Outlined } from 'bisheng-icons';
 import { useCallback, useEffect, useRef } from 'react';
@@ -85,12 +86,14 @@ export default function NewChat({
 
   const { conversation } = store.useCreateConversationAtom(index);
 
+  const location = useLocation();
   const handleNewChat = () => {
       newConvo();
       // Reset the global atom directly (KeepAlive-cached ChatView won't re-run
       // its location effect after a tab switch — see taskModeState).
-      setTaskMode(false);
-      navigate('/c/new');
+      const scene = advisorScene(location.search);
+      setTaskMode(!!scene && scene !== 'select');
+      navigate(`/c/new${advisorSearch(location.search)}`);
       // Keep auto-collapse behavior only on small screens.
       if (isSmallScreen) {
         toggleNav();

@@ -107,7 +107,7 @@ interface AiChatInputProps {
     onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
-    onSend: (text: string, files?: any[] | null) => void | boolean;
+    onSend: (text: string, files?: any[] | null) => void | boolean | Promise<void | boolean>;
     onStop: () => void;
     onScrollToBottom: () => void;
     /** Optional controlled value — for filling in preset questions */
@@ -378,7 +378,7 @@ const AiChatInput = memo(
             (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
         );
 
-        const handleSend = useCallback(() => {
+        const handleSend = useCallback(async () => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
             if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
@@ -392,7 +392,7 @@ const AiChatInput = memo(
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
             // bubble goes back to `cover_filepath` once parsing produces it.
-            const accepted = onSend(trimmed, chatFiles?.map((file) => (
+            const accepted = await onSend(trimmed, chatFiles?.map((file) => (
                 file?.mediaCoverUrl?.startsWith('blob:')
                     ? { ...file, mediaCoverUrl: undefined }
                     : file

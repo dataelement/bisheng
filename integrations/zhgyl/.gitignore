@@ -1,0 +1,12 @@
+# Runtime state and generated fixtures stay outside source delivery.
+**/__pycache__/
+**/runtime/
+**/runtime-*/
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/credentials.json
+**/client.json
+**/secrets/
+**/private/
+forecast/skill/procurement-forecast-fast/assets/orders.json

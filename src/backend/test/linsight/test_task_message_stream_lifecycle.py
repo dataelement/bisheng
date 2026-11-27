@@ -68,7 +68,8 @@ async def test_persisted_terminal_state_completes_a_quiet_socket(handler, monkey
     await asyncio.wait_for(subject.connect(), timeout=1)
     assert ws.send_json.call_args.args[0]["event_type"] == event
     ws.close.assert_awaited_once_with(code=1000, reason="Session finished")
-    assert closed.is_set()
+    # D: already-finished viewers must not acquire a Redis subscription.
+    assert not closed.is_set()
     if status == "completed":
         assert ws.send_json.call_args.args[0]["data"]["output_result"]["final_files"][0]["file_name"] == "report.docx"
 
@@ -100,7 +101,7 @@ async def test_completion_during_an_existing_connection_is_reconciled(handler, m
     assert ws.send_json.call_args.args[0]["event_type"] == "final_result"
 
 
-async def test_completed_snapshot_preserves_queued_progress_and_final_order(handler):
+async def test_completed_snapshot_sends_persisted_final_without_consuming_queued_progress(handler):
     subject, ws = handler
     attach_stream(
         subject,
@@ -113,7 +114,9 @@ async def test_completed_snapshot_preserves_queued_progress_and_final_order(hand
         status="completed", output_result={"answer": "done"}
     )
     await asyncio.wait_for(subject.connect(), timeout=1)
-    assert [call.args[0]["event_type"] for call in ws.send_json.call_args_list] == ["task_end", "final_result"]
+    # D deliberately replaces the older queued-progress expectation: persisted
+    # completion is authoritative and works even when Redis has no free slots.
+    assert [call.args[0]["event_type"] for call in ws.send_json.call_args_list] == ["final_result"]
 
 
 async def test_disconnect_cancels_a_quiet_stream(handler):

@@ -62,6 +62,8 @@ interface AiChatMessagesProps {
     hideEmptyState?: boolean;
     /** Optional width utility classes for the inner message column */
     contentWidthClassName?: string;
+    /** Scene introduction shown once above the conversation, outside individual turns. */
+    assistantOpening?: ReactNode;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
@@ -195,6 +197,7 @@ export default function AiChatMessages({
     emptyStateHint,
     emptyStateIllustration,
     contentWidthClassName,
+    assistantOpening,
     onPresetClick,
     onRegenerate,
     onOpenCitationPanel,
@@ -420,6 +423,7 @@ export default function AiChatMessages({
                         contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
                     )}
                 >
+                    {assistantOpening}
                     {/* F028: surface the live messages list to selection-aware children
                         (MessageCheckbox / ExportSelectionButton inside AiMessageBubble)
                         without modifying useAiChat or prop-drilling. */}

@@ -292,10 +292,9 @@ export async function uploadChatFile(
     }
     const urlMap = {
         linsight: '/api/v1/linsight/workbench/upload-file',
-        // Daily chat used to have its own endpoint, which stored files under
-        // their raw filename — two users uploading "1.png" overwrote each other.
-        // The shared endpoint already names objects by uuid.
-        workstation: '/api/v1/knowledge/upload',
+        // This endpoint generates unique keys and records owner/tenant metadata
+        // required when the attachment's signed URL is renewed.
+        workstation: '/api/v1/workstation/files',
     };
     const url = uploadMode ? urlMap[uploadMode] : '/api/v1/knowledge/upload';
     return await request.post(url, formData, {
@@ -369,8 +368,7 @@ export const uploadFileWithProgress = async (file, callback, type: 'knowledge' |
         // Handle the response data as needed
     } catch (error) {
         console.error('Error uploading file:', error);
-        return ''
-        // Handle errors
+        throw error;
     }
 };
 

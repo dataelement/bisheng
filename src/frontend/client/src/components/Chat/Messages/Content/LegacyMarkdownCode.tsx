@@ -1,3 +1,6 @@
+import { BusinessRecap } from '~/components/zhgyl/BusinessRecap';
+import { readBusinessRecap } from '~/components/zhgyl/recapProtocol';
+import { advisorScene } from '~/components/zhgyl/scenes';
 import React, { memo, useEffect, useRef } from 'react';
 import { useCodeBlockContext } from '~/Providers';
 import { handleDoubleClick } from '~/utils';
@@ -29,6 +32,8 @@ export const code: React.ElementType = memo(({ className, children }: TCodeProps
     resetCounter();
   }, [children, resetCounter]);
 
+  const recap = readBusinessRecap(String(children), advisorScene(window.location.search), className);
+  if (recap.kind !== 'other') return <BusinessRecap result={recap} />;
   if (isMath) {
     return <>{children}</>;
   } else if (isSingleLine) {
@@ -53,6 +58,8 @@ export const codeNoExecution: React.ElementType = memo(({ className, children }:
   const match = /language-(\w+)/.exec(className ?? '');
   const lang = match && match[1];
 
+  const recap = readBusinessRecap(String(children), advisorScene(window.location.search), className);
+  if (recap.kind !== 'other') return <BusinessRecap result={recap} />;
   if (lang === 'math') {
     return children;
   } else if (typeof children === 'string' && children.split('\n').length === 1) {

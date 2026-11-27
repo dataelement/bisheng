@@ -1,0 +1,34 @@
+services:
+  code-runner:
+    image: ${BISHENG_CODE_RUNNER_IMAGE:?Set the BISHENG code-runner image}
+    restart: on-failure
+    user: "0"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, DAC_OVERRIDE, KILL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 256
+    tmpfs:
+      - /tmp:mode=755
+    env_file:
+      - ${BISHENG_RUNNER_ENV_FILE:?Set the private file containing SANDBOX_TOKEN}
+    environment:
+      TZ: Asia/Shanghai
+      SANDBOX_SESSIONS_ROOT: /sessions
+      SANDBOX_MAX_SESSIONS: "5"
+      SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
+      SANDBOX_ENABLE_UID_ISOLATION: "true"
+      SANDBOX_LEASE_TTL_S: "900"
+    volumes:
+      - code-runner-sessions:/sessions
+    command: [python, serve.py]
+    networks: [executor]
+
+networks:
+  executor:
+    internal: true
+
+volumes:
+  code-runner-sessions:

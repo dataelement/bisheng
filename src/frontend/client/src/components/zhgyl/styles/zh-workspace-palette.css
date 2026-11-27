@@ -1,0 +1,56 @@
+:root {
+  --aviation-page: #f5f8fc;
+  --aviation-sidebar: #eaf0f2;
+  --aviation-surface: #fcfdfd;
+  --aviation-border: #dbe4e8;
+  --aviation-hero-border: #c8dce7;
+  --aviation-input-border: #cbdbe6;
+  --aviation-input-focus: #8caec5;
+  --aviation-title: #153347;
+  --aviation-hero-light:
+    radial-gradient(ellipse at 83% 48%, #b8d8e8 0%, #d4e9f3 31%, #eaf4f8 58%, transparent 73%),
+    linear-gradient(115deg, #fcfefe, #edf6fa 52%, #cfe4ef);
+}
+body:is(.zh-workbench, .zh-orders-open, .zh-orders-ai) aside {
+  background: var(--aviation-sidebar) !important;
+  border-right-color: var(--aviation-border) !important;
+}
+
+body.zh-workbench .dsh-chat-surface:is([data-assistant-home="true"], [data-scene-theme]),
+body.zh-workbench .dsh-chat-surface:is([data-assistant-home="true"], [data-scene-theme]) .dsh-chat-landing,
+body:is(.zh-orders-open, .zh-orders-ai) .dsh-chat-surface,
+body.zh-orders-open .zh-orders-frame,
+body.zh-orders-ai .dsh-chat-surface .dsh-chat-landing {
+  background: var(--aviation-page) !important;
+}
+
+body .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading,
+body.zh-workbench .dsh-chat-surface[data-scene-theme="light"] .assistant-chat-heading,
+body.zh-orders-ai .dsh-chat-surface .assistant-chat-heading {
+  background: var(--aviation-hero-light) !important;
+  border-color: var(--aviation-hero-border) !important;
+}
+
+body.zh-workbench .dsh-chat-surface[data-scene-theme="light"] .assistant-chat-heading,
+body.zh-orders-ai .dsh-chat-surface .assistant-chat-heading > span {
+  color: var(--aviation-title);
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card:not(:hover, :focus-visible),
+body.zh-workbench .dsh-chat-surface[data-scene-theme] .assistant-opening.assistant-friendly,
+body.zh-workbench.zh-orders-ai .dsh-chat-surface .assistant-opening,
+body.zh-orders-ai .dsh-chat-surface .zh-ai-order-context {
+  background: var(--aviation-surface) !important;
+  border-color: var(--aviation-border) !important;
+}
+
+body.zh-workbench .dsh-chat-surface:is([data-assistant-home="true"], [data-scene-theme]) .dsh-chat-composer,
+body.zh-orders-ai .dsh-chat-surface .dsh-chat-composer {
+  background: #fff !important;
+  border-color: var(--aviation-input-border) !important;
+}
+
+body.zh-workbench .dsh-chat-surface:is([data-assistant-home="true"], [data-scene-theme]) .dsh-chat-composer:focus-within,
+body.zh-orders-ai .dsh-chat-surface .dsh-chat-composer:focus-within {
+  border-color: var(--aviation-input-focus) !important;
+}

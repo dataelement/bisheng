@@ -1,0 +1,972 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "采购历史Excel样例查询",
+    "version": "1.0.0",
+    "description": "只读查询授权样例。导入前阅读同目录platform-import.md；访问令牌通过受控执行器获取，不作为模型参数。"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:18768",
+      "description": "119本人采购Mock伴随服务"
+    }
+  ],
+  "paths": {
+    "/openapi/tic-definition/integrationInterface/call": {
+      "post": {
+        "operationId": "query_procurement_history",
+        "summary": "按型号查询采购历史Excel样例",
+        "description": "查询已授权Excel样例的采购历史，不是客户生产数据。requestQuery必须为对象，model必填、1—256字符；match_mode为exact或regex，默认exact；pageNum默认1且最大100000；pageSize默认50且最大100。响应列表位于data.data.result，空结果仍是成功；失败不得视为空历史。比较前须取完所有分页并核对snapshotId/fieldMap/sourceRows/totalElements，不能只取第一页推荐。",
+        "parameters": [
+          {
+            "name": "functionCode",
+            "in": "query",
+            "required": true,
+            "description": "固定mock函数；平台v3.0.0导入后需按适配说明固化到子工具extra.path。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "mock_procurement_history_v1"
+              ],
+              "default": "mock_procurement_history_v1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requestQuery": {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256,
+                        "description": "规格型号；exact按NFKC、空白、大小写归一后精确匹配，regex按Python re忽略大小写fullmatch。"
+                      },
+                      "match_mode": {
+                        "type": "string",
+                        "enum": [
+                          "exact",
+                          "regex"
+                        ],
+                        "default": "exact"
+                      },
+                      "pageNum": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000,
+                        "default": 1,
+                        "description": "从1开始；接口也兼容正整数字符串，工具使用整数。"
+                      },
+                      "pageSize": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 50,
+                        "description": "每页条数；工具使用整数。"
+                      }
+                    },
+                    "required": [
+                      "model"
+                    ],
+                    "additionalProperties": false,
+                    "description": "查询已授权Excel样例的采购历史，不是客户生产数据。requestQuery必须为对象，model必填、1—256字符；match_mode为exact或regex，默认exact；pageNum默认1且最大100000；pageSize默认50且最大100。响应列表位于data.data.result，空结果仍是成功；失败不得视为空历史。比较前须取完所有分页并核对snapshotId/fieldMap/sourceRows/totalElements，不能只取第一页推荐。"
+                  }
+                },
+                "required": [
+                  "requestQuery"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "requestQuery": {
+                  "model": "BMS10-146 TYPE I",
+                  "match_mode": "exact",
+                  "pageNum": 1,
+                  "pageSize": 50
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；无历史时result为空且totalElements为0。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistorySuccess"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "无效JSON、参数或正则",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少、失效或无效访问令牌",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未知接口或functionCode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求体超过16384字节或长度无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "请求Content-Type不是application/json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "正则超过一秒预算",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "服务并发预算达到上限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "服务内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "配置完整Bearer <access_token>，不使用URL令牌。访问令牌7200秒后需受控刷新。"
+      }
+    },
+    "schemas": {
+      "RawHistoryRow": {
+        "type": "object",
+        "properties": {
+          "col_A": {
+            "description": "A列：主键；原始值原样保留。"
+          },
+          "col_B": {
+            "description": "B列：订单号；原始值原样保留。"
+          },
+          "col_C": {
+            "description": "C列：下单方式；原始值原样保留。"
+          },
+          "col_D": {
+            "description": "D列：项目主键；原始值原样保留。"
+          },
+          "col_E": {
+            "description": "E列：项目名称；原始值原样保留。"
+          },
+          "col_F": {
+            "description": "F列：供应商标识；原始值原样保留。"
+          },
+          "col_G": {
+            "description": "G列：供应商名称；原始值原样保留。"
+          },
+          "col_H": {
+            "description": "H列：制造商标识；原始值原样保留。"
+          },
+          "col_I": {
+            "description": "I列：制造商名称；原始值原样保留。"
+          },
+          "col_J": {
+            "description": "J列：币种；原始值原样保留。"
+          },
+          "col_K": {
+            "description": "K列：结算系数%；原始值原样保留。"
+          },
+          "col_L": {
+            "description": "L列：订单总价；原始值原样保留。"
+          },
+          "col_M": {
+            "description": "M列：付款条款；原始值原样保留。"
+          },
+          "col_N": {
+            "description": "N列：账期天数；原始值原样保留。"
+          },
+          "col_O": {
+            "description": "O列：incoterms；原始值原样保留。"
+          },
+          "col_P": {
+            "description": "P列：incoterms引申字段；原始值原样保留。"
+          },
+          "col_Q": {
+            "description": "Q列：确认状态；原始值原样保留。"
+          },
+          "col_R": {
+            "description": "R列：订单是否关闭；原始值原样保留。"
+          },
+          "col_S": {
+            "description": "S列：订单状态；原始值原样保留。"
+          },
+          "col_T": {
+            "description": "T列：是否发送oa审批；原始值原样保留。"
+          },
+          "col_U": {
+            "description": "U列：项目经理名称(子账户)；原始值原样保留。"
+          },
+          "col_V": {
+            "description": "V列：项目经理标识；原始值原样保留。"
+          },
+          "col_W": {
+            "description": "W列：首次发货日期；原始值原样保留。"
+          },
+          "col_X": {
+            "description": "X列：版本号；原始值原样保留。"
+          },
+          "col_Y": {
+            "description": "Y列：确认时间；原始值原样保留。"
+          },
+          "col_Z": {
+            "description": "Z列：订单方向；原始值原样保留。"
+          },
+          "col_AA": {
+            "description": "AA列：采购订单；原始值原样保留。"
+          },
+          "col_AB": {
+            "description": "AB列：是否长期协议；原始值原样保留。"
+          },
+          "col_AC": {
+            "description": "AC列：长期协议号；原始值原样保留。"
+          },
+          "col_AD": {
+            "description": "AD列：客户标识；原始值原样保留。"
+          },
+          "col_AE": {
+            "description": "AE列：客户名单；原始值原样保留。"
+          },
+          "col_AF": {
+            "description": "AF列：客户订单号；原始值原样保留。"
+          },
+          "col_AG": {
+            "description": "AG列：添加时间；原始值原样保留。"
+          },
+          "col_AH": {
+            "description": "AH列：操作时间；原始值原样保留。"
+          },
+          "col_AI": {
+            "description": "AI列：添加企业标识；原始值原样保留。"
+          },
+          "col_AJ": {
+            "description": "AJ列：添加人标识；原始值原样保留。"
+          },
+          "col_AK": {
+            "description": "AK列：操作人标识；原始值原样保留。"
+          },
+          "col_AL": {
+            "description": "AL列：订单备注；原始值原样保留。"
+          },
+          "col_AM": {
+            "description": "AM列：指令接收；原始值原样保留。"
+          },
+          "col_AN": {
+            "description": "AN列：订单发出；原始值原样保留。"
+          },
+          "col_AO": {
+            "description": "AO列：订单确认；原始值原样保留。"
+          },
+          "col_AP": {
+            "description": "AP列：指令回签；原始值原样保留。"
+          },
+          "col_AQ": {
+            "description": "AQ列：最新指令接收；原始值原样保留。"
+          },
+          "col_AR": {
+            "description": "AR列：最新订单发出；原始值原样保留。"
+          },
+          "col_AS": {
+            "description": "AS列：最新订单确认；原始值原样保留。"
+          },
+          "col_AT": {
+            "description": "AT列：最新指令回签；原始值原样保留。"
+          },
+          "col_AU": {
+            "description": "AU列：客户采购指令号；原始值原样保留。"
+          },
+          "col_AV": {
+            "description": "AV列：付款状态：1待付款,2已付款；原始值原样保留。"
+          },
+          "col_AW": {
+            "description": "AW列：erp录入日期；原始值原样保留。"
+          },
+          "col_AX": {
+            "description": "AX列：合同评审日期；原始值原样保留。"
+          },
+          "col_AY": {
+            "description": "AY列：OA合同评审状态；原始值原样保留。"
+          },
+          "col_AZ": {
+            "description": "AZ列：合同是否生成状态；原始值原样保留。"
+          },
+          "col_BA": {
+            "description": "BA列：订单状态；原始值原样保留。"
+          },
+          "col_BB": {
+            "description": "BB列：贸易国别主键；原始值原样保留。"
+          },
+          "col_BC": {
+            "description": "BC列：运输方式主键；原始值原样保留。"
+          },
+          "col_BD": {
+            "description": "BD列：结算方式主键；原始值原样保留。"
+          },
+          "col_BE": {
+            "description": "BE列：贸易方式主键；原始值原样保留。"
+          },
+          "col_BF": {
+            "description": "BF列：溢装率；原始值原样保留。"
+          },
+          "col_BG": {
+            "description": "BG列：短装率；原始值原样保留。"
+          },
+          "col_BH": {
+            "description": "BH列：NC方返回合同主键；原始值原样保留。"
+          },
+          "col_BI": {
+            "description": "BI列：采购计划编号-添加采购订单保存使用；原始值原样保留。"
+          },
+          "col_BJ": {
+            "description": "BJ列：添加信用证状态；原始值原样保留。"
+          },
+          "col_BK": {
+            "description": "BK列：erp状态；原始值原样保留。"
+          },
+          "col_BL": {
+            "description": "BL列：是否推送项目助理；原始值原样保留。"
+          },
+          "col_BM": {
+            "description": "BM列：付款条款拼接字段；原始值原样保留。"
+          },
+          "col_BN": {
+            "description": "BN列：oa审批结束时间；原始值原样保留。"
+          },
+          "col_BO": {
+            "description": "BO列：是否危化品；原始值原样保留。"
+          },
+          "col_BP": {
+            "description": "BP列：经济测算表路径；原始值原样保留。"
+          },
+          "col_BQ": {
+            "description": "BQ列：推送NC状态；原始值原样保留。"
+          },
+          "col_BR": {
+            "description": "BR列：无需付款状态；原始值原样保留。"
+          },
+          "col_BS": {
+            "description": "BS列：订单状态；原始值原样保留。"
+          },
+          "col_BT": {
+            "description": "BT列：是否自动生成代理协议和项目状态；原始值原样保留。"
+          },
+          "col_BU": {
+            "description": "BU列：国际订单编号；原始值原样保留。"
+          },
+          "col_BV": {
+            "description": "BV列：运输方式编码；原始值原样保留。"
+          },
+          "col_BW": {
+            "description": "BW列：贸易方式编码；原始值原样保留。"
+          },
+          "col_BX": {
+            "description": "BX列：贸易国别编码；原始值原样保留。"
+          },
+          "col_BY": {
+            "description": "BY列：上飞采购经理名称；原始值原样保留。"
+          },
+          "col_BZ": {
+            "description": "BZ列：订单明细主表；原始值原样保留。"
+          },
+          "col_CA": {
+            "description": "CA列：订单主键外键；原始值原样保留。"
+          },
+          "col_CB": {
+            "description": "CB列：订单号；原始值原样保留。"
+          },
+          "col_CC": {
+            "description": "CC列：订单行号；原始值原样保留。"
+          },
+          "col_CD": {
+            "description": "CD列：采购计划明细主键；原始值原样保留。"
+          },
+          "col_CE": {
+            "description": "CE列：需求计划明细主键；原始值原样保留。"
+          },
+          "col_CF": {
+            "description": "CF列：客户物料编码；原始值原样保留。"
+          },
+          "col_CG": {
+            "description": "CG列：集团统一编码；原始值原样保留。"
+          },
+          "col_CH": {
+            "description": "CH列：物料编码；原始值原样保留。"
+          },
+          "col_CI": {
+            "description": "CI列：物料名称；原始值原样保留。"
+          },
+          "col_CJ": {
+            "description": "CJ列：规格型号；原始值原样保留。"
+          },
+          "col_CK": {
+            "description": "CK列：牌号/描述；原始值原样保留。"
+          },
+          "col_CL": {
+            "description": "CL列：技术规范；原始值原样保留。"
+          },
+          "col_CM": {
+            "description": "CM列：长度；原始值原样保留。"
+          },
+          "col_CN": {
+            "description": "CN列：宽度；原始值原样保留。"
+          },
+          "col_CO": {
+            "description": "CO列：厚度(规格)；原始值原样保留。"
+          },
+          "col_CP": {
+            "description": "CP列：单位；原始值原样保留。"
+          },
+          "col_CQ": {
+            "description": "CQ列：数量；原始值原样保留。"
+          },
+          "col_CR": {
+            "description": "CR列：单价；原始值原样保留。"
+          },
+          "col_CS": {
+            "description": "CS列：金额；原始值原样保留。"
+          },
+          "col_CT": {
+            "description": "CT列：参考数量；原始值原样保留。"
+          },
+          "col_CU": {
+            "description": "CU列：参考单位；原始值原样保留。"
+          },
+          "col_CV": {
+            "description": "CV列：合同期望交付日期；原始值原样保留。"
+          },
+          "col_CW": {
+            "description": "CW列：物料是否关闭；原始值原样保留。"
+          },
+          "col_CX": {
+            "description": "CX列：备注；原始值原样保留。"
+          },
+          "col_CY": {
+            "description": "CY列：是否异常；原始值原样保留。"
+          },
+          "col_CZ": {
+            "description": "CZ列：异常类型；原始值原样保留。"
+          },
+          "col_DA": {
+            "description": "DA列：异常数量；原始值原样保留。"
+          },
+          "col_DB": {
+            "description": "DB列：添加时间；原始值原样保留。"
+          },
+          "col_DC": {
+            "description": "DC列：更改时间；原始值原样保留。"
+          },
+          "col_DD": {
+            "description": "DD列：添加人标识；原始值原样保留。"
+          },
+          "col_DE": {
+            "description": "DE列：更改人标识；原始值原样保留。"
+          },
+          "col_DF": {
+            "description": "DF列：添加企业标识；原始值原样保留。"
+          },
+          "col_DG": {
+            "description": "DG列：wms数量；原始值原样保留。"
+          },
+          "col_DH": {
+            "description": "DH列：wms单位；原始值原样保留。"
+          },
+          "col_DI": {
+            "description": "DI列：长度单位；原始值原样保留。"
+          },
+          "col_DJ": {
+            "description": "DJ列：宽度单位；原始值原样保留。"
+          },
+          "col_DK": {
+            "description": "DK列：厚度单位；原始值原样保留。"
+          },
+          "col_DL": {
+            "description": "DL列：特征尺寸1单位；原始值原样保留。"
+          },
+          "col_DM": {
+            "description": "DM列：特征尺寸2单位；原始值原样保留。"
+          },
+          "col_DN": {
+            "description": "DN列：生效状态；原始值原样保留。"
+          },
+          "col_DO": {
+            "description": "DO列：供应商最新确认的交货时间；原始值原样保留。"
+          },
+          "col_DP": {
+            "description": "DP列：订单行号；原始值原样保留。"
+          },
+          "col_DQ": {
+            "description": "DQ列：历史确认交货变更汇总备注；原始值原样保留。"
+          },
+          "col_DR": {
+            "description": "DR列：供应商最新确认时间；原始值原样保留。"
+          },
+          "col_DS": {
+            "description": "DS列：异常关闭状态；原始值原样保留。"
+          },
+          "col_DT": {
+            "description": "DT列：结算系数%；原始值原样保留。"
+          },
+          "col_DU": {
+            "description": "DU列：物料类型；原始值原样保留。"
+          },
+          "col_DV": {
+            "description": "DV列：运输方式(平台内部)；原始值原样保留。"
+          },
+          "col_DW": {
+            "description": "DW列：付款条款拼接字段；原始值原样保留。"
+          },
+          "col_DX": {
+            "description": "DX列：订单状态；原始值原样保留。"
+          },
+          "col_DY": {
+            "description": "DY列：竞价明细主键；原始值原样保留。"
+          }
+        },
+        "required": [
+          "col_A",
+          "col_B",
+          "col_C",
+          "col_D",
+          "col_E",
+          "col_F",
+          "col_G",
+          "col_H",
+          "col_I",
+          "col_J",
+          "col_K",
+          "col_L",
+          "col_M",
+          "col_N",
+          "col_O",
+          "col_P",
+          "col_Q",
+          "col_R",
+          "col_S",
+          "col_T",
+          "col_U",
+          "col_V",
+          "col_W",
+          "col_X",
+          "col_Y",
+          "col_Z",
+          "col_AA",
+          "col_AB",
+          "col_AC",
+          "col_AD",
+          "col_AE",
+          "col_AF",
+          "col_AG",
+          "col_AH",
+          "col_AI",
+          "col_AJ",
+          "col_AK",
+          "col_AL",
+          "col_AM",
+          "col_AN",
+          "col_AO",
+          "col_AP",
+          "col_AQ",
+          "col_AR",
+          "col_AS",
+          "col_AT",
+          "col_AU",
+          "col_AV",
+          "col_AW",
+          "col_AX",
+          "col_AY",
+          "col_AZ",
+          "col_BA",
+          "col_BB",
+          "col_BC",
+          "col_BD",
+          "col_BE",
+          "col_BF",
+          "col_BG",
+          "col_BH",
+          "col_BI",
+          "col_BJ",
+          "col_BK",
+          "col_BL",
+          "col_BM",
+          "col_BN",
+          "col_BO",
+          "col_BP",
+          "col_BQ",
+          "col_BR",
+          "col_BS",
+          "col_BT",
+          "col_BU",
+          "col_BV",
+          "col_BW",
+          "col_BX",
+          "col_BY",
+          "col_BZ",
+          "col_CA",
+          "col_CB",
+          "col_CC",
+          "col_CD",
+          "col_CE",
+          "col_CF",
+          "col_CG",
+          "col_CH",
+          "col_CI",
+          "col_CJ",
+          "col_CK",
+          "col_CL",
+          "col_CM",
+          "col_CN",
+          "col_CO",
+          "col_CP",
+          "col_CQ",
+          "col_CR",
+          "col_CS",
+          "col_CT",
+          "col_CU",
+          "col_CV",
+          "col_CW",
+          "col_CX",
+          "col_CY",
+          "col_CZ",
+          "col_DA",
+          "col_DB",
+          "col_DC",
+          "col_DD",
+          "col_DE",
+          "col_DF",
+          "col_DG",
+          "col_DH",
+          "col_DI",
+          "col_DJ",
+          "col_DK",
+          "col_DL",
+          "col_DM",
+          "col_DN",
+          "col_DO",
+          "col_DP",
+          "col_DQ",
+          "col_DR",
+          "col_DS",
+          "col_DT",
+          "col_DU",
+          "col_DV",
+          "col_DW",
+          "col_DX",
+          "col_DY"
+        ],
+        "additionalProperties": false,
+        "minProperties": 129,
+        "maxProperties": 129
+      },
+      "FieldMapItem": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "column": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "column",
+          "label",
+          "scope"
+        ]
+      },
+      "Source": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "sheet": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "sheet",
+          "sha256",
+          "scope"
+        ]
+      },
+      "HistoryPage": {
+        "type": "object",
+        "properties": {
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RawHistoryRow"
+            }
+          },
+          "pageNum": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasNext": {
+            "type": "boolean"
+          },
+          "snapshotId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "schemaVersion": {
+            "type": "string"
+          },
+          "mock": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "scope": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "sourceRows": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "fieldMap": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldMapItem"
+            },
+            "minItems": 129,
+            "maxItems": 129
+          },
+          "matchedModelCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "query": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "match_mode": {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "regex"
+                ]
+              }
+            },
+            "required": [
+              "model",
+              "match_mode"
+            ]
+          }
+        },
+        "required": [
+          "totalElements",
+          "result",
+          "pageNum",
+          "pageSize",
+          "totalPages",
+          "hasNext",
+          "snapshotId",
+          "schemaVersion",
+          "mock",
+          "scope",
+          "source",
+          "sourceRows",
+          "fieldMap",
+          "matchedModelCount",
+          "query"
+        ]
+      },
+      "HistorySuccess": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "return.optSuccess"
+            ]
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "integer",
+                "enum": [
+                  200
+                ]
+              },
+              "msg": {
+                "type": "string"
+              },
+              "data": {
+                "$ref": "#/components/schemas/HistoryPage"
+              }
+            },
+            "required": [
+              "status",
+              "msg",
+              "data"
+            ]
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "code",
+          "msg",
+          "data",
+          "traceId"
+        ]
+      },
+      "HistoryError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "nullable": true
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "code",
+          "msg"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ]
+}

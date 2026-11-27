@@ -479,3 +479,80 @@ async def test_delete_tool_checks_delete_then_projects_lifecycle(
     )
     adapter.project_delete.assert_awaited_once()
     delete_row.assert_awaited_once_with(10)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ("use", "visible"))
+@pytest.mark.parametrize("can_edit", (False, True))
+async def test_saved_api_key_list_projection_requires_edit_and_never_changes_db(monkeypatch, action, can_edit):
+    tool_type = GptsToolsType(
+        id=10,
+        tenant_id=1,
+        user_id=99,
+        name="Synthetic API",
+        is_preset=0,
+        auth_method=1,
+        api_key="fixture-service-credential",
+    )
+    checks = []
+
+    async def decisions(_user, *, resource_type, resource_ids, actions):
+        checks.append((tuple(resource_ids), tuple(actions)))
+        allowed = {"use", "visible"} | ({"edit"} if can_edit else set())
+        return {"10": frozenset(a for a in actions if a in allowed)}
+
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_tenant_tool_type", AsyncMock(return_value=[tool_type])
+    )
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.GptsToolsDao.aget_list_by_type", AsyncMock(return_value=[]))
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.batch_check_business_actions", decisions)
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.resolve_permission_actor", AsyncMock(return_value=_actor(tenant_id=1))
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.get_f048_runtime",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                list_visible_objects=AsyncMock(return_value=SimpleNamespace(object_ids=("10",)))
+            )
+        ),
+    )
+    user = UserPayload(user_id=7, tenant_id=1, user_role=[])
+    result = await ToolServices(login_user=user).get_tool_list(action=action)
+    assert result[0].api_key == ("fixture-service-credential" if can_edit else "********")
+    assert tool_type.api_key == "fixture-service-credential"
+    assert result[0] is not tool_type
+    assert [call for call in checks if call[1] == ("edit",)] == [((10,), ("edit",))]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("credential", (None, ""))
+async def test_empty_api_key_list_does_not_add_edit_checks(monkeypatch, credential):
+    tool_type = GptsToolsType(id=10, tenant_id=1, user_id=99, name="No credential", is_preset=0, api_key=credential)
+    checks = AsyncMock(return_value={"10": frozenset({"use"})})
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_tenant_tool_type", AsyncMock(return_value=[tool_type])
+    )
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.GptsToolsDao.aget_list_by_type", AsyncMock(return_value=[]))
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.batch_check_business_actions", checks)
+    result = await ToolServices(login_user=UserPayload(user_id=7, tenant_id=1, user_role=[])).get_tool_list(
+        action="use"
+    )
+    assert result[0].api_key == credential
+    assert checks.await_count == 1 and checks.await_args.kwargs["actions"] == ("use",)
+
+
+@pytest.mark.asyncio
+async def test_edit_permission_failure_never_returns_a_credential_list(monkeypatch):
+    tool_type = GptsToolsType(
+        id=10, tenant_id=1, user_id=99, name="Synthetic API", is_preset=0, api_key="fixture-service-credential"
+    )
+    checks = AsyncMock(side_effect=[{"10": frozenset({"use"})}, PermissionFGAUnavailableError()])
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_tenant_tool_type", AsyncMock(return_value=[tool_type])
+    )
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.GptsToolsDao.aget_list_by_type", AsyncMock(return_value=[]))
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.batch_check_business_actions", checks)
+    with pytest.raises(PermissionFGAUnavailableError):
+        await ToolServices(login_user=UserPayload(user_id=7, tenant_id=1, user_role=[])).get_tool_list(action="use")
+    assert tool_type.api_key == "fixture-service-credential"

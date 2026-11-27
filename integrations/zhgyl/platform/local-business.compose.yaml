@@ -1,0 +1,73 @@
+# Synthetic-only acceptance stack. Create the shared network with the main stack.
+# Set ZHGYL_RUNTIME to seed_local_acceptance.py's NEW external directory.
+x-python: &python
+  image: ${ZHGYL_PYTHON_IMAGE:-python:3.11-slim}
+  restart: "no"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp]
+  networks: [isolated]
+
+services:
+  procurement-api:
+    <<: *python
+    command: [python, /service/server.py, --snapshot, /data/snapshot.json, --credentials, /private/credentials.json, --host, 0.0.0.0, --port, "18768"]
+    volumes:
+      - ../services/procurement:/service:ro
+      - ${ZHGYL_RUNTIME:?Set external synthetic runtime}/procurement/snapshot.json:/data/snapshot.json:ro
+      - ${ZHGYL_RUNTIME}/procurement/credentials.json:/private/credentials.json:ro
+    ports: ["127.0.0.1:28768:18768"]
+  transport-api:
+    <<: *python
+    command: [python, /service/server.py, --snapshot, /data/snapshot.json, --bind, 0.0.0.0, --port, "8080"]
+    env_file: ["${ZHGYL_RUNTIME}/transport.env"]
+    volumes:
+      - ../services/transport-history:/service:ro
+      - ${ZHGYL_RUNTIME}/transport/snapshot.json:/data/snapshot.json:ro
+    ports: ["127.0.0.1:28769:8080"]
+    networks:
+      isolated:
+        aliases: [bs-d-transport-api]
+  customs-api:
+    <<: *python
+    command: [python, /service/server.py, --snapshot, /data/snapshot.json, --bind, 0.0.0.0, --port, "8080"]
+    env_file: ["${ZHGYL_RUNTIME}/customs.env"]
+    volumes:
+      - ../services/customs-history:/service:ro
+      - ${ZHGYL_RUNTIME}/customs/snapshot.json:/data/snapshot.json:ro
+    ports: ["127.0.0.1:28770:8080"]
+    networks:
+      isolated:
+        aliases: [bs-d-customs-api]
+  transport-native-api:
+    <<: *python
+    command: [python, /service/service.py, --bind, 0.0.0.0, --port, "8080", --state, /state]
+    env_file: ["${ZHGYL_RUNTIME}/transport-native.env"]
+    volumes:
+      - ../services/transport-native:/service:ro
+      - ${ZHGYL_RUNTIME}/transport-state:/state
+    ports: ["127.0.0.1:28771:8080"]
+    depends_on: [transport-api]
+  procurement-forecast:
+    <<: *python
+    working_dir: /opt/forecast
+    command: [python, server.py, --host, 0.0.0.0, --port, "8786", --runtime, /runtime, --public-prefix, /workspace/procurement-forecast]
+    env_file: ["${ZHGYL_RUNTIME}/forecast.env"]
+    volumes:
+      - ${ZHGYL_RUNTIME}/forecast:/opt/forecast:ro
+      - ${ZHGYL_RUNTIME}/forecast-runtime:/runtime
+    ports: ["127.0.0.1:28786:8786"]
+  orders-data:
+    <<: *python
+    command: [python, /service/server.py, --dataset, /data/orders.json, --bind, 0.0.0.0, --port, "8080"]
+    env_file: ["${ZHGYL_RUNTIME}/orders.env"]
+    volumes:
+      - ../services/orders-data:/service:ro
+      - ${ZHGYL_RUNTIME}/skills/order-tracking/assets/orders.json:/data/orders.json:ro
+    # No host port. Only the loopback frontend's same-origin proxy may call it.
+
+networks:
+  isolated:
+    external: true
+    name: zhgyl302_isolated

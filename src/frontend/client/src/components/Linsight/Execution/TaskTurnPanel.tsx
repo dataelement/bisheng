@@ -1,3 +1,6 @@
+import { AdvisorLiveProgress } from '~/components/zhgyl/AdvisorLiveProgress';
+import { advisorScene } from '~/components/zhgyl/scenes';
+import { recapFromAnswer } from '~/components/zhgyl/businessTimeline';
 /**
  * F035 Track J (TJ-7): inline task-turn panel.
  *
@@ -23,7 +26,7 @@
  */
 import { OctagonX } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
@@ -120,10 +123,15 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         (linsight?.tasks as any) || [],
         ((linsight as any)?.sessionSteps as ExecStepEventData[]) || [],
     );
+    const { search: advisorQuery } = useLocation();
+    const requestedScene = advisorScene(advisorQuery);
+    const businessScene = !readOnly && requestedScene && requestedScene !== 'select' ? requestedScene : recapFromAnswer(linsight?.output_result?.answer, '')?.scene;
+    const wasBusinessLive = useRef(false);
     const status = linsight?.status;
     const running = status === SopStatus.Running;
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
     const stopped = status === SopStatus.Stoped;
+    if (running || status === SopStatus.SopGenerating || status === SopStatus.SopGenerated || status === SopStatus.NotStarted) wasBusinessLive.current = true;
     const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
 
     const pendingInput = useMemo(
@@ -205,13 +213,15 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         // done, so the planning thinking must collapse to "已深度思考" instead of
         // lingering as a pulsing "正在深度思考" concurrent with the running task.
         <ExecutionLiveContext.Provider value={running && !pendingInput && !tasks.length}>
-        <div ref={rootRef} className="w-full">
+        <div ref={rootRef} className="w-full" data-business-progress={businessScene && wasBusinessLive.current ? 'live' : undefined}>
+            {businessScene && wasBusinessLive.current && <AdvisorLiveProgress scene={businessScene} versionId={versionId} tasks={tasks} steps={sessionSteps} status={status} answer={linsight.output_result?.answer} error={linsight.taskError} pendingInput={!!pendingInput} />}
             {/* queueing card (auto-disappears when the worker picks us up) */}
             {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
 
             {/* session-level steps (planning-stage tools etc.); an answered clarify
                 renders as an inline IntentRow at its chronological position here
                 (时序内联) instead of being hoisted above the timeline. */}
+            <div hidden={!!businessScene}>
             <ExecutionTimeline history={sessionSteps} />
 
             {/* pre-output breathing row: the worker holds us but has emitted
@@ -227,6 +237,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                 <TaskStepRow key={task.id} task={task} />
             ))}
 
+            </div>
             {/* active clarify card (HITL stays on linsight WS) */}
             {pendingInput && (
                 <ClarifyCard data={pendingInput} disabled={readOnly} onSubmit={handleClarifySubmit} />
@@ -262,7 +273,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                 let this row surface concurrently with 正在深度思考 during the
                 pre-task thinking phase. The deep-thinking node's live-tail owns the
                 "working" signal until the first task arrives. */}
-            {running && !queueing && !pendingInput && tasks.length > 0 && !tasks.some((t) => isTaskRunning(t.status)) && (
+            {!businessScene && running && !queueing && !pendingInput && tasks.length > 0 && !tasks.some((t) => isTaskRunning(t.status)) && (
                 <BreathingRow state="generating" />
             )}
 

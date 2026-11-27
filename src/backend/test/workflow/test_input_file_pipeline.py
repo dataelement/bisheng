@@ -10,7 +10,7 @@ import pytest
 from langchain_core.documents import Document
 from PIL import Image
 
-from bisheng.common.errcode.knowledge import KnowledgeFileChunkMaxError
+from bisheng.common.errcode.knowledge import KnowledgeFileChunkMaxError, KnowledgeFileNotSupportedError
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.loader.x_create import XinChuangFormatterLoader
 from bisheng.knowledge.rag.pipeline.types import ImageStorageContext
@@ -42,6 +42,51 @@ def _pipeline(tmp_path, filename="file.pdf", **kwargs):
     pipeline = TempFilePipeline(1, str(path), filename, **kwargs)
     pipeline.__dict__["file_metadata"] = {}
     return pipeline
+
+
+@pytest.mark.parametrize(
+    "filename,content",
+    [
+        ("unsupported.fixture", b"synthetic unsupported attachment"),
+        ("empty.txt", b""),
+        ("valid.txt", b"synthetic text"),
+    ],
+)
+def test_input_preserves_parser_failure_and_valid_empty_text(tmp_path, monkeypatch, filename, content):
+    """Unsupported formats fail the workflow; empty supported text remains valid."""
+    path = tmp_path / filename
+    path.write_bytes(content)
+    node = InputNode.__new__(InputNode)
+    node.id, node.workflow_id = "input", "workflow"
+    node.user_id, node.tenant_id = 1, 1
+    node.exec_unique_id = None
+    node._image_ext = ["png", "jpg"]
+    monkeypatch.setattr("bisheng.workflow.nodes.input.input.file_download", lambda _: (str(path), filename))
+    monkeypatch.setattr(
+        "bisheng.workflow.nodes.input.input.KnowledgeService.get_upload_file_original_name", lambda name: name
+    )
+    monkeypatch.setattr(
+        "bisheng.chat_session.domain.services.workflow_file_service.WorkflowFileService.image_storage",
+        lambda **_: None,
+    )
+    # Only external identity/storage are isolated; the real pipeline and text
+    # loader still decide whether this attachment is supported and extract it.
+    monkeypatch.setattr(TempFilePipeline, "file_metadata", property(lambda _: {}))
+    key_info = {
+        "key": "file",
+        "file_content": "content",
+        "file_path": "paths",
+        "image_file": "images",
+        "file_parse_mode": "extract_text",
+    }
+    if filename.endswith(".fixture"):
+        with pytest.raises(KnowledgeFileNotSupportedError):
+            node.parse_upload_file("file", key_info, ["http://storage/temp/" + filename])
+    else:
+        result = node.parse_upload_file("file", key_info, ["http://storage/temp/" + filename])
+        assert result["paths"] == ["http://storage/temp/" + filename]
+        assert "[file content begin]" in result["content"]
+        assert content.decode() in result["content"]
 
 
 @pytest.mark.parametrize("split", [False, True])

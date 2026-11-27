@@ -1,0 +1,472 @@
+
+/* Overlay for the existing three-scene desktop home. */
+body.zh-workbench[data-flight-theme] {
+  --aviation-ink: #162b39;
+  --aviation-muted: #4f6370;
+  --aviation-edge: #dbe3e7;
+  --aviation-paper: #f3f6f7;
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .dsh-chat-landing {
+  background: var(--aviation-paper);
+}
+
+body.zh-workbench[data-flight-theme] aside {
+  background: #eaf0f2 !important;
+  border-right-color: #dce5e8 !important;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading {
+  --aviation-plane-width: min(31%, 328px);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 144px;
+  padding: 30px calc(var(--aviation-plane-width) + clamp(7px, 2.3vw, 36px) + 12px) 25px 30px;
+  border: 1px solid var(--aviation-hero-border);
+  border-radius: 16px;
+  background: var(--aviation-hero-light);
+  box-shadow: 0 10px 22px -18px #2c698d80;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading h2 {
+  color: #142f44 !important;
+  margin-bottom: 8px !important;
+  letter-spacing: -.025em;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading p {
+  color: #37576a !important;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading > * {
+  position: relative;
+  z-index: 2;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  width: min(48%, 470px);
+  aspect-ratio: 2.1;
+  right: -4%;
+  top: -18%;
+  border: 1px solid #a5c6d63d;
+  border-radius: 50%;
+  transform: rotate(-19deg);
+  box-shadow: 0 0 0 21px #aac8d719, 0 0 0 44px #aac8d712;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: clamp(7px, 2.3vw, 36px);
+  width: var(--aviation-plane-width);
+  height: 100%;
+  background: url("../assets/zh-home-flight-20261123-0.webp") right center / contain no-repeat;
+  filter: drop-shadow(0 11px 12px #0c1d2a72);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading::after {
+    animation: aviation-arrive 2.2s cubic-bezier(.17,.74,.23,1) both;
+  }
+  @keyframes aviation-arrive {
+    from { transform: translate(16px, 6px); opacity: .64; }
+    to { transform: translate(0, 0); opacity: 1; }
+  }
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card {
+  --scene-ink: #30566a;
+  --scene-edge: #a6c0ca;
+  --scene-tint: #eaf2f6;
+  color: var(--aviation-ink);
+  background: #fcfdfd !important;
+  border-color: var(--aviation-edge) !important;
+  border-radius: 13px !important;
+  box-shadow: 0 7px 16px -16px #1636487a !important;
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=transport"] {
+  --scene-ink: #246b64;
+  --scene-edge: #9dbfb7;
+  --scene-tint: #e9f4f1;
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=customs"] {
+  --scene-ink: #725733;
+  --scene-edge: #cbbc9f;
+  --scene-tint: #f5f0e7;
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card:hover,
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card:focus-visible {
+  border-color: var(--scene-edge) !important;
+  box-shadow: 0 10px 23px -16px #16364899 !important;
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card:focus-visible {
+  outline: 2px solid var(--scene-ink);
+  outline-offset: 3px;
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card .assistant-home-icon {
+  background: var(--scene-tint) !important;
+  color: var(--scene-ink) !important;
+  border-color: transparent;
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card h3 {
+  color: var(--aviation-ink) !important;
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card > p {
+  color: var(--aviation-muted) !important;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-capabilities {
+  border-color: #e5ebee;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-capabilities > div {
+  color: var(--aviation-muted);
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-cap-dot {
+  color: #637b89;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example {
+  position: relative;
+  min-height: 58px;
+  box-sizing: border-box;
+  padding-right: 77px;
+  overflow-wrap: anywhere;
+  border-color: transparent;
+  border-radius: 8px;
+  background: var(--scene-tint);
+  color: var(--scene-ink);
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example small {
+  color: var(--scene-ink);
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  top: 50%;
+  right: 6px;
+  width: 61px;
+  height: 54px;
+  transform: translateY(-50%);
+  background: var(--aviation-art) center / contain no-repeat;
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=procurement"] .zh-home-example,
+.zh-workbench .dsh-chat-surface[data-assistant-scene="procurement"] {
+  --aviation-art: url("../assets/zh-home-flight-20261123-1.webp");
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=transport"] .zh-home-example,
+.zh-workbench .dsh-chat-surface[data-assistant-scene="transport"] {
+  --aviation-art: url("../assets/zh-home-flight-20261123-2.webp");
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=customs"] .zh-home-example,
+.zh-workbench .dsh-chat-surface[data-assistant-scene="customs"] {
+  --aviation-art: url("../assets/zh-home-flight-20261123-3.webp");
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-action {
+  background: #f8fafb;
+  color: var(--scene-ink);
+  border-color: #e8edf0;
+}
+
+@media (min-width: 1440px) {
+  body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .dsh-chat-hero {
+    max-width: 1320px !important;
+  }
+
+  body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home {
+    margin-bottom: 20px !important;
+  }
+
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading {
+    --aviation-plane-width: min(30%, 368px);
+    min-height: 156px;
+    padding-top: 33px;
+  }
+
+  body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading p,
+  body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card > p {
+    font-size: 13px !important;
+  }
+
+  body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card h3 {
+    font-size: 18px !important;
+  }
+
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-capabilities > div,
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example span,
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-action {
+    font-size: 12px;
+  }
+
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example {
+    min-height: 62px;
+    padding-right: 83px;
+  }
+
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example::after {
+    width: 69px;
+    height: 57px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example::after {
+    transition: transform .24s ease;
+  }
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card:hover .zh-home-example::after {
+    transform: translate(-3px,-53%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+@media (max-width: 1320px) {
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example {
+    padding-right: 54px;
+  }
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .zh-home-example::after {
+    width: 45px;
+    height: 45px;
+  }
+}
+
+@media (max-width: 780px) {
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading {
+    padding: 22px 24% 22px 20px;
+  }
+  .zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading::after {
+    width: 23%;
+  }
+}
+
+
+body .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading h2 {
+  color: #142f44 !important;
+}
+
+body .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading p {
+  color: #37576a !important;
+}
+
+body .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading::before {
+  border-color: #4a8db64d;
+  box-shadow: 0 0 0 21px #5a9fc016, 0 0 0 44px #6fabc010;
+}
+
+body .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading::after {
+  filter: drop-shadow(0 13px 10px #264e6854);
+}
+
+body.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading > .flight-lights {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  width: min(46%, 540px);
+  height: 60px;
+  right: -1%;
+  top: 67%;
+  color: #74cee8;
+  transform: rotate(-8deg);
+}
+
+body .flight-lights { color: #367eaa; }
+
+.flight-lights::before,
+.flight-lights::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, currentColor 68%, transparent);
+  opacity: .46;
+}
+
+.flight-lights::before { top: 26px; }
+.flight-lights::after { top: 39px; opacity: .24; }
+
+.flight-lights i {
+  position: absolute;
+  top: 24px;
+  left: var(--position);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  opacity: .76;
+}
+
+.flight-lights i:nth-child(1) { --position: 25%; --delay: 100ms; }
+.flight-lights i:nth-child(2) { --position: 41%; --delay: 220ms; }
+.flight-lights i:nth-child(3) { --position: 57%; --delay: 340ms; }
+
+body[data-flight-theme] .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card { position: relative; }
+
+body[data-flight-theme] .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  top: 0;
+  left: 13px;
+  right: 13px;
+  z-index: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--scene-ink), transparent);
+  opacity: 0;
+  transform: scaleX(.55);
+}
+
+body[data-flight-theme] .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card:is(:hover,:focus-visible)::before {
+  opacity: .75;
+  transform: scaleX(1);
+}
+
+body[data-flight-theme] .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card:is(:hover,:focus-visible) .zh-home-example {
+  border-color: var(--scene-edge);
+}
+
+.flight-preview-controls {
+  margin: auto 6px 13px;
+  padding-top: 14px;
+  display: grid;
+  gap: 7px;
+}
+
+.flight-preview-controls + .account { margin-top: 0; }
+
+.flight-preview-controls button {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #3c5866;
+  font-size: 12px;
+}
+
+.flight-preview-controls .replay-flight {
+  justify-self: start;
+  padding: 4px 2px;
+  color: #254f65;
+}
+
+.replay-flight:disabled { opacity: .55; cursor: default; }
+
+@media (prefers-reduced-motion: no-preference) {
+  body[data-flight-theme] .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card::before { transition: opacity .22s ease, transform .26s ease; }
+  .zh-home-example { transition: border-color .22s ease; }
+
+  body .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading::after {
+    animation: none;
+  }
+
+  body[data-flight-run="on"] .dsh-chat-surface[data-assistant-home="true"] .assistant-home-heading::after {
+    animation: flight-arrival 1.85s cubic-bezier(.19,.68,.24,1) both;
+  }
+
+  body[data-flight-run="on"] .flight-lights::before,
+  body[data-flight-run="on"] .flight-lights::after {
+    animation: flight-line .85s ease-out both;
+  }
+
+  body[data-flight-run="on"] .flight-lights i {
+    animation: flight-light 1s ease-out var(--delay) both;
+  }
+
+  @keyframes flight-arrival {
+    from { transform: translate(-34px, 8px); opacity: .5; }
+    to { transform: translate(0, 0); opacity: 1; }
+  }
+
+  @keyframes flight-line {
+    from { clip-path: inset(0 100% 0 0); opacity: 0; }
+    to { clip-path: inset(0 0 0 0); }
+  }
+
+  @keyframes flight-light {
+    0% { opacity: 0; transform: scale(.6); }
+    32% { opacity: 1; transform: scale(1.34); }
+    100% { opacity: .76; transform: scale(1); }
+  }
+}
+
+@media (max-width: 850px) {
+  .flight-preview-controls {
+    margin: 0;
+    padding: 0;
+    grid-column: 1/-1;
+    display: flex;
+    align-items: center;
+  }
+  .sidebar { flex-wrap: wrap; }
+}
+
+body[data-flight-theme] aside > .flight-preview-controls {
+ margin: 0 4px;
+ padding: 0;
+ flex: 0 0 auto;
+}
+body[data-flight-theme] aside > .flight-preview-controls button:focus-visible {
+ outline: 2px solid #346679;
+ outline-offset: 2px;
+}
+body.zh-workbench[data-flight-theme] .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card::after {
+ display: none;
+}
+
+/* Full Airbus emblem and wordmark from https://commons.wikimedia.org/wiki/File:Logo_Airbus_2014.svg */
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=procurement"] .zh-home-example {
+  --airbus-logo-width: clamp(76px, 6.1vw, 96px);
+  --aviation-art: url("../assets/zh-home-flight-20261123-4.svg");
+  padding-right: calc(var(--airbus-logo-width) + 14px);
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=procurement"] .zh-home-example::after {
+  width: var(--airbus-logo-width);
+}
+
+/* Official CBP footer logo for the approved internal workspace.
+   Source: https://www.cbp.gov/profiles/cbpd8_gov/themes/custom/cbpd8_gov_theme/logo.png */
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=customs"] .zh-home-example {
+  --cbp-logo-width: clamp(88px, 7.2vw, 110px);
+  --aviation-art: url("../assets/zh-home-flight-20261123-5.png");
+  padding-right: calc(var(--cbp-logo-width) + 14px);
+}
+
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=customs"] .zh-home-example::after {
+  width: var(--cbp-logo-width);
+}
+
+/* Generated hazmat illustration, scoped to the home transport example. */
+.zh-workbench .dsh-chat-surface[data-assistant-home="true"] .assistant-home-card[href*="agent=transport"] .zh-home-example {
+  --aviation-art: url("../assets/zh-home-flight-20261123-6.webp");
+}

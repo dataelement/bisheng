@@ -2908,5 +2908,324 @@
   },
   "com_archive_batch_limit": "An attachment batch containing ZIP files is limited to 20 files and 100 MiB.",
   "com_archive_wait_upload": "Wait for file uploads to finish before running.",
-  "com_archive_remove_group": "Remove all files from this ZIP"
+  "com_archive_remove_group": "Remove all files from this ZIP",
+  "zhgyl": {
+    "title": "AI Procurement Advisor",
+    "workspace": "Supply chain workspace",
+    "subtitle": "Choose a procurement, transport or customs advisor. Review history and evidence to inform your next step.",
+    "switch": "Switch advisor",
+    "general": "General chat",
+    "forecast": "Demand forecasting",
+    "orders": "Purchase order tracking",
+    "ready": "Preparing this advisor…",
+    "unavailable": "The required skill, query tool or task permission is unavailable. This turn has not started. Contact an administrator.",
+    "retry": "Reload",
+    "guide": "Getting started",
+    "disclaimer": "Historical records are references, not a current quotation.",
+    "example": "Example question",
+    "start": "Start a conversation",
+    "emptyOrders": "No order data has been loaded.",
+    "orderHint": "No order data is connected. Once connected, you can review orders and dates and manage reminders.",
+    "backOrders": "Back to order tracking",
+    "transportMissing": "Query transport costs in this conversation before opening bill details.",
+    "transportFailed": "Unable to read this conversation’s transport history. This turn has not started. Please retry.",
+    "transportUnavailable": "No valid transport bill reference exists in this conversation. Query transport costs again.",
+    "scenes": {
+      "procurement": {
+        "label": "Procurement advisor",
+        "summary": "Supplier recommendations · Historical prices · Qualification checks",
+        "paragraphs": [
+          "Supplier recommendations · Historical prices · Qualification checks",
+          "Send a question or choose an example below. Examples fill the draft only."
+        ],
+        "note": "Historical records are references, not a current quotation.",
+        "examples": [
+          {
+            "label": "Example 1",
+            "description": "Procurement advisor",
+            "text": "Find historical suppliers for DEMO-QPL-001 for Airbus. Sort by historical minimum unit price.",
+            "icon": "search"
+          },
+          {
+            "label": "Example 2",
+            "description": "Procurement advisor",
+            "text": "Find historical suppliers for DEMO-QSL-001 for COMAC. Sort by historical minimum unit price.",
+            "icon": "users"
+          }
+        ],
+        "home": {
+          "desc": "Start with a specification: check historical prices, compare purchase terms and select enquiry candidates for the current customer.",
+          "features": [
+            "Purchase history: prices, quantities, currencies and trade terms",
+            "Qualification checks: Airbus QPL · COMAC QSL",
+            "Supplier selection: evidence, confirmation and undo"
+          ],
+          "example": "DEMO-QPL-001 · Airbus qualified suppliers",
+          "action": "Open procurement advisor"
+        },
+        "emphasis": ""
+      },
+      "transport": {
+        "label": "Transport advisor",
+        "summary": "Transport recommendations · Historical freight · Bill references",
+        "paragraphs": [
+          "Transport recommendations · Historical freight · Bill references",
+          "Send a question or choose an example below. Examples fill the draft only."
+        ],
+        "note": "Historical records are references, not a current quotation.",
+        "examples": [
+          {
+            "label": "Example 1",
+            "description": "Transport advisor",
+            "text": "Find the historical freight cost for house bill DEMO-TRN-001.",
+            "icon": "receipt-text"
+          },
+          {
+            "label": "Example 2",
+            "description": "Transport advisor",
+            "text": "Recommend transport from JFK to TFU for model 683-3-2/X-310A. Gross weight 100 kg, package dimensions 107 × 61 × 61 cm, hazardous goods by air.",
+            "icon": "truck"
+          }
+        ],
+        "home": {
+          "desc": "Start with a house bill or new shipment conditions: review historical freight, complete coverage and the evidence behind transport options.",
+          "features": [
+            "Shipment conditions: route, gross weight, dimensions and hazardous goods",
+            "Cost references: exact matches first, with approximate differences",
+            "Traceability: deduplicate shared bills and expand full coverage"
+          ],
+          "example": "JFK → TFU · 100KG hazardous air freight",
+          "action": "Open transport advisor"
+        },
+        "emphasis": ""
+      },
+      "customs": {
+        "label": "Customs advisor",
+        "summary": "Broker recommendations · Historical customs costs · Document references",
+        "paragraphs": [
+          "Broker recommendations · Historical customs costs · Document references",
+          "Send a question or choose an example below. Examples fill the draft only."
+        ],
+        "note": "Historical records are references, not a current quotation.",
+        "examples": [
+          {
+            "label": "Example 1",
+            "description": "Customs advisor",
+            "text": "Find the historical customs clearance fee and broker for house bill DEMO-CUS-001.",
+            "icon": "files"
+          },
+          {
+            "label": "Example 2",
+            "description": "Customs advisor",
+            "text": "Recommend a customs broker for destination PVG and model BMS10-146 TYPE I. Gross weight 100 kg, package dimensions 100 × 80 × 60 cm, hazardous goods.",
+            "icon": "package"
+          }
+        ],
+        "home": {
+          "desc": "Start with a past house bill or customs requirements: review costs and broker experience for the destination, gross weight and hazardous goods.",
+          "features": [
+            "History: customs clearance fee, currency and broker",
+            "Condition matching: destination, gross weight, packaging and hazards",
+            "Broker references: comparable experience, differences and evidence"
+          ],
+          "example": "DEMO-CUS-001 · Historical costs and brokers",
+          "action": "Open customs advisor"
+        },
+        "emphasis": ""
+      },
+      "orders": {
+        "label": "AI order assistant",
+        "summary": "Order overview · Dates · Reminder proposals",
+        "paragraphs": [
+          "Order overview · Dates · Reminder proposals",
+          "Send a question or choose an example below. Examples fill the draft only."
+        ],
+        "note": "Historical records are references, not a current quotation.",
+        "examples": [
+          {
+            "label": "Example 1",
+            "description": "AI order assistant",
+            "text": "Show the order overview for DEMO-ORDER-001 with materials, amounts, payment, delivery and settlement dates.",
+            "icon": "search"
+          },
+          {
+            "label": "Example 2",
+            "description": "AI order assistant",
+            "text": "Which delivery dates fall in the next seven days?",
+            "icon": "search"
+          },
+          {
+            "label": "Example 3",
+            "description": "AI order assistant",
+            "text": "Prepare a reminder proposal for DEMO-ORDER-001 seven days after delivery, for review before saving.",
+            "icon": "users"
+          }
+        ],
+        "emphasis": ""
+      }
+    },
+    "navigation": "Procurement recommendations",
+    "transportDraft": "View {{reference}} details.",
+    "recapTitle": "Business process record",
+    "recapPending": "Receiving the process record…",
+    "recapInvalid": "The process record is unavailable. Review the response below.",
+    "recapDemo": "Synthetic demonstration data",
+    "recapStates": {
+      "done": "Completed",
+      "running": "In progress",
+      "waiting": "Needs input",
+      "pending": "Not started",
+      "error": "Incomplete",
+      "empty": "No match",
+      "skipped": "Skipped"
+    },
+    "generalEntry": "Or start a general conversation",
+    "replay": "↻ Replay animation",
+    "reducedMotion": "Reduced motion is enabled in system settings",
+    "fillQuestion": "Fill question: {{label}}",
+    "openingLabel": "{{label}} introduction",
+    "quickTasks": "{{label}} quick tasks",
+    "brand": "AVIC Supply Chain",
+    "currentOrder": "Current order · Linked",
+    "currentThreadOrder": "Current order · {{order}}",
+    "orderDetails": "View order details ↗",
+    "supplier": "Supplier",
+    "material": "Material / Part",
+    "amount": "Order amount",
+    "paymentDate": "Payment due dates",
+    "deliveryDate": "Planned delivery dates",
+    "settlementDate": "Settlement dates",
+    "missingDate": "No date provided",
+    "pastDays": "{{count}} days past",
+    "todayDue": "Due today",
+    "futureDays": "{{count}} days left",
+    "dateCount": "{{count}} dates",
+    "orderContextHint": "Ask about this order directly; you do not need to repeat its number.",
+    "orderBreadcrumb": "Business workspace / Order tracking",
+    "orderNav": "Order tracking navigation",
+    "orderOverview": "Order overview",
+    "orderWorkbench": "Alerts",
+    "orderReminders": "Reminders",
+    "orderAi": "AI order assistant",
+    "orderPrefix": "Current order: {{order}}\n\nUser question: {{question}}",
+    "moreFunctions": "Other workspace features",
+    "orderLoading": "Loading order data…",
+    "orderLoadFailed": "Order data could not be loaded. Please retry.",
+    "orderLinkedIntro": "Current order {{order}} is linked.",
+    "orderLinkedAsk": "Ask when this order is due, review its material amounts or adjust a reminder.",
+    "orderLinkedConfirm": "Review the reminder proposal before saving.",
+    "orderLinkedEmphasis": "when this order is due",
+    "orderLinkedOverview": "View this order",
+    "orderLinkedDelivery": "Check this delivery",
+    "orderLinkedReminder": "Adjust this reminder",
+    "orderLinkedDeliveryDescription": "Review the agreed delivery dates and days remaining",
+    "orderLinkedOverviewQuestion": "Show the overview for order {{order}} with materials, quantities, amounts and all three date types.",
+    "orderLinkedDeliveryQuestion": "What are the delivery dates for order {{order}} and how many days remain? List each item.",
+    "orderLinkedReminderQuestion": "Prepare a reminder for order {{order}} seven days after delivery, for review before saving.",
+    "flowCopy": {
+      "procurement": "procurement",
+      "transport": "transport",
+      "customs": "customs",
+      "orders": "orders",
+      "scope": "Confirm this task",
+      "entering": "Entering the {{scene}} scene",
+      "rules": "Read scene rules",
+      "rulesWaiting": "Waiting to read execution rules",
+      "query": "Query purchase history",
+      "queryWaiting": "Waiting for data retrieval or batch confirmation",
+      "executeProcurement": "Filter, compare and verify qualifications",
+      "executeOrders": "Check orders, dates and reminders",
+      "executeCosts": "Match history and validate costs",
+      "executeWaiting": "Waiting for business execution",
+      "result": "Return this result",
+      "resultWaiting": "Waiting for actual results",
+      "scopeProcessed": "This request was handled through the {{scene}} process",
+      "rulesNotRead": "Followed this scene; no separate rule-file read was observed",
+      "queryNotRun": "No new API query was executed this turn",
+      "executeFailed": "This operation failed; subsequent conclusions are not established",
+      "needsInput": "Provide or confirm information to continue",
+      "executeComplete": "Business processing completed",
+      "resultFailed": "Follow the error guidance; failure does not mean no history exists",
+      "resultWaitingInput": "Waiting for your input; subsequent steps are paused",
+      "resultReturned": "The result is available; review evidence or ask a follow-up",
+      "understanding": "Understanding this request; later steps have not executed",
+      "entered": "Entered the {{scene}} business process",
+      "rulesReading": "Reading the scene rules and materials",
+      "rulesRead": "Scene rules and materials have been read",
+      "planned": "Generated the actual execution plan for this turn",
+      "queryRunning": "Querying history for this model; no conclusion yet",
+      "queryReturned": "The API returned {{count}}{{rows}}{{more}}",
+      "historyRows": " history records",
+      "currentData": "data for this turn",
+      "paging": "; continuing pagination",
+      "queryFailed": "Data retrieval did not complete; this does not establish an empty history",
+      "queryNeedsValidation": "The API call ended; waiting for business-entry validation",
+      "rulesSkipped": "No separate rules read was observed this turn",
+      "procurementRunning": "Filtering, comparing or checking qualifications",
+      "ordersRunning": "Reading the order and linked documents, validating dates and reminders",
+      "costsRunning": "Matching this request and validating historical costs",
+      "validating": "Business steps returned; validating the result",
+      "transportValidating": "Transport response received; validating costs and matching",
+      "transportResult": "Preparing this transport result",
+      "receiving": "Receiving the result; missing conditions are not conclusions",
+      "taskFailed": "Task incomplete; review the error and retry",
+      "stopped": "This task stopped; unexecuted steps remain not started",
+      "unconfirmed": "No execution result was observed for this step; completion is not assumed",
+      "replyReturned": "This response has been returned",
+      "replyScope": "The response is available; see the steps and answer for the actual scope",
+      "understandTitle": "Understand this request",
+      "sceneRules": "Read {{scene}} rules and materials",
+      "unallocated": "; shared costs are not allocated",
+      "noMatch": "No history matched these conditions; experience candidates are separate and are not matched costs",
+      "failedSummary": "This turn is incomplete",
+      "stoppedSummary": "This turn stopped",
+      "waitingSummary": "Waiting for input",
+      "emptySummary": "No matching history",
+      "completedSummary": "This turn completed",
+      "liveSummary": "Updates with actual execution",
+      "executionFlow": "Execution flow",
+      "executionRecord": "Execution record",
+      "historySummary": "Historical execution record",
+      "liveIntro": "Steps update with actual execution; unexecuted steps remain not started.",
+      "historyIntro": "Actual business results and evidence for this turn",
+      "requiredTitle": "Check required conditions",
+      "inputRequested": "Provide the requested information in the conversation",
+      "effectiveFilters": "Applied filters: ",
+      "dateFrom": "Confirmed date from",
+      "dateTo": "Confirmed date to",
+      "currency": "Currency",
+      "unit": "Unit",
+      "tradeTerm": "Trade terms",
+      "tradePlace": "Trade location",
+      "supplier": "Supplier",
+      "supplierContains": "Supplier contains",
+      "customer": "Customer",
+      "customerContains": "Customer contains",
+      "extraCondition": "Additional condition",
+      "noFilters": "No additional filters",
+      "noRelaxation": "Queried by this document or protected conditions; no progressive relaxation needed.",
+      "matchSteps": "Progressive matching:",
+      "material": "Material",
+      "grossWeight": "Gross weight",
+      "netWeight": "Net weight",
+      "packageSize": "Package dimensions",
+      "packageCount": "Package count",
+      "currentCondition": "Current condition",
+      "rows": " rows",
+      "keepPrevious": "No identical records; retained the previous stage",
+      "sameCondition": "Filtered by identical conditions",
+      "matchDetails": "See the business result for progressive matching details.",
+      "submitting": "Submitting the request; waiting for task acceptance"
+    },
+    "sharedFeeHint": "Shared cost note: ",
+    "forecastLoadFailed": "The forecast page could not be loaded.",
+    "reopen": "Reopen",
+    "tableLabels": {
+      "procurement": "Historical purchase prices",
+      "transport": "Transport cost overview",
+      "customs": "Customs cost overview",
+      "orders": "Order overview",
+      "details": "Related details"
+    }
+  }
 }

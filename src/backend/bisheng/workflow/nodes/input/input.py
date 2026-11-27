@@ -170,7 +170,9 @@ class InputNode(BaseNode):
                 continue
             url_obj = urlparse(one_file_url)
             file_name = unquote(url_obj.path.split("/")[-1])
-            if is_media_filename(file_name) or is_media_filename(KnowledgeService.get_upload_file_original_name(file_name)):
+            if is_media_filename(file_name) or is_media_filename(
+                KnowledgeService.get_upload_file_original_name(file_name)
+            ):
                 count += 1
         return count
 
@@ -373,8 +375,8 @@ class InputNode(BaseNode):
                 metadatas.append(metadata_dict)
 
         except KnowledgeFileNotSupportedError:
-            logger.warning("input node file type is not support")
-            pass
+            logger.warning("input node file type is not supported")
+            raise
 
         return texts, metadatas
 
@@ -478,6 +480,7 @@ class InputNode(BaseNode):
                 )
             if not texts and one_file_url in archive_sources:
                 from bisheng.common.errcode.knowledge import KnowledgeArchiveUploadError
+
                 raise KnowledgeArchiveUploadError(reason=f"No text extracted from {file_name}")
             if not texts:
                 logger.debug(f"{self.id}.{key} extract file text is empty")

@@ -1,3 +1,4 @@
+import { AdvisorNavIcon } from '~/components/zhgyl/AdvisorIcons';
 import { Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -6,8 +7,9 @@ import { squarePath } from '~/pages/square/squarePaths';
 import { useSquareTypes } from '~/pages/square/useSquareTypes';
 import type { WorkbenchNavSection } from '../useWorkbenchNavLinks';
 import { useWorkbenchNavLinks } from '../useWorkbenchNavLinks';
+import { sidebarChatEntry } from './sidebarChatEntry';
 
-type SidebarEntryId = Exclude<WorkbenchNavSection, 'home'> | 'square' | 'capabilities';
+type SidebarEntryId = Exclude<WorkbenchNavSection, 'home'> | 'square' | 'capabilities' | 'zhgyl-forecast' | 'zhgyl-orders';
 
 export interface SidebarEntry {
   id: SidebarEntryId;
@@ -21,7 +23,7 @@ export interface SidebarEntry {
 const MODULE_ORDER: Exclude<WorkbenchNavSection, 'home'>[] = ['knowledge', 'channel', 'apps'];
 
 /** The nav shows at most this many rows — 新建对话 counts as one; the rest go under 更多. */
-const MAX_VISIBLE_ROWS = 4;
+const MAX_VISIBLE_ROWS = 3;
 
 /**
  * Split the fixed entry order at the row cap. The new-chat entry occupies one row
@@ -38,7 +40,7 @@ export function splitSidebarEntries(entries: SidebarEntry[], hasNewChatRow: bool
  */
 export function useSidebarEntries(): SidebarEntry[] {
   const localize = useLocalize();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { links } = useWorkbenchNavLinks();
   const hasSquare = useSquareTypes().length > 0;
 
@@ -48,6 +50,11 @@ export function useSidebarEntries(): SidebarEntry[] {
   });
   const home = links.find((link) => link.section === 'home');
   if (home && !home.to.startsWith('/menu-unavailable')) {
+    const selectedChatEntry = sidebarChatEntry(pathname, search);
+    entries.unshift(
+      { id: 'zhgyl-forecast', to: '/c/new?module=procurement-forecast', icon: <AdvisorNavIcon module="forecast" />, label: localize('zhgyl.forecast'), active: selectedChatEntry === 'zhgyl-forecast' },
+      { id: 'zhgyl-orders', to: '/c/new?module=order-tracking', icon: <AdvisorNavIcon module="orders" />, label: localize('zhgyl.orders'), active: selectedChatEntry === 'zhgyl-orders' },
+    );
     entries.push({
       id: 'capabilities',
       to: '/capabilities',

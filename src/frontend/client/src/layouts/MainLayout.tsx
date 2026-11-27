@@ -1,3 +1,4 @@
+import { useWorkspaceTheme } from '~/components/zhgyl/useWorkspaceTheme';
 import { DesktopShellBridge } from "./DesktopShellBridge";
 import { isDesktopEmbedded } from "~/components/Chat/desktopEmbedding";
 import { getBysConfigApi } from "~/api/apps";
@@ -209,6 +210,7 @@ function Sidebar({
 }
 
 export default function MainLayout() {
+  useWorkspaceTheme();
   const { pathname, search } = useLocation();
   const outlet = useOutlet();
   const { data: bsConfig } = useGetBsConfig();
