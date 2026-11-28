@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from bisheng.workflow.common.node import NodeType
 from bisheng.workflow.nodes.agent.agent import AgentNode
 from bisheng.workflow.nodes.code.code import CodeNode
@@ -13,6 +15,9 @@ from bisheng.workflow.nodes.rag.rag import RagNode
 from bisheng.workflow.nodes.report.report import ReportNode
 from bisheng.workflow.nodes.start.start import StartNode
 from bisheng.workflow.nodes.tool.tool import ToolNode
+
+if TYPE_CHECKING:
+    from bisheng.workflow.nodes.base import BaseNode
 
 NODE_CLASS_MAP = {
     NodeType.START.value: StartNode,
