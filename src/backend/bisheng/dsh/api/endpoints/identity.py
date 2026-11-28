@@ -54,7 +54,7 @@ async def get_authorization_info(
         data={
             "auth_id": auth_id,
             "client_id": binding["client_id"],
-            "client_name": binding.get("client_name") or "BiSheng Desktop (DSH)",
+            "client_name": binding.get("client_name") or "BiSheng Desktop",
             "require_consent": bool(binding.get("require_consent", True)),
             "expires_in": binding["expires_in"],
         }

@@ -1,4 +1,4 @@
-"""Silent first-party exchange: target opt-in, no pairwise policy, explicit consent preserved."""
+"""Silent first-party exchange to enabled applications without OAuth consent prompts."""
 
 import asyncio
 import time
@@ -10,7 +10,6 @@ from pydantic import ValidationError
 
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.oauth2_provider import (
-    OAuth2ConsentRequiredError,
     OAuth2InvalidAccessTokenError,
     OAuth2InvalidGrantError,
     OAuth2InvalidRequestError,
@@ -23,7 +22,7 @@ from bisheng.oauth2_provider.domain.models.platform_exchange import OAuth2Platfo
 from bisheng.oauth2_provider.domain.repositories.client import OAuth2ClientRepository
 from bisheng.oauth2_provider.domain.repositories.platform_exchange import OAuth2PlatformExchangeRepository
 from bisheng.oauth2_provider.domain.repositories.session import OAuth2SessionRepository
-from bisheng.oauth2_provider.domain.schemas.exchange import ACCESS_TOKEN_TYPE, EXCHANGE_GRANT_TYPE, IDENTITY_SCOPES
+from bisheng.oauth2_provider.domain.schemas.exchange import ACCESS_TOKEN_TYPE, IDENTITY_SCOPES
 from bisheng.oauth2_provider.domain.schemas.platform_exchange import OAuth2PlatformSubject
 from bisheng.oauth2_provider.domain.services.exchange_service import event, timestamp, unavailable
 from bisheng.oauth2_provider.infrastructure.key_service import OAUTH2_KEY_ID
@@ -39,19 +38,12 @@ class OAuth2PlatformExchangeService:
     @staticmethod
     def _target(db, audience, user_id, tenant_id, scopes):
         target = OAuth2ClientRepository(db).get_by_client_id(audience)
-        if (
-            not target
-            or not target.enabled
-            or target.is_builtin
-            or EXCHANGE_GRANT_TYPE not in (target.grant_types or [])
-        ):
+        # First-party sessions do not need an OAuth grant opt-in or pairwise policy.
+        if not target or not target.enabled or target.is_builtin:
             raise OAuth2InvalidTargetError()
         if not scopes or not scopes <= set(target.allowed_scopes or []) & IDENTITY_SCOPES:
             raise OAuth2InvalidScopeError()
-        if target.require_consent:
-            consent = OAuth2PlatformExchangeRepository(db).get_consent(target, user_id, tenant_id)
-            if not consent or not scopes <= set(consent.scopes or []):
-                raise OAuth2ConsentRequiredError()
+        # Verified first-party sessions exchange silently, independent of OAuth consent.
         return target
 
     async def _verify_parent(self, reference):
@@ -100,6 +92,7 @@ class OAuth2PlatformExchangeService:
     async def exchange(self, *, origin, subject, audience, scope, requested_token_type=None, _started_at=None):
         t0 = int(time.time()) if _started_at is None else _started_at
         verified = None
+        source_client_id = None
         try:
             if (
                 not isinstance(audience, str)
@@ -133,6 +126,7 @@ class OAuth2PlatformExchangeService:
             ):
                 raise OAuth2InvalidGrantError()
             verified = {"sub": str(subject.user_id), "tenant_id": str(subject.tenant_id)}
+            source_client_id = subject.client_id
             private = await self.keys.get_private_key()
 
             def issue():
@@ -199,10 +193,10 @@ class OAuth2PlatformExchangeService:
             event("platform_success", subject.client_id, audience, verified)
             return result
         except BaseErrorCode as exc:
-            event("platform_denied_" + str(exc.code), target=audience, claims=verified)
+            event("platform_denied_" + str(exc.code), source=source_client_id, target=audience, claims=verified)
             raise
         except Exception as exc:
-            event("platform_unavailable", target=audience, claims=verified)
+            event("platform_unavailable", source=source_client_id, target=audience, claims=verified)
             raise unavailable(exc) from None
 
     async def validate_claims(self, claims):

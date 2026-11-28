@@ -13,6 +13,7 @@ from loguru import logger
 from sqlalchemy.exc import SQLAlchemyError
 
 from bisheng.common.errcode.platform_auth import PlatformAuthError
+from bisheng.user.domain.const import FIRST_PARTY_CLIENT_IDS, NATIVE_CLIENT_IDS
 from bisheng.user.domain.models.platform_session import PlatformRefreshToken, PlatformSession, PlatformWebTicket
 from bisheng.user.domain.schemas.credential_reference import valid_browser_reference_shape
 from bisheng.user.domain.services.session_rotation import rotation_decision, unspent_successor
@@ -198,7 +199,7 @@ class PlatformSessionService:
             "refresh_mode": "host"
             if session.parent_session_id
             else "native"
-            if session.client_id == "bisheng-mobile"
+            if session.client_id in NATIVE_CLIENT_IDS
             else "cookie",
             "csrf_token": self.derive("csrf", f"{session.session_id}:{session.version}"),
             "user": {"id": identity["id"], "user_name": identity["user_name"]},
@@ -223,7 +224,7 @@ class PlatformSessionService:
     ):
         if self.issuance_enabled_reader and not self.issuance_enabled_reader():
             raise PlatformAuthError("auth_service_unavailable")
-        if client_id not in {"bisheng-mobile", "bisheng-web"}:
+        if client_id not in FIRST_PARTY_CLIENT_IDS:
             raise PlatformAuthError("invalid_auth_request")
         allow_multi_login = await self.login_policy_reader() if self.login_policy_reader else self.allow_multi_login
 
@@ -517,7 +518,7 @@ class PlatformSessionService:
         def action(repo):
             row = self.locked(repo, claims["session_id"])
             self.checked(repo, row, claims=claims)
-            if row.client_id != "bisheng-mobile" or row.parent_session_id:
+            if row.client_id not in NATIVE_CLIENT_IDS or row.parent_session_id:
                 raise PlatformAuthError("invalid_auth_request")
             ticket = secrets.token_urlsafe(32)
             repo.cleanup_tickets(self.now(), limit=100)

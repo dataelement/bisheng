@@ -14,3 +14,12 @@ class DshSessionActivity(AuthenticatedActivity):
 
     async def record(self) -> None:
         await self.sessions.record_activity(self.principal)
+
+
+@dataclass(frozen=True)
+class DesktopPlatformActivity(AuthenticatedActivity):
+    sessions: object
+    token: str
+
+    async def record(self) -> None:
+        await self.sessions.activity(self.token)

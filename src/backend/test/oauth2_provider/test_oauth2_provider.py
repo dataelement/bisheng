@@ -390,7 +390,7 @@ async def test_dsh_authorization_delegates_to_oauth2_client(oauth2_env):
     created = await dsh_auth.create(req)
     resolved = await dsh_auth.resolve(created["auth_id"])
     assert resolved["require_consent"] is True
-    assert resolved["client_name"] == "BiSheng Desktop (DSH)"
+    assert resolved["client_name"] == "BiSheng Desktop"
 
     # Toggling require_consent=False on built-in dsh-desktop propagates to DSH
     await runtime.clients.update_client(BUILTIN_DSH_CLIENT_ID, OAuth2ClientUpdate(require_consent=False))

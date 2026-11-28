@@ -31,6 +31,7 @@ class DshRuntime:
     access: DshAccessService
     sessions: DshLocalSessionService
     authorizations: DshAuthorizationService
+    platform_sessions: object | None = None
 
     async def close(self):
         models = getattr(self, "models", None)
@@ -49,6 +50,10 @@ async def get_logout_runtime(request: Request, config: DshSettings = Depends(get
         if runtime is not None:
             return runtime
         runtime = await build_runtime(config)
+        injected = getattr(request.app.state, "platform_auth_service", None)
+        if injected is not None:
+            runtime.platform_sessions = injected
+            runtime.access.platform_auth = injected
         request.app.state.dsh_runtime = runtime
         return runtime
 
@@ -88,5 +93,8 @@ async def build_runtime(config: DshSettings) -> DshRuntime:
         idle_seconds=config.session_idle_ttl_seconds,
         migrate_idle_sessions=config.session_idle_migrate_existing,
     )
-    access = DshAccessService(ISSUER, keys, identity, sessions)
-    return DshRuntime(config, identity, access, sessions, authorizations)
+    from bisheng.user.platform_auth_runtime import platform_auth_service
+
+    platform_sessions = platform_auth_service()
+    access = DshAccessService(ISSUER, keys, identity, sessions, platform_auth=platform_sessions)
+    return DshRuntime(config, identity, access, sessions, authorizations, platform_sessions)

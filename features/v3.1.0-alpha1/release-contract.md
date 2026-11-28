@@ -19,7 +19,7 @@
 
 ## F026：第一方会话向第三方静默换证（用户已确认）
 
-- 第一方正式web/mobile会话经用户域权威接缝校验后，B显式启用token-exchange即可静默换证，不增加第一方→B配对白名单或人工审批；B.require_consent=true仍检查本人、本租户、当前B登记实例与scope的既有同意。旧第三方OAuth A→B保留配对授权。
+- 第一方正式 Web/App/Desktop 会话（bisheng-web、bisheng-mobile、bisheng-desktop）经用户域权威接缝校验后，可向已启用的非内置 B 静默换证；不要求 B 开启 token-exchange grant，不需要第一方→B配对白名单、人工审批或 OAuth 用户同意。B.require_consent 仅继续作用于原 OAuth 授权流程；旧第三方 OAuth A→B 保留原配对授权。
 - 平台会话及其校验/撤销归F003用户域；输出B身份断言、child会话、同意与父引用关联归F026。只通过用户域application seam取得已验证值与无密引用，不跨域读写源Session。
 - 输出同用户/租户、仅openid/profile/email、最长300秒并受原Access/Session及B TTL约束，不发refresh/id_token；不授予ApiCredential/API Key/PAT/DSH模型能力，不复制业务角色。B本地验签接受至多300秒撤销残余，B本地会话自行管理。
 - 新平台父引用/同意两独立表由模型发现创建，原三张OAuth表不改；request/code绑定registration，旧未完成申请/code须重新发起，同ID新登记不继承旧用户同意。
@@ -32,13 +32,13 @@
 | 领域对象 | Owner | 依赖及边界 |
 | --- | --- | --- |
 | 平台登录 Session、平台 Refresh Token、平台凭证格式与签发 | 用户域／F003（本版本） | 提炼 DSH 轮换机制；不接管账号、部门、租户、角色的业务写入权 |
-| 旧 DSH Session、专用 Token 与浏览器桥接 | 既有 DSH 领域 | F003 首期仅保持定向适配；正式迁入平台 Token 属于后续阶段 |
+| Desktop 浏览器授权、旧 DSH Session 与平台会话交接 | DSH 负责票据/PKCE，用户域负责平台会话 | 保留浏览器回调体验；新票据兑换签发 bisheng-desktop 平台会话，旧 DSH 凭据仍走原校验，不自动转换 |
 | 第三方 OAuth2 Client、OAuth2 Session 与 OIDC 凭证 | F026 OAuth2／OIDC Provider | 保留其签发、刷新和撤销语义；只适配读取当前网页登录身份的接缝 |
 | 网关 HMAC 登录同步与组织同步 | 既有 SSO Sync 领域 | 入参、响应和网关程序不改；身份同步完成后调用 F003 的平台签发应用接口 |
 
 | ID | 跨特性不变量 |
 | --- | --- |
-| AUTH-INV-01 | 新网页和手机使用同一种平台 Token 与同一会话核心；客户端标识不授予额外权限。 |
+| AUTH-INV-01 | 新网页、App、BiSheng Desktop 使用同一种平台 Token 与同一会话核心；客户端标识不授予额外业务权限。 |
 | AUTH-INV-02 | 新平台 Access Token 默认 30 天；不得因复用 DSH 而套用其 5 分钟期限或模型专用凭证用途。 |
 | AUTH-INV-03 | 普通旧网页 JWT 允许在切换时失效；不得通过轮换全局主密钥破坏旧 DSH 或第三方 OAuth2／OIDC 凭证。 |
 | AUTH-INV-04 | 旧 DSH 专用凭证及其短期浏览器桥接按原协议校验；普通旧网页 JWT 的拒绝规则不得覆盖该定向兼容入口。 |
@@ -46,6 +46,12 @@
 | AUTH-INV-06 | 平台登录与 `/api/v2` PAT／服务账号、公开匿名入口保持边界，不能以平台 Token 替代它们的专属契约。 |
 
 106 用户错误码段继续由用户域拥有；设计暂预留 `10650–10664`（在上述代码基线中检索未占用），实施前必须重新检查代码占用，不新增模块编码。
+
+## 2026-11-28 Desktop 与静默换证增量
+
+用户已确认保留 Desktop 浏览器登录/PKCE/一次性票据交接，新票据兑换改由统一平台会话服务签发；统一密码登录继续保留。第一方换证无需 OAuth 同意，保留身份/租户、目标启用、Scope、TTL 及父会话撤销检查。原 F003/F026 文档中的“Desktop 后续迁移”“目标 grant opt-in”“第一方需既有同意”描述由本增量覆盖，第三方 OAuth 规则不变。接入及兼容边界见 [Desktop 接入说明](../../docs/BISHENG_DESKTOP_TOKEN_EXCHANGE.md)。
+
+115 的 beta2 适配部署已记录实际 `platform_success source=bisheng-desktop target=xpie`；这不是 alpha1 实机验收。本次按用户要求不运行功能测试，移植仅执行静态检查。
 
 ## 变更历史
 
