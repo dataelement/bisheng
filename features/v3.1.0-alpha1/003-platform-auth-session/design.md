@@ -158,6 +158,10 @@ flowchart LR
 | runtime credential reference 只认旧 kind | HTTP 可撤销，排队任务／托管应用仍用失效身份 | 新 `platform_session` 引用及用户、app_runtime 两侧 resolver 一起改 |
 | 当前 Web 桥接无法在普通网页取得 Refresh Cookie | 新网页主动刷新会误把旧 DSH 视为退出 | `/auth/session` 返回 `refresh_mode=host`，SDK 不调用平台 Refresh；旧宿主继续既有短 Cookie 续期 |
 | 派生密钥共享平台持久化主秘密 | 旋转全局秘密会连带破坏 OAuth2 ES256 和旧 DSH | 新格式分流失效旧网页，不用换主秘密逼重登 |
+| 新 Desktop 会话写入 `platform_session`，旧设备仍在 `dsh_session` | 只查旧表会使新登录无法列应用、发布或撤销设备 | `user.application.dsh_session.validate_desktop_session` 分流校验；设备管理合并两侧游标页，并按用户、Home及Desktop类型验证撤销 |
+| 撤销接口的 UUID 参数会把32位平台sid规范化为带连字符的字符串 | 按接口参数直接查新表会找不到设备；格式本身不能作为授权证明 | `DshSelfService.revoke` 还原平台sid，用户域锁定后验证归属；旧会话仍使用原UUID |
+| `PlatformAuthError` 与 DSH 的HTTP错误属性不同 | Access到期或撤销被当作500，客户端不能识别认证结束原因 | 用户域 `desktop_auth_error` 在Desktop认证／引用校验边界转换；不可用保持503，不回退旧凭据 |
+| 手机冷启动等待宿主时 `snapshot` 为空 | 忽略宿主 `tokenUpdated` 会永久停留在重连页 | Client `AuthContext` 同时接受 `hostPending`，强制重读会话后恢复身份查询和页面；SDK epoch阻止退出后的迟到补票 |
 
 ## 6. 接口契约与依赖
 
@@ -237,6 +241,8 @@ WebView consume 的 ticket 不承载 Access Token；响应 `Referrer-Policy:no-r
 | 全部退出、平台单点配置 | 不宣称覆盖历史DSH Session | 正式迁入平台Session后才纳入；不能首期提前改变其登录策略 |
 
 新网页识别 `refresh_mode=host` 后不主动向平台 refresh 接口提交空凭证，不持久化宿主原生 Refresh；保留旧宿主现有 Cookie 续期定时器。普通旧 JWT 切换拒绝不触发 DSH 全局密钥变化。
+
+当前 Desktop 首次票据兑换已按 spec AC-24 签发 `bisheng-desktop` 平台会话。应用列表、启动及发布入口通过同一会话分流适配重新校验；后台执行保留平台引用及其原Access期限。设备管理保持既有 `items/has_more/next_cursor` 与设备字段，按sid升序合并新旧页，平台侧仅列当前用户当前Home的原生Desktop会话，不列Web、Mobile或host子会话。撤销新设备使其Refresh和派生身份失效，不改变旧DSH期限或新增会话策略。只有旧会话退役后才可移除双读与合并分页。
 
 ### 6.7 准入与身份消费者完整性
 
@@ -343,6 +349,7 @@ WebView consume 的 ticket 不承载 Access Token；响应 `Referrer-Policy:no-r
 | 2026-11-27 | 初版草案；按DSH平台化、Access30天、普通旧网页可重登整理默认期限、接口和兼容边界 | 用户明确仅授权spec/design；基线572d5ecf77 |
 | 2026-11-27 | 用户确认spec S1与design D1，接受Session／Refresh默认90天；更新确认状态并进入用例／tasks文档阶段 | 用户再次明确先不写实现；契约和算法口径未改 |
 | 2026-11-27 | 按模板整理QA参考用例及7个Wave的tasks，补充独立任务审查；仅更新文档阶段状态 | 不改变已确认S1/D1行为，不执行测试或实现 |
+| 2026-11-28 | 修复Desktop应用与设备管理的新旧会话衔接、DSH认证错误映射和手机冷启动补票恢复，补充持久化与前端回归 | alpha1与main差异评审发现4处消费者遗漏；遵循既有接口及AC-10/15/17/20/24/26，不改变会话策略 |
 
 ### 实施细化（2026-11-27）
 

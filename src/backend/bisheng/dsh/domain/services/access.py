@@ -10,8 +10,10 @@ from bisheng.common.errcode.dsh import (
     DshInvalidAccessTokenError,
     DshUserDisabledError,
 )
+from bisheng.common.errcode.platform_auth import PlatformAuthError
 from bisheng.core.context import tenant as tenant_context
 from bisheng.dsh.domain.schemas.contracts import DshContract, SubjectId
+from bisheng.user.application.dsh_session import desktop_auth_error
 
 
 class DshPrincipal(DshContract):
@@ -129,6 +131,8 @@ class DshAccessService:
             )
             if int(principal.tenant_id) < 1 or int(principal.user_id) < 1:
                 raise DshInvalidAccessTokenError()
+        except PlatformAuthError as exc:
+            raise desktop_auth_error(exc) from exc
         except (jwt.PyJWTError, ValidationError, ValueError, TypeError):
             raise DshInvalidAccessTokenError() from None
         return principal
@@ -142,7 +146,9 @@ class DshAccessService:
             if (identity.tenant_id, identity.user_id) != (principal.tenant_id, principal.user_id):
                 raise DshInvalidAccessTokenError()
             if principal.platform_reference is not None:
-                await self.platform_auth.validate_reference(principal.platform_reference)
+                from bisheng.user.application.dsh_session import platform_call
+
+                await platform_call(self.platform_auth.validate_reference(principal.platform_reference))
             else:
                 await self.sessions.validate(principal)
         return principal

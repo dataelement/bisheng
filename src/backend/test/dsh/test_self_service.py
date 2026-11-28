@@ -25,6 +25,7 @@ def runtime():
     return SimpleNamespace(
         settings=SimpleNamespace(platform_public_url="http://test"),
         sessions=SimpleNamespace(page=AsyncMock(), revoke=AsyncMock()),
+        platform_sessions=None,
     )
 
 

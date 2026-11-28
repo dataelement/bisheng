@@ -13,20 +13,33 @@ from bisheng.common.errcode.platform_auth import PlatformAuthError
 from bisheng.user.platform_auth_runtime import get_platform_auth
 
 
+def desktop_auth_error(exc):
+    """Translate platform failures to the frozen Desktop protocol."""
+    reason = {
+        "access_expired": "session_expired",
+        "legacy_web_token_rejected": "invalid_access_token",
+        "web_bootstrap_required": "invalid_access_token",
+    }.get(exc.reason, exc.reason)
+    error = ERROR_BY_CLIENT_CODE.get(reason)
+    if error is None:
+        error = DshAuthorizationUnavailableError if exc.http_status == 503 else DshInvalidAccessTokenError
+    return error()
+
+
 async def platform_call(operation):
     """Preserve the frozen DSH HTTP error envelope without credential fallback."""
     try:
         return await operation
     except PlatformAuthError as exc:
-        reason = {
-            "access_expired": "session_expired",
-            "legacy_web_token_rejected": "invalid_access_token",
-            "web_bootstrap_required": "invalid_access_token",
-        }.get(exc.reason, exc.reason)
-        error = ERROR_BY_CLIENT_CODE.get(reason)
-        if error is None:
-            error = DshAuthorizationUnavailableError if exc.http_status == 503 else DshInvalidAccessTokenError
-        raise error() from exc
+        raise desktop_auth_error(exc) from exc
+
+
+async def validate_desktop_session(runtime, principal):
+    """Revalidate the authority that issued this Desktop identity, without fallback."""
+    if principal.platform_reference is not None:
+        await platform_call(runtime.platform_sessions.validate_reference(principal.platform_reference))
+    else:
+        await runtime.sessions.validate(principal)
 
 
 async def issue_desktop_session(request, identity, binding):

@@ -202,19 +202,27 @@ const AuthContextProvider = ({
 
   const refetchUser = userQuery.refetch;
   useEffect(() => {
+    let active = true;
     const handleTokenUpdate = () => {
-      if (platformAuth.snapshot?.refresh_mode !== 'host') return;
+      if (!platformAuth.hostPending && platformAuth.snapshot?.refresh_mode !== 'host') return;
       void platformAuth.initialize(true).then(session => {
-        if (session?.refresh_mode === 'host') void refetchUser();
-      }).catch(() => undefined);
+        if (!active || session?.refresh_mode !== 'host') return;
+        setHostPending(platformAuth.hostPending);
+        setAuthReady(!platformAuth.hostPending);
+        setStartupFailed(false);
+        if (!platformAuth.hostPending) void refetchUser();
+      }).catch(() => {
+        if (active) { setStartupFailed(true); doSetError(translate('platformAuth.serviceUnavailable')); }
+      });
     };
 
     window.addEventListener('tokenUpdated', handleTokenUpdate);
 
     return () => {
+      active = false;
       window.removeEventListener('tokenUpdated', handleTokenUpdate);
     };
-  }, [refetchUser]);
+  }, [refetchUser, doSetError, translate]);
 
   // Consider "still loading" in two cases:
   // 1. The query hasn't completed yet (!isFetched)

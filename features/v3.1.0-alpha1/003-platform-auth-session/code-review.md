@@ -33,3 +33,27 @@
 没有剩余已知HIGH代码缺陷。警告是已有工具环境/静态基线，不是批准真实环境上线；按用户最新授权，发布前集成由用户自行执行。SQLite串行夹具不能替代MySQL/DM8并发实测；原生DSH安装包和手机真机仍按handoff验收。未合并、未部署。
 
 说明：本报告由主执行者按sdd-code-review清单审查，并结合手机Owner对后端/网页的只读交叉评审；不是外部审计或CI全绿证明。微任务未逐个留存独立红态日志，未伪造TDD历史。
+
+## 2026-11-28 消费者回归修复复审
+
+基线：`origin/feat/3.1.0-alpha1` 的 `ee3e79063f`。本节仅评审本次4项修复及新增回归，不替代上文历史实施记录或整分支验收。按Hotfix轨道完成；接口路径、响应字段、会话期限、权限规则和数据库schema不变。
+
+| 维度 | High | Medium | 结果 |
+| --- | --- | --- | --- |
+| 边界条件 | 0 | 0 | 新旧sid格式、混合分页、重复撤销、Access到期与临时不可用均覆盖 |
+| 权限与认证 | 0 | 0 | 当前用户/Home及Desktop类型验证，跨用户/租户拒绝；撤销后应用准入与Refresh均拒绝 |
+| 并发安全 | 0 | 0 | 撤销复用已有user→session锁序；宿主补票沿用SDK epoch，退出后的迟到结果不能恢复身份 |
+| 信息泄漏 | 0 | 0 | 设备列表仅返回既有展示字段，不暴露凭据；认证失败保持DSH错误封装 |
+| 测试覆盖 | 0 | 0 | 新增12个后端参数化场景、3个Provider场景和1个真实SDK状态恢复场景；相关旧组一并回归 |
+| 代码风格 | 0 | 0 | 修改Python文件Ruff format/check及架构守卫通过；Client/API-client lint通过 |
+| 设计同步 | 0 | 0 | design §5、§6.6同步双会话消费、设备管理、错误映射及冷启动恢复边界 |
+
+### 验证证据
+
+- 后端：`test/platform_auth`、`test/oauth2_provider`、`test/dsh/{test_platform_consumers,test_self_service,test_access,test_web_session,test_platform_ticket_exchange}.py`、`test/cloud_workbench/test_desktop_access.py`、`test/app_publish/test_desktop_publish.py`，320通过、1跳过、3排除。使用已有隔离fakeredis/Lua依赖；未连接业务数据库或Redis。
+- 排除项分别是外部双DB用例、需要显式隔离Redis的真实PKCE票据用例，以及 `test_online_seat_check_and_parallel_scopes_are_restored`。最后一项在未修改的 `ee3e79063f` 快照上也单独复现 `None != 99`，属于既有管理作用域测试基线；未把它计为通过。
+- 前端：`authStartup`、`requestAuthSession`、`useMobileHostBridge`、`mobileHostBridge` 共27通过；共享包 `authSession`、`authCoordination` 共34通过。
+- Client完整lint、共享API-client完整lint和Client严格类型检查通过。类型检查复用现有依赖，临时paths按各workspace包的exports指向本工作树；Jest仅在本机临时禁用未编译的可选canvas。适配文件不进入提交，未改依赖和锁文件。
+- `git diff --check`及修改文件的架构守卫通过。SQLite不验证MySQL/DM8锁行为；未部署或执行原生设备验收。
+
+复审结论：**PASS（本次修复范围）**。没有剩余阻塞发现；已知基线失败与外部环境验收限制见上。

@@ -584,6 +584,49 @@ class PlatformSessionService:
 
         return await self.run(action)
 
+    async def desktop_sessions(self, user_id, *, cursor=None, limit=20):
+        """Device management reads only Desktop sessions in the caller's tenant scope."""
+
+        def action(repo):
+            rows = repo.desktop_sessions(user_id, cursor=cursor, limit=limit)
+            return {
+                "items": [
+                    {
+                        "session_id": row.session_id,
+                        "device_label": row.device_label,
+                        "client_version": row.client_version,
+                        "state": row.state,
+                        "expires_at": iso(row.expires_at),
+                        "created_at": iso(row.created_at),
+                        "last_seen_at": iso(row.last_activity_at),
+                    }
+                    for row in rows[:limit]
+                ],
+                "has_more": len(rows) > limit,
+                "next_cursor": rows[limit - 1].session_id if len(rows) > limit else None,
+            }
+
+        return await self.run(action, read_only=True)
+
+    async def revoke_desktop_session(self, user_id, tenant_id, session_id):
+        """A browser may revoke only its own native Desktop device, including expired devices."""
+
+        def action(repo):
+            row = self.locked(repo, session_id)
+            if (
+                row is None
+                or row.user_id != user_id
+                or row.tenant_id != tenant_id
+                or row.client_id != "bisheng-desktop"
+                or row.parent_session_id is not None
+            ):
+                return False
+            row.state = "REVOKED"
+            repo.add(row)
+            return True
+
+        return await self.run(action)
+
     async def validate_reference(self, reference):
         try:
             if not valid_browser_reference_shape(reference):

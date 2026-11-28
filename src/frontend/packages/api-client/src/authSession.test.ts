@@ -205,6 +205,23 @@ it('detects the real mobile bridge and preserved hint when rebuilding the browse
   expect(transport.mock.calls.map(call => call[1])).toEqual(['/api/v1/auth/session']);
   auth.dispose();
 });
+it('accepts replacement host credentials after a cold start without attempting cookie refresh', async () => {
+  const transport = vi.fn<AuthTransport>().mockResolvedValueOnce(failure(10650))
+    .mockResolvedValueOnce(ok(session(undefined, { refresh_mode: 'host' })));
+  const { auth, environment } = fixture(transport);
+  environment.selectSession('a'.repeat(32));
+  environment.hostOwned = () => true;
+  environment.requestHostRenewal = vi.fn();
+  await auth.initialize();
+  expect(auth.hostPending).toBe(true);
+  expect(auth.snapshot).toBeNull();
+  expect(await auth.initialize(true)).toMatchObject({ refresh_mode: 'host' });
+  expect(auth.hostPending).toBe(false);
+  expect(transport.mock.calls.map(call => call.slice(0, 2))).toEqual([
+    ['GET', '/api/v1/auth/session'], ['GET', '/api/v1/auth/session'],
+  ]);
+  expect(environment.clearLegacyAuth).not.toHaveBeenCalled();
+});
 afterEach(() => { vi.unstubAllGlobals(); });
 it('broadcasts a gateway account switch after binding so other SPA tabs reload identity', async () => {
   const transport = vi.fn<AuthTransport>().mockResolvedValueOnce(ok(session(undefined, { delivery_state: 'PENDING_WEB_BIND' })))

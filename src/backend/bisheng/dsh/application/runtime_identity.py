@@ -22,10 +22,9 @@ async def resolve_desktop_runtime_identity(reference):
     runtime = await build_runtime(config)
     try:
         with principal_scope(principal):
-            if principal.platform_reference is not None:
-                await runtime.platform_sessions.validate_reference(principal.platform_reference)
-            else:
-                await runtime.sessions.validate(principal)
+            from bisheng.user.application.dsh_session import validate_desktop_session
+
+            await validate_desktop_session(runtime, principal)
             identity = await runtime.identity.check(principal.tenant_id, principal.user_id)
             if not identity.active:
                 raise DshUserDisabledError()

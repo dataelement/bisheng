@@ -2,7 +2,7 @@
 
 from sqlmodel import select
 
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
 from bisheng.user.domain.models.platform_session import PlatformRefreshToken, PlatformSession, PlatformWebTicket
 
 
@@ -53,6 +53,17 @@ class PlatformSessionRepository:
                 .with_for_update()
                 .execution_options(populate_existing=True)
             ).all()
+
+    @strict_tenant_filter()
+    def desktop_sessions(self, user_id, *, cursor=None, limit=20):
+        query = select(PlatformSession).where(
+            PlatformSession.user_id == user_id,
+            PlatformSession.client_id == "bisheng-desktop",
+            PlatformSession.parent_session_id.is_(None),
+        )
+        if cursor:
+            query = query.where(PlatformSession.session_id > cursor)
+        return self.db.exec(query.order_by(PlatformSession.session_id).limit(limit + 1)).all()
 
     def identity(self, user_id, tenant_id, *, lock=False):
         from bisheng.database.models.tenant import Tenant, UserTenant

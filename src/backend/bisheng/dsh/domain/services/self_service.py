@@ -1,8 +1,11 @@
 """Browser self-service uses the authenticated identity, never an admin target."""
 
+from uuid import UUID
+
 from bisheng.common.errcode.dsh import DshUserDisabledError
 from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
 from bisheng.dsh.domain.services.profile import profile_scope
+from bisheng.user.application.dsh_session import platform_call
 
 
 class DshSelfService:
@@ -88,8 +91,28 @@ class DshSelfService:
 
     async def sessions(self, user, *, cursor=None, limit=20):
         await self.identity(user)
-        return await self.runtime.sessions.page(user.tenant_id, user.user_id, cursor=cursor, limit=limit)
+        legacy = await self.runtime.sessions.page(user.tenant_id, user.user_id, cursor=cursor, limit=limit)
+        if self.runtime.platform_sessions is None:
+            return legacy
+        with profile_scope(user.tenant_id):
+            platform = await platform_call(
+                self.runtime.platform_sessions.desktop_sessions(user.user_id, cursor=cursor, limit=limit)
+            )
+        items = sorted(legacy["items"] + platform["items"], key=lambda row: row["session_id"])
+        has_more = legacy["has_more"] or platform["has_more"] or len(items) > limit
+        items = items[:limit]
+        return {
+            "items": items,
+            "has_more": has_more,
+            "next_cursor": items[-1]["session_id"] if has_more else None,
+        }
 
     async def revoke(self, user, session_id):
         await self.identity(user)
+        # The UUID endpoint canonicalizes 32-character platform IDs to hyphenated UUIDs.
+        platform_id = UUID(session_id).hex
+        if self.runtime.platform_sessions is not None and await platform_call(
+            self.runtime.platform_sessions.revoke_desktop_session(user.user_id, user.tenant_id, platform_id)
+        ):
+            return {"session_id": platform_id, "state": "REVOKED"}
         return await self.runtime.sessions.revoke(user.tenant_id, user.user_id, session_id)

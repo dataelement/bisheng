@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from bisheng.common.errcode.app_factory import AppManageForbiddenError, AppNotFoundError
 from bisheng.common.errcode.dsh import DshUserDisabledError
 from bisheng.dsh.domain.services.access import principal_scope
+from bisheng.user.application.dsh_session import validate_desktop_session
 
 
 async def current_global_super(user_id):
@@ -40,7 +41,7 @@ class DesktopAppsService:
 
     async def actor(self, principal):
         with principal_scope(principal):
-            await self.runtime.sessions.validate(principal)
+            await validate_desktop_session(self.runtime, principal)
             identity = await self.runtime.identity.check(principal.tenant_id, principal.user_id)
             if not identity.active or (identity.tenant_id, identity.user_id) != (
                 principal.tenant_id,
