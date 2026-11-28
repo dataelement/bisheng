@@ -4,7 +4,7 @@ description: BiSheng standard platform, optional infrastructure, Vibe runtime an
   code sandbox
 type: application
 version: 0.2.0
-appVersion: 3.1.0-beta2
+appVersion: 3.1.0-alpha1
 keywords:
 - bisheng
 - llm

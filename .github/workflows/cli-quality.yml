@@ -65,7 +65,10 @@ jobs:
       # installed into an empty environment, where uv.lock plays no part and the
       # dependency ceilings in the wheel metadata are the only constraint.
       - name: Build wheel and run the packaging smoke test
-        run: bash scripts/pack_cli_wheel.sh
+        # CLI releases are independent; keep the platform release declared by the artifacts.
+        run: |
+          PLATFORM_VERSION="$(python3 -c "import json; print(json.load(open('src/backend/bisheng/dev_toolkit/artifacts/manifest.json'))['platform']['version'])")" \
+            bash scripts/pack_cli_wheel.sh
 
       - name: Version drift guard
         # Catches "changed the CLI, forgot to re-run pack_cli_wheel.sh": the

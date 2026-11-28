@@ -57,12 +57,12 @@ def artifacts():
     ).encode()
     lock = {
         "schema_version": 1,
-        "release": "3.1.0-beta2",
+        "release": "3.1.0-alpha1",
         "catalog_sha256": hashlib.sha256(raw).hexdigest(),
     }
     image_set = {
         "schema_version": 1,
-        "release": "3.1.0-beta2",
+        "release": "3.1.0-alpha1",
         "source_revision": source,
         "runtime_contract": 2,
         "gateway_sql_contract": "1.8.0",
@@ -74,7 +74,7 @@ def artifacts():
 
 def test_complete_metadata_accepts_all_workloads_jobs_and_helpers():
     image_set, raw, lock = artifacts()
-    assert len(mod.validate(image_set, raw, lock, version="3.1.0-beta2")) == 20
+    assert len(mod.validate(image_set, raw, lock, version="3.1.0-alpha1")) == 20
 
 
 @pytest.mark.parametrize(
@@ -103,7 +103,7 @@ def test_incomplete_or_mixed_release_refused(change):
         raw = json.dumps(document).encode()
         lock["catalog_sha256"] = hashlib.sha256(raw).hexdigest()
     with pytest.raises(ValueError):
-        mod.validate(image_set, raw, lock, version="3.1.0-beta2")
+        mod.validate(image_set, raw, lock, version="3.1.0-alpha1")
 
 
 def test_package_stages_locked_sources_and_catalog_without_image_build(

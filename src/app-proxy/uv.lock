@@ -35,7 +35,7 @@ wheels = [
 
 [[package]]
 name = "bisheng-app-proxy"
-version = "3.1.0b2"
+version = "3.1.0a1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

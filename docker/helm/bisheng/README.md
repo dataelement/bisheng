@@ -2,7 +2,7 @@
 
 ## 交付状态和前提
 
-这是 3.1.0-beta2 标准安装源码，包含正式初始化命令及运行协议变更。**本轮只完成代码与部署文件；配套镜像尚未构建，真实安装和双架构验收尚未执行。** 正式用户应使用包含 `files/image-set.json`、`files/runtime-catalog/catalog.json` 及锁文件的发行 Chart，不能将源码 Chart 配到旧版镜像。
+这是 3.1.0-alpha1 标准安装源码，包含正式初始化命令及运行协议变更。**本轮只完成代码与部署文件；配套镜像尚未构建，真实安装和双架构验收尚未执行。** 正式用户应使用包含 `files/image-set.json`、`files/runtime-catalog/catalog.json` 及锁文件的发行 Chart，不能将源码 Chart 配到旧版镜像。
 
 运行前提：Kubernetes 1.28+、Helm 3.14+，Linux amd64 或 arm64 节点；支持实际执行 NetworkPolicy 的 CNI；API Server 能到达 Admission HTTPS Service。运维提供本集群 Pod/Service CIDR、DNS/API/内部平台访问范围，以及可用的持久存储。Chart 不安装存储驱动、不探测后宣称网络隔离成立、不修改节点 cgroup/磁盘。
 

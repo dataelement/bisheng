@@ -1,6 +1,6 @@
 # Isolation-environment image: backend venv + office binaries + runner HTTP.
 # Build from the repository root (same Dockerfile for amd64 / arm64):
-#   docker build -f docker/bisheng-sandbox/Dockerfile -t dataelement/bisheng-sandbox:v3.1.0-beta2 .
+#   docker build -f docker/bisheng-sandbox/Dockerfile -t dataelement/bisheng-sandbox:v3.1.0-alpha1 .
 #
 # Derived from src/backend/base.Dockerfile: full uv.lock venv, LibreOffice, pandoc,
 # fonts, ffmpeg, plus the PPTD engine at /opt/pptd-runtime. Does NOT copy

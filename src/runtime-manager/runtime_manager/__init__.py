@@ -12,4 +12,4 @@ Every public interface is deliberately *form agnostic*: no ``container`` /
 ``compose`` word appears in a request or response field name (INV-33).
 """
 
-__version__ = "3.1.0-beta2"
+__version__ = "3.1.0-alpha1"
