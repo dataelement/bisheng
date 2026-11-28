@@ -99,7 +99,7 @@ class BishengTTS(BishengBase):
             if model_info.config:
                 params.update(model_info.config)
         if server_info.type not in _tts_client_type:
-            raise Exception(f"TtsModel not supported{server_info.type}Type of service provider")
+            raise ValueError(f"TtsModel not supported{server_info.type}Type of service provider")
         params_handler = _tts_client_type[server_info.type]["params_handler"]
         new_params = await params_handler(params, server_info, model_info)
         client = _tts_client_type[server_info.type]["client"](**new_params)
