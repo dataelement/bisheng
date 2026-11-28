@@ -9,6 +9,12 @@ import type {
 export const PRICE_PATTERN = /^(0|[1-9]\d{0,5})(\.\d{1,6})?$/;
 export const PRICE_FIELDS = ["input", "cache_read", "cache_write", "output"] as const;
 export type PriceField = (typeof PRICE_FIELDS)[number];
+export const PRICE_FIELD_LABELS: Record<PriceField, string> = {
+    input: "model.pricing.input",
+    cache_read: "model.pricing.cacheRead",
+    cache_write: "model.pricing.cacheWrite",
+    output: "model.pricing.output",
+};
 
 // One ordinary Q&A used for the "about N credits per question" estimate (3:1 like the ratio).
 export const TYPICAL_INPUT_TOKENS = 3000;
@@ -55,6 +61,21 @@ export function convertCreditValue(
     const rate = BigInt(priceMicro(usdCnyRate));
     const [numerator, denominator] = to === "USD" ? [amount * 1_000_000n, rate] : [amount * rate, 1_000_000n];
     return formatMicro(Number((numerator * 2n + denominator) / (denominator * 2n)));
+}
+
+/**
+ * The same four prices in another currency at the credit settings' rate (six decimals, half up).
+ * A price that is not a valid number yet is kept as typed; an empty cache-write price stays empty.
+ */
+export function convertPricing(pricing: ModelPricing, to: PricingCurrency, usdCnyRate: string): ModelPricing {
+    const convert = (price: string) => convertCreditValue(price, pricing.currency, to, usdCnyRate) ?? price;
+    return {
+        currency: to,
+        input: convert(pricing.input),
+        cache_read: convert(pricing.cache_read),
+        cache_write: pricing.cache_write ? convert(pricing.cache_write) : pricing.cache_write,
+        output: convert(pricing.output),
+    };
 }
 
 function effectiveCacheWrite(pricing: Pick<ModelPricing, "input" | "cache_write">): string {

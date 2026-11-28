@@ -4529,9 +4529,6 @@
       "rate": "為替レート（1 米ドルあたりの人民元）",
       "rateHelp": "モデルの価格通貨と課金通貨が異なる場合の換算に使います。実際の購入レートを入力してください。",
       "rateInvalid": "0.01～100 の数値を、小数点以下 6 桁までで入力してください。",
-      "switchCurrencyDesc": "クレジット単価をどうしますか？",
-      "keepBudget": "予算を維持：クレジット単価を為替レートで {{value}} {{currency}} に換算する",
-      "keepNumber": "数値を維持：クレジット単価は {{value}} {{currency}} のまま（同じ割り当ての金額が変わります）",
       "cancel": "キャンセル",
       "save": "保存",
       "saving": "保存中…",
@@ -4541,7 +4538,11 @@
       "refresh": "更新",
       "editPrice": "価格を編集",
       "priceSaved": "価格を保存しました",
-      "saveFailed": "保存できませんでした。もう一度お試しください。"
+      "saveFailed": "保存できませんでした。もう一度お試しください。",
+      "switchCurrencyTitle": "{{currency}}建てに切り替えますか？",
+      "switchCurrencyDesc": "クレジット単価の数値はそのままです：1 クレジット = {{value}} {{from}} が 1 クレジット = {{value}} {{to}} になります。現在のレート（1 米ドル = {{rate}} 人民元）では、1 クレジットあたりの金額が {{times}} 倍になり、毎月の割り当てで使える量と 1 回の呼び出しで消費するクレジットも変わります。切り替えた後、「保存」をクリックすると反映されます。",
+      "switchCurrencyOk": "切り替える",
+      "switchCurrencyCancel": "今はしない"
     }
   },
   "request": {

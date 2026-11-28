@@ -21,6 +21,7 @@ export const discoveryProviders = new Set([
   "MindIE",
   "ollama",
   "anthropic",
+  "openai_compatible",
 ]);
 export const modelTypes: ModelType[] = [
   "llm",

@@ -4584,9 +4584,6 @@
       "rate": "Exchange rate (CNY per USD)",
       "rateHelp": "Used when a model's price currency differs from the billing currency. Enter the rate you actually pay.",
       "rateInvalid": "Enter a number from 0.01 to 100 with at most 6 decimal places.",
-      "switchCurrencyDesc": "What should happen to the credit value?",
-      "keepBudget": "Keep the budget: convert the credit value to {{value}} {{currency}}",
-      "keepNumber": "Keep the number: the credit value stays {{value}} {{currency}}, so the same allowance is worth a different amount",
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving…",
@@ -4596,7 +4593,11 @@
       "refresh": "Refresh",
       "editPrice": "Edit price",
       "priceSaved": "Price saved",
-      "saveFailed": "Could not save. Try again."
+      "saveFailed": "Could not save. Try again.",
+      "switchCurrencyTitle": "Bill in {{currency}}?",
+      "switchCurrencyDesc": "The credit value keeps its number: 1 credit = {{value}} {{from}} becomes 1 credit = {{value}} {{to}}. At the current rate (1 USD = {{rate}} CNY), each credit becomes worth {{times}} times as much, so what monthly allowances cover and how many credits each call costs both change. Click Save afterwards to apply it.",
+      "switchCurrencyOk": "Switch",
+      "switchCurrencyCancel": "Not now"
     }
   },
   "request": {

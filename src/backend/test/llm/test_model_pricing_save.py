@@ -14,7 +14,7 @@ def stored(**changes):
         **QWEN_MAX,
         "source": "CATALOG",
         "catalog_key": "qwen/qwen-max",
-        "catalog_version": "2026-11-16",
+        "catalog_version": "2026-11-25",
         "ref_key": None,
         "revision": 3,
     }

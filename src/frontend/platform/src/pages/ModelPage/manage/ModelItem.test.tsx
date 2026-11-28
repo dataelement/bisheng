@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@/test/test-utils";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ModelItem } from "./ModelItem";

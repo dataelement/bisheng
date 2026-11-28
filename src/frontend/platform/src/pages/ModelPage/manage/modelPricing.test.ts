@@ -3,6 +3,7 @@ import type { PriceCatalogEntry, PriceCatalogMatch } from "@/controllers/API/mod
 import {
     ZERO_PRICING,
     convertCreditValue,
+    convertPricing,
     formatMicro,
     isFreePricing,
     isPricingValid,
@@ -117,5 +118,19 @@ describe("credit value across currencies", () => {
     it("refuses to convert unusable input", () => {
         expect(convertCreditValue("abc", "CNY", "USD", "7.2")).toBeNull();
         expect(convertCreditValue("0.01", "CNY", "USD", "0")).toBeNull();
+    });
+});
+
+describe("converting a model price between currencies", () => {
+    const qwenMax = { currency: "CNY" as const, input: "2.4", cache_read: "0.48", cache_write: "3", output: "9.6" };
+    it("converts every price at the rate, six decimals half up", () => {
+        expect(convertPricing(qwenMax, "USD", "6.72")).toEqual({
+            currency: "USD", input: "0.357143", cache_read: "0.071429", cache_write: "0.446429", output: "1.428571",
+        });
+        expect(convertPricing({ currency: "USD", input: "5", cache_read: "0.5", cache_write: null, output: "30" }, "CNY", "6.72"))
+            .toEqual({ currency: "CNY", input: "33.6", cache_read: "3.36", cache_write: null, output: "201.6" });
+    });
+    it("keeps a price that is not a number yet as typed", () => {
+        expect(convertPricing({ ...qwenMax, input: "1." }, "USD", "6.72").input).toBe("1.");
     });
 });

@@ -27,7 +27,16 @@ DEFAULT_BASES = {
     "spark": "https://spark-api-open.xf-yun.com/v1",
     "minimax": "https://api.minimax.cn/v1",
 }
-PROVIDERS = set(DEFAULT_BASES) | {"azure_openai", "ollama", "xinference", "vllm", "llamacpp", "MindIE"}
+# OpenAI-compatible gateways have no default address: their list comes from the configured Base URL.
+PROVIDERS = set(DEFAULT_BASES) | {
+    "azure_openai",
+    "ollama",
+    "xinference",
+    "vllm",
+    "llamacpp",
+    "MindIE",
+    "openai_compatible",
+}
 TOKENHUB_HOSTS = {
     "tokenhub.tencentmaas.com",
     "tokenhub.tencentmaas.cn",
@@ -241,9 +250,7 @@ def prefer_connection_catalog(provider: str, config: dict, options: dict) -> boo
     if any(value.strip() for value in options.values()):
         return False
     host = urlsplit(base_url(provider, config)).hostname
-    # Zhipu's live list is partial. TokenHub's compatible list has no task type.
-    if provider == "zhipu" and host in PRESETS["zhipu"]["hosts"]:
-        return False
+    # TokenHub's compatible list has no task type.
     if provider == "tencent" and host in TOKENHUB_HOSTS:
         return False
     return (

@@ -3,6 +3,8 @@
 PRESETS = {
     "zhipu": {
         "hosts": {"open.bigmodel.cn"},
+        # The official live list omits some models, so an automatic listing adds these to it.
+        "supplements_live": True,
         "docs": "https://docs.bigmodel.cn/cn/guide/start/model-overview",
         "models": {
             "llm": ["glm-5.3", "glm-5.2", "glm-5.3-flash", "glm-5.3-flashx"],

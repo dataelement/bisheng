@@ -32,7 +32,11 @@ import {
 
 import { ModelDiscoveryOptions } from "./ModelDiscoveryOptions";
 import { discoveryFailureReason } from "./modelDiscoveryErrors";
-import { PRICE_CATALOG_ONLY, priceCatalogModels } from "./modelDiscoveryCatalog";
+import {
+  PRICE_CATALOG_WITHOUT_CONNECTION,
+  priceCatalogModels,
+} from "./modelDiscoveryCatalog";
+import { DiscoveredModelPrice } from "./ModelDiscoveryPrice";
 
 const manualSpeechProviders = new Set([
   "volcengine",
@@ -42,14 +46,13 @@ const manualSpeechProviders = new Set([
   "spark",
   "minimax",
 ]);
-const money = (currency: string, value: string) =>
-  `${currency === "USD" ? "$" : "¥"}${value}`;
 
 interface ModelDiscoveryProps {
   provider: string;
   connectionVersion: number;
   existing: string[];
-  getConnection: () => DiscoveryConnection | null;
+  // quiet: report missing connection fields without telling the administrator.
+  getConnection: (quiet?: boolean) => DiscoveryConnection | null;
   onImport: (models: DiscoveredModel[]) => void;
 }
 
@@ -82,12 +85,15 @@ export function ModelDiscovery({
   const [requiredReason, setRequiredReason] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const requestVersion = useRef(0);
-  const catalogOnly = PRICE_CATALOG_ONLY.has(provider);
-  const supported = discoveryProviders.has(provider) || catalogOnly;
+  const connectionOptional = PRICE_CATALOG_WITHOUT_CONNECTION.has(provider);
+  const supported = discoveryProviders.has(provider);
   const allowedTypes = availableModelTypes(provider);
   const needsDeployment = resultInfo?.scope === "azure_models";
   // F016: price-catalog rows are all text models; they are filtered and grouped by vendor instead.
   const catalogMode = resultInfo?.scope === "price_catalog";
+  // Self-hosted engines have no list price, and an Azure row is added under the deployment name typed later.
+  const showUnpriced =
+    resultInfo?.scope !== "local" && resultInfo?.scope !== "azure_models";
   const vendors = catalogMode
     ? [
         ...new Set(
@@ -182,8 +188,9 @@ export function ModelDiscovery({
   };
   const handleFetch = async () => {
     if (!supported) return;
-    const connection = catalogOnly ? null : getConnection();
-    if (!catalogOnly && !connection) return;
+    // A gateway with no address yet still gets the price catalog, so it is checked quietly.
+    const connection = getConnection(connectionOptional);
+    if (!connectionOptional && !connection) return;
     const version = ++requestVersion.current;
     setOpen(true);
     setLoading(true);
@@ -263,7 +270,7 @@ export function ModelDiscovery({
         variant="outlined"
         color="default"
         onClick={() => {
-          if (!catalogOnly && !getConnection()) return;
+          if (!connectionOptional && !getConnection()) return;
           if (catalog) setOpen(true);
           else void handleFetch();
         }}
@@ -425,7 +432,9 @@ export function ModelDiscovery({
               {!loading &&
                 !error &&
                 visible.map((model, index) => {
-                  const vendor = model.catalog?.vendor;
+                  const vendor = catalogMode
+                    ? model.catalog?.vendor
+                    : undefined;
                   const groupStart =
                     !!vendor && vendor !== visible[index - 1]?.catalog?.vendor;
                   const added = existing.includes(
@@ -472,21 +481,10 @@ export function ModelDiscovery({
                             >
                               {model.model_name}
                             </p>
-                            {model.catalog && (
-                              <p className="truncate text-xs text-muted-foreground">
-                                {t("model.catalogPrice", {
-                                  label: model.catalog.label,
-                                  input: money(
-                                    model.catalog.currency,
-                                    model.catalog.input,
-                                  ),
-                                  output: money(
-                                    model.catalog.currency,
-                                    model.catalog.output,
-                                  ),
-                                })}
-                              </p>
-                            )}
+                            <DiscoveredModelPrice
+                              model={model}
+                              showUnpriced={showUnpriced}
+                            />
                           </div>
                           {(added || unsupported) && (
                             <span className="shrink-0 text-xs text-muted-foreground">

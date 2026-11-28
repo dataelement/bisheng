@@ -21,3 +21,12 @@ export function hasInvalidModelName(models: { model_name?: string | null }[]): b
         return !name || name.length > 100;
     });
 }
+
+/** Default name of a newly added row: one past the highest existing "model N". */
+export function nextModelName(models: { name: string }[]): string {
+    const highest = models.reduce((max, model) => {
+        const found = model.name.match(/model (\d+)/);
+        return found ? Math.max(max, Number(found[1])) : max;
+    }, 0);
+    return `model ${highest + 1}`;
+}
