@@ -41,5 +41,5 @@ class NodeFactory:
     def instance_node(cls, node_type: str, **kwargs) -> 'BaseNode':
         node_class = cls.get_node_class(node_type)
         if node_class is None:
-            raise Exception(f'Unknown node type:{node_type}')
+            raise ValueError(f'Unknown node type:{node_type}')
         return node_class(**kwargs)
