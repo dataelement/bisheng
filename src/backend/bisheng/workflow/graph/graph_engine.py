@@ -96,7 +96,7 @@ class GraphEngine:
         source_node_ids = self.edges.get_source_node(node_instance.id)
         # There are no linked nodes reporting errors
         if not target_node_ids and not source_node_ids:
-            raise Exception(f"node {node_instance.name} {node_instance.id} must have at least one edge")
+            raise ValueError(f"node {node_instance.name} {node_instance.id} must have at least one edge")
 
         # output Node followed by afake Nodes are used to handle interrupts
         if node_instance.type == NodeType.OUTPUT.value:
@@ -121,7 +121,7 @@ class GraphEngine:
         # Links Totargetnode_amb
         for node_id in target_node_ids:
             if node_id not in self.nodes_map:
-                raise Exception(f"target node {node_id} not found")
+                raise FileNotFoundError(f"target node {node_id} not found")
             if self.nodes_fan_in.get(node_id) and len(self.nodes_fan_in.get(node_id)) > 1:
                 # need wait all fan in node exec over
                 continue
@@ -216,7 +216,7 @@ class GraphEngine:
         for node in nodes:
             node_data = BaseNodeData(**node.get("data", {}))
             if not node_data.id:
-                raise Exception("node must have attribute id")
+                raise ValueError("node must have attribute id")
             if node_data.type == NodeType.NOTE.value:
                 continue
 
@@ -266,12 +266,12 @@ class GraphEngine:
     def build_nodes(self):
         nodes = self.workflow_data.get("nodes", [])
         if not nodes:
-            raise Exception("workflow must have at least one node")
+            raise ValueError("workflow must have at least one node")
 
         start_node, end_nodes, interrupt_nodes = self.init_nodes(nodes)
 
         if not start_node:
-            raise Exception("workflow must have start node")
+            raise ValueError("workflow must have start node")
         self.graph_builder.add_edge(START, start_node)
         if end_nodes:
             for end_node in end_nodes:
